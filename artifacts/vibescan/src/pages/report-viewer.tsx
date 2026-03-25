@@ -4,7 +4,7 @@ import { Shield, ShieldAlert, CheckCircle2, ArrowLeft, Loader2, Globe, Server, L
 import { cn, formatSeverity, getSeverityColors, getGradeColor } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
-import type { Vulnerability } from "@workspace/api-client-react/src/generated/api.schemas";
+import type { Vulnerability } from "@workspace/api-client-react";
 
 function GradeRing({ grade, score }: { grade: string, score: number }) {
   // Simple CSS conic gradient for ring based on score
@@ -119,7 +119,8 @@ function VulnCard({ vuln, index }: { vuln: Vulnerability, index: number }) {
 export default function ReportViewer() {
   const [, params] = useRoute("/report/:id");
   const { data: report, isLoading, error } = useGetReport(params?.id || "", {
-    query: { enabled: !!params?.id }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query: { enabled: !!params?.id } as any,
   });
 
   if (isLoading) return <div className="min-h-[80vh] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
