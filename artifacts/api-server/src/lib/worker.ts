@@ -11,9 +11,12 @@
 import { db, scansTable, reportsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { getBoss, SCAN_QUEUE, type ScanJobData } from "./queue";
-import { runScan, computeRiskScore, computeGrade } from "./scanner";
+import { runScan, computeRiskScore, computeGrade, type ScanVulnerability } from "./scanner";
 import { callDeepSeek } from "./deepseek";
+import { checkSslLabs } from "./ssllabs";
+import { sendReportReadyEmail } from "./mailer";
 import { logger } from "./logger";
+import { randomUUID } from "node:crypto";
 import type { Job } from "pg-boss";
 
 type ScanJob = Job<ScanJobData>;
@@ -30,11 +33,17 @@ async function processScanJob(job: ScanJob): Promise<void> {
     .set({ status: "scanning", startedAt: new Date() })
     .where(eq(scansTable.id, scanId));
 
-  let scanResult;
+  // ── 2. Run header scan + SSL Labs check in parallel ───────────────────
+  log.info("Running HTTP security scan and SSL Labs check in parallel");
 
+  // SSL Labs is best-effort and can take up to 120 seconds — start it early
+  const sslLabsPromise = checkSslLabs(targetUrl).catch((err) => {
+    log.warn({ err }, "SSL Labs check failed (non-fatal)");
+    return null;
+  });
+
+  let scanResult;
   try {
-    // ── 2. Run the HTTP security scanner ────────────────────────────────
-    log.info("Running HTTP security scan");
     scanResult = await runScan(targetUrl, tier);
     log.info(
       { vulnCount: scanResult.vulnerabilities.length, durationMs: scanResult.requestDurationMs },
@@ -48,6 +57,32 @@ async function processScanJob(job: ScanJob): Promise<void> {
       .set({ status: "failed", error: errMsg, completedAt: new Date() })
       .where(eq(scansTable.id, scanId));
     return;
+  }
+
+  // Wait for SSL Labs (it was started in parallel with the header scan)
+  log.info("Waiting for SSL Labs assessment to complete");
+  const sslLabsResult = await sslLabsPromise;
+  if (sslLabsResult) {
+    log.info({ grade: sslLabsResult.grade, issues: sslLabsResult.issues.length }, "SSL Labs assessment complete");
+    // Override the basic TLS grade with the real SSL Labs grade
+    scanResult.tlsGrade = sslLabsResult.grade;
+
+    // Add SSL Labs findings as vulnerabilities
+    if (sslLabsResult.grade && /^[C-F]$/.test(sslLabsResult.grade)) {
+      scanResult.vulnerabilities.push({
+        id: randomUUID(),
+        name: `Weak TLS Configuration (SSL Labs Grade: ${sslLabsResult.grade})`,
+        severity: sslLabsResult.grade === "F" ? "critical" : sslLabsResult.grade === "D" ? "high" : "medium",
+        category: "Transport Security",
+        description: `SSL Labs graded your TLS configuration as ${sslLabsResult.grade}. This indicates weak cipher suites, outdated protocol support, or certificate issues that could expose users to downgrade attacks.`,
+        evidence: sslLabsResult.issues.join("; ") || null,
+        solution: "Use a modern TLS configuration: TLS 1.2 minimum, TLS 1.3 preferred, disable RC4/3DES/CBC-mode cipher suites, and enable HSTS. Use Mozilla's SSL Configuration Generator for server-specific settings.",
+        cweId: "CWE-326",
+        cvssScore: sslLabsResult.grade === "F" ? 9.1 : sslLabsResult.grade === "D" ? 7.5 : 5.3,
+      } satisfies ScanVulnerability);
+    }
+  } else {
+    log.warn("SSL Labs assessment not available — using basic TLS detection");
   }
 
   // ── 3. Mark as analyzing (AI phase) ──────────────────────────────────
@@ -138,6 +173,28 @@ async function processScanJob(job: ScanJob): Promise<void> {
       .where(eq(scansTable.id, scanId));
 
     log.info({ reportId: report.id, grade, riskScore }, "Scan complete");
+
+    // ── 8. Send report-ready email (deep / pack tiers only) ───────────
+    const isDeep = tier === "deep" || tier === "pack_5" || tier === "pack_20";
+    if (isDeep) {
+      const [scan] = await db
+        .select({ userEmail: scansTable.userEmail })
+        .from(scansTable)
+        .where(eq(scansTable.id, scanId));
+
+      if (scan?.userEmail) {
+        const appOrigin = process.env.APP_ORIGIN ?? "https://vibescan.app";
+        await sendReportReadyEmail({
+          toEmail: scan.userEmail,
+          targetUrl: scanResult.finalUrl || targetUrl,
+          grade,
+          riskScore,
+          totalVulns: scanResult.vulnerabilities.length,
+          reportUrl: `${appOrigin}/report/${report.id}`,
+          tier,
+        });
+      }
+    }
   } catch (dbErr) {
     log.error({ err: dbErr }, "Failed to save report to database");
     await db
