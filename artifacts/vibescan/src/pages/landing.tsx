@@ -46,12 +46,12 @@ export default function LandingPage() {
             </motion.div>
 
             <motion.h1 variants={itemVariants} className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6">
-              Your app is live. <br />
+              Any website. <br />
               <span className="text-gradient-primary">Is it safe?</span>
             </motion.h1>
 
             <motion.p variants={itemVariants} className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl">
-              Pay-per-scan, black-box penetration testing SaaS purpose-built for developers who ship apps fast. Get a plain-English security report in under 10 minutes.
+              Paste any public URL — your app, a client's site, or a competitor's — and get a plain-English security report in under 10 minutes. No installs, no agents.
             </motion.p>
 
             <motion.div variants={itemVariants} className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
@@ -108,7 +108,7 @@ export default function LandingPage() {
             <div className="hidden md:block absolute top-12 left-[15%] right-[15%] h-0.5 bg-gradient-to-r from-primary/0 via-primary/30 to-primary/0" />
             
             {[
-              { step: 1, icon: Code2, title: "Paste URL", desc: "Point VibeScan at your publicly deployed staging or production URL." },
+              { step: 1, icon: Code2, title: "Paste Any URL", desc: "Drop in any publicly accessible URL — your own app, a client's site, or any live website." },
               { step: 2, icon: Zap, title: "We Scan", desc: "Our engine analyzes headers, SSL, and runs a comprehensive black-box check." },
               { step: 3, icon: CheckCircle2, title: "Get Report", desc: "DeepSeek AI translates the raw findings into a plain-English, actionable report." }
             ].map((item, i) => (
