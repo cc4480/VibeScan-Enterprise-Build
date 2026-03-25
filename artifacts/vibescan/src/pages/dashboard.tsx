@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { useListScans, useGetCredits, useGetScanStatus } from "@workspace/api-client-react";
+import { useListScans, useGetCredits, useGetScanStatus, getGetScanStatusQueryKey } from "@workspace/api-client-react";
 import { Shield, Plus, Clock, CheckCircle2, AlertCircle, RefreshCw, FileText, Loader2, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { cn, getGradeColor } from "@/lib/utils";
@@ -10,8 +10,10 @@ function ScanRow({ initialScan }: { initialScan: Scan }) {
   const isPolling = ['pending', 'paid', 'queued', 'scanning', 'analyzing'].includes(initialScan.status);
   
   const { data: statusData } = useGetScanStatus(initialScan.id, {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    query: { refetchInterval: isPolling ? 3000 : false } as any,
+    query: {
+      queryKey: getGetScanStatusQueryKey(initialScan.id),
+      refetchInterval: isPolling ? 3000 : false,
+    },
   });
 
   const scan = statusData || initialScan;
