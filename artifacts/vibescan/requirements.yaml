@@ -1,0 +1,14 @@
+packages:
+  "framer-motion": "For premium animations and page transitions"
+  "clsx": "Utility for constructing className strings conditionally"
+  "tailwind-merge": "Utility for merging tailwind classes without conflicts"
+
+images:
+  - path: "artifacts/vibescan/public/images/hero-bg.png"
+    description: "Abstract dark navy background with subtle neon green and teal glowing geometric grid lines and nodes, cyber security theme, very dark and professional, slight vignette"
+    aspect_ratio: "16:9"
+
+notes:
+  - "Using wouter for routing"
+  - "Auth handled via @workspace/replit-auth-web"
+  - "API hooks imported from @workspace/api-client-react"
