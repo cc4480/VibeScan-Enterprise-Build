@@ -29,6 +29,13 @@ app.use(
 );
 app.use(cors({ credentials: true, origin: true }));
 app.use(cookieParser());
+
+// Stripe webhook needs raw body BEFORE json() middleware
+app.use(
+  "/api/stripe/webhook",
+  express.raw({ type: "application/json" }),
+);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(authMiddleware);
