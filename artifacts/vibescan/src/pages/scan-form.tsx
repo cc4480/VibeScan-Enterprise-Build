@@ -100,7 +100,7 @@ export default function ScanFormPage() {
         <p className="text-muted-foreground text-lg">
           {isPack
             ? "Pre-purchase credits and run scans any time — they never expire."
-            : "Enter your live app URL and we'll analyze it for vulnerabilities."}
+            : "Paste any publicly accessible URL — your app, a client's site, or any live website."}
         </p>
       </div>
 
@@ -119,7 +119,7 @@ export default function ScanFormPage() {
                 <input
                   id="url"
                   type="text"
-                  placeholder="https://your-app.com"
+                  placeholder="https://example.com"
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   required={!isPack}
@@ -127,7 +127,7 @@ export default function ScanFormPage() {
                 />
               </div>
               <p className="text-xs text-muted-foreground ml-1">
-                Must be a publicly accessible URL. Do not scan sites you don't own.
+                Any publicly accessible website works — your app, a client's site, or any live URL. Only scan sites you have permission to test.
               </p>
             </div>
           )}
