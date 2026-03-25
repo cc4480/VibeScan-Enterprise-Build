@@ -1,13 +1,33 @@
 import { useEffect, useRef } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useListScans, useGetCredits, useGetScanStatus, getGetScanStatusQueryKey } from "@workspace/api-client-react";
 import { Shield, Plus, Clock, CheckCircle2, AlertCircle, RefreshCw, FileText, Loader2, ArrowRight, Info, Zap as ZapIcon } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { Scan } from "@workspace/api-client-react";
 
+const GRADE_COLORS: Record<string, string> = {
+  A: "text-emerald-400 bg-emerald-400/10 border-emerald-400/30",
+  B: "text-green-400 bg-green-400/10 border-green-400/30",
+  C: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30",
+  D: "text-orange-400 bg-orange-400/10 border-orange-400/30",
+  F: "text-red-400 bg-red-400/10 border-red-400/30",
+};
+
+function GradeBadge({ grade }: { grade: string | null | undefined }) {
+  const key = grade ?? "";
+  const colors = GRADE_COLORS[key] ?? "text-muted-foreground bg-secondary border-white/10";
+  return (
+    <div className={cn("w-9 h-9 rounded-lg border flex items-center justify-center font-bold text-lg", colors)}>
+      {grade ?? "?"}
+    </div>
+  );
+}
+
 function ScanRow({ initialScan, highlight }: { initialScan: Scan; highlight?: boolean }) {
   const rowRef = useRef<HTMLTableRowElement>(null);
+  const [, setLocation] = useLocation();
+  const wasPolling = useRef(['pending', 'paid', 'queued', 'scanning', 'analyzing'].includes(initialScan.status));
   const isPolling = ['pending', 'paid', 'queued', 'scanning', 'analyzing'].includes(initialScan.status);
 
   const { data: statusData } = useGetScanStatus(initialScan.id, {
@@ -18,6 +38,22 @@ function ScanRow({ initialScan, highlight }: { initialScan: Scan; highlight?: bo
   });
 
   const scan = statusData ?? initialScan;
+
+  // Auto-redirect to report when scan transitions from in-progress to complete
+  useEffect(() => {
+    if (
+      wasPolling.current &&
+      scan.status === "complete" &&
+      "reportId" in scan &&
+      scan.reportId
+    ) {
+      wasPolling.current = false;
+      setLocation(`/report/${scan.reportId}`);
+    }
+    if (!["pending", "paid", "queued", "scanning", "analyzing"].includes(scan.status)) {
+      wasPolling.current = false;
+    }
+  }, [scan.status, scan, setLocation]);
 
   // Scroll into view when highlighted (new scan from checkout)
   useEffect(() => {
@@ -103,13 +139,13 @@ function ScanRow({ initialScan, highlight }: { initialScan: Scan; highlight?: bo
       </td>
 
       <td className="p-4 hidden md:table-cell">
-        {scan.status === 'complete' ? (
-          <Shield className="w-5 h-5 text-emerald-400" />
-        ) : scan.status === 'failed' ? (
-          <AlertCircle className="w-5 h-5 text-red-400/50" />
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
+        {(() => {
+          const grade = 'grade' in scan ? (scan as { grade?: string | null }).grade : null;
+          if (scan.status === 'complete' && grade) return <GradeBadge grade={grade} />;
+          if (scan.status === 'complete') return <Shield className="w-5 h-5 text-emerald-400" />;
+          if (scan.status === 'failed') return <AlertCircle className="w-5 h-5 text-red-400/50" />;
+          return <span className="text-muted-foreground">—</span>;
+        })()}
       </td>
 
       <td className="p-4 text-right">

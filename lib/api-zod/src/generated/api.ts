@@ -188,6 +188,7 @@ export const GetScanStatusResponse = zod.object({
   completedAt: zod.date().nullish(),
   error: zod.string().nullish(),
   reportId: zod.string().nullish(),
+  grade: zod.string().nullish(),
 });
 
 /**

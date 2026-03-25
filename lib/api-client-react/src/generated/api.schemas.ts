@@ -114,6 +114,8 @@ export interface ScanStatus {
   error?: string | null;
   /** @nullable */
   reportId?: string | null;
+  /** @nullable */
+  grade?: string | null;
 }
 
 export interface CreateScanRequest {
