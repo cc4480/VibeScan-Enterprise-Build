@@ -1,0 +1,70 @@
+import { pgTable, text, uuid, integer, timestamp, jsonb, index } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
+
+export const scansTable = pgTable("scans", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: text("user_id").notNull(),
+  userEmail: text("user_email").notNull(),
+  targetUrl: text("target_url").notNull(),
+  tier: text("tier", { enum: ["basic", "deep", "pack_5", "pack_20"] }).notNull(),
+  status: text("status", {
+    enum: ["pending", "paid", "queued", "scanning", "analyzing", "complete", "failed"],
+  }).notNull().default("pending"),
+  stripeSessionId: text("stripe_session_id"),
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  error: text("error"),
+}, (table) => [
+  index("idx_scans_user_id").on(table.userId),
+  index("idx_scans_status").on(table.status),
+]);
+
+export const reportsTable = pgTable("reports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  scanId: uuid("scan_id").references(() => scansTable.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  targetUrl: text("target_url").notNull(),
+  tier: text("tier", { enum: ["basic", "deep", "pack_5", "pack_20"] }).notNull(),
+  scannedAt: timestamp("scanned_at", { withTimezone: true }).notNull().defaultNow(),
+  duration: integer("duration"),
+  data: jsonb("data").notNull(),
+  pdfUrl: text("pdf_url"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("idx_reports_user_id").on(table.userId),
+  index("idx_reports_scan_id").on(table.scanId),
+]);
+
+export const creditsTable = pgTable("credits", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: text("user_id").notNull().unique(),
+  balance: integer("balance").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const insertScanSchema = createInsertSchema(scansTable).omit({
+  id: true,
+  createdAt: true,
+  startedAt: true,
+  completedAt: true,
+});
+export type InsertScan = z.infer<typeof insertScanSchema>;
+export type Scan = typeof scansTable.$inferSelect;
+
+export const insertReportSchema = createInsertSchema(reportsTable).omit({
+  id: true,
+  scannedAt: true,
+  createdAt: true,
+});
+export type InsertReport = z.infer<typeof insertReportSchema>;
+export type Report = typeof reportsTable.$inferSelect;
+
+export const insertCreditSchema = createInsertSchema(creditsTable).omit({
+  id: true,
+  updatedAt: true,
+});
+export type InsertCredit = z.infer<typeof insertCreditSchema>;
+export type Credit = typeof creditsTable.$inferSelect;

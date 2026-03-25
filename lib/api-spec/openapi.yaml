@@ -1,15 +1,22 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: VibeScan API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: Auth
+    description: Browser and mobile authentication endpoints.
+  - name: scans
+    description: Scan management
+  - name: reports
+    description: Report retrieval
+  - name: credits
+    description: Credit balance management
 paths:
   /healthz:
     get:
@@ -24,7 +31,285 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/user:
+    get:
+      tags: [Auth]
+      operationId: getCurrentAuthUser
+      summary: Get the currently authenticated user
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        '200':
+          description: Auth status resolved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUserEnvelope'
+  /login:
+    get:
+      tags: [Auth]
+      operationId: beginBrowserLogin
+      summary: Start the browser OIDC login flow
+      parameters:
+        - name: returnTo
+          in: query
+          required: false
+          description: Relative path to redirect to after login (must start with `/`). Defaults to `/`.
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect to the OIDC authorization endpoint.
+  /callback:
+    get:
+      tags: [Auth]
+      operationId: handleBrowserLoginCallback
+      summary: Complete the browser OIDC login flow
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: iss
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uri
+      responses:
+        '302':
+          description: Redirect to the returnTo path on success or /api/login on failure.
+  /logout:
+    get:
+      tags: [Auth]
+      operationId: logoutBrowserSession
+      summary: Clear the session and begin OIDC logout
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        '302':
+          description: Redirect to the OIDC provider logout URL.
+  /mobile-auth/token-exchange:
+    post:
+      tags: [Auth]
+      operationId: exchangeMobileAuthorizationCode
+      summary: Exchange a mobile OIDC code for a session token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MobileTokenExchangeRequest'
+      responses:
+        '200':
+          description: Session created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileTokenExchangeSuccess'
+        '400':
+          description: Missing or invalid required fields.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Token did not contain usable claims.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Token exchange failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /mobile-auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logoutMobileSession
+      summary: Delete a mobile session token
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+      responses:
+        '200':
+          description: Logout processed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutSuccess'
+
+  /scans:
+    get:
+      tags: [scans]
+      operationId: listScans
+      summary: List all scans for the current user
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        '200':
+          description: List of scans
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Scan'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    post:
+      tags: [scans]
+      operationId: createScan
+      summary: Create a new scan and initiate payment
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateScanRequest'
+      responses:
+        '201':
+          description: Scan created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateScanResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /scans/{id}/status:
+    get:
+      tags: [scans]
+      operationId: getScanStatus
+      summary: Get the live status of a scan
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Scan status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanStatus'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Scan not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /reports/{id}:
+    get:
+      tags: [reports]
+      operationId: getReport
+      summary: Get a completed scan report
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Full report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /credits:
+    get:
+      tags: [credits]
+      operationId: getCredits
+      summary: Get the current user's credit balance
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        '200':
+          description: Credit balance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credits'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
 components:
+  parameters:
+    AuthorizationSessionHeader:
+      name: Authorization
+      in: header
+      required: false
+      description: Opaque session token — `Bearer <sid>`.
+      schema:
+        type: string
+    SessionCookie:
+      name: sid
+      in: cookie
+      required: false
+      description: Browser session cookie.
+      schema:
+        type: string
+
   schemas:
     HealthStatus:
       type: object
@@ -34,3 +319,280 @@ components:
       required:
         - status
 
+    AuthUser:
+      type: object
+      required: [id, email, firstName, lastName, profileImageUrl]
+      properties:
+        id:
+          type: string
+        email:
+          type: [string, 'null']
+          format: email
+        firstName:
+          type: [string, 'null']
+        lastName:
+          type: [string, 'null']
+        profileImageUrl:
+          type: [string, 'null']
+    AuthUserEnvelope:
+      type: object
+      required: [user]
+      properties:
+        user:
+          oneOf:
+            - $ref: '#/components/schemas/AuthUser'
+            - type: 'null'
+    MobileTokenExchangeRequest:
+      type: object
+      required: [code, code_verifier, redirect_uri, state]
+      properties:
+        code:
+          type: string
+          minLength: 1
+        code_verifier:
+          type: string
+          minLength: 1
+        redirect_uri:
+          type: string
+          minLength: 1
+          format: uri
+        state:
+          type: string
+          minLength: 1
+        nonce:
+          type: string
+          minLength: 1
+    MobileTokenExchangeSuccess:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+    LogoutSuccess:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          const: true
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    ScanTier:
+      type: string
+      enum: [basic, deep, pack_5, pack_20]
+
+    ScanStatusEnum:
+      type: string
+      enum: [pending, paid, queued, scanning, analyzing, complete, failed]
+
+    Scan:
+      type: object
+      required: [id, userId, userEmail, targetUrl, tier, status, createdAt]
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        userEmail:
+          type: string
+        targetUrl:
+          type: string
+        tier:
+          $ref: '#/components/schemas/ScanTier'
+        status:
+          $ref: '#/components/schemas/ScanStatusEnum'
+        stripeSessionId:
+          type: [string, 'null']
+        stripePaymentIntentId:
+          type: [string, 'null']
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: [string, 'null']
+          format: date-time
+        completedAt:
+          type: [string, 'null']
+          format: date-time
+        error:
+          type: [string, 'null']
+        reportId:
+          type: [string, 'null']
+
+    ScanStatus:
+      type: object
+      required: [id, targetUrl, tier, status, progress, createdAt]
+      properties:
+        id:
+          type: string
+        targetUrl:
+          type: string
+        tier:
+          $ref: '#/components/schemas/ScanTier'
+        status:
+          $ref: '#/components/schemas/ScanStatusEnum'
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: [string, 'null']
+          format: date-time
+        completedAt:
+          type: [string, 'null']
+          format: date-time
+        error:
+          type: [string, 'null']
+        reportId:
+          type: [string, 'null']
+
+    CreateScanRequest:
+      type: object
+      required: [targetUrl, tier]
+      properties:
+        targetUrl:
+          type: string
+        tier:
+          $ref: '#/components/schemas/ScanTier'
+
+    CreateScanResponse:
+      type: object
+      required: [scanId]
+      properties:
+        scanId:
+          type: string
+        checkoutUrl:
+          type: [string, 'null']
+        creditUsed:
+          type: boolean
+
+    Vulnerability:
+      type: object
+      required: [id, name, severity, category, description, solution]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        severity:
+          type: string
+          enum: [critical, high, medium, low, info]
+        category:
+          type: string
+        description:
+          type: string
+        evidence:
+          type: [string, 'null']
+        solution:
+          type: string
+        cweId:
+          type: [string, 'null']
+        cvssScore:
+          type: [number, 'null']
+
+    ScanSummary:
+      type: object
+      required: [totalVulnerabilities, critical, high, medium, low, info, riskScore, grade, executiveSummary]
+      properties:
+        totalVulnerabilities:
+          type: integer
+        critical:
+          type: integer
+        high:
+          type: integer
+        medium:
+          type: integer
+        low:
+          type: integer
+        info:
+          type: integer
+        riskScore:
+          type: integer
+        grade:
+          type: string
+        executiveSummary:
+          type: string
+
+    AiAnalysis:
+      type: object
+      required: [overallRisk, topPriorities, quickWins]
+      properties:
+        overallRisk:
+          type: string
+        topPriorities:
+          type: array
+          items:
+            type: string
+        quickWins:
+          type: array
+          items:
+            type: string
+        complianceNotes:
+          type: [string, 'null']
+
+    ReportData:
+      type: object
+      required: [vulnerabilities, summary, technologies, targetUrl]
+      properties:
+        vulnerabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Vulnerability'
+        summary:
+          $ref: '#/components/schemas/ScanSummary'
+        technologies:
+          type: array
+          items:
+            type: string
+        server:
+          type: [string, 'null']
+        tlsGrade:
+          type: [string, 'null']
+        openPorts:
+          type: array
+          items:
+            type: integer
+        targetUrl:
+          type: string
+        aiAnalysis:
+          $ref: '#/components/schemas/AiAnalysis'
+
+    Report:
+      type: object
+      required: [id, scanId, userId, targetUrl, tier, scannedAt, createdAt, data]
+      properties:
+        id:
+          type: string
+        scanId:
+          type: string
+        userId:
+          type: string
+        targetUrl:
+          type: string
+        tier:
+          $ref: '#/components/schemas/ScanTier'
+        scannedAt:
+          type: string
+          format: date-time
+        duration:
+          type: [integer, 'null']
+        createdAt:
+          type: string
+          format: date-time
+        data:
+          $ref: '#/components/schemas/ReportData'
+
+    Credits:
+      type: object
+      required: [balance]
+      properties:
+        balance:
+          type: integer
