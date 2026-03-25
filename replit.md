@@ -21,9 +21,9 @@ Pay-per-scan black-box penetration testing SaaS for vibe coders. Users paste a U
 ## Pricing Tiers
 
 - Basic Scan: $29 (headers + SSL + tech fingerprint)
-- Deep Scan: $79 (all Basic + deeper analysis + email report)
-- 5-Scan Pack: $99 credits
-- 20-Scan Pack: $299 credits
+- Deep Scan: $79 (all Basic + deeper analysis + DeepSeek AI report)
+- 5-Scan Pack: $99 credits (5 Deep Scan credits)
+- 20-Scan Pack: $299 credits (20 Deep Scan credits)
 
 ## Structure
 
@@ -32,10 +32,16 @@ vibescan/
 ├── artifacts/
 │   ├── api-server/         # Express API server (port 8080)
 │   │   └── src/
-│   │       ├── app.ts          # CORS, auth middleware, routes
-│   │       ├── routes/         # auth, scans, reports, credits
+│   │       ├── app.ts          # CORS, raw body, auth middleware, routes
+│   │       ├── routes/         # auth, scans, reports, credits, scan/webhook
 │   │       ├── middlewares/    # authMiddleware.ts
-│   │       └── lib/auth.ts     # OIDC session management
+│   │       └── lib/
+│   │           ├── auth.ts     # OIDC session management
+│   │           ├── stripe.ts   # Stripe client + PRICE_MAP
+│   │           ├── queue.ts    # pg-boss singleton + enqueueScan()
+│   │           ├── scanner.ts  # HTTP security scanner (headers/TLS/CORS/cookies)
+│   │           ├── deepseek.ts # DeepSeek AI client (overallRisk/priorities/quickWins)
+│   │           └── worker.ts   # pg-boss worker: queued→scanning→analyzing→complete
 │   └── vibescan/           # React+Vite frontend (previewPath: /)
 │       └── src/
 │           ├── pages/      # landing, dashboard, scan-form, report-viewer
@@ -53,6 +59,35 @@ vibescan/
 └── scripts/                # Utility scripts
 ```
 
+## Scan Worker Flow
+
+1. User submits URL + tier → POST /api/scans
+2. If credits available → deduct credit, mark paid, enqueue immediately
+3. If no credits → create Stripe Checkout Session → redirect to Stripe
+4. On `checkout.session.completed` webhook → mark paid, enqueue, mark queued
+5. pg-boss worker picks up job:
+   - `queued → scanning`: fetch target URL, analyze headers/TLS/cookies/CORS
+   - `scanning → analyzing`: call DeepSeek AI (deep/pack tiers only)
+   - `analyzing → complete`: write report to DB, mark scan complete
+   - Any error → `failed` with error message
+6. Dashboard polls `/api/scans/:id/status` every 3s while in-flight
+
+## Security Checks Implemented
+
+- HTTPS / TLS enforcement (Critical if no HTTPS)
+- HTTP Strict Transport Security (HSTS)
+- Content-Security-Policy (including unsafe-inline/unsafe-eval detection)
+- X-Frame-Options / clickjacking protection
+- X-Content-Type-Options: nosniff
+- Referrer-Policy
+- Permissions-Policy / Feature-Policy
+- CORS wildcard origin (Access-Control-Allow-Origin: *)
+- Server version disclosure
+- X-Powered-By technology disclosure
+- Cookie flags: Secure, HttpOnly, SameSite
+- Mixed content detection (HTTP resources on HTTPS pages)
+- Technology fingerprinting (15+ frameworks/servers)
+
 ## Auth Flow
 
 Replit OIDC (not Clerk). The auth lib (`lib/replit-auth-web`) exports `useAuth()` with `login()` and `logout()` that redirect to `/api/login` and `/api/logout`. Sessions are stored in the `sessions` table.
@@ -61,9 +96,13 @@ Replit OIDC (not Clerk). The auth lib (`lib/replit-auth-web`) exports `useAuth()
 
 - `DATABASE_URL` — auto-provided by Replit
 - `REPL_ID` — Replit OIDC client ID (auto-provided)
-- `DEEPSEEK_API_KEY` — for AI scan analysis
-- `STRIPE_SECRET_KEY` — for Stripe payments (must be set as secret)
-- `STRIPE_WEBHOOK_SECRET` — for Stripe webhook verification (must be set as secret)
+- `DEEPSEEK_API_KEY` — for AI scan analysis (user must set)
+- `STRIPE_SECRET_KEY` — for Stripe payments (user must set)
+- `STRIPE_WEBHOOK_SECRET` — for Stripe webhook verification (user must set)
+
+## Webhook URL
+
+`POST /api/scan/webhook` — Stripe webhook endpoint. Requires `express.raw()` middleware (configured in app.ts before `express.json()`).
 
 ## TypeScript Project References
 
@@ -74,10 +113,15 @@ Typecheck command: `pnpm --filter @workspace/api-server run typecheck && pnpm --
 ## Task Status
 
 - [x] Task 1: Foundation, Auth, Landing Page — COMPLETE
-- [ ] Task 2: Stripe Payments & Scan Queue — PENDING
-- [ ] Task 3: Scan Worker Engine & DeepSeek Report Generation — PENDING
-- [ ] Task 4: Polish & Production Readiness — PENDING
+- [x] Task 2: Stripe Payments & Scan Queue — COMPLETE
+- [x] Task 3: Scan Worker Engine & DeepSeek Report Generation — COMPLETE
+- [ ] Task 4: Polish & Production Readiness — remaining items below
 
-## Note on Stripe Integration
+## Remaining for Production
 
-The Replit Stripe connector was dismissed. Use `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` environment secrets manually. When implementing Task 2, ask the user to provide their Stripe keys via the secrets panel.
+1. Set `DEEPSEEK_API_KEY` secret in the Replit Secrets panel
+2. Set `STRIPE_SECRET_KEY` secret for payments
+3. Set `STRIPE_WEBHOOK_SECRET` and point Stripe dashboard webhook to `/api/scan/webhook`
+4. Consider: email notifications when scan completes
+5. Consider: rate limiting on POST /api/scans
+6. Consider: report PDF export

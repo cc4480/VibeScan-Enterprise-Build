@@ -32,11 +32,18 @@ export interface ScanJobData {
   tier: string;
 }
 
-export async function enqueueScan(data: ScanJobData): Promise<string | null> {
+export async function ensureQueue(): Promise<void> {
   const b = await getBoss();
-  return b.send(SCAN_QUEUE, data, {
+  await b.createQueue(SCAN_QUEUE, {
     retryLimit: 2,
     retryDelay: 30,
     expireInSeconds: 7200,
   });
+}
+
+export async function enqueueScan(data: ScanJobData): Promise<string | null> {
+  const b = await getBoss();
+  // Ensure queue exists (idempotent) before sending
+  await b.createQueue(SCAN_QUEUE, { retryLimit: 2, retryDelay: 30, expireInSeconds: 7200 });
+  return b.send(SCAN_QUEUE, data);
 }
