@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useCreateScan, useGetCredits } from "@workspace/api-client-react";
 import { Shield, Zap, Globe, Lock, CheckCircle2, Loader2, CreditCard } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ScanTier } from "@workspace/api-client-react/src/generated/api.schemas";
+import type { ScanTier } from "@workspace/api-client-react";
 
 const TIERS: { id: ScanTier; name: string; price: string; desc: string; features: string[], popular?: boolean }[] = [
   {

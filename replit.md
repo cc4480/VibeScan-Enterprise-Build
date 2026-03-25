@@ -1,96 +1,83 @@
-# Workspace
+# VibeScan
 
-## Overview
-
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+Pay-per-scan black-box penetration testing SaaS for vibe coders. Users paste a URL, choose a tier, pay, and receive a plain-English security report powered by DeepSeek AI.
 
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces
 - **Node.js version**: 24
 - **Package manager**: pnpm
-- **TypeScript version**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
+- **Frontend**: React + Vite (artifacts/vibescan)
+- **API**: Express 5 (artifacts/api-server)
+- **Auth**: Replit Auth (OIDC/PKCE) — NOT Clerk
+- **Database**: Replit PostgreSQL + Drizzle ORM — NOT Supabase
+- **AI**: DeepSeek AI (model: deepseek-chat, endpoint: https://api.deepseek.com/v1/chat/completions, env: DEEPSEEK_API_KEY) — NOT Claude/Anthropic
+- **Queue**: pg-boss (PostgreSQL-backed job queue) — NOT Redis/BullMQ
+- **Payments**: Stripe (manual keys: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET) — Replit integration was dismissed, use env secrets
+- **Validation**: Zod (zod/v4), drizzle-zod
 - **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+- **TypeScript version**: 5.9
+
+## Pricing Tiers
+
+- Basic Scan: $29 (headers + SSL + tech fingerprint)
+- Deep Scan: $79 (all Basic + deeper analysis + email report)
+- 5-Scan Pack: $99 credits
+- 20-Scan Pack: $299 credits
 
 ## Structure
 
 ```text
-artifacts-monorepo/
-├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
-├── lib/                    # Shared libraries
+vibescan/
+├── artifacts/
+│   ├── api-server/         # Express API server (port 8080)
+│   │   └── src/
+│   │       ├── app.ts          # CORS, auth middleware, routes
+│   │       ├── routes/         # auth, scans, reports, credits
+│   │       ├── middlewares/    # authMiddleware.ts
+│   │       └── lib/auth.ts     # OIDC session management
+│   └── vibescan/           # React+Vite frontend (previewPath: /)
+│       └── src/
+│           ├── pages/      # landing, dashboard, scan-form, report-viewer
+│           ├── components/ # layout, protected-route
+│           └── lib/utils.ts
+├── lib/
 │   ├── api-spec/           # OpenAPI spec + Orval codegen config
 │   ├── api-client-react/   # Generated React Query hooks
 │   ├── api-zod/            # Generated Zod schemas from OpenAPI
-│   └── db/                 # Drizzle ORM schema + DB connection
-├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts, run via `pnpm --filter @workspace/scripts run <script>`
-├── pnpm-workspace.yaml     # pnpm workspace (artifacts/*, lib/*, lib/integrations/*, scripts)
-├── tsconfig.base.json      # Shared TS options (composite, bundler resolution, es2022)
-├── tsconfig.json           # Root TS project references
-└── package.json            # Root package with hoisted devDeps
+│   ├── db/                 # Drizzle ORM schema + DB connection
+│   │   └── src/schema/
+│   │       ├── auth.ts         # users, sessions tables
+│   │       └── vibescan.ts     # scans, reports, credits tables
+│   └── replit-auth-web/    # useAuth() hook for OIDC login/logout
+└── scripts/                # Utility scripts
 ```
 
-## TypeScript & Composite Projects
+## Auth Flow
 
-Every package extends `tsconfig.base.json` which sets `composite: true`. The root `tsconfig.json` lists all packages as project references. This means:
+Replit OIDC (not Clerk). The auth lib (`lib/replit-auth-web`) exports `useAuth()` with `login()` and `logout()` that redirect to `/api/login` and `/api/logout`. Sessions are stored in the `sessions` table.
 
-- **Always typecheck from the root** — run `pnpm run typecheck` (which runs `tsc --build --emitDeclarationOnly`). This builds the full dependency graph so that cross-package imports resolve correctly. Running `tsc` inside a single package will fail if its dependencies haven't been built yet.
-- **`emitDeclarationOnly`** — we only emit `.d.ts` files during typecheck; actual JS bundling is handled by esbuild/tsx/vite...etc, not `tsc`.
-- **Project references** — when package A depends on package B, A's `tsconfig.json` must list B in its `references` array. `tsc --build` uses this to determine build order and skip up-to-date packages.
+## Key Env Vars
 
-## Root Scripts
+- `DATABASE_URL` — auto-provided by Replit
+- `REPL_ID` — Replit OIDC client ID (auto-provided)
+- `DEEPSEEK_API_KEY` — for AI scan analysis
+- `STRIPE_SECRET_KEY` — for Stripe payments (must be set as secret)
+- `STRIPE_WEBHOOK_SECRET` — for Stripe webhook verification (must be set as secret)
 
-- `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
-- `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
+## TypeScript Project References
 
-## Packages
+Every lib package has `composite: true`. Build order: run `npx tsc -b tsconfig.json` from root to emit declarations for all libs before typechecking individual artifacts.
 
-### `artifacts/api-server` (`@workspace/api-server`)
+Typecheck command: `pnpm --filter @workspace/api-server run typecheck && pnpm --filter @workspace/vibescan run typecheck`
 
-Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence.
+## Task Status
 
-- Entry: `src/index.ts` — reads `PORT`, starts Express
-- App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
-- Depends on: `@workspace/db`, `@workspace/api-zod`
-- `pnpm --filter @workspace/api-server run dev` — run the dev server
-- `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
-- Build bundles an allowlist of deps (express, cors, pg, drizzle-orm, zod, etc.) and externalizes the rest
+- [x] Task 1: Foundation, Auth, Landing Page — COMPLETE
+- [ ] Task 2: Stripe Payments & Scan Queue — PENDING
+- [ ] Task 3: Scan Worker Engine & DeepSeek Report Generation — PENDING
+- [ ] Task 4: Polish & Production Readiness — PENDING
 
-### `lib/db` (`@workspace/db`)
+## Note on Stripe Integration
 
-Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client instance and schema models.
-
-- `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
-- `src/schema/index.ts` — barrel re-export of all models
-- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
-- `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
-- Exports: `.` (pool, db, schema), `./schema` (schema only)
-
-Production migrations are handled by Replit when publishing. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
-
-### `lib/api-spec` (`@workspace/api-spec`)
-
-Owns the OpenAPI 3.1 spec (`openapi.yaml`) and the Orval config (`orval.config.ts`). Running codegen produces output into two sibling packages:
-
-1. `lib/api-client-react/src/generated/` — React Query hooks + fetch client
-2. `lib/api-zod/src/generated/` — Zod schemas
-
-Run codegen: `pnpm --filter @workspace/api-spec run codegen`
-
-### `lib/api-zod` (`@workspace/api-zod`)
-
-Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used by `api-server` for response validation.
-
-### `lib/api-client-react` (`@workspace/api-client-react`)
-
-Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
-
-### `scripts` (`@workspace/scripts`)
-
-Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+The Replit Stripe connector was dismissed. Use `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` environment secrets manually. When implementing Task 2, ask the user to provide their Stripe keys via the secrets panel.

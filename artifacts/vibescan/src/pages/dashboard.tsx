@@ -3,16 +3,15 @@ import { useListScans, useGetCredits, useGetScanStatus } from "@workspace/api-cl
 import { Shield, Plus, Clock, CheckCircle2, AlertCircle, RefreshCw, FileText, Loader2, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { cn, getGradeColor } from "@/lib/utils";
-import type { Scan } from "@workspace/api-client-react/src/generated/api.schemas";
+import type { Scan } from "@workspace/api-client-react";
 
 // Individual row component to handle independent polling
 function ScanRow({ initialScan }: { initialScan: Scan }) {
   const isPolling = ['pending', 'paid', 'queued', 'scanning', 'analyzing'].includes(initialScan.status);
   
   const { data: statusData } = useGetScanStatus(initialScan.id, {
-    query: {
-      refetchInterval: isPolling ? 3000 : false,
-    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query: { refetchInterval: isPolling ? 3000 : false } as any,
   });
 
   const scan = statusData || initialScan;
