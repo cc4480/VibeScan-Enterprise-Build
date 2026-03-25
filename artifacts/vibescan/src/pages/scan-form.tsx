@@ -5,6 +5,18 @@ import { Shield, Zap, Globe, Lock, CheckCircle2, Loader2, CreditCard, ShoppingCa
 import { cn } from "@/lib/utils";
 import type { ScanTier } from "@workspace/api-client-react";
 
+function getFriendlyError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  if (!msg) return "Something went wrong. Please try again.";
+  if (/<!DOCTYPE|<html|<head|<body/i.test(msg)) return "Server is unavailable right now. Please wait a moment and try again.";
+  if (/failed to fetch|networkerror|load failed/i.test(msg)) return "Could not reach the server. Check your connection and try again.";
+  if (/not configured|503/i.test(msg)) return "Payment processing is not set up yet. Contact support.";
+  if (/invalid url/i.test(msg)) return msg;
+  if (/unauthorized|401/i.test(msg)) return "You need to be signed in to scan.";
+  const clean = msg.replace(/^HTTP \d{3} [^:]+:\s*/, "");
+  return clean.length > 120 ? clean.slice(0, 120) + "…" : clean;
+}
+
 type TierConfig = {
   id: ScanTier;
   name: string;
@@ -243,7 +255,7 @@ export default function ScanFormPage() {
 
             {createScan.isError && (
               <p className="text-red-400 text-sm text-center">
-                {(createScan.error as Error)?.message || "Failed to initiate scan. Please try again."}
+                {getFriendlyError(createScan.error)}
               </p>
             )}
 
