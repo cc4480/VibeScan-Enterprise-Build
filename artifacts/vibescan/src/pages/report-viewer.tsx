@@ -1,4 +1,4 @@
-import { useGetReport } from "@workspace/api-client-react";
+import { useGetReport, getGetReportQueryKey } from "@workspace/api-client-react";
 import { useRoute, Link } from "wouter";
 import { Shield, ShieldAlert, CheckCircle2, ArrowLeft, Loader2, Globe, Server, Lock, ExternalLink, Activity, Info } from "lucide-react";
 import { cn, formatSeverity, getSeverityColors, getGradeColor } from "@/lib/utils";
@@ -118,9 +118,12 @@ function VulnCard({ vuln, index }: { vuln: Vulnerability, index: number }) {
 
 export default function ReportViewer() {
   const [, params] = useRoute("/report/:id");
-  const { data: report, isLoading, error } = useGetReport(params?.id || "", {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    query: { enabled: !!params?.id } as any,
+  const reportId = params?.id || "";
+  const { data: report, isLoading, error } = useGetReport(reportId, {
+    query: {
+      queryKey: getGetReportQueryKey(reportId),
+      enabled: !!params?.id,
+    },
   });
 
   if (isLoading) return <div className="min-h-[80vh] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;

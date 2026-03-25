@@ -127,6 +127,40 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* OWASP Coverage Section */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-16">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold mb-4 uppercase tracking-wider">
+            <Activity className="w-3.5 h-3.5" /> OWASP Top 10 Coverage
+          </div>
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">What VibeScan checks</h2>
+          <p className="text-muted-foreground max-w-2xl mx-auto">
+            Every scan runs a comprehensive black-box suite targeting the most critical web security risks—without installing anything.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[
+            { category: "A01", title: "Broken Access Control", desc: "Checks for publicly exposed admin routes, directory listing, and missing auth enforcement." },
+            { category: "A02", title: "Cryptographic Failures", desc: "SSL/TLS grade, cipher strength, HSTS enforcement, and certificate validity." },
+            { category: "A03", title: "Injection Risks", desc: "Detects input reflection patterns, missing content-type validation, and error verbosity." },
+            { category: "A05", title: "Security Misconfiguration", desc: "Security headers (CSP, X-Frame-Options, CORP, COOP), server version disclosure, debug modes." },
+            { category: "A06", title: "Vulnerable Components", desc: "Technology fingerprinting to identify outdated frameworks and libraries in use." },
+            { category: "A07", title: "Auth & Session Flaws", desc: "Cookie flags (HttpOnly, Secure, SameSite), session fixation indicators, and login endpoint analysis." },
+          ].map((item) => (
+            <div key={item.category} className="glass-card p-6 rounded-2xl flex gap-4 group hover:border-primary/30 transition-colors">
+              <div className="shrink-0 w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+                <span className="text-primary font-mono text-xs font-bold">{item.category}</span>
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground mb-1">{item.title}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* Pricing */}
       <section id="pricing" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
