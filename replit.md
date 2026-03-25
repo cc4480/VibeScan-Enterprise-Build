@@ -115,13 +115,20 @@ Typecheck command: `pnpm --filter @workspace/api-server run typecheck && pnpm --
 - [x] Task 1: Foundation, Auth, Landing Page — COMPLETE
 - [x] Task 2: Stripe Payments & Scan Queue — COMPLETE
 - [x] Task 3: Scan Worker Engine & DeepSeek Report Generation — COMPLETE
-- [ ] Task 4: Polish & Production Readiness — remaining items below
+- [x] Task 4: Polish & Production Readiness — COMPLETE
 
-## Remaining for Production
+## Task 4 Polish Applied
+
+- **Security headers** on all API responses: X-Content-Type-Options, X-Frame-Options: DENY, X-XSS-Protection, Referrer-Policy, Permissions-Policy, Content-Security-Policy; HSTS in production
+- **Grade badge** in dashboard Security column — colorized letter grade (A/B/C/D/F) fetched from the status polling endpoint (GET /api/scans/:id/status returns `grade`)
+- **Auto-redirect to report** when scan transitions from in-progress to `complete` (via `wasPolling` ref + `setLocation`)
+- **OG/SEO meta tags** in index.html (Open Graph, Twitter Card, description, theme-color)
+- **.env.example** at project root with all env vars documented
+
+## For Production
 
 1. Set `DEEPSEEK_API_KEY` secret in the Replit Secrets panel
 2. Set `STRIPE_SECRET_KEY` secret for payments
-3. Set `STRIPE_WEBHOOK_SECRET` and point Stripe dashboard webhook to `/api/scan/webhook`
-4. Consider: email notifications when scan completes
-5. Consider: rate limiting on POST /api/scans
-6. Consider: report PDF export
+3. Set `STRIPE_WEBHOOK_SECRET` and point Stripe dashboard webhook to `https://<domain>/api-server/api/scan/webhook`
+4. Set `RESEND_API_KEY` for email notifications on Deep/Pack scan completion (optional)
+5. Set `APP_ORIGIN` to the production URL for email links

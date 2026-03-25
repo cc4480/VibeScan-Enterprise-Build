@@ -311,12 +311,15 @@ router.get("/scans/:id/status", async (req, res): Promise<void> => {
   }
 
   let reportId: string | null = null;
+  let grade: string | null = null;
   if (scan.status === "complete") {
     const [report] = await db
-      .select({ id: reportsTable.id })
+      .select({ id: reportsTable.id, data: reportsTable.data })
       .from(reportsTable)
       .where(eq(reportsTable.scanId, scan.id));
     reportId = report?.id ?? null;
+    const reportData = report?.data as { summary?: { grade?: string } } | undefined;
+    grade = reportData?.summary?.grade ?? null;
   }
 
   res.json(
@@ -331,6 +334,7 @@ router.get("/scans/:id/status", async (req, res): Promise<void> => {
       completedAt: scan.completedAt ?? null,
       error: scan.error ?? null,
       reportId,
+      grade,
     }),
   );
 });
