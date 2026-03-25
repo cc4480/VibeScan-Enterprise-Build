@@ -34,9 +34,7 @@ function Router() {
           {() => <ProtectedRoute><ScanFormPage /></ProtectedRoute>}
         </Route>
         
-        <Route path="/report/:id">
-          {() => <ProtectedRoute><ReportViewer /></ProtectedRoute>}
-        </Route>
+        <Route path="/report/:id" component={ReportViewer} />
         
         <Route component={NotFound} />
       </Switch>

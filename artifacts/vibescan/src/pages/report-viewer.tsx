@@ -1,19 +1,18 @@
 import { useGetReport, getGetReportQueryKey } from "@workspace/api-client-react";
 import { useRoute, Link } from "wouter";
-import { Shield, ShieldAlert, CheckCircle2, ArrowLeft, Loader2, Globe, Server, Lock, ExternalLink, Activity, Info } from "lucide-react";
+import { Shield, ShieldAlert, CheckCircle2, ArrowLeft, Loader2, Globe, Server, Lock, Activity, Share2, Plus } from "lucide-react";
 import { cn, formatSeverity, getSeverityColors, getGradeColor } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import type { Vulnerability } from "@workspace/api-client-react";
 
 function GradeRing({ grade, score }: { grade: string, score: number }) {
-  // Simple CSS conic gradient for ring based on score
   const colorMap: Record<string, string> = {
-    A: "#34d399", // emerald-400
-    B: "#a3e635", // lime-400
-    C: "#facc15", // yellow-400
-    D: "#fb923c", // orange-400
-    F: "#f87171", // red-400
+    A: "#34d399",
+    B: "#a3e635",
+    C: "#facc15",
+    D: "#fb923c",
+    F: "#f87171",
   };
   const color = colorMap[grade] || "#94a3b8";
   
@@ -96,7 +95,6 @@ function VulnCard({ vuln, index }: { vuln: Vulnerability, index: number }) {
                     <CheckCircle2 className="w-4 h-4" /> Recommended Fix
                   </h5>
                   <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 text-sm text-foreground/90 leading-relaxed prose prose-invert max-w-none">
-                    {/* Assuming solution might contain simple markdown-like structure, rendering as text for safety but retaining whitespace */}
                     <div className="whitespace-pre-wrap">{vuln.solution}</div>
                   </div>
                   
@@ -113,6 +111,31 @@ function VulnCard({ vuln, index }: { vuln: Vulnerability, index: number }) {
         )}
       </AnimatePresence>
     </motion.div>
+  );
+}
+
+function ShareButton({ reportId }: { reportId: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = async () => {
+    const url = `${window.location.origin}${window.location.pathname.split("/report/")[0]}/report/${reportId}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      prompt("Copy this link:", url);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleShare}
+      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary border border-white/10 text-sm font-medium hover:bg-white/10 transition-colors"
+    >
+      <Share2 className="w-4 h-4" />
+      {copied ? "Link Copied!" : "Share Report"}
+    </button>
   );
 }
 
@@ -141,10 +164,11 @@ export default function ReportViewer() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
-      <div className="mb-8">
+      <div className="mb-8 flex items-center justify-between">
         <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="w-4 h-4" /> Back to Dashboard
         </Link>
+        <ShareButton reportId={reportId} />
       </div>
 
       {/* Header / Cover */}
@@ -207,7 +231,7 @@ export default function ReportViewer() {
           {aiAnalysis && (
             <div className="glass-card rounded-2xl p-6 border-t-4 border-t-primary">
               <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
-                <Activity className="w-5 h-5 text-primary" /> DeepSeek Analysis
+                <Activity className="w-5 h-5 text-primary" /> AI Analysis
               </h3>
               
               <div className="space-y-6">
@@ -271,6 +295,25 @@ export default function ReportViewer() {
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Bottom CTA */}
+      <div className="glass-panel rounded-3xl p-8 md:p-12 text-center border border-primary/20 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent pointer-events-none" />
+        <Shield className="w-12 h-12 text-primary mx-auto mb-4" />
+        <h2 className="text-2xl md:text-3xl font-bold mb-3">Scan another website</h2>
+        <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+          Check a different URL, a staging environment, or a client's site — each scan takes under 10 minutes.
+        </p>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <Link
+            href="/scan"
+            className="inline-flex items-center gap-2 px-8 py-4 bg-primary text-primary-foreground text-lg font-bold rounded-xl shadow-[0_0_30px_rgba(20,184,120,0.25)] hover:shadow-[0_0_40px_rgba(20,184,120,0.4)] hover:-translate-y-1 transition-all duration-300"
+          >
+            <Plus className="w-5 h-5" /> New Scan
+          </Link>
+          <ShareButton reportId={reportId} />
         </div>
       </div>
     </div>
