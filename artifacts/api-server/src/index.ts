@@ -16,10 +16,12 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-// Initialize pg-boss job queue (creates pgboss schema if not present)
+// Initialize pg-boss and start the scan worker
 getBoss()
-  .then(() => {
+  .then(async () => {
     logger.info("Job queue ready");
+    const { startWorker } = await import("./lib/worker");
+    await startWorker();
   })
   .catch((err: unknown) => {
     logger.error({ err }, "Failed to initialize job queue — scans will not be processed");
