@@ -82,6 +82,7 @@ router.post("/scans", async (req, res): Promise<void> => {
   const { targetUrl, tier } = parsed.data;
 
   const isPack = tier === "pack_5" || tier === "pack_20";
+  const paymentsDisabled = process.env.DISABLE_PAYMENTS === "true";
 
   // Validate URL only for scan tiers
   if (!isPack) {
@@ -94,6 +95,50 @@ router.post("/scans", async (req, res): Promise<void> => {
       res.status(400).json({ error: "Invalid URL. Must start with http:// or https://" });
       return;
     }
+  }
+
+  // ── Payment bypass for testing (DISABLE_PAYMENTS=true) ──────────────
+  if (paymentsDisabled && !isPack) {
+    const [scan] = await db
+      .insert(scansTable)
+      .values({
+        userId: req.user.id,
+        userEmail: req.user.email ?? "",
+        targetUrl,
+        tier,
+        status: "paid",
+      })
+      .returning();
+
+    await enqueueScan({ scanId: scan.id, userId: req.user.id, targetUrl, tier });
+
+    await db
+      .update(scansTable)
+      .set({ status: "queued", startedAt: new Date() })
+      .where(eq(scansTable.id, scan.id));
+
+    res.status(201).json({ scanId: scan.id, checkoutUrl: null, creditUsed: false });
+    return;
+  }
+
+  // ── Pack bypass for testing ──────────────────────────────────────────
+  if (paymentsDisabled && isPack) {
+    // In test mode, add 5 or 20 credits directly without payment
+    const creditsToAdd = tier === "pack_5" ? 5 : 20;
+    const [existing] = await db
+      .select()
+      .from(creditsTable)
+      .where(eq(creditsTable.userId, req.user.id));
+    if (existing) {
+      await db
+        .update(creditsTable)
+        .set({ balance: existing.balance + creditsToAdd })
+        .where(eq(creditsTable.userId, req.user.id));
+    } else {
+      await db.insert(creditsTable).values({ userId: req.user.id, balance: creditsToAdd });
+    }
+    res.status(201).json({ scanId: null, checkoutUrl: null, creditUsed: false });
+    return;
   }
 
   // For pack purchases: create a Stripe checkout for credits only (no scan record)
