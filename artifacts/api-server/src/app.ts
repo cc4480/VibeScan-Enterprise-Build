@@ -32,7 +32,7 @@ app.use(cookieParser());
 
 // Stripe webhook needs raw body BEFORE json() middleware
 app.use(
-  "/api/stripe/webhook",
+  "/api/scan/webhook",
   express.raw({ type: "application/json" }),
 );
 

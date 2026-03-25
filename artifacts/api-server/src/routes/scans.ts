@@ -165,10 +165,10 @@ router.post("/scans", async (req, res): Promise<void> => {
       .set({ balance: credit.balance - 1 })
       .where(eq(creditsTable.userId, req.user.id));
 
-    // Mark as paid and enqueue immediately
+    // pending → paid → queued
     await db
       .update(scansTable)
-      .set({ status: "queued", startedAt: new Date() })
+      .set({ status: "paid" })
       .where(eq(scansTable.id, scan.id));
 
     await enqueueScan({
@@ -177,6 +177,11 @@ router.post("/scans", async (req, res): Promise<void> => {
       targetUrl,
       tier,
     });
+
+    await db
+      .update(scansTable)
+      .set({ status: "queued", startedAt: new Date() })
+      .where(eq(scansTable.id, scan.id));
 
     res.status(201).json({
       scanId: scan.id,
@@ -216,6 +221,14 @@ router.post("/scans", async (req, res): Promise<void> => {
       user_id: req.user.id,
       target_url: targetUrl,
       tier,
+    },
+    payment_intent_data: {
+      metadata: {
+        type: "scan",
+        scan_id: scan.id,
+        user_id: req.user.id,
+        tier,
+      },
     },
     success_url: `${origin}/dashboard?scan=${scan.id}`,
     cancel_url: `${origin}/scan`,

@@ -7,7 +7,7 @@ import { enqueueScan } from "../lib/queue";
 const router: IRouter = Router();
 
 router.post(
-  "/stripe/webhook",
+  "/scan/webhook",
   async (req: Request, res: Response): Promise<void> => {
     if (!stripe) {
       res.status(503).json({ error: "Stripe not configured" });
@@ -62,19 +62,19 @@ router.post(
               break;
             }
 
-            // Mark scan as paid then queued
+            // pending → paid (so UI can show payment confirmed)
             await db
               .update(scansTable)
               .set({
-                status: "queued",
+                status: "paid",
                 stripePaymentIntentId:
                   typeof session.payment_intent === "string"
                     ? session.payment_intent
                     : (session.payment_intent?.id ?? null),
-                startedAt: new Date(),
               })
               .where(eq(scansTable.id, scanId));
 
+            // paid → queued (after enqueue succeeds)
             await enqueueScan({
               scanId: scan.id,
               userId: scan.userId,
@@ -82,7 +82,12 @@ router.post(
               tier: scan.tier,
             });
 
-            req.log.info({ scanId }, "Scan enqueued after payment");
+            await db
+              .update(scansTable)
+              .set({ status: "queued", startedAt: new Date() })
+              .where(eq(scansTable.id, scanId));
+
+            req.log.info({ scanId }, "Scan paid and enqueued");
           } else if (meta.type === "credits") {
             const userId = meta.user_id;
             const tier = meta.tier;
@@ -91,7 +96,6 @@ router.post(
             const creditsToAdd = CREDITS_MAP[tier] ?? 0;
             if (creditsToAdd === 0) break;
 
-            // Upsert credits balance
             const [existing] = await db
               .select()
               .from(creditsTable)
@@ -128,6 +132,7 @@ router.post(
         }
 
         case "payment_intent.payment_failed": {
+          // Metadata is propagated from the Checkout Session via payment_intent_data.metadata
           const failedIntent = event.data.object as import("stripe").Stripe.PaymentIntent;
           const meta = failedIntent.metadata ?? {};
           if (meta.type === "scan" && meta.scan_id) {
@@ -141,7 +146,6 @@ router.post(
         }
 
         default:
-          // Unhandled event type — ignore
           break;
       }
     } catch (err) {
