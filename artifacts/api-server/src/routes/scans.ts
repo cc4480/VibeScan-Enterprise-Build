@@ -1,11 +1,13 @@
 import { Router, type IRouter } from "express";
-import { db, scansTable, reportsTable } from "@workspace/db";
+import { db, scansTable, reportsTable, creditsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import {
   CreateScanBody,
   ListScansResponseItem,
   GetScanStatusResponse,
 } from "@workspace/api-zod";
+import { stripe, PRICE_MAP, getOrigin } from "../lib/stripe";
+import { enqueueScan } from "../lib/queue";
 
 const router: IRouter = Router();
 
@@ -79,17 +81,72 @@ router.post("/scans", async (req, res): Promise<void> => {
 
   const { targetUrl, tier } = parsed.data;
 
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(targetUrl);
-    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-      throw new Error("bad protocol");
+  const isPack = tier === "pack_5" || tier === "pack_20";
+
+  // Validate URL only for scan tiers
+  if (!isPack) {
+    try {
+      const parsedUrl = new URL(targetUrl);
+      if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+        throw new Error("bad protocol");
+      }
+    } catch {
+      res.status(400).json({ error: "Invalid URL. Must start with http:// or https://" });
+      return;
     }
-  } catch {
-    res.status(400).json({ error: "Invalid URL format. Must be http:// or https://" });
+  }
+
+  // For pack purchases: create a Stripe checkout for credits only (no scan record)
+  if (isPack) {
+    if (!stripe) {
+      res.status(503).json({ error: "Payment processing is not configured" });
+      return;
+    }
+
+    const priceConfig = PRICE_MAP[tier];
+    const origin = getOrigin(req);
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: "usd",
+            unit_amount: priceConfig.amount,
+            product_data: {
+              name: priceConfig.name,
+              description: priceConfig.description,
+            },
+          },
+        },
+      ],
+      metadata: {
+        type: "credits",
+        tier,
+        user_id: req.user.id,
+      },
+      success_url: `${origin}/dashboard?credits=purchased`,
+      cancel_url: `${origin}/scan`,
+    });
+
+    res.status(201).json({
+      scanId: null,
+      checkoutUrl: session.url,
+      creditUsed: false,
+    });
     return;
   }
 
+  // Check for available credits (only for scan tiers)
+  const [credit] = await db
+    .select()
+    .from(creditsTable)
+    .where(eq(creditsTable.userId, req.user.id));
+
+  const hasCredits = credit && credit.balance > 0;
+
+  // Create the scan record
   const [scan] = await db
     .insert(scansTable)
     .values({
@@ -101,9 +158,78 @@ router.post("/scans", async (req, res): Promise<void> => {
     })
     .returning();
 
+  // Use a credit if available
+  if (hasCredits) {
+    await db
+      .update(creditsTable)
+      .set({ balance: credit.balance - 1 })
+      .where(eq(creditsTable.userId, req.user.id));
+
+    // Mark as paid and enqueue immediately
+    await db
+      .update(scansTable)
+      .set({ status: "queued", startedAt: new Date() })
+      .where(eq(scansTable.id, scan.id));
+
+    await enqueueScan({
+      scanId: scan.id,
+      userId: req.user.id,
+      targetUrl,
+      tier,
+    });
+
+    res.status(201).json({
+      scanId: scan.id,
+      checkoutUrl: null,
+      creditUsed: true,
+    });
+    return;
+  }
+
+  // No credits — create Stripe checkout session
+  if (!stripe) {
+    res.status(503).json({ error: "Payment processing is not configured. Please contact support." });
+    return;
+  }
+
+  const priceConfig = PRICE_MAP[tier];
+  const origin = getOrigin(req);
+
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: "usd",
+          unit_amount: priceConfig.amount,
+          product_data: {
+            name: priceConfig.name,
+            description: `Target: ${targetUrl}`,
+          },
+        },
+      },
+    ],
+    metadata: {
+      type: "scan",
+      scan_id: scan.id,
+      user_id: req.user.id,
+      target_url: targetUrl,
+      tier,
+    },
+    success_url: `${origin}/dashboard?scan=${scan.id}`,
+    cancel_url: `${origin}/scan`,
+  });
+
+  // Save the Stripe session ID on the scan
+  await db
+    .update(scansTable)
+    .set({ stripeSessionId: session.id })
+    .where(eq(scansTable.id, scan.id));
+
   res.status(201).json({
     scanId: scan.id,
-    checkoutUrl: null,
+    checkoutUrl: session.url,
     creditUsed: false,
   });
 });
