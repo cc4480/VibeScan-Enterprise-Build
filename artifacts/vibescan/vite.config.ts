@@ -22,9 +22,11 @@ const securityHeaders: Record<string, string> = {
   "Cross-Origin-Resource-Policy": "same-origin",
   "Content-Security-Policy": [
     "default-src 'self'",
+    // 'unsafe-inline' is required by Vite's dev-server HMR runtime.
+    // Fonts are now self-hosted so no external font origins are needed.
     "script-src 'self' 'unsafe-inline'",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com data:",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self' data:",
     "img-src 'self' data: https: blob:",
     "connect-src 'self' https: wss: ws:",
     "worker-src 'self' blob:",

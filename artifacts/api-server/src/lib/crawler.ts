@@ -360,6 +360,21 @@ const probeUrlFn = probeUrl;
  *   "issueName::cookieName". Prevents the same cookie problem from being filed
  *   once per crawled page (e.g. Replit's GAESA cookie on every response).
  */
+// Cookies set by third-party infrastructure (CDN proxies, load balancers, etc.)
+// that the site owner cannot control.  Must match the list in scanner.ts.
+const INFRA_COOKIE_NAMES = new Set([
+  "gaesa",      // Replit CDN / proxy
+  "__cf_bm",    // Cloudflare Bot Management
+  "__cflb",     // Cloudflare Load Balancing
+  "_cfuvid",    // Cloudflare UVID
+  "cf_clearance", // Cloudflare challenge clearance
+  "__utmz",     // Google Analytics (legacy)
+  "__utma",     // Google Analytics (legacy)
+  "_ga",        // Google Analytics
+  "_gid",       // Google Analytics
+  "_gat",       // Google Analytics throttle
+]);
+
 function checkPageCookies(
   setCookies: string[],
   pageUrl: string,
@@ -377,6 +392,9 @@ function checkPageCookies(
     const firstSegment = cookie.split(";")[0] ?? "";
     if (!firstSegment.includes("=")) continue;
     const namePart = firstSegment.split("=")[0]?.trim() ?? "cookie";
+
+    // Skip infrastructure-owned cookies that the site operator cannot modify.
+    if (INFRA_COOKIE_NAMES.has(namePart.toLowerCase())) continue;
 
     if (isHttps && !/secure/i.test(cookie)) {
       const key = `secure::${namePart}`;
