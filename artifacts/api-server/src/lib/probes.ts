@@ -459,6 +459,392 @@ const SENSITIVE_PATHS: SensitivePath[] = [
     solution: "Remove crossdomain.xml if Flash is not used. If needed, restrict to specific domains instead of using wildcards.",
     validate: (body) => /<cross-domain-policy|allow-access-from domain/i.test(body),
   },
+
+  // ── Additional .env variants ──────────────────────────────────────────────
+  {
+    path: "/.env.development",
+    name: "Development Environment File Exposed (.env.development)",
+    severity: "high", cweId: "CWE-312", cvssScore: 7.5,
+    category: "Credential Exposure",
+    description: "A development .env file is publicly accessible, potentially containing database credentials, API keys, and OAuth secrets used in development — which are often reused in staging or production.",
+    solution: "Block all .env* files at the web server. Nginx: `location ~ /\\.env { deny all; }`. Never deploy .env files to the web root.",
+    validate: (body, ct) => !ct.includes("text/html") || /^[A-Z_][A-Z0-9_]*\s*=.+/m.test(body),
+  },
+  {
+    path: "/.env.dev",
+    name: "Dev Environment File Exposed (.env.dev)",
+    severity: "high", cweId: "CWE-312", cvssScore: 7.5,
+    category: "Credential Exposure",
+    description: "A .env.dev file is publicly accessible, potentially containing developer credentials and service keys.",
+    solution: "Block all .env* files at the web server and remove them from the web root.",
+    validate: (body, ct) => !ct.includes("text/html") || /^[A-Z_][A-Z0-9_]*\s*=.+/m.test(body),
+  },
+  {
+    path: "/.env.development.local",
+    name: "Local Development Overrides Exposed (.env.development.local)",
+    severity: "high", cweId: "CWE-312", cvssScore: 7.5,
+    category: "Credential Exposure",
+    description: ".env.development.local is gitignored by default and contains developer-specific overrides, frequently with real third-party API credentials and database passwords.",
+    solution: "Block all .env* files at the web server. This file should never be deployed.",
+    validate: (body, ct) => !ct.includes("text/html") || /^[A-Z_][A-Z0-9_]*\s*=.+/m.test(body),
+  },
+  {
+    path: "/.env.test",
+    name: "Test Environment File Exposed (.env.test)",
+    severity: "medium", cweId: "CWE-312", cvssScore: 5.3,
+    category: "Credential Exposure",
+    description: "A test .env file is accessible. Test environments frequently share credentials with staging or contain real third-party API keys for integration tests.",
+    solution: "Block all .env* files at the web server.",
+    validate: (body, ct) => !ct.includes("text/html") || /^[A-Z_][A-Z0-9_]*\s*=.+/m.test(body),
+  },
+
+  // ── CI/CD pipeline configurations ─────────────────────────────────────────
+  {
+    path: "/.travis.yml",
+    name: "Travis CI Configuration Exposed",
+    severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
+    category: "Information Disclosure",
+    description: ".travis.yml is publicly accessible. CI configuration files reveal deployment scripts, environment variable names (and sometimes values), server addresses, and the complete build and deployment pipeline. Attackers use this to plan targeted attacks on your infrastructure.",
+    solution: "Block CI config files at the web server or ensure they are not placed in the web root. Never hardcode secrets in CI configs — use the CI provider's encrypted secrets/variables feature.",
+    validate: (body) => /language:|script:|deploy:|env:|install:/i.test(body),
+  },
+  {
+    path: "/.circleci/config.yml",
+    name: "CircleCI Configuration Exposed",
+    severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
+    category: "Information Disclosure",
+    description: "A CircleCI configuration file is publicly accessible, revealing the full build, test, and deployment pipeline including any environment variable references.",
+    solution: "Block the .circleci directory at the web server. Store all secrets in CircleCI's project environment variables, not in the config file.",
+    validate: (body) => /version:|jobs:|steps:|workflows:|orbs:/i.test(body),
+  },
+  {
+    path: "/Jenkinsfile",
+    name: "Jenkinsfile CI/CD Configuration Exposed",
+    severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
+    category: "Information Disclosure",
+    description: "A Jenkinsfile is publicly accessible. Jenkins pipeline scripts often contain deployment targets, server addresses, credential references, and the complete build and release process.",
+    solution: "Block Jenkinsfile at the web server. Use Jenkins credentials store for all secrets, never inline them in the Jenkinsfile.",
+    validate: (body) => /pipeline|stage|steps|agent|environment|credentials/i.test(body),
+  },
+  {
+    path: "/.gitlab-ci.yml",
+    name: "GitLab CI/CD Configuration Exposed",
+    severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
+    category: "Information Disclosure",
+    description: ".gitlab-ci.yml is publicly accessible, revealing build stages, deployment scripts, Docker image references, and environment variable names used in the pipeline.",
+    solution: "Block .gitlab-ci.yml at the web server. All secrets should use GitLab CI/CD variables, not inline values.",
+    validate: (body) => /stages:|script:|deploy:|image:|variables:/i.test(body),
+  },
+  {
+    path: "/.drone.yml",
+    name: "Drone CI Configuration Exposed",
+    severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
+    category: "Information Disclosure",
+    description: "A Drone CI configuration file is publicly accessible, revealing pipeline steps and deployment configuration.",
+    solution: "Block CI config files at the web server.",
+    validate: (body) => /kind:|steps:|name:|image:|commands:/i.test(body),
+  },
+
+  // ── Dependency lockfiles ───────────────────────────────────────────────────
+  {
+    path: "/yarn.lock",
+    name: "yarn.lock Dependency Lockfile Exposed",
+    severity: "info", cweId: "CWE-200",
+    category: "Information Disclosure",
+    description: "yarn.lock is publicly accessible, revealing the exact version of every package in the dependency tree. Attackers cross-reference these versions against CVE databases to identify exploitable packages with precision, skipping the fingerprinting step entirely.",
+    solution: "Block lockfiles at the web server. They should not be placed in the web root.",
+    validate: (body) => /^# yarn lockfile|^# This file is generated/m.test(body) || (/resolved "https:\/\/registry/m.test(body) && body.length > 200),
+  },
+  {
+    path: "/package-lock.json",
+    name: "npm package-lock.json Exposed",
+    severity: "info", cweId: "CWE-200",
+    category: "Information Disclosure",
+    description: "package-lock.json is accessible, providing the complete resolved dependency tree with exact versions. This is a precision CVE-targeting blueprint.",
+    solution: "Block lockfiles at the web server.",
+    validate: (body, ct) => (ct.includes("json") || body.trim().startsWith("{")) && /"lockfileVersion"|"packages"|"dependencies"/.test(body),
+  },
+  {
+    path: "/composer.lock",
+    name: "PHP composer.lock Exposed",
+    severity: "info", cweId: "CWE-200",
+    category: "Information Disclosure",
+    description: "composer.lock is accessible, revealing all PHP package versions in use. Attackers use this to target known vulnerabilities in specific package versions.",
+    solution: "Block composer.lock at the web server.",
+    validate: (body) => /"content-hash"|"packages"|"platform"/i.test(body),
+  },
+  {
+    path: "/Gemfile.lock",
+    name: "Ruby Gemfile.lock Exposed",
+    severity: "info", cweId: "CWE-200",
+    category: "Information Disclosure",
+    description: "Gemfile.lock is publicly accessible, exposing all Ruby gem versions and dependency sources.",
+    solution: "Block Gemfile.lock at the web server.",
+    validate: (body) => /GEM\s+remote:|BUNDLED WITH|PLATFORMS/m.test(body),
+  },
+  {
+    path: "/Pipfile.lock",
+    name: "Python Pipfile.lock Exposed",
+    severity: "info", cweId: "CWE-200",
+    category: "Information Disclosure",
+    description: "Pipfile.lock is accessible, revealing all Python package versions. Useful for identifying vulnerable dependencies.",
+    solution: "Block Pipfile.lock at the web server.",
+    validate: (body) => /"_meta"|"default"|"develop"/.test(body) && /"version":/.test(body),
+  },
+  {
+    path: "/requirements.txt",
+    name: "Python requirements.txt Exposed",
+    severity: "info", cweId: "CWE-200",
+    category: "Information Disclosure",
+    description: "requirements.txt is publicly accessible, listing all Python dependencies and their pinned versions.",
+    solution: "Block requirements.txt at the web server.",
+    validate: (body) => /^[a-zA-Z][\w.-]*(==|>=|<=|~=|!=|>|<)\d/m.test(body) || (/^[a-zA-Z][\w.-]+$/m.test(body) && body.split("\n").length > 3),
+  },
+
+  // ── Cloud / infrastructure secrets ────────────────────────────────────────
+  {
+    path: "/terraform.tfstate",
+    name: "Terraform State File Exposed — Infrastructure Secrets",
+    severity: "critical", cweId: "CWE-312", cvssScore: 9.8,
+    category: "Credential Exposure",
+    description: "A Terraform state file is publicly accessible. Terraform state files contain a complete inventory of your cloud infrastructure in plaintext, including resource IDs, database connection strings, API keys, access tokens, private IPs, and any secrets passed as Terraform variables or outputs. This is one of the most sensitive files in any infrastructure.",
+    solution: "Remove terraform.tfstate from the web server immediately. Store Terraform state in a remote backend with encryption and access controls (Terraform Cloud, S3 with SSE, GCS). Never commit state files to repositories or deploy them to web servers.",
+    validate: (body) => /"terraform_version"|"resources"|"outputs"/.test(body.slice(0, 2000)),
+  },
+  {
+    path: "/.aws/credentials",
+    name: "AWS Credentials File Exposed",
+    severity: "critical", cweId: "CWE-312", cvssScore: 9.8,
+    category: "Credential Exposure",
+    description: "An AWS credentials file is publicly accessible. This file contains AWS Access Key IDs and Secret Access Keys in plaintext, granting API-level access to all AWS services the associated user or role can access.",
+    solution: "Remove .aws/credentials from the web server immediately. Rotate all exposed credentials in the AWS IAM console. Use IAM roles for EC2/Lambda instead of static credentials files.",
+    validate: (body) => /\[default\]|aws_access_key_id|aws_secret_access_key/i.test(body),
+  },
+  {
+    path: "/.kube/config",
+    name: "Kubernetes Config File Exposed — Cluster Credentials",
+    severity: "critical", cweId: "CWE-312", cvssScore: 9.8,
+    category: "Credential Exposure",
+    description: "A Kubernetes kubeconfig file is publicly accessible. This file contains cluster API server addresses, client certificates or tokens, and namespace context — providing full kubectl access to the Kubernetes cluster.",
+    solution: "Remove .kube/config from the web server immediately. Rotate all cluster credentials. Never deploy kubeconfig files to web servers.",
+    validate: (body) => /apiVersion:|clusters:|users:|contexts:|kind: Config/i.test(body),
+  },
+  {
+    path: "/id_rsa",
+    name: "SSH Private Key Exposed (id_rsa)",
+    severity: "critical", cweId: "CWE-312", cvssScore: 10.0,
+    category: "Credential Exposure",
+    description: "An SSH private key file is publicly accessible. Anyone who downloads this file can authenticate as the key's owner to any server that has the corresponding public key authorized. This typically grants root or admin shell access.",
+    solution: "Remove id_rsa from the web server immediately and consider it completely compromised. Generate a new key pair, deploy the new public key to all servers, and revoke the old public key from all authorized_keys files.",
+    validate: (body) => /-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/.test(body),
+  },
+  {
+    path: "/.ssh/id_rsa",
+    name: "SSH Private Key Exposed (.ssh/id_rsa)",
+    severity: "critical", cweId: "CWE-312", cvssScore: 10.0,
+    category: "Credential Exposure",
+    description: "An SSH private key is publicly accessible at .ssh/id_rsa. Anyone downloading this file can authenticate as the key owner to all servers that trust this key.",
+    solution: "Remove the key from the web server, revoke it from all authorized_keys files, and generate a new key pair.",
+    validate: (body) => /-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/.test(body),
+  },
+  {
+    path: "/.bash_history",
+    name: "Bash History File Exposed",
+    severity: "high", cweId: "CWE-200", cvssScore: 7.5,
+    category: "Information Disclosure",
+    description: ".bash_history is publicly accessible. Shell history files contain previously executed commands including curl requests with auth tokens, database connection strings typed directly, passwords passed as command-line arguments, and internal server addresses.",
+    solution: "Remove .bash_history from the web root. Block dotfiles at the web server: `location ~ /\\. { deny all; }`",
+    validate: (body) => body.length > 50 && /\b(sudo|curl|wget|mysql|psql|ssh|scp|git|npm|docker|kubectl)\b/i.test(body),
+  },
+
+  // ── Database admin panels ─────────────────────────────────────────────────
+  {
+    path: "/phpmyadmin/",
+    name: "phpMyAdmin Database Admin Exposed",
+    severity: "high", cweId: "CWE-200", cvssScore: 8.1,
+    category: "Information Disclosure",
+    description: "A phpMyAdmin database administration interface is accessible. If default or weak credentials are used, attackers gain full database access including reading all data, exfiltrating user credentials, modifying records, and executing SQL to write webshells.",
+    solution: "Restrict phpMyAdmin to localhost or VPN-only access. Enable authentication with a strong password. Ideally, remove it from the production server entirely and use a secure tunnel for DB access.",
+    validate: (body) => /phpMyAdmin|phpmyadmin|pma_/i.test(body),
+  },
+  {
+    path: "/adminer.php",
+    name: "Adminer Database Admin Tool Exposed",
+    severity: "high", cweId: "CWE-200", cvssScore: 8.1,
+    category: "Information Disclosure",
+    description: "Adminer (formerly phpMinAdmin) is publicly accessible. This single-file database admin tool gives attackers a GUI to connect to any database server visible from the web server, not just the local database.",
+    solution: "Remove adminer.php from production immediately. For development use only — restrict with IP allowlisting if kept on staging servers.",
+    validate: (body) => /adminer|Adminer/i.test(body),
+  },
+
+  // ── WordPress ─────────────────────────────────────────────────────────────
+  {
+    path: "/xmlrpc.php",
+    name: "WordPress XML-RPC Enabled — Brute Force Amplification Vector",
+    severity: "medium", cweId: "CWE-307", cvssScore: 7.5,
+    category: "Brute Force Protection",
+    description: "WordPress XML-RPC (xmlrpc.php) is accessible. The system.multicall method allows attackers to test thousands of username/password combinations in a single HTTP request, making brute-force attacks up to 1000× more efficient than targeting /wp-login.php directly. It's also used for DDoS amplification.",
+    solution: "Disable XML-RPC if not needed (most sites don't need it): add `add_filter('xmlrpc_enabled', '__return_false');` to functions.php, or block it at the web server: `location = /xmlrpc.php { deny all; return 403; }`",
+    validate: (body) => /xml version|xmlrpc|<methodResponse|<fault>/i.test(body),
+  },
+
+  // ── Spring Boot additional Actuator endpoints ─────────────────────────────
+  {
+    path: "/actuator/heapdump",
+    name: "Spring Boot Heap Dump Endpoint Exposed — Full Memory Snapshot",
+    severity: "critical", cweId: "CWE-200", cvssScore: 9.8,
+    category: "Credential Exposure",
+    description: "The Spring Boot Actuator /heapdump endpoint is publicly accessible. This endpoint downloads a complete snapshot of the JVM heap memory, which contains ALL in-memory application data: database passwords, API keys, session tokens, decrypted secrets, user PII, and any other data the application has processed. An attacker can extract secrets directly from the heap dump using tools like Eclipse Memory Analyzer.",
+    solution: "Restrict all Actuator endpoints immediately: `management.endpoints.web.exposure.include=health`. If heapdump is needed for debugging, restrict it to localhost or require authentication.",
+    validate: (_, ct) => ct.includes("octet-stream") || ct.includes("x-java") || ct.includes("application/zip"),
+  },
+  {
+    path: "/actuator/loggers",
+    name: "Spring Boot Loggers Endpoint Exposed",
+    severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
+    category: "Information Disclosure",
+    description: "The Spring Boot Actuator /loggers endpoint is accessible. Attackers can use this to increase log verbosity (e.g. enabling DEBUG) to extract sensitive data from logs, or to identify internal package structures.",
+    solution: "Restrict Actuator endpoints to authenticated users or internal network only.",
+    validate: (body) => /"loggers"|"levels"|"configuredLevel"/.test(body.slice(0, 1000)),
+  },
+  {
+    path: "/actuator/metrics",
+    name: "Spring Boot Metrics Endpoint Exposed",
+    severity: "low", cweId: "CWE-200",
+    category: "Information Disclosure",
+    description: "The Spring Boot Actuator /metrics endpoint reveals application performance counters, JVM statistics, and system resource usage. This aids attackers in understanding the application's technology stack and identifying attack windows.",
+    solution: "Restrict all Actuator endpoints. Expose only /health publicly if needed.",
+    validate: (body) => /"names"|"measurements"|"availableTags"/.test(body.slice(0, 1000)),
+  },
+
+  // ── Apache password / access control ─────────────────────────────────────
+  {
+    path: "/.htpasswd",
+    name: "Apache .htpasswd Password File Exposed",
+    severity: "critical", cweId: "CWE-312", cvssScore: 9.1,
+    category: "Credential Exposure",
+    description: ".htpasswd is publicly accessible. This file contains usernames and hashed passwords used for HTTP Basic Authentication. The hashes (MD5-APR, bcrypt, SHA1) can be cracked offline with tools like hashcat or John the Ripper.",
+    solution: "Remove .htpasswd from the web root. Configure Apache to block access to .ht* files (this is the default but can be accidentally overridden): `<Files ~ '^\\.ht'> Deny from all </Files>`",
+    validate: (body) => /^[a-zA-Z0-9._-]+:\$apr1\$|^[a-zA-Z0-9._-]+:\{SHA\}|^[a-zA-Z0-9._-]+:[a-zA-Z0-9./]{13}/m.test(body),
+  },
+
+  // ── Apache / Nginx diagnostics ────────────────────────────────────────────
+  {
+    path: "/server-info",
+    name: "Apache Server Info Page Exposed",
+    severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
+    category: "Information Disclosure",
+    description: "Apache's /server-info page is accessible, revealing all loaded modules, configuration directives, virtual host settings, and compile-time options. This provides attackers a detailed map of the server configuration to find exploitable settings.",
+    solution: "Disable mod_info or restrict to localhost: `<Location /server-info> Require local </Location>`",
+    validate: (body) => /Apache Server Information|Server Settings|Module Name/i.test(body),
+  },
+  {
+    path: "/nginx_status",
+    name: "Nginx Status Page Exposed",
+    severity: "low", cweId: "CWE-200",
+    category: "Information Disclosure",
+    description: "The Nginx stub_status page is accessible, showing active connections, total requests, and server state. While low severity on its own, it confirms the server is Nginx and reveals traffic patterns.",
+    solution: "Restrict nginx_status to localhost: `allow 127.0.0.1; deny all;`",
+    validate: (body) => /Active connections:|Reading:|Writing:|Waiting:|server accepts handled requests/i.test(body),
+  },
+
+  // ── Java / JEE ────────────────────────────────────────────────────────────
+  {
+    path: "/WEB-INF/web.xml",
+    name: "Java Web Application Config (WEB-INF/web.xml) Exposed",
+    severity: "high", cweId: "CWE-200", cvssScore: 7.5,
+    category: "Information Disclosure",
+    description: "The Java web application deployment descriptor (web.xml) is accessible. This file maps servlets, defines security constraints, lists initialization parameters, and may contain database JNDI references or other configuration that helps attackers understand the application structure.",
+    solution: "Web servers should block direct access to WEB-INF by default. Verify your web server or servlet container is not misconfigured to serve this directory directly.",
+    validate: (body) => /<web-app|<servlet|<filter|<context-param/i.test(body),
+  },
+  {
+    path: "/WEB-INF/classes/application.properties",
+    name: "Spring Application Properties Exposed (WEB-INF/classes/application.properties)",
+    severity: "critical", cweId: "CWE-312", cvssScore: 9.8,
+    category: "Credential Exposure",
+    description: "The Spring Boot application.properties file is publicly accessible. This file contains datasource URLs with credentials, JWT secrets, API keys, mail server passwords, and all other application configuration.",
+    solution: "Block the WEB-INF directory at your web server. Spring properties files must not be directly accessible from the web.",
+    validate: (body) => /spring\.|datasource\.|server\.port|jwt\.|mail\.|security\./i.test(body),
+  },
+
+  // ── IDE configuration files ───────────────────────────────────────────────
+  {
+    path: "/.vscode/settings.json",
+    name: "VS Code Workspace Settings Exposed",
+    severity: "low", cweId: "CWE-200",
+    category: "Information Disclosure",
+    description: ".vscode/settings.json is accessible. While usually benign, editor settings can reveal database connection strings, local server addresses, plugin configurations, and file paths that help attackers understand the development environment.",
+    solution: "Block .vscode at the web server. IDE config files should be in .gitignore and never deployed.",
+    validate: (body, ct) => (ct.includes("json") || body.trim().startsWith("{")) && body.length > 20,
+  },
+  {
+    path: "/.idea/workspace.xml",
+    name: "JetBrains IDE Workspace Config Exposed",
+    severity: "low", cweId: "CWE-200",
+    category: "Information Disclosure",
+    description: ".idea/workspace.xml contains JetBrains IDE workspace configuration, run configurations, data source settings (which may include database credentials), and local file paths.",
+    solution: "Block the .idea directory at the web server. Add it to .gitignore.",
+    validate: (body) => /<project|<component name=|<configuration/i.test(body),
+  },
+
+  // ── Generic config files ──────────────────────────────────────────────────
+  {
+    path: "/config.yaml",
+    name: "YAML Configuration File Exposed (config.yaml)",
+    severity: "high", cweId: "CWE-200", cvssScore: 7.5,
+    category: "Information Disclosure",
+    description: "A YAML configuration file is publicly accessible. YAML configs commonly contain database connection strings, API keys, service passwords, and internal endpoint URLs.",
+    solution: "Remove config.yaml from the web root. Use environment variables for sensitive configuration.",
+    validate: (body, ct) => (ct.includes("yaml") || /^[a-z_]+:/m.test(body)) && !ct.includes("text/html"),
+  },
+  {
+    path: "/config.yml",
+    name: "YAML Configuration File Exposed (config.yml)",
+    severity: "high", cweId: "CWE-200", cvssScore: 7.5,
+    category: "Information Disclosure",
+    description: "A YAML configuration file is publicly accessible, potentially containing service credentials and infrastructure details.",
+    solution: "Remove config.yml from the web root and use environment variables for sensitive values.",
+    validate: (body, ct) => (ct.includes("yaml") || /^[a-z_]+:/m.test(body)) && !ct.includes("text/html"),
+  },
+  {
+    path: "/app.yaml",
+    name: "Google App Engine Configuration Exposed (app.yaml)",
+    severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
+    category: "Information Disclosure",
+    description: "app.yaml is accessible. Google App Engine config files define runtime settings, environment variables, and service routing. Environment variable sections may contain API keys and credentials.",
+    solution: "Block app.yaml at the web server. Use GCP Secret Manager for credentials.",
+    validate: (body) => /runtime:|handlers:|env_variables:|service:|instance_class:/i.test(body),
+  },
+
+  // ── Additional API doc variants ────────────────────────────────────────────
+  {
+    path: "/api/swagger.json",
+    name: "API Documentation Exposed (/api/swagger.json)",
+    severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
+    category: "Information Disclosure",
+    description: "Swagger API documentation is exposed at /api/swagger.json, providing a full blueprint of API endpoints, parameters, authentication schemes, and data models.",
+    solution: "Require authentication to access API documentation in production.",
+    validate: (body) => /"swagger"|"openapi"/.test(body.slice(0, 500)),
+  },
+  {
+    path: "/api/v1/swagger.json",
+    name: "API v1 Documentation Exposed",
+    severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
+    category: "Information Disclosure",
+    description: "API v1 Swagger documentation is publicly accessible, exposing the complete API surface for version 1.",
+    solution: "Require authentication for API docs in production.",
+    validate: (body) => /"swagger"|"openapi"/.test(body.slice(0, 500)),
+  },
+  {
+    path: "/api/v2/swagger.json",
+    name: "API v2 Documentation Exposed",
+    severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
+    category: "Information Disclosure",
+    description: "API v2 Swagger documentation is publicly accessible.",
+    solution: "Require authentication for API docs in production.",
+    validate: (body) => /"swagger"|"openapi"/.test(body.slice(0, 500)),
+  },
 ];
 
 export async function checkSensitiveFiles(baseUrl: string): Promise<ScanVulnerability[]> {
@@ -908,6 +1294,105 @@ export async function checkClickjacking(targetUrl: string): Promise<ScanVulnerab
 // ORCHESTRATOR
 // ─────────────────────────────────────────────────────────────────────────────
 
+const DIRECTORY_LISTING_DIRS = [
+  "/uploads/", "/images/", "/files/", "/backup/", "/backups/",
+  "/logs/", "/static/", "/assets/", "/media/", "/data/",
+  "/tmp/", "/cache/", "/downloads/", "/export/", "/exports/",
+];
+
+const DIRECTORY_LISTING_PATTERNS = [
+  /Index of \//i,
+  /<title>Directory listing/i,
+  /\[To Parent Directory\]/i,
+  /httpd\s+Directory\s+Listing/i,
+  /<hr>\s*<pre>/i,
+  /\?C=N&amp;O=D/,
+];
+
+export async function checkDirectoryListing(
+  targetUrl: string,
+): Promise<ScanVulnerability[]> {
+  let origin: string;
+  try {
+    origin = new URL(targetUrl).origin;
+  } catch {
+    return [];
+  }
+
+  const results = await Promise.allSettled(
+    DIRECTORY_LISTING_DIRS.map(async (dir) => {
+      const url = origin + dir;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 6_000);
+      try {
+        const res = await fetch(url, { signal: controller.signal, redirect: "follow" });
+        if (!res.ok) return null;
+        const body = await res.text();
+        const matched = DIRECTORY_LISTING_PATTERNS.some((rx) => rx.test(body));
+        if (!matched) return null;
+        return vuln({
+          name: "Directory Listing Enabled",
+          severity: "medium",
+          category: "Information Disclosure",
+          description: `Directory listing is enabled at ${dir}. This exposes the complete file structure of that directory, allowing attackers to enumerate all files — including backup archives, configuration files, log files, and uploaded content that should not be public.`,
+          evidence: `Directory listing found at: ${url}`,
+          solution: "Disable directory listing at the web server. Nginx: remove the 'autoindex on' directive. Apache: add 'Options -Indexes' to the relevant directory block or .htaccess.",
+          cweId: "CWE-548",
+          cvssScore: 5.3,
+        });
+      } catch {
+        return null;
+      } finally {
+        clearTimeout(timer);
+      }
+    }),
+  );
+
+  return results
+    .filter((r): r is PromiseFulfilledResult<ScanVulnerability | null> => r.status === "fulfilled")
+    .map((r) => r.value)
+    .filter((v): v is ScanVulnerability => v !== null)
+    .slice(0, 3);
+}
+
+export async function checkSecurityTxt(
+  targetUrl: string,
+): Promise<ScanVulnerability[]> {
+  let origin: string;
+  try {
+    origin = new URL(targetUrl).origin;
+  } catch {
+    return [];
+  }
+
+  const paths = ["/.well-known/security.txt", "/security.txt"];
+  for (const p of paths) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6_000);
+    try {
+      const res = await fetch(origin + p, { signal: controller.signal, redirect: "follow" });
+      if (res.ok) {
+        const body = await res.text();
+        if (/Contact:|Expires:|Policy:/i.test(body)) return [];
+      }
+    } catch { /* network error = not present */ } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  return [vuln({
+    name: "Missing security.txt (RFC 9116)",
+    severity: "info",
+    category: "Information Disclosure",
+    description: "No security.txt file was found at /.well-known/security.txt or /security.txt. RFC 9116 defines this as the standard way for security researchers to report vulnerabilities to your organisation. Without it, researchers may not know how to contact you responsibly, leading to public disclosure before you can patch.",
+    solution: "Create /.well-known/security.txt with at minimum: Contact (email or form URL), Expires (date after which the file is stale), and optionally Policy (URL of your vulnerability disclosure policy). Generator: https://securitytxt.org/",
+    cweId: "CWE-205",
+    cvssScore: 0,
+  })];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function runAllProbes(
   targetUrl: string,
   html: string,
@@ -923,6 +1408,8 @@ export async function runAllProbes(
     checkHttpsRedirect(targetUrl),
     checkRateLimiting(targetUrl),
     checkClickjacking(targetUrl),
+    checkDirectoryListing(targetUrl),
+    checkSecurityTxt(targetUrl),
   ]);
 
   return settled
