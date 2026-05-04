@@ -12,6 +12,34 @@
  */
 
 import { randomUUID } from "node:crypto";
+
+/**
+ * Checks the HSTS preload list for a hostname.
+ * Preloaded domains have HTTPS enforced browser-side before the first request,
+ * making the Strict-Transport-Security response header optional. Without this
+ * check, scanners that run behind TLS-terminating proxies (which strip the
+ * header) produce false-positive "Missing HSTS" findings for preloaded domains.
+ */
+async function isHstsPreloaded(hostname: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5_000);
+  try {
+    // Remove www. prefix — preload status is registered on the apex domain
+    const apex = hostname.replace(/^www\./, "");
+    const res = await fetch(
+      `https://hstspreload.org/api/v2/status?domain=${encodeURIComponent(apex)}`,
+      { signal: controller.signal },
+    );
+    if (!res.ok) return false;
+    const json = (await res.json()) as { status?: string };
+    return json.status === "preloaded";
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 import { runAllProbes } from "./probes";
 import { checkDnsSecurity } from "./dnsChecks";
 import { scanJavaScriptForSecrets } from "./jsScanner";
@@ -335,15 +363,22 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
   // ── HTTP Strict-Transport-Security ────────────────────────────────────
   const hsts = headerVal(rawHeaders, "strict-transport-security");
   if (!hsts && isHttps) {
-    vulnerabilities.push(vuln({
-      name: "Missing HTTP Strict-Transport-Security (HSTS)",
-      severity: "high",
-      category: "Transport Security",
-      description: "HSTS is not configured. Without it, browsers may initially connect over HTTP, exposing users to downgrade attacks and SSL stripping. HSTS tells browsers to only ever connect via HTTPS.",
-      solution: "Add this header to all HTTPS responses: Strict-Transport-Security: max-age=31536000; includeSubDomains; preload",
-      cweId: "CWE-523",
-      cvssScore: 7.4,
-    }));
+    // Before flagging: check the HSTS preload list. Preloaded domains have HTTPS
+    // enforced in browsers before the first request, so the header is optional.
+    // This also prevents false positives when the scanner runs behind a
+    // TLS-terminating proxy that strips security headers from HTTPS responses.
+    const preloaded = await isHstsPreloaded(new URL(finalUrl).hostname).catch(() => false);
+    if (!preloaded) {
+      vulnerabilities.push(vuln({
+        name: "Missing HTTP Strict-Transport-Security (HSTS)",
+        severity: "high",
+        category: "Transport Security",
+        description: "HSTS is not configured. Without it, browsers may initially connect over HTTP, exposing users to downgrade attacks and SSL stripping. HSTS tells browsers to only ever connect via HTTPS.",
+        solution: "Add this header to all HTTPS responses: Strict-Transport-Security: max-age=31536000; includeSubDomains; preload",
+        cweId: "CWE-523",
+        cvssScore: 7.4,
+      }));
+    }
   } else if (hsts) {
     // Check for weak HSTS config
     const maxAgeMatch = /max-age=(\d+)/i.exec(hsts);
