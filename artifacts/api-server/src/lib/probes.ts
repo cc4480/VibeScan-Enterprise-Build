@@ -507,7 +507,8 @@ const SENSITIVE_PATHS: SensitivePath[] = [
     category: "Information Disclosure",
     description: ".travis.yml is publicly accessible. CI configuration files reveal deployment scripts, environment variable names (and sometimes values), server addresses, and the complete build and deployment pipeline. Attackers use this to plan targeted attacks on your infrastructure.",
     solution: "Block CI config files at the web server or ensure they are not placed in the web root. Never hardcode secrets in CI configs — use the CI provider's encrypted secrets/variables feature.",
-    validate: (body) => /language:|script:|deploy:|env:|install:/i.test(body),
+    // YAML CI files must not return text/html — that's an SPA catch-all serving index.html
+    validate: (body, ct) => !ct.includes("text/html") && /language:|script:|deploy:|env:|install:/i.test(body),
   },
   {
     path: "/.circleci/config.yml",
@@ -516,7 +517,7 @@ const SENSITIVE_PATHS: SensitivePath[] = [
     category: "Information Disclosure",
     description: "A CircleCI configuration file is publicly accessible, revealing the full build, test, and deployment pipeline including any environment variable references.",
     solution: "Block the .circleci directory at the web server. Store all secrets in CircleCI's project environment variables, not in the config file.",
-    validate: (body) => /version:|jobs:|steps:|workflows:|orbs:/i.test(body),
+    validate: (body, ct) => !ct.includes("text/html") && /version:|jobs:|steps:|workflows:|orbs:/i.test(body),
   },
   {
     path: "/Jenkinsfile",
@@ -525,7 +526,7 @@ const SENSITIVE_PATHS: SensitivePath[] = [
     category: "Information Disclosure",
     description: "A Jenkinsfile is publicly accessible. Jenkins pipeline scripts often contain deployment targets, server addresses, credential references, and the complete build and release process.",
     solution: "Block Jenkinsfile at the web server. Use Jenkins credentials store for all secrets, never inline them in the Jenkinsfile.",
-    validate: (body) => /pipeline|stage|steps|agent|environment|credentials/i.test(body),
+    validate: (body, ct) => !ct.includes("text/html") && /pipeline|stage|steps|agent|environment|credentials/i.test(body),
   },
   {
     path: "/.gitlab-ci.yml",
@@ -534,7 +535,8 @@ const SENSITIVE_PATHS: SensitivePath[] = [
     category: "Information Disclosure",
     description: ".gitlab-ci.yml is publicly accessible, revealing build stages, deployment scripts, Docker image references, and environment variable names used in the pipeline.",
     solution: "Block .gitlab-ci.yml at the web server. All secrets should use GitLab CI/CD variables, not inline values.",
-    validate: (body) => /stages:|script:|deploy:|image:|variables:/i.test(body),
+    // SPA apps return text/html for every route — only flag when genuine YAML content is returned
+    validate: (body, ct) => !ct.includes("text/html") && /stages:|script:|deploy:|image:|variables:/i.test(body),
   },
   {
     path: "/.drone.yml",
@@ -543,7 +545,7 @@ const SENSITIVE_PATHS: SensitivePath[] = [
     category: "Information Disclosure",
     description: "A Drone CI configuration file is publicly accessible, revealing pipeline steps and deployment configuration.",
     solution: "Block CI config files at the web server.",
-    validate: (body) => /kind:|steps:|name:|image:|commands:/i.test(body),
+    validate: (body, ct) => !ct.includes("text/html") && /kind:|steps:|name:|image:|commands:/i.test(body),
   },
 
   // ── Dependency lockfiles ───────────────────────────────────────────────────
