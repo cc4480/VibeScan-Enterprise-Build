@@ -1,5 +1,8 @@
 /**
- * Site crawler — checks security header consistency across inner pages.
+ * Site crawler — follows same-domain links, then for each inner page:
+ *   1. Checks security response headers (reports gaps vs. root page)
+ *   2. Probes for sensitive files relative to the discovered path
+ *   3. Checks cookie security flags on Set-Cookie headers
  *
  * The root URL is often served via a CDN that injects security headers, while
  * inner routes (especially /api/* paths) bypass the CDN and hit the origin
@@ -12,7 +15,7 @@ import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 
 const PAGE_TIMEOUT_MS = 8_000;
-const CRAWL_TIMEOUT_MS = 40_000;
+const CRAWL_TIMEOUT_MS = 30_000;
 
 // Paths that could trigger destructive actions — skip these
 const DANGEROUS_PATH_PATTERNS = /logout|signout|delete|remove|destroy|unsubscribe|reset|drop/i;
@@ -62,7 +65,77 @@ export function extractInternalLinks(html: string, baseUrl: string): string[] {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PER-PAGE HEADER CHECK
+// PAGE FETCH (GET — needed for Set-Cookie, body, and full response headers)
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface PageResult {
+  status: number;
+  headers: Record<string, string>;
+  /** Each Set-Cookie header as a separate entry (avoids Expires= comma mis-parse). */
+  setCookies: string[];
+  body: string;
+  finalUrl: string;
+}
+
+async function fetchPage(url: string, timeoutMs: number): Promise<PageResult | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      signal: controller.signal,
+      redirect: "follow",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; VibeScan-Security-Bot/1.0; +https://vibescan.app/bot)",
+        "Accept": "text/html,application/xhtml+xml,*/*",
+      },
+    });
+    const headers: Record<string, string> = {};
+    res.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });
+    const body = await res.text().catch(() => "");
+
+    // Use getSetCookie() to preserve each Set-Cookie header as a separate string,
+    // avoiding mis-parsing cookies that contain commas (e.g. Expires=Thu, 01 Jan …).
+    // Falls back to an empty array if the method is unavailable.
+    const setCookies: string[] =
+      typeof (res.headers as { getSetCookie?: () => string[] }).getSetCookie === "function"
+        ? (res.headers as { getSetCookie: () => string[] }).getSetCookie()
+        : [];
+
+    return { status: res.status, headers, setCookies, body, finalUrl: res.url };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Light probe — fetches a URL and returns status, headers, body, and final URL after redirects
+async function probeUrl(
+  url: string,
+  timeoutMs: number,
+): Promise<{ status: number; headers: Record<string, string>; body: string; finalUrl: string } | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      redirect: "follow",
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; VibeScan-Security-Bot/1.0)" },
+    });
+    const headers: Record<string, string> = {};
+    res.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });
+    const body = await res.text().catch(() => "");
+    return { status: res.status, headers, body, finalUrl: res.url };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PER-PAGE HEADER CHECKS
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface HeaderSnapshot {
@@ -87,39 +160,240 @@ function snapshotHeaders(headers: Record<string, string>): HeaderSnapshot {
   };
 }
 
-async function fetchPageHeaders(
-  url: string,
-): Promise<{ status: number; headers: Record<string, string>; cookies: string[] } | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PAGE_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      method: "HEAD",
-      signal: controller.signal,
-      redirect: "follow",
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; VibeScan-Security-Bot/1.0)" },
-    });
-    // Some servers return empty HEAD responses — fall back to GET
-    const headers: Record<string, string> = {};
-    res.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });
+// ─────────────────────────────────────────────────────────────────────────────
+// SENSITIVE FILE PROBES — run per discovered path prefix
+// ─────────────────────────────────────────────────────────────────────────────
 
-    const setCookie: string[] = [];
-    // HEAD won't give Set-Cookie usually — ok for now
-    return { status: res.status, headers, cookies: setCookie };
+interface PathProbe {
+  suffix: string;
+  name: string;
+  severity: ScanVulnerability["severity"];
+  category: string;
+  cweId: string;
+  cvssScore?: number;
+  description: (path: string) => string;
+  solution: string;
+  validate: (body: string, ct: string, status: number) => boolean;
+}
+
+const PATH_PROBES: PathProbe[] = [
+  {
+    suffix: "/swagger.json",
+    name: "API Documentation Exposed on Inner Route (Swagger)",
+    severity: "medium",
+    category: "Information Disclosure",
+    cweId: "CWE-200",
+    cvssScore: 5.3,
+    description: (path) =>
+      `Swagger/OpenAPI documentation is publicly accessible at "${path}swagger.json". This gives attackers a complete blueprint of every API endpoint, parameters, authentication schemes, and data models — without needing to reverse-engineer the application.`,
+    solution: "Require authentication to access API docs in production, or restrict them to internal networks.",
+    validate: (body) => /"swagger"|"openapi"/.test(body.slice(0, 500)),
+  },
+  {
+    suffix: "/openapi.json",
+    name: "API Documentation Exposed on Inner Route (OpenAPI)",
+    severity: "medium",
+    category: "Information Disclosure",
+    cweId: "CWE-200",
+    cvssScore: 5.3,
+    description: (path) =>
+      `OpenAPI documentation is publicly accessible at "${path}openapi.json". This exposes a complete map of your API surface to unauthenticated users.`,
+    solution: "Restrict API documentation to authenticated users or internal network access.",
+    validate: (body) => /"openapi"|"swagger"/.test(body.slice(0, 500)),
+  },
+  {
+    suffix: "/api-docs",
+    name: "API Documentation Exposed on Inner Route",
+    severity: "medium",
+    category: "Information Disclosure",
+    cweId: "CWE-200",
+    cvssScore: 5.3,
+    description: (path) =>
+      `API documentation is publicly accessible at "${path}api-docs". This may expose internal endpoint details and data structures.`,
+    solution: "Restrict API documentation to authenticated users.",
+    validate: (body) => /"swagger"|"openapi"|"paths"/.test(body.slice(0, 1000)),
+  },
+  {
+    suffix: "/.env",
+    name: "Environment File Exposed on Inner Route",
+    severity: "critical",
+    category: "Credential Exposure",
+    cweId: "CWE-312",
+    cvssScore: 9.1,
+    description: (path) =>
+      `A .env file is publicly accessible at "${path}.env". This file typically contains database passwords, API keys, JWT secrets, and third-party tokens that can immediately compromise all connected services.`,
+    solution: "Block .env* files at the web server level. Rotate all exposed credentials immediately.",
+    validate: (body, ct) => !ct.includes("text/html") || /^[A-Z_][A-Z0-9_]*\s*=.+/m.test(body),
+  },
+  {
+    suffix: "/.git/HEAD",
+    name: "Git Repository Exposed on Inner Route",
+    severity: "high",
+    category: "Source Code Exposure",
+    cweId: "CWE-538",
+    cvssScore: 8.1,
+    description: (path) =>
+      `A Git repository is accessible at "${path}.git/HEAD". Attackers can reconstruct source code, deleted files, and any credentials ever committed using git-dumper.`,
+    solution: "Block /.git directory access at the web server. Never deploy VCS directories to a public web root.",
+    validate: (body) => /^ref: refs\/heads\/\S+/.test(body.trim()) || /^[0-9a-f]{40}$/m.test(body.trim()),
+  },
+  {
+    suffix: "/config.json",
+    name: "Configuration File Exposed on Inner Route",
+    severity: "high",
+    category: "Information Disclosure",
+    cweId: "CWE-200",
+    cvssScore: 6.5,
+    description: (path) =>
+      `A configuration file is publicly accessible at "${path}config.json". It may contain connection strings, API keys, or internal endpoint URLs.`,
+    solution: "Remove config.json from web-accessible paths. Use environment variables for runtime configuration.",
+    validate: (body, ct) => (ct.includes("json") || body.trim().startsWith("{")) && !ct.includes("text/html") && body.length > 20,
+  },
+  {
+    suffix: "/graphql",
+    name: "GraphQL Endpoint Exposed on Inner Route",
+    severity: "medium",
+    category: "Information Disclosure",
+    cweId: "CWE-200",
+    cvssScore: 5.3,
+    description: (path) =>
+      `A GraphQL endpoint appears accessible at "${path}graphql". If introspection is enabled, attackers can enumerate your entire schema including all queries, mutations, types, and fields.`,
+    solution: "Disable GraphQL introspection in production. Add depth limiting and query complexity analysis.",
+    validate: (body) => /\"__schema\"|\"__type\"|graphql|GraphQL/i.test(body),
+  },
+  {
+    suffix: "/debug.log",
+    name: "Debug Log Exposed on Inner Route",
+    severity: "medium",
+    category: "Information Disclosure",
+    cweId: "CWE-532",
+    cvssScore: 5.3,
+    description: (path) =>
+      `A debug log file is publicly accessible at "${path}debug.log". Logs can contain sensitive request data, stack traces, and application internals.`,
+    solution: "Store logs outside the web root. Block .log files at the web server.",
+    validate: (body) => body.length > 100 && /error|warn|debug|exception|trace/i.test(body.slice(0, 3000)),
+  },
+];
+
+/**
+ * Run sensitive file probes relative to a discovered path's directory prefix.
+ * E.g. for page "/api/v1/users", probes are run under "/api/v1/".
+ * timeoutMs caps each individual probe request to respect the overall crawl budget.
+ */
+async function probePathSensitiveFiles(
+  pageUrl: string,
+  origin: string,
+  expectedHostname: string,
+  timeoutMs: number,
+): Promise<ScanVulnerability[]> {
+  let pathname: string;
+  try {
+    pathname = new URL(pageUrl).pathname;
   } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
+    return [];
   }
+
+  // Get the directory prefix (everything up to and including the last slash)
+  const lastSlash = pathname.lastIndexOf("/");
+  const dirPrefix = lastSlash > 0 ? pathname.slice(0, lastSlash + 1) : "/";
+
+  // Skip probing root prefix — root-level probes are already handled by probes.ts
+  if (dirPrefix === "/") return [];
+
+  const findings: ScanVulnerability[] = [];
+
+  await Promise.allSettled(
+    PATH_PROBES.map(async (probe) => {
+      const probeUrl = `${origin}${dirPrefix}${probe.suffix.replace(/^\//, "")}`;
+      const result = await probeUrlFn(probeUrl, timeoutMs);
+      if (!result || result.status !== 200) return;
+
+      // Ensure we didn't get redirected off-domain (catch-all login pages, etc.)
+      // Must check result.finalUrl (the URL after redirects), not the original probeUrl
+      try {
+        const finalHostname = new URL(result.finalUrl).hostname;
+        if (finalHostname !== expectedHostname) return;
+      } catch {
+        return;
+      }
+
+      const ct = result.headers["content-type"] ?? "";
+      if (!probe.validate(result.body, ct, result.status)) return;
+
+      findings.push(vuln({
+        name: probe.name,
+        severity: probe.severity,
+        category: probe.category,
+        description: probe.description(dirPrefix),
+        evidence: `GET ${dirPrefix}${probe.suffix.replace(/^\//, "")}\nHTTP 200 (${result.body.length.toLocaleString()} bytes)\nContent-Type: ${ct || "not set"}`,
+        solution: probe.solution,
+        cweId: probe.cweId,
+        cvssScore: probe.cvssScore,
+      }));
+    }),
+  );
+
+  return findings;
+}
+
+// Named alias to avoid shadowing the import at module level
+const probeUrlFn = probeUrl;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PER-PAGE COOKIE CHECKS
+// ─────────────────────────────────────────────────────────────────────────────
+
+function checkPageCookies(
+  setCookies: string[],
+  pageUrl: string,
+  isHttps: boolean,
+): ScanVulnerability[] {
+  if (setCookies.length === 0) return [];
+  const path = (() => { try { return new URL(pageUrl).pathname; } catch { return pageUrl; } })();
+  const findings: ScanVulnerability[] = [];
+  // Each entry is already a single Set-Cookie value (no need to split on commas)
+  const cookies = setCookies;
+
+  for (const cookie of cookies) {
+    if (!cookie.trim()) continue;
+    const namePart = cookie.split(";")[0]?.split("=")[0]?.trim() ?? "cookie";
+
+    if (isHttps && !/secure/i.test(cookie)) {
+      findings.push(vuln({
+        name: "Cookie Missing Secure Flag on Inner Page",
+        severity: "high",
+        category: "Session Management",
+        description: `The page "${path}" sets the cookie "${namePart}" without the Secure flag, allowing it to be transmitted over unencrypted HTTP even on an HTTPS site.`,
+        evidence: `GET ${pageUrl}\nSet-Cookie: ${cookie.split(";")[0]?.trim()}; (no Secure flag)`,
+        solution: "Add the Secure attribute to all cookies: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax",
+        cweId: "CWE-614",
+        cvssScore: 6.5,
+      }));
+    }
+
+    if (!/httponly/i.test(cookie)) {
+      findings.push(vuln({
+        name: "Cookie Missing HttpOnly Flag on Inner Page",
+        severity: "medium",
+        category: "Session Management",
+        description: `The page "${path}" sets the cookie "${namePart}" without the HttpOnly flag, allowing client-side JavaScript to access it. This enables session theft via XSS.`,
+        evidence: `GET ${pageUrl}\nSet-Cookie: ${cookie.split(";")[0]?.trim()}; (no HttpOnly flag)`,
+        solution: "Add the HttpOnly attribute to all session cookies: Set-Cookie: name=value; HttpOnly; Secure; SameSite=Lax",
+        cweId: "CWE-1004",
+        cvssScore: 5.3,
+      }));
+    }
+  }
+
+  return findings;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AGGREGATE FINDINGS
+// AGGREGATE HEADER-GAP FINDINGS
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface HeaderGap {
+interface HeaderGapMeta {
   header: string;
-  paths: string[];
   severity: ScanVulnerability["severity"];
   cweId: string;
   cvssScore: number;
@@ -127,71 +401,66 @@ interface HeaderGap {
   solution: string;
 }
 
+const HEADER_GAP_META: Record<keyof HeaderSnapshot, HeaderGapMeta> = {
+  hsts: {
+    header: "Strict-Transport-Security",
+    severity: "high",
+    cweId: "CWE-523",
+    cvssScore: 7.4,
+    description:
+      "The root URL has HSTS configured, but the following internal routes respond without the header. Routes that bypass the CDN (e.g. API endpoints hitting origin directly) won't enforce HTTPS-only connections.",
+    solution:
+      "Ensure HSTS is set at the application layer, not just the CDN, so all responses include the header: Strict-Transport-Security: max-age=31536000; includeSubDomains",
+  },
+  csp: {
+    header: "Content-Security-Policy",
+    severity: "high",
+    cweId: "CWE-79",
+    cvssScore: 7.2,
+    description:
+      "CSP is present on the root URL but absent on some internal routes. API endpoints and authenticated pages often need CSP too — injected content on those pages can steal tokens.",
+    solution:
+      "Apply CSP at the application/middleware layer for all routes, not just the homepage. Use a base policy that works across your entire app.",
+  },
+  xfo: {
+    header: "X-Frame-Options / frame-ancestors",
+    severity: "medium",
+    cweId: "CWE-1021",
+    cvssScore: 4.3,
+    description:
+      "Clickjacking protection is set on the root URL but missing on some internal pages. Those pages can be embedded in malicious iframes.",
+    solution:
+      "Apply X-Frame-Options: DENY (or SAMEORIGIN) globally via middleware, not per-route.",
+  },
+  xcto: {
+    header: "X-Content-Type-Options",
+    severity: "medium",
+    cweId: "CWE-16",
+    cvssScore: 4.3,
+    description:
+      "X-Content-Type-Options: nosniff is on the root page but missing on some internal routes, leaving those routes open to MIME-sniffing attacks.",
+    solution: "Set X-Content-Type-Options: nosniff globally in your server/middleware.",
+  },
+  rp: {
+    header: "Referrer-Policy",
+    severity: "low",
+    cweId: "CWE-200",
+    cvssScore: 3.1,
+    description:
+      "Referrer-Policy is set on the root URL but absent on some internal routes.",
+    solution: "Set Referrer-Policy globally: strict-origin-when-cross-origin",
+  },
+};
+
 function buildHeaderGapVulns(
   rootSnapshot: HeaderSnapshot,
   gapMap: Map<keyof HeaderSnapshot, string[]>,
 ): ScanVulnerability[] {
-  const HEADER_META: Record<keyof HeaderSnapshot, HeaderGap> = {
-    hsts: {
-      header: "Strict-Transport-Security",
-      paths: [],
-      severity: "high",
-      cweId: "CWE-523",
-      cvssScore: 7.4,
-      description:
-        "The root URL has HSTS configured, but the following internal routes respond without the header. Routes that bypass the CDN (e.g. API endpoints hitting origin directly) won't enforce HTTPS-only connections.",
-      solution:
-        "Ensure HSTS is set at the application layer, not just the CDN, so all responses include the header: Strict-Transport-Security: max-age=31536000; includeSubDomains",
-    },
-    csp: {
-      header: "Content-Security-Policy",
-      paths: [],
-      severity: "high",
-      cweId: "CWE-79",
-      cvssScore: 7.2,
-      description:
-        "CSP is present on the root URL but absent on some internal routes. API endpoints and authenticated pages often need CSP too — injected content on those pages can steal tokens.",
-      solution:
-        "Apply CSP at the application/middleware layer for all routes, not just the homepage. Use a base policy that works across your entire app.",
-    },
-    xfo: {
-      header: "X-Frame-Options / frame-ancestors",
-      paths: [],
-      severity: "medium",
-      cweId: "CWE-1021",
-      cvssScore: 4.3,
-      description:
-        "Clickjacking protection is set on the root URL but missing on some internal pages. Those pages can be embedded in malicious iframes.",
-      solution:
-        "Apply X-Frame-Options: DENY (or SAMEORIGIN) globally via middleware, not per-route.",
-    },
-    xcto: {
-      header: "X-Content-Type-Options",
-      paths: [],
-      severity: "medium",
-      cweId: "CWE-16",
-      cvssScore: 4.3,
-      description:
-        "X-Content-Type-Options: nosniff is on the root page but missing on some internal routes, leaving those routes open to MIME-sniffing attacks.",
-      solution: "Set X-Content-Type-Options: nosniff globally in your server/middleware.",
-    },
-    rp: {
-      header: "Referrer-Policy",
-      paths: [],
-      severity: "low",
-      cweId: "CWE-200",
-      cvssScore: 3.1,
-      description:
-        "Referrer-Policy is set on the root URL but absent on some internal routes.",
-      solution: "Set Referrer-Policy globally: strict-origin-when-cross-origin",
-    },
-  };
-
   const results: ScanVulnerability[] = [];
 
   for (const [key, paths] of gapMap.entries()) {
     if (paths.length === 0) continue;
-    const meta = HEADER_META[key];
+    const meta = HEADER_GAP_META[key];
     if (!meta) continue;
 
     // Only flag if root page HAD the header (makes this a regression, not a new issue)
@@ -226,12 +495,25 @@ export async function crawlAndCheck(
   rootHeaders: Record<string, string>,
   maxPages: number,
 ): Promise<ScanVulnerability[]> {
+  if (maxPages <= 0) return [];
+
   const urls = extractInternalLinks(rootHtml, rootUrl).slice(0, maxPages);
   if (urls.length === 0) return [];
 
-  const rootSnapshot = snapshotHeaders(rootHeaders);
+  let origin: string;
+  let expectedHostname: string;
+  try {
+    const parsed = new URL(rootUrl);
+    origin = parsed.origin;
+    expectedHostname = parsed.hostname;
+  } catch {
+    return [];
+  }
 
-  // Track which header is missing on which paths
+  const rootSnapshot = snapshotHeaders(rootHeaders);
+  const isHttps = rootUrl.startsWith("https://");
+
+  // Track which header is missing on which paths (for gap aggregation)
   const gapMap = new Map<keyof typeof rootSnapshot, string[]>([
     ["hsts", []],
     ["csp",  []],
@@ -241,28 +523,66 @@ export async function crawlAndCheck(
   ]);
 
   const crawlDeadline = Date.now() + CRAWL_TIMEOUT_MS;
+  const perPageFindings: ScanVulnerability[] = [];
 
-  const results = await Promise.allSettled(
-    urls.map(async (url) => {
-      if (Date.now() > crawlDeadline) return;
-      const page = await fetchPageHeaders(url);
-      if (!page || page.status === 404 || page.status === 0) return;
-      // Only analyse 2xx and some 3xx final responses
-      if (page.status >= 400) return;
+  // Minimum remaining budget required to start a new page fetch (avoids starting
+  // a request that can never complete within the overall time bound)
+  const MIN_BUDGET_MS = 1_000;
 
-      const snap = snapshotHeaders(page.headers);
+  // Process each page sequentially to respect the time budget
+  for (const url of urls) {
+    const remaining = crawlDeadline - Date.now();
+    if (remaining < MIN_BUDGET_MS) break;
 
-      for (const key of Object.keys(rootSnapshot) as (keyof typeof rootSnapshot)[]) {
-        if (rootSnapshot[key] && !snap[key]) {
-          const list = gapMap.get(key) ?? [];
-          list.push(url);
-          gapMap.set(key, list);
-        }
+    // Cap per-fetch timeout to whatever budget remains (hard deadline enforcement)
+    const fetchTimeout = Math.min(PAGE_TIMEOUT_MS, remaining);
+
+    const page = await fetchPage(url, fetchTimeout);
+    if (!page || page.status === 0 || page.status >= 400) continue;
+
+    // Verify we didn't get redirected off-domain (catch-all login redirects, etc.)
+    try {
+      const finalHostname = new URL(page.finalUrl).hostname;
+      if (finalHostname !== expectedHostname) continue;
+    } catch {
+      continue;
+    }
+
+    // ── Header gap tracking ────────────────────────────────────────────────
+    const snap = snapshotHeaders(page.headers);
+    for (const key of Object.keys(rootSnapshot) as (keyof typeof rootSnapshot)[]) {
+      if (rootSnapshot[key] && !snap[key]) {
+        const list = gapMap.get(key) ?? [];
+        list.push(url);
+        gapMap.set(key, list);
       }
-    }),
-  );
+    }
 
-  void results; // we care about the side-effects on gapMap
+    // ── Cookie checks ──────────────────────────────────────────────────────
+    perPageFindings.push(...checkPageCookies(page.setCookies, url, isHttps));
 
-  return buildHeaderGapVulns(rootSnapshot, gapMap);
+    // ── Sensitive file probes under this path's directory ──────────────────
+    const probeRemaining = crawlDeadline - Date.now();
+    if (probeRemaining >= MIN_BUDGET_MS) {
+      const probeTimeout = Math.min(PAGE_TIMEOUT_MS, probeRemaining);
+      const pathFindings = await probePathSensitiveFiles(url, origin, expectedHostname, probeTimeout);
+      perPageFindings.push(...pathFindings);
+    }
+  }
+
+  // Aggregate header gap findings (one finding per header type covering all affected paths)
+  const headerGapFindings = buildHeaderGapVulns(rootSnapshot, gapMap);
+
+  // Deduplicate: sensitive file probes may return the same finding for different paths
+  const seenSensitiveKeys = new Set<string>();
+  const dedupedPerPage: ScanVulnerability[] = [];
+  for (const finding of perPageFindings) {
+    const key = `${finding.name}::${finding.evidence?.slice(0, 80) ?? ""}`;
+    if (!seenSensitiveKeys.has(key)) {
+      seenSensitiveKeys.add(key);
+      dedupedPerPage.push(finding);
+    }
+  }
+
+  return [...headerGapFindings, ...dedupedPerPage];
 }
