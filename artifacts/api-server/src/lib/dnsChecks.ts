@@ -28,7 +28,20 @@ interface DohResponse {
   Answer?: DnsAnswer[];
 }
 
-async function dnsQuery(name: string, type: "TXT" | "MX" | "A" | "DNSKEY" | "NS"): Promise<DnsAnswer[]> {
+/**
+ * Returns { answers, status } where:
+ *   status  0 = NOERROR  (domain exists, record type may or may not exist)
+ *   status  2 = SERVFAIL (resolver error)
+ *   status  3 = NXDOMAIN (domain does not exist)
+ *   status -1 = network / timeout failure (we don't know)
+ *
+ * Only report a "missing record" finding when status === 0, so transient
+ * failures don't produce false-positive alerts.
+ */
+async function dnsQuery(
+  name: string,
+  type: "TXT" | "MX" | "A" | "DNSKEY" | "NS",
+): Promise<{ answers: DnsAnswer[]; status: number }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), DNS_TIMEOUT_MS);
   try {
@@ -37,11 +50,11 @@ async function dnsQuery(name: string, type: "TXT" | "MX" | "A" | "DNSKEY" | "NS"
       headers: { Accept: "application/dns-json" },
       signal: controller.signal,
     });
-    if (!res.ok) return [];
+    if (!res.ok) return { answers: [], status: -1 };
     const json = (await res.json()) as DohResponse;
-    return json.Answer ?? [];
+    return { answers: json.Answer ?? [], status: json.Status };
   } catch {
-    return [];
+    return { answers: [], status: -1 };
   } finally {
     clearTimeout(timer);
   }
@@ -52,22 +65,24 @@ async function dnsQuery(name: string, type: "TXT" | "MX" | "A" | "DNSKEY" | "NS"
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function checkSpf(hostname: string): Promise<ScanVulnerability[]> {
-  const answers = await dnsQuery(hostname, "TXT");
+  const { answers, status } = await dnsQuery(hostname, "TXT");
+  // status -1 means network failure — don't false-positive on transient errors
+  if (status === -1) return [];
   const txtRecords = answers.map((a) => a.data.replace(/^"|"$/g, "").replace(/"\s*"/g, ""));
 
   const spfRecord = txtRecords.find((r) => r.startsWith("v=spf1"));
 
   if (!spfRecord) {
     // Check if the domain has MX records (sends email) — if so, missing SPF is worse
-    const mxRecords = await dnsQuery(hostname, "MX");
-    const sendsMail = mxRecords.length > 0;
+    const { answers: mxAnswers } = await dnsQuery(hostname, "MX");
+    const sendsMail = mxAnswers.length > 0;
 
     return [vuln({
       name: "Missing SPF Record — Email Spoofing Possible",
       severity: sendsMail ? "high" : "medium",
       category: "Email Security",
       description: `No SPF (Sender Policy Framework) record was found for ${hostname}. Without SPF, anyone can send emails that appear to come from @${hostname}. Attackers use this to send phishing emails to your customers, partners, and employees under your domain name, with no technical barrier to doing so.`,
-      evidence: `DNS TXT query for ${hostname} returned no v=spf1 record.${sendsMail ? `\n${mxRecords.length} MX record(s) found — this domain actively sends email.` : ""}`,
+      evidence: `DNS TXT query for ${hostname} returned no v=spf1 record.${sendsMail ? `\n${mxAnswers.length} MX record(s) found — this domain actively sends email.` : ""}`,
       solution: `Add a TXT record to your DNS for ${hostname}:\n"v=spf1 include:_spf.yourmailprovider.com ~all"\n\nReplace 'include:...' with your actual mail provider's SPF include. End with '-all' (hard fail) for strictest enforcement. Verify at: https://mxtoolbox.com/spf.aspx`,
       cweId: "CWE-290",
       cvssScore: sendsMail ? 7.5 : 5.3,
@@ -125,7 +140,8 @@ export async function checkSpf(hostname: string): Promise<ScanVulnerability[]> {
 
 export async function checkDmarc(hostname: string): Promise<ScanVulnerability[]> {
   const dmarcHost = `_dmarc.${hostname}`;
-  const answers = await dnsQuery(dmarcHost, "TXT");
+  const { answers, status } = await dnsQuery(dmarcHost, "TXT");
+  if (status === -1) return [];
   const txtRecords = answers.map((a) => a.data.replace(/^"|"$/g, "").replace(/"\s*"/g, ""));
 
   const dmarcRecord = txtRecords.find((r) => r.startsWith("v=DMARC1"));
@@ -198,10 +214,15 @@ export async function checkDkim(hostname: string): Promise<ScanVulnerability[]> 
   );
 
   const foundAny = results.some(
-    (r) => r.status === "fulfilled" && r.value.length > 0,
+    (r) => r.status === "fulfilled" && r.value.answers.length > 0,
+  );
+  // Only report if at least one query returned a valid DNS response (status 0).
+  // If ALL queries timed out / errored, we have no basis for a finding.
+  const anyQuerySucceeded = results.some(
+    (r) => r.status === "fulfilled" && r.value.status === 0,
   );
 
-  if (!foundAny) {
+  if (!foundAny && anyQuerySucceeded) {
     return [vuln({
       name: "No DKIM Records Found",
       severity: "low",
@@ -221,7 +242,8 @@ export async function checkDkim(hostname: string): Promise<ScanVulnerability[]> 
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function checkDnssec(hostname: string): Promise<ScanVulnerability[]> {
-  const answers = await dnsQuery(hostname, "DNSKEY");
+  const { answers, status } = await dnsQuery(hostname, "DNSKEY");
+  if (status === -1) return [];
   if (answers.length === 0) {
     return [vuln({
       name: "DNSSEC Not Enabled",

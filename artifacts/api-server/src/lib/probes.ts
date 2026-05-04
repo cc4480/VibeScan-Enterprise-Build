@@ -1202,12 +1202,23 @@ export async function checkHttpsRedirect(targetUrl: string): Promise<ScanVulnera
   const result = await safeGet(`http://${hostname}/`, { redirect: "manual" }, 6_000);
   if (!result) return [];
 
+  // Explicit 3xx with Location: https://... — clear redirect to HTTPS
   if (result.status >= 300 && result.status < 400) {
     const location = result.headers["location"] ?? "";
     if (location.startsWith("https://")) return [];
+    // Some proxies/CDNs return a protocol-relative URL — resolve it:
+    // protocol-relative from an HTTP request means http://, so NOT a fix.
+    // Fall through and check finalUrl below.
   }
 
-  if (result.status === 200 || (result.status >= 300 && !result.headers["location"]?.startsWith("https://"))) {
+  // Some environments (reverse proxies, load balancers) transparently upgrade
+  // the connection. In that case the manual-redirect response may show status 200
+  // but res.url (finalUrl) is already https://. If we ended up on https://, the
+  // redirect chain is working — no finding.
+  if (result.finalUrl?.startsWith("https://")) return [];
+
+  // Confirmed: served HTTP without redirect to HTTPS
+  if (result.status === 200 || (result.status >= 300 && result.status < 400)) {
     return [vuln({
       name: "HTTP Traffic Not Redirected to HTTPS",
       severity: "high",
