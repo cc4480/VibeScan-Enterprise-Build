@@ -6,7 +6,11 @@
  * (https://osv.dev — free, no API key required).
  *
  * Covers: jQuery, Bootstrap, Lodash, Moment.js, Vue.js, Angular,
- * React (CDN-hosted), plus PHP end-of-life detection from headers.
+ * React (CDN-hosted), WordPress, Drupal, Joomla, plus PHP, Nginx,
+ * Apache, IIS, OpenResty end-of-life / CVE detection from headers.
+ *
+ * Results are cached in-process per (package, version, ecosystem) to
+ * avoid duplicate OSV.dev API calls within the same server lifetime.
  */
 
 import { randomUUID } from "node:crypto";
@@ -20,11 +24,23 @@ function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// IN-PROCESS CACHE — avoids duplicate OSV.dev calls for same version
+// ─────────────────────────────────────────────────────────────────────────────
+
+const osvCache = new Map<string, OsvVuln[]>();
+
+function osvCacheKey(packageName: string, version: string, ecosystem: string): string {
+  return `${ecosystem}:${packageName}@${version}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // VERSION EXTRACTION PATTERNS
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface DetectedVersion {
   displayName: string;
+  /** Canonical name as returned by detectTechnologies() in scanner.ts — used for enrichment matching */
+  techName: string;
   packageName: string;    // OSV package name
   ecosystem: string;      // OSV ecosystem ("npm", "PyPI", etc.)
   version: string;
@@ -32,6 +48,8 @@ interface DetectedVersion {
 
 interface VersionPattern {
   displayName: string;
+  /** Canonical name as returned by detectTechnologies() in scanner.ts */
+  techName?: string;
   packageName: string;
   ecosystem: string;
   patterns: RegExp[];
@@ -47,6 +65,7 @@ const VERSION_PATTERNS: VersionPattern[] = [
       /jQuery JavaScript Library v(\d+\.\d+\.\d+)/i,        // inline comment
       /jquery\.min\.js\?ver=(\d+\.\d+\.\d+)/i,              // WordPress ?ver= param
       /"jquery":\s*"([^"]+)"/i,                              // JSON dependency
+      /jquery\.fn\.jquery\s*=\s*["'](\d+\.\d+\.\d+)/i,      // runtime property
     ],
   },
   {
@@ -56,6 +75,7 @@ const VERSION_PATTERNS: VersionPattern[] = [
     patterns: [
       /bootstrap[/@-]v?(\d+\.\d+\.\d+)/i,
       /Bootstrap v(\d+\.\d+\.\d+)/i,
+      /bootstrap\.min\.(?:css|js)\?ver=(\d+\.\d+\.\d+)/i,
     ],
   },
   {
@@ -82,11 +102,12 @@ const VERSION_PATTERNS: VersionPattern[] = [
     ecosystem: "npm",
     patterns: [
       /vue[/@-]v?(\d+\.\d+\.\d+)/i,
-      /Vue\.version\s*=\s*"(\d+\.\d+\.\d+)"/i,
+      /Vue\.version\s*=\s*["'](\d+\.\d+\.\d+)/i,
     ],
   },
   {
     displayName: "AngularJS",
+    techName: "Angular",
     packageName: "angular",
     ecosystem: "npm",
     patterns: [
@@ -127,12 +148,65 @@ const VERSION_PATTERNS: VersionPattern[] = [
     ],
   },
   {
+    displayName: "DOMPurify",
+    packageName: "dompurify",
+    ecosystem: "npm",
+    patterns: [
+      /dompurify[/@-]v?(\d+\.\d+\.\d+)/i,
+      /DOMPurify\.version\s*=\s*["'](\d+\.\d+\.\d+)/i,
+    ],
+  },
+  {
+    displayName: "Axios",
+    packageName: "axios",
+    ecosystem: "npm",
+    patterns: [
+      /axios[/@-]v?(\d+\.\d+\.\d+)/i,
+    ],
+  },
+  {
+    displayName: "CKEditor",
+    packageName: "ckeditor4",
+    ecosystem: "npm",
+    patterns: [
+      /ckeditor[/@-]v?(\d+\.\d+\.\d+)/i,
+      /CKEditor\s+(\d+\.\d+\.\d+)/i,
+    ],
+  },
+  {
+    displayName: "TinyMCE",
+    packageName: "tinymce",
+    ecosystem: "npm",
+    patterns: [
+      /tinymce[/@-]v?(\d+\.\d+\.\d+)/i,
+      /tinymce\/(\d+\.\d+\.\d+)/i,
+    ],
+  },
+  {
     displayName: "WordPress",
     packageName: "wordpress",
     ecosystem: "WordPress",
     patterns: [
       /<meta[^>]*generator[^>]*WordPress\s+(\d+\.\d+\.?\d*)/i,
       /WordPress\.org\?v=(\d+\.\d+\.?\d*)/i,
+      /wp-includes\/js\/jquery\/jquery(?:\.min)?\.js\?ver=(\d+\.\d+\.?\d*)/i,
+    ],
+  },
+  {
+    displayName: "Drupal",
+    packageName: "drupal",
+    ecosystem: "Packagist",
+    patterns: [
+      /<meta[^>]*generator[^>]*Drupal\s+(\d+\.\d+\.?\d*)/i,
+      /Drupal\.settings.*?["']version["']\s*:\s*["'](\d+\.\d+\.?\d*)/i,
+    ],
+  },
+  {
+    displayName: "Joomla",
+    packageName: "joomla",
+    ecosystem: "Packagist",
+    patterns: [
+      /<meta[^>]*generator[^>]*Joomla!\s+(\d+\.\d+\.?\d*)/i,
     ],
   },
 ];
@@ -155,6 +229,7 @@ export function extractVersionedTechnologies(
         if (/^\d+\.\d+/.test(version)) {
           found.push({
             displayName: vp.displayName,
+            techName: vp.techName ?? vp.displayName,
             packageName: vp.packageName,
             ecosystem: vp.ecosystem,
             version,
@@ -166,35 +241,64 @@ export function extractVersionedTechnologies(
     }
   }
 
-  // PHP version from X-Powered-By header (not in OSV, checked locally)
+  // ── Headers: extract versioned server/runtime software ────────────────────
+
+  const serverHeader = Object.entries(headers).find(([k]) => k.toLowerCase() === "server")?.[1] ?? "";
   const poweredBy = Object.entries(headers).find(([k]) => k.toLowerCase() === "x-powered-by")?.[1] ?? "";
+
+  // PHP version from X-Powered-By header (not in OSV, checked locally)
   const phpMatch = /PHP\/(\d+\.\d+\.?\d*)/i.exec(poweredBy);
   if (phpMatch?.[1] && !seen.has("php")) {
     found.push({
       displayName: "PHP",
+      techName: "PHP",
       packageName: "php",
-      ecosystem: "local",  // handled separately
+      ecosystem: "local",
       version: phpMatch[1],
     });
+    seen.add("php");
   }
 
-  // Nginx version from Server header (local check)
-  const serverHeader = Object.entries(headers).find(([k]) => k.toLowerCase() === "server")?.[1] ?? "";
+  // Nginx version from Server header
   const nginxMatch = /nginx\/(\d+\.\d+\.\d+)/i.exec(serverHeader);
   if (nginxMatch?.[1] && !seen.has("nginx")) {
-    found.push({ displayName: "Nginx", packageName: "nginx", ecosystem: "local", version: nginxMatch[1] });
+    found.push({ displayName: "Nginx", techName: "Nginx", packageName: "nginx", ecosystem: "local", version: nginxMatch[1] });
+    seen.add("nginx");
   }
 
+  // Apache version from Server header — techName matches detectTechnologies() output "Apache"
   const apacheMatch = /Apache\/(\d+\.\d+\.\d+)/i.exec(serverHeader);
   if (apacheMatch?.[1] && !seen.has("apache")) {
-    found.push({ displayName: "Apache HTTPD", packageName: "apache", ecosystem: "local", version: apacheMatch[1] });
+    found.push({ displayName: "Apache HTTPD", techName: "Apache", packageName: "apache", ecosystem: "local", version: apacheMatch[1] });
+    seen.add("apache");
+  }
+
+  // Microsoft IIS version from Server header — techName matches detectTechnologies() output "IIS"
+  const iisMatch = /Microsoft-IIS\/(\d+\.\d+)/i.exec(serverHeader);
+  if (iisMatch?.[1] && !seen.has("iis")) {
+    found.push({ displayName: "Microsoft IIS", techName: "IIS", packageName: "iis", ecosystem: "local", version: iisMatch[1] });
+    seen.add("iis");
+  }
+
+  // OpenResty version from Server header
+  const openrestyMatch = /openresty\/(\d+\.\d+\.\d+)/i.exec(serverHeader);
+  if (openrestyMatch?.[1] && !seen.has("openresty")) {
+    found.push({ displayName: "OpenResty", techName: "OpenResty", packageName: "openresty", ecosystem: "local", version: openrestyMatch[1] });
+    seen.add("openresty");
+  }
+
+  // LiteSpeed version from Server header
+  const litespeedMatch = /LiteSpeed\/(\d+\.\d+\.?\d*)/i.exec(serverHeader);
+  if (litespeedMatch?.[1] && !seen.has("litespeed")) {
+    found.push({ displayName: "LiteSpeed", techName: "LiteSpeed", packageName: "litespeed", ecosystem: "local", version: litespeedMatch[1] });
+    seen.add("litespeed");
   }
 
   return found;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// OSV.dev QUERY
+// OSV.dev QUERY (with in-process cache)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface OsvVuln {
@@ -210,6 +314,11 @@ interface OsvVuln {
 }
 
 async function queryOsv(packageName: string, version: string, ecosystem: string): Promise<OsvVuln[]> {
+  const cacheKey = osvCacheKey(packageName, version, ecosystem);
+  if (osvCache.has(cacheKey)) {
+    return osvCache.get(cacheKey)!;
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), OSV_TIMEOUT_MS);
   try {
@@ -222,10 +331,19 @@ async function queryOsv(packageName: string, version: string, ecosystem: string)
       }),
       signal: controller.signal,
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      // Cache definitive non-2xx responses (e.g. 404 — package not found in OSV)
+      osvCache.set(cacheKey, []);
+      return [];
+    }
     const json = (await res.json()) as { vulns?: OsvVuln[] };
-    return json.vulns ?? [];
+    const vulns = json.vulns ?? [];
+    // Only cache definitive successful responses — not transient errors
+    osvCache.set(cacheKey, vulns);
+    return vulns;
   } catch {
+    // Network errors and timeouts are transient — do NOT cache so the next
+    // scan can retry. Just return empty for this request.
     return [];
   } finally {
     clearTimeout(timer);
@@ -301,6 +419,10 @@ const APACHE_VULN_RANGES: Array<{ lt: string; cve: string; desc: string; cvss: n
   { lt: "2.4.52", cve: "CVE-2021-41773", desc: "Path traversal and RCE on Apache 2.4.49 (historic Proxypass exploit)", cvss: 9.8 },
 ];
 
+// Microsoft IIS 6.x — CVE-2017-7269 targets WebDAV in IIS 6 only (Windows 2003).
+// IIS 7/8/8.5/10 are NOT affected, so we only flag major version "6".
+const IIS_EOL_MAJOR = "6";
+
 function semverLt(a: string, b: string): boolean {
   const pa = a.split(".").map(Number);
   const pb = b.split(".").map(Number);
@@ -370,6 +492,23 @@ function checkLocalVulns(detected: DetectedVersion[]): ScanVulnerability[] {
         }
       }
     }
+
+    if (d.packageName === "iis") {
+      // Only flag IIS 6.x — CVE-2017-7269 is specific to IIS 6 WebDAV (Windows Server 2003)
+      const majorVer = d.version.split(".")[0] ?? "";
+      if (majorVer === IIS_EOL_MAJOR) {
+        findings.push(vuln({
+          name: `Microsoft IIS ${d.version} — CVE-2017-7269 (End-of-Life)`,
+          severity: "critical",
+          category: "Outdated Software",
+          description: `Microsoft IIS ${d.version} is detected. IIS 6.0 (Windows Server 2003) has a critical buffer overflow vulnerability (CVE-2017-7269, CVSS 9.8) in the WebDAV service that allows remote code execution. IIS 6 reached end-of-life in July 2015 and receives no security updates.`,
+          evidence: `Server: Microsoft-IIS/${d.version}`,
+          solution: `Upgrade to IIS 10.0 (Windows Server 2022) or IIS 10.0 on Server 2019/2016. As an immediate mitigation, disable WebDAV in IIS if it is not required.`,
+          cweId: "CWE-119",
+          cvssScore: 9.8,
+        }));
+      }
+    }
   }
 
   return findings;
@@ -391,7 +530,7 @@ export async function checkForKnownVulnerabilities(
   // 1. Local checks (instant, no network)
   findings.push(...checkLocalVulns(detected));
 
-  // 2. OSV.dev queries for npm + WordPress packages (parallel)
+  // 2. OSV.dev queries for npm + CMS packages (parallel, cached per version)
   const osvTargets = detected.filter((d) => d.ecosystem !== "local");
 
   const osvResults = await Promise.allSettled(
