@@ -15,6 +15,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
+import { PATH_TRAVERSAL_TEMPLATES, classifyTraversalBody } from "./payloads";
 
 const TIMEOUT_MS = 7_000;
 
@@ -30,47 +31,6 @@ const FILE_PARAMS = new Set([
   "dir", "pg", "module", "conf", "cfg", "content", "layout",
   "resource", "section", "action", "name", "f", "p",
 ]);
-
-// ─── Traversal payloads ───────────────────────────────────────────────────────
-// Mix of plain, encoded, and filter-bypass variants; both Linux + Windows targets.
-
-const PAYLOADS = [
-  // Linux — direct
-  "../../../etc/passwd",
-  "../../../../etc/passwd",
-  "../../../../../../etc/passwd",
-  // Linux — filter bypass (dot-dot-slash variants)
-  "....//....//....//etc/passwd",
-  "..%2F..%2F..%2Fetc%2Fpasswd",
-  "%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd",
-  "..%252f..%252f..%252fetc%252fpasswd",
-  // Windows
-  "../../../windows/win.ini",
-  "../../../../windows/win.ini",
-  "%2e%2e%2f%2e%2e%2f%2e%2e%2fwindows%2fwin.ini",
-];
-
-// ─── Success indicators ───────────────────────────────────────────────────────
-
-const LINUX_INDICATORS: RegExp[] = [
-  /root:x:0:0:/,
-  /daemon:[x*]:\d+:\d+:/,
-  /nobody:[x*]:\d+:\d+:/,
-  /bin:[x*]:\d+:\d+:/,
-];
-
-const WINDOWS_INDICATORS: RegExp[] = [
-  /\[fonts\]/i,
-  /\[extensions\]/i,
-  /\[mci extensions\]/i,
-  /\[files\]/i,
-];
-
-function classify(body: string): "linux" | "windows" | null {
-  if (LINUX_INDICATORS.some((rx) => rx.test(body))) return "linux";
-  if (WINDOWS_INDICATORS.some((rx) => rx.test(body))) return "windows";
-  return null;
-}
 
 // ─── Common probe endpoints ───────────────────────────────────────────────────
 
@@ -161,14 +121,14 @@ export async function checkPathTraversal(
   // Run all cases concurrently but resolve on the first confirmed hit.
 
   for (const { path, param } of cases.slice(0, 40)) {
-    for (const payload of PAYLOADS) {
+    for (const payload of PATH_TRAVERSAL_TEMPLATES) {
       const testUrl = new URL(`${origin}${path}`);
       testUrl.searchParams.set(param, payload);
 
       const result = await safeGet(testUrl.toString());
       if (!result) continue;
 
-      const os = classify(result.body);
+      const os = classifyTraversalBody(result.body);
       if (!os) continue;
 
       const target = os === "linux" ? "/etc/passwd" : "windows/win.ini";

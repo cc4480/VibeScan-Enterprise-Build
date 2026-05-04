@@ -179,7 +179,7 @@ function VulnCard({ vuln, index }: { vuln: Vulnerability; index: number }) {
                     <div className="whitespace-pre-wrap">{vuln.solution}</div>
                   </div>
 
-                  {(vuln.cweId || vuln.cvssScore != null || vuln.wstgId) && (
+                  {(vuln.cweId || vuln.cvssScore != null || vuln.wstgId || vuln.confidence != null) && (
                     <div className="mt-4 flex gap-3 flex-wrap">
                       {vuln.cweId && (
                         <a
@@ -209,6 +209,20 @@ function VulnCard({ vuln, index }: { vuln: Vulnerability; index: number }) {
                         >
                           {vuln.wstgId}
                         </a>
+                      )}
+                      {vuln.confidence != null && (
+                        <span
+                          title="Confidence: how certain the scanner is this is a real finding, not a false positive"
+                          className={cn(
+                            "text-xs px-2 py-1 rounded font-medium",
+                            vuln.confidence >= 85 ? "bg-emerald-950 text-emerald-400" :
+                            vuln.confidence >= 70 ? "bg-teal-950 text-teal-400" :
+                            vuln.confidence >= 55 ? "bg-yellow-950 text-yellow-500" :
+                            "bg-secondary text-muted-foreground",
+                          )}
+                        >
+                          {vuln.confidence}% confidence
+                        </span>
                       )}
                     </div>
                   )}

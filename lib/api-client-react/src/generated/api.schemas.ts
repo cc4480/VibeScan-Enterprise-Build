@@ -156,6 +156,8 @@ export interface Vulnerability {
   cvssScore?: number | null;
   /** @nullable */
   wstgId?: string | null;
+  /** @nullable */
+  confidence?: number | null;
 }
 
 export interface ScanSummary {

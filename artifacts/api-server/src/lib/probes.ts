@@ -9,6 +9,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
+import { OPEN_REDIRECT_PROBE, OPEN_REDIRECT_PARAMS } from "./payloads";
 
 const PROBE_TIMEOUT_MS = 8_000;
 
@@ -1021,10 +1022,9 @@ export async function checkActiveCors(targetUrl: string): Promise<ScanVulnerabil
 
 export async function checkOpenRedirect(targetUrl: string): Promise<ScanVulnerability[]> {
   const base = new URL(targetUrl);
-  const probeTarget = "https://evil-redirect-probe.com";
-  const params = ["redirect", "url", "next", "goto", "return", "returnUrl", "returnTo", "r", "redirect_uri", "callback", "continue", "dest", "destination", "forward"];
+  const probeTarget = OPEN_REDIRECT_PROBE.template;
 
-  for (const param of params) {
+  for (const param of OPEN_REDIRECT_PARAMS) {
     const testUrl = new URL(targetUrl);
     testUrl.searchParams.set(param, probeTarget);
 
@@ -1033,7 +1033,7 @@ export async function checkOpenRedirect(targetUrl: string): Promise<ScanVulnerab
 
     if (result.status >= 300 && result.status < 400) {
       const location = result.headers["location"] ?? "";
-      if (/evil-redirect-probe\.com/i.test(location)) {
+      if (OPEN_REDIRECT_PROBE.indicator!.test(location)) {
         return [vuln({
           name: "Open Redirect Vulnerability",
           severity: "medium",

@@ -501,6 +501,15 @@ components:
           type: [number, 'null']
         wstgId:
           type: [string, 'null']
+        confidence:
+          type: [integer, 'null']
+          minimum: 0
+          maximum: 100
+          description: |
+            Confidence score 0–100. Measures how certain the scanner is that this
+            finding is a real, reproducible issue (not a false positive). Distinct
+            from CVSS severity — a low-severity finding can have high confidence
+            and vice versa.
 
     ScanSummary:
       type: object
