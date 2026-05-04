@@ -348,10 +348,11 @@ export async function scanJavaScriptForSecrets(
       severity: f.pattern.severity,
       category: "Exposed Secrets / Credentials",
       description: f.pattern.description,
-      evidence: `Found in inline script.\nMatch: ${redactSecret(f.match)}\nContext: ...${f.context.slice(0, 200)}...`,
+      evidence: `Source: inline <script> block\nMatch (redacted): ${redactSecret(f.match)}\nContext: ...${f.context.slice(0, 200)}...`,
       solution: f.pattern.solution,
       cweId: f.pattern.cweId,
       cvssScore: f.pattern.cvssScore,
+      wstgId: "WSTG-CONF-04",
     }));
   }
 
@@ -364,10 +365,11 @@ export async function scanJavaScriptForSecrets(
       severity: f.pattern.severity,
       category: "Exposed Secrets / Credentials",
       description: f.pattern.description,
-      evidence: `Found in external script: ${scriptPath}\nMatch: ${redactSecret(f.match)}\nContext: ...${f.context.slice(0, 200)}...`,
+      evidence: `Source: external script ${scriptPath}\nMatch (redacted): ${redactSecret(f.match)}\nContext: ...${f.context.slice(0, 200)}...`,
       solution: f.pattern.solution,
       cweId: f.pattern.cweId,
       cvssScore: f.pattern.cvssScore,
+      wstgId: "WSTG-CONF-04",
     }));
   }
 

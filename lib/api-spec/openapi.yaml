@@ -499,6 +499,8 @@ components:
           type: [string, 'null']
         cvssScore:
           type: [number, 'null']
+        wstgId:
+          type: [string, 'null']
 
     ScanSummary:
       type: object

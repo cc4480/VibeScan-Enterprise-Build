@@ -875,15 +875,19 @@ export async function checkSensitiveFiles(baseUrl: string): Promise<ScanVulnerab
       const ct = result.headers["content-type"] ?? "";
       if (!p.validate(result.body, ct)) return null;
 
+      const wstgId = /phpmyadmin|adminer|admin\s+panel|admin\s+interface|management\s+interface/i.test(p.name)
+        ? "WSTG-CONF-05"
+        : "WSTG-CONF-04";
       return vuln({
         name: p.name,
         severity: p.severity,
         category: p.category,
         description: p.description,
-        evidence: `GET ${p.path} → HTTP 200 (${result.body.length.toLocaleString()} bytes)\nContent-Type: ${ct || "not set"}`,
+        evidence: `GET ${origin}${p.path} → HTTP 200 (${result.body.length.toLocaleString()} bytes)\nContent-Type: ${ct || "not set"}`,
         solution: p.solution,
         cweId: p.cweId,
         cvssScore: p.cvssScore,
+        wstgId,
       });
     }),
   );
@@ -913,10 +917,11 @@ export async function checkHttpMethods(targetUrl: string): Promise<ScanVulnerabi
       severity: "medium",
       category: "HTTP Security",
       description: "The HTTP TRACE method is enabled. It reflects the full request back to the client—including headers like Authorization and Cookie. Combined with XSS (Cross-Site Tracing / XST), an attacker can steal session tokens that are marked HttpOnly, bypassing that protection.",
-      evidence: `OPTIONS → Allow: ${allow}`,
+      evidence: `OPTIONS ${targetUrl}\nAllow: ${allow}`,
       solution: "Disable TRACE server-wide. Apache: `TraceEnable Off`. Nginx: already off by default. IIS: Use URLScan or Request Filtering. This should be disabled regardless of whether XSS is present.",
       cweId: "CWE-16",
       cvssScore: 5.8,
+      wstgId: "WSTG-CONF-06",
     }));
   }
 
@@ -929,10 +934,11 @@ export async function checkHttpMethods(targetUrl: string): Promise<ScanVulnerabi
       severity: "high",
       category: "HTTP Security",
       description: `The server advertises ${dangerousMethods.join("/")} in the Allow header for the root path. If not properly guarded by application-level authorization, these methods can allow arbitrary file uploads or deletion of server resources.`,
-      evidence: `OPTIONS → Allow: ${allow}`,
+      evidence: `OPTIONS ${targetUrl}\nAllow: ${allow}`,
       solution: "Restrict HTTP methods to only those genuinely required. Use application-level authorization on any write methods. Block unused methods at the web server or load balancer before requests reach application code.",
       cweId: "CWE-650",
       cvssScore: 7.5,
+      wstgId: "WSTG-CONF-06",
     }));
   }
 
@@ -942,10 +948,11 @@ export async function checkHttpMethods(targetUrl: string): Promise<ScanVulnerabi
       severity: "medium",
       category: "HTTP Security",
       description: "The CONNECT method is advertised. This method is used to establish tunnels and could allow the server to be used as a proxy to reach internal systems not otherwise accessible.",
-      evidence: `OPTIONS → Allow: ${allow}`,
+      evidence: `OPTIONS ${targetUrl}\nAllow: ${allow}`,
       solution: "Disable the CONNECT method unless you are intentionally running a proxy server.",
       cweId: "CWE-441",
       cvssScore: 6.1,
+      wstgId: "WSTG-CONF-06",
     }));
   }
 
@@ -982,10 +989,11 @@ export async function checkActiveCors(targetUrl: string): Promise<ScanVulnerabil
         severity: "critical",
         category: "CORS Misconfiguration",
         description: `The server reflects any request Origin in Access-Control-Allow-Origin AND sets Access-Control-Allow-Credentials: true. This allows any malicious website to make authenticated cross-origin requests on behalf of a logged-in victim — reading their private data, performing actions as them, and effectively bypassing SameSite cookie protections.`,
-        evidence: `Request: Origin: ${origin}\nResponse: Access-Control-Allow-Origin: ${acao}\nAccess-Control-Allow-Credentials: ${acac}`,
+        evidence: `GET ${targetUrl}\nRequest header: Origin: ${origin}\nResponse: Access-Control-Allow-Origin: ${acao}\nResponse: Access-Control-Allow-Credentials: ${acac}`,
         solution: "Maintain a strict server-side allowlist of trusted origins. Never dynamically reflect the incoming Origin header without validating it against the allowlist. Never combine a dynamic origin with credentials: true.",
         cweId: "CWE-942",
         cvssScore: 9.1,
+        wstgId: "WSTG-CONF-07",
       })];
     }
 
@@ -995,10 +1003,11 @@ export async function checkActiveCors(targetUrl: string): Promise<ScanVulnerabil
         severity: "medium",
         category: "CORS Misconfiguration",
         description: `The server reflects any Origin value in Access-Control-Allow-Origin without validating it. While credentials are not currently sent, this enables cross-origin data theft from any public API endpoint your application exposes.`,
-        evidence: `Request: Origin: ${origin}\nResponse: Access-Control-Allow-Origin: ${acao}`,
+        evidence: `GET ${targetUrl}\nRequest header: Origin: ${origin}\nResponse: Access-Control-Allow-Origin: ${acao}`,
         solution: "Validate the Origin header against an explicit allowlist. Only reflect origins that are on the approved list. Never use a catch-all reflection.",
         cweId: "CWE-942",
         cvssScore: 6.5,
+        wstgId: "WSTG-CONF-07",
       })];
     }
   }
@@ -1030,10 +1039,11 @@ export async function checkOpenRedirect(targetUrl: string): Promise<ScanVulnerab
           severity: "medium",
           category: "Unvalidated Redirects",
           description: `The '${param}' parameter controls where users are sent after an action without validation. Attackers send victims a URL on ${base.hostname} (which they trust) that silently redirects them to a phishing site. This is widely used in credential harvesting campaigns because the initial URL appears legitimate.`,
-          evidence: `GET ${testUrl.pathname}?${param}=${encodeURIComponent(probeTarget)}\n→ HTTP ${result.status} Location: ${location}`,
+          evidence: `GET ${testUrl.pathname}?${param}=${encodeURIComponent(probeTarget)}\nHTTP ${result.status}\nLocation: ${location}`,
           solution: "Validate all redirect targets against an allowlist of permitted paths or domains. Prefer relative paths. If external redirects are needed, use an intermediate confirmation page and never accept destination URLs from user input directly.",
           cweId: "CWE-601",
           cvssScore: 6.1,
+          wstgId: "WSTG-CLNT-04",
         })];
       }
     }
@@ -1081,9 +1091,10 @@ export async function checkRobotsTxt(baseUrl: string): Promise<ScanVulnerability
     severity: "info",
     category: "Information Disclosure",
     description: `The robots.txt file contains ${sensitivePaths.length} path(s) that reveal sensitive areas of the application: ${sensitivePaths.slice(0, 5).join(", ")}${sensitivePaths.length > 5 ? "…" : ""}. Ironically, listing paths in robots.txt to hide them from search engines makes them more discoverable to attackers who always check this file first.`,
-    evidence: sensitivePaths.slice(0, 8).map((p) => `Disallow: ${p}`).join("\n"),
+    evidence: `GET ${origin}/robots.txt → HTTP 200\n${sensitivePaths.slice(0, 8).map((p) => `Disallow: ${p}`).join("\n")}`,
     solution: "Do not use robots.txt to obscure sensitive paths — it achieves the opposite. Properly secure those endpoints with authentication. Consider using `Disallow: /` globally if you don't want any indexing, rather than listing individual sensitive paths.",
     cweId: "CWE-200",
+    wstgId: "WSTG-INFO-01",
   })];
 }
 
@@ -1123,10 +1134,11 @@ export async function checkSRI(html: string, baseUrl: string): Promise<ScanVulne
     severity: "medium",
     category: "Supply Chain Security",
     description: `${missingIntegrity.length} external script(s)/stylesheet(s) are loaded from third-party CDNs without Subresource Integrity hashes. If any of these CDNs are compromised (which has happened to major CDNs), attackers can inject arbitrary JavaScript that runs on your site for all visitors—stealing credentials, hijacking sessions, or installing skimmers.`,
-    evidence: missingIntegrity.slice(0, 5).map((s) => `Missing integrity: ${s}`).join("\n"),
+    evidence: missingIntegrity.slice(0, 5).map((s) => `<script/link src="${s}" (no integrity= attribute)>`).join("\n"),
     solution: 'Add integrity and crossorigin to all external resources: `<script src="https://cdn.example.com/lib.js" integrity="sha384-..." crossorigin="anonymous">`. Generate hashes at https://www.srihash.org/ or using `openssl dgst -sha384 -binary FILE | openssl base64 -A`.',
     cweId: "CWE-353",
     cvssScore: 6.1,
+    wstgId: "WSTG-CONF-04",
   })];
 }
 
@@ -1176,12 +1188,13 @@ export async function checkErrorDisclosure(baseUrl: string): Promise<ScanVulnera
     description: isFlaskDebugger
       ? "The Flask/Werkzeug interactive debugger is enabled and publicly accessible. This allows ANYONE to execute arbitrary Python code on your server directly from their browser. This is a complete server compromise."
       : `Non-existent URLs trigger error pages containing ${matched.name}. These responses reveal internal file paths, framework/library versions, function call stacks, and application structure—dramatically reducing attacker effort to find exploitable weaknesses.`,
-    evidence: `GET ${testPath} → HTTP ${result.status}\nLeak type: ${matched.name}`,
+    evidence: `GET ${origin}${testPath} → HTTP ${result.status}\nLeak type: ${matched.name}`,
     solution: isFlaskDebugger
       ? "IMMEDIATELY disable the Werkzeug debugger: set DEBUG=False and FLASK_ENV=production. This is a critical emergency—your server can be fully compromised."
       : "Disable debug mode in production. Use a generic error page that reveals nothing. Log detailed errors server-side only. Framework guides: Express.js — use a production error handler middleware. Django — DEBUG = False. PHP — display_errors = Off in php.ini. Rails — config.consider_all_requests_local = false.",
     cweId: isFlaskDebugger ? "CWE-94" : "CWE-209",
     cvssScore: isFlaskDebugger ? 10.0 : 5.3,
+    wstgId: "WSTG-CONF-02",
   })];
 }
 
@@ -1237,10 +1250,11 @@ export async function checkHttpsRedirect(targetUrl: string): Promise<ScanVulnera
     severity: "medium",
     category: "Transport Security",
     description: `The HTTP version of the site does not issue a redirect to HTTPS. Users arriving via plain HTTP (old bookmarks, typed URLs, email links) may communicate in plaintext. Note: sites on the HSTS preload list rely on browsers enforcing HTTPS natively instead of HTTP-level redirects — verify at https://hstspreload.org if this is intentional.`,
-    evidence: `http://${hostname}/ does not redirect to https://${hostname}/`,
+    evidence: `GET http://${hostname}/ (followed up to 5 redirect hops)\nResult: request chain never reached https://${hostname}/`,
     solution: "Add a permanent 301 redirect from HTTP to HTTPS at the web server or load balancer:\n  Nginx: return 301 https://$host$request_uri;\n  Apache: Redirect permanent / https://yourdomain.com/\nAlternatively, submit your domain to the HSTS preload list (https://hstspreload.org) so browsers enforce HTTPS natively.",
     cweId: "CWE-319",
     cvssScore: 5.3,
+    wstgId: "WSTG-CONF-07",
   })];
 }
 
@@ -1270,9 +1284,11 @@ export async function checkRateLimiting(targetUrl: string): Promise<ScanVulnerab
       severity: "low",
       category: "Brute Force Protection",
       description: "No rate limiting or throttling headers were detected. Without rate limiting, attackers can run automated brute-force attacks against login endpoints, enumerate valid user accounts through credential stuffing, abuse API endpoints at scale, or perform denial-of-service attacks by flooding your server.",
+      evidence: `GET ${targetUrl}\nNo rate-limit headers found (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, X-Kong-Limit, cf-ray)`,
       solution: "Implement rate limiting on all sensitive endpoints (login, registration, password reset, API). Node.js: express-rate-limit. Django: DRF throttling. Also implement: account lockout after N failures, CAPTCHA on login, and IP-based throttling at the CDN/load balancer level. Return standard headers: X-RateLimit-Limit, X-RateLimit-Remaining, Retry-After.",
       cweId: "CWE-307",
       cvssScore: 5.3,
+      wstgId: "WSTG-ATHN-03",
     })];
   }
 
@@ -1301,10 +1317,11 @@ export async function checkClickjacking(targetUrl: string): Promise<ScanVulnerab
       severity: "medium",
       category: "UI Security",
       description: `X-Frame-Options is set to an invalid or non-standard value: "${xfo}". Browsers may ignore unrecognized values, leaving the application vulnerable to clickjacking attacks where attackers embed your page in an invisible iframe.`,
-      evidence: `X-Frame-Options: ${xfo}`,
+      evidence: `GET ${targetUrl}\nX-Frame-Options: ${xfo}\n(valid values: DENY or SAMEORIGIN)`,
       solution: 'Set X-Frame-Options to either "DENY" (blocks all framing) or "SAMEORIGIN" (allows framing by same origin). Alternatively, use CSP: Content-Security-Policy: frame-ancestors \'none\'',
       cweId: "CWE-1021",
       cvssScore: 4.3,
+      wstgId: "WSTG-CLNT-09",
     })];
   }
 
@@ -1356,10 +1373,11 @@ export async function checkDirectoryListing(
           severity: "medium",
           category: "Information Disclosure",
           description: `Directory listing is enabled at ${dir}. This exposes the complete file structure of that directory, allowing attackers to enumerate all files — including backup archives, configuration files, log files, and uploaded content that should not be public.`,
-          evidence: `Directory listing found at: ${url}`,
+          evidence: `GET ${url} → HTTP 200\nDirectory index page returned (autoindex enabled)`,
           solution: "Disable directory listing at the web server. Nginx: remove the 'autoindex on' directive. Apache: add 'Options -Indexes' to the relevant directory block or .htaccess.",
           cweId: "CWE-548",
           cvssScore: 5.3,
+          wstgId: "WSTG-CONF-04",
         });
       } catch {
         return null;
@@ -1406,6 +1424,7 @@ export async function checkSecurityTxt(
     severity: "info",
     category: "Information Disclosure",
     description: "No security.txt file was found at /.well-known/security.txt or /security.txt. RFC 9116 defines this as the standard way for security researchers to report vulnerabilities to your organisation. Without it, researchers may not know how to contact you responsibly, leading to public disclosure before you can patch.",
+    evidence: `GET ${origin}/.well-known/security.txt → not found\nGET ${origin}/security.txt → not found`,
     solution: "Create /.well-known/security.txt with at minimum: Contact (email or form URL), Expires (date after which the file is stale), and optionally Policy (URL of your vulnerability disclosure policy). Generator: https://securitytxt.org/",
     cweId: "CWE-205",
     cvssScore: 0,

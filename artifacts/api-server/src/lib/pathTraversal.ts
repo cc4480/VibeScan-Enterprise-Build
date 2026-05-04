@@ -183,6 +183,7 @@ export async function checkPathTraversal(
             "Never construct file system paths from user input. If file selection is required: (1) Use an allowlist of permitted file names or IDs only, (2) Resolve the final path with path.resolve() or equivalent and assert it starts within the permitted directory, (3) Never pass user-controlled values directly to file-reading APIs. Block any path containing '..', encoded variants, or null bytes at the input validation layer.",
           cweId: "CWE-22",
           cvssScore: 9.8,
+          wstgId: "WSTG-AUTHZ-01",
         }),
       ];
     }

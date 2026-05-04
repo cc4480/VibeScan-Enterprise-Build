@@ -171,6 +171,7 @@ interface PathProbe {
   category: string;
   cweId: string;
   cvssScore?: number;
+  wstgId?: string;
   description: (path: string) => string;
   solution: string;
   validate: (body: string, ct: string, status: number) => boolean;
@@ -184,6 +185,7 @@ const PATH_PROBES: PathProbe[] = [
     category: "Information Disclosure",
     cweId: "CWE-200",
     cvssScore: 5.3,
+    wstgId: "WSTG-CONF-04",
     description: (path) =>
       `Swagger/OpenAPI documentation is publicly accessible at "${path}swagger.json". This gives attackers a complete blueprint of every API endpoint, parameters, authentication schemes, and data models — without needing to reverse-engineer the application.`,
     solution: "Require authentication to access API docs in production, or restrict them to internal networks.",
@@ -196,6 +198,7 @@ const PATH_PROBES: PathProbe[] = [
     category: "Information Disclosure",
     cweId: "CWE-200",
     cvssScore: 5.3,
+    wstgId: "WSTG-CONF-04",
     description: (path) =>
       `OpenAPI documentation is publicly accessible at "${path}openapi.json". This exposes a complete map of your API surface to unauthenticated users.`,
     solution: "Restrict API documentation to authenticated users or internal network access.",
@@ -208,6 +211,7 @@ const PATH_PROBES: PathProbe[] = [
     category: "Information Disclosure",
     cweId: "CWE-200",
     cvssScore: 5.3,
+    wstgId: "WSTG-CONF-04",
     description: (path) =>
       `API documentation is publicly accessible at "${path}api-docs". This may expose internal endpoint details and data structures.`,
     solution: "Restrict API documentation to authenticated users.",
@@ -220,6 +224,7 @@ const PATH_PROBES: PathProbe[] = [
     category: "Credential Exposure",
     cweId: "CWE-312",
     cvssScore: 9.1,
+    wstgId: "WSTG-CONF-04",
     description: (path) =>
       `A .env file is publicly accessible at "${path}.env". This file typically contains database passwords, API keys, JWT secrets, and third-party tokens that can immediately compromise all connected services.`,
     solution: "Block .env* files at the web server level. Rotate all exposed credentials immediately.",
@@ -232,6 +237,7 @@ const PATH_PROBES: PathProbe[] = [
     category: "Source Code Exposure",
     cweId: "CWE-538",
     cvssScore: 8.1,
+    wstgId: "WSTG-CONF-04",
     description: (path) =>
       `A Git repository is accessible at "${path}.git/HEAD". Attackers can reconstruct source code, deleted files, and any credentials ever committed using git-dumper.`,
     solution: "Block /.git directory access at the web server. Never deploy VCS directories to a public web root.",
@@ -244,6 +250,7 @@ const PATH_PROBES: PathProbe[] = [
     category: "Information Disclosure",
     cweId: "CWE-200",
     cvssScore: 6.5,
+    wstgId: "WSTG-CONF-04",
     description: (path) =>
       `A configuration file is publicly accessible at "${path}config.json". It may contain connection strings, API keys, or internal endpoint URLs.`,
     solution: "Remove config.json from web-accessible paths. Use environment variables for runtime configuration.",
@@ -256,6 +263,7 @@ const PATH_PROBES: PathProbe[] = [
     category: "Information Disclosure",
     cweId: "CWE-200",
     cvssScore: 5.3,
+    wstgId: "WSTG-CONF-04",
     description: (path) =>
       `A GraphQL endpoint appears accessible at "${path}graphql". If introspection is enabled, attackers can enumerate your entire schema including all queries, mutations, types, and fields.`,
     solution: "Disable GraphQL introspection in production. Add depth limiting and query complexity analysis.",
@@ -268,6 +276,7 @@ const PATH_PROBES: PathProbe[] = [
     category: "Information Disclosure",
     cweId: "CWE-532",
     cvssScore: 5.3,
+    wstgId: "WSTG-CONF-04",
     description: (path) =>
       `A debug log file is publicly accessible at "${path}debug.log". Logs can contain sensitive request data, stack traces, and application internals.`,
     solution: "Store logs outside the web root. Block .log files at the web server.",
@@ -325,10 +334,11 @@ async function probePathSensitiveFiles(
         severity: probe.severity,
         category: probe.category,
         description: probe.description(dirPrefix),
-        evidence: `GET ${dirPrefix}${probe.suffix.replace(/^\//, "")}\nHTTP 200 (${result.body.length.toLocaleString()} bytes)\nContent-Type: ${ct || "not set"}`,
+        evidence: `GET ${origin}${dirPrefix}${probe.suffix.replace(/^\//, "")} → HTTP 200 (${result.body.length.toLocaleString()} bytes)\nContent-Type: ${ct || "not set"}`,
         solution: probe.solution,
         cweId: probe.cweId,
         cvssScore: probe.cvssScore,
+        wstgId: probe.wstgId,
       }));
     }),
   );
@@ -364,10 +374,11 @@ function checkPageCookies(
         severity: "high",
         category: "Session Management",
         description: `The page "${path}" sets the cookie "${namePart}" without the Secure flag, allowing it to be transmitted over unencrypted HTTP even on an HTTPS site.`,
-        evidence: `GET ${pageUrl}\nSet-Cookie: ${cookie.split(";")[0]?.trim()}; (no Secure flag)`,
+        evidence: `GET ${pageUrl}\nSet-Cookie: ${cookie.trim()}`,
         solution: "Add the Secure attribute to all cookies: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax",
         cweId: "CWE-614",
         cvssScore: 6.5,
+        wstgId: "WSTG-SESS-02",
       }));
     }
 
@@ -377,10 +388,11 @@ function checkPageCookies(
         severity: "medium",
         category: "Session Management",
         description: `The page "${path}" sets the cookie "${namePart}" without the HttpOnly flag, allowing client-side JavaScript to access it. This enables session theft via XSS.`,
-        evidence: `GET ${pageUrl}\nSet-Cookie: ${cookie.split(";")[0]?.trim()}; (no HttpOnly flag)`,
+        evidence: `GET ${pageUrl}\nSet-Cookie: ${cookie.trim()}`,
         solution: "Add the HttpOnly attribute to all session cookies: Set-Cookie: name=value; HttpOnly; Secure; SameSite=Lax",
         cweId: "CWE-1004",
         cvssScore: 5.3,
+        wstgId: "WSTG-SESS-02",
       }));
     }
   }
@@ -397,6 +409,7 @@ interface HeaderGapMeta {
   severity: ScanVulnerability["severity"];
   cweId: string;
   cvssScore: number;
+  wstgId: string;
   description: string;
   solution: string;
 }
@@ -407,6 +420,7 @@ const HEADER_GAP_META: Record<keyof HeaderSnapshot, HeaderGapMeta> = {
     severity: "high",
     cweId: "CWE-523",
     cvssScore: 7.4,
+    wstgId: "WSTG-CONF-07",
     description:
       "The root URL has HSTS configured, but the following internal routes respond without the header. Routes that bypass the CDN (e.g. API endpoints hitting origin directly) won't enforce HTTPS-only connections.",
     solution:
@@ -417,6 +431,7 @@ const HEADER_GAP_META: Record<keyof HeaderSnapshot, HeaderGapMeta> = {
     severity: "high",
     cweId: "CWE-79",
     cvssScore: 7.2,
+    wstgId: "WSTG-CONF-12",
     description:
       "CSP is present on the root URL but absent on some internal routes. API endpoints and authenticated pages often need CSP too — injected content on those pages can steal tokens.",
     solution:
@@ -427,6 +442,7 @@ const HEADER_GAP_META: Record<keyof HeaderSnapshot, HeaderGapMeta> = {
     severity: "medium",
     cweId: "CWE-1021",
     cvssScore: 4.3,
+    wstgId: "WSTG-CLNT-09",
     description:
       "Clickjacking protection is set on the root URL but missing on some internal pages. Those pages can be embedded in malicious iframes.",
     solution:
@@ -437,6 +453,7 @@ const HEADER_GAP_META: Record<keyof HeaderSnapshot, HeaderGapMeta> = {
     severity: "medium",
     cweId: "CWE-16",
     cvssScore: 4.3,
+    wstgId: "WSTG-CONF-07",
     description:
       "X-Content-Type-Options: nosniff is on the root page but missing on some internal routes, leaving those routes open to MIME-sniffing attacks.",
     solution: "Set X-Content-Type-Options: nosniff globally in your server/middleware.",
@@ -446,6 +463,7 @@ const HEADER_GAP_META: Record<keyof HeaderSnapshot, HeaderGapMeta> = {
     severity: "low",
     cweId: "CWE-200",
     cvssScore: 3.1,
+    wstgId: "WSTG-CONF-07",
     description:
       "Referrer-Policy is set on the root URL but absent on some internal routes.",
     solution: "Set Referrer-Policy globally: strict-origin-when-cross-origin",
@@ -479,6 +497,7 @@ function buildHeaderGapVulns(
       solution: meta.solution,
       cweId: meta.cweId,
       cvssScore: meta.cvssScore,
+      wstgId: meta.wstgId,
     }));
   }
 

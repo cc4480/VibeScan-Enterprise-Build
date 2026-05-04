@@ -68,6 +68,7 @@ export interface ScanVulnerability {
   solution: string;
   cweId?: string | null;
   cvssScore?: number | null;
+  wstgId?: string | null;
 }
 
 export interface ScanResult {
@@ -257,10 +258,11 @@ function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[
         severity: "high",
         category: "Session Management",
         description: `The cookie "${namePart}" is set without the Secure flag, meaning it can be transmitted over unencrypted HTTP connections, making it susceptible to interception.`,
-        evidence: `Set-Cookie: ${cookie.split(";")[0]?.trim()}; (no Secure flag)`,
+        evidence: `Set-Cookie: ${cookie.trim()}`,
         solution: "Add the Secure attribute to all cookies: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax",
         cweId: "CWE-614",
         cvssScore: 6.5,
+        wstgId: "WSTG-SESS-02",
       }));
     }
 
@@ -270,10 +272,11 @@ function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[
         severity: "medium",
         category: "Session Management",
         description: `The cookie "${namePart}" is set without the HttpOnly flag, allowing client-side JavaScript to access it. This enables session theft via XSS attacks.`,
-        evidence: `Set-Cookie: ${cookie.split(";")[0]?.trim()}; (no HttpOnly flag)`,
+        evidence: `Set-Cookie: ${cookie.trim()}`,
         solution: "Add the HttpOnly attribute to all session cookies: Set-Cookie: name=value; HttpOnly; Secure; SameSite=Lax",
         cweId: "CWE-1004",
         cvssScore: 5.3,
+        wstgId: "WSTG-SESS-02",
       }));
     }
 
@@ -283,10 +286,11 @@ function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[
         severity: "medium",
         category: "CSRF Protection",
         description: `The cookie "${namePart}" lacks the SameSite attribute, making the application potentially vulnerable to Cross-Site Request Forgery (CSRF) attacks.`,
-        evidence: `Set-Cookie: ${cookie.split(";")[0]?.trim()}; (no SameSite attribute)`,
+        evidence: `Set-Cookie: ${cookie.trim()}`,
         solution: "Set SameSite=Lax or SameSite=Strict on all cookies to prevent CSRF: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax",
         cweId: "CWE-352",
         cvssScore: 4.3,
+        wstgId: "WSTG-SESS-02",
       }));
     }
   }
@@ -361,10 +365,11 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       severity: "critical",
       category: "Transport Security",
       description: "The application is served over HTTP without TLS encryption. All data transmitted between the browser and the server—including passwords and session tokens—can be intercepted by any network observer.",
-      evidence: `URL: ${finalUrl}`,
+      evidence: `URL: ${finalUrl}\nProtocol: HTTP (no TLS)`,
       solution: "Obtain a TLS certificate (free from Let's Encrypt) and redirect all HTTP traffic to HTTPS. Set up HSTS once HTTPS is working.",
       cweId: "CWE-319",
       cvssScore: 9.1,
+      wstgId: "WSTG-CRYP-01",
     }));
   }
 
@@ -387,9 +392,11 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
         severity: "medium",
         category: "Transport Security",
         description: "HSTS is not configured via response header. Without it, browsers won't cache the HTTPS-only preference, leaving users vulnerable to downgrade attacks and SSL stripping on their first visit or after cache expiry. Note: some sites rely on HSTS preloading (browser built-in list) instead — verify at https://hstspreload.org.",
+        evidence: `GET ${finalUrl}\nStrict-Transport-Security: (header absent from response)`,
         solution: "Add this header to all HTTPS responses: Strict-Transport-Security: max-age=31536000; includeSubDomains; preload\n\nFor the strongest protection, also submit your domain to the HSTS preload list at https://hstspreload.org",
         cweId: "CWE-523",
         cvssScore: 5.3,
+        wstgId: "WSTG-CONF-07",
       }));
     }
   } else if (hsts) {
@@ -402,10 +409,11 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
         severity: "low",
         category: "Transport Security",
         description: `The HSTS max-age is set to ${maxAge} seconds (${Math.round(maxAge / 86400)} days), which is below the recommended minimum of 180 days (15552000 seconds). Short max-age values mean users lose HTTPS protection shortly after their browser cache expires.`,
-        evidence: `Strict-Transport-Security: ${hsts}`,
+        evidence: `GET ${finalUrl}\nStrict-Transport-Security: ${hsts}\n(max-age=${maxAge} — minimum recommended: 15552000)`,
         solution: "Set max-age to at least 15552000 (180 days). For preloading eligibility, use max-age=31536000; includeSubDomains; preload.",
         cweId: "CWE-523",
         cvssScore: 3.1,
+        wstgId: "WSTG-CONF-07",
       }));
     }
   }
@@ -418,9 +426,11 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       severity: "high",
       category: "Injection Defense",
       description: "No Content-Security-Policy header was found. CSP is the primary browser-enforced defense against Cross-Site Scripting (XSS) attacks. Without it, injected scripts can run with full page privileges and steal session cookies or credentials.",
+      evidence: `GET ${finalUrl}\nContent-Security-Policy: (header absent from response)`,
       solution: "Implement a strict CSP. A starting point: Content-Security-Policy: default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'. Tighten over time using CSP violation reports.",
       cweId: "CWE-79",
       cvssScore: 7.2,
+      wstgId: "WSTG-CONF-12",
     }));
   } else if (/unsafe-inline|unsafe-eval/i.test(csp)) {
     vulnerabilities.push(vuln({
@@ -428,10 +438,11 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       severity: "medium",
       category: "Injection Defense",
       description: "The Content-Security-Policy header allows 'unsafe-inline' or 'unsafe-eval', which significantly weakens XSS protection. Attackers who achieve HTML injection can still execute scripts.",
-      evidence: `CSP: ${csp}`,
+      evidence: `GET ${finalUrl}\nContent-Security-Policy: ${csp}`,
       solution: "Replace 'unsafe-inline' with nonce-based or hash-based CSP directives. Avoid 'unsafe-eval' entirely. Use a CSP evaluator (csp-evaluator.withgoogle.com) to check your policy.",
       cweId: "CWE-79",
       cvssScore: 5.4,
+      wstgId: "WSTG-CONF-12",
     }));
   }
 
@@ -446,10 +457,11 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
           severity: "medium",
           category: "Injection Defense",
           description: "The Content-Security-Policy does not include 'object-src: none'. Without this, browsers may allow Flash, Java, or other plugin content to load, which can bypass script-src restrictions entirely. XSS via plugin content is a known CSP bypass technique.",
-          evidence: `CSP: ${csp}`,
+          evidence: `GET ${finalUrl}\nContent-Security-Policy: ${csp}\n(object-src directive absent — plugin content unrestricted)`,
           solution: "Add object-src 'none' to your CSP. If you use default-src 'none', object-src is implicitly restricted.",
           cweId: "CWE-79",
           cvssScore: 4.3,
+          wstgId: "WSTG-CONF-12",
         }));
       }
     }
@@ -461,10 +473,11 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
         severity: "low",
         category: "Injection Defense",
         description: "The Content-Security-Policy does not restrict base-uri. Without this directive, an attacker who can inject a <base href='https://attacker.com'> tag can redirect all relative URLs on the page to their own server, hijacking resource loads and form submissions.",
-        evidence: `CSP: ${csp}`,
+        evidence: `GET ${finalUrl}\nContent-Security-Policy: ${csp}\n(base-uri directive absent)`,
         solution: "Add base-uri 'self' to your CSP to prevent base-tag injection attacks.",
         cweId: "CWE-79",
         cvssScore: 3.5,
+        wstgId: "WSTG-CONF-12",
       }));
     }
 
@@ -475,10 +488,11 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
         severity: "high",
         category: "Injection Defense",
         description: "The script-src directive in the Content-Security-Policy contains a wildcard (*), which allows scripts to be loaded from any origin. This completely defeats the purpose of CSP as an XSS mitigation.",
-        evidence: `CSP: ${csp}`,
+        evidence: `GET ${finalUrl}\nContent-Security-Policy: ${csp}\n(wildcard in script-src allows scripts from any origin)`,
         solution: "Remove wildcards from script-src. Use an explicit allowlist of trusted origins, or switch to nonce-based CSP: script-src 'nonce-{random}'.",
         cweId: "CWE-79",
         cvssScore: 7.2,
+        wstgId: "WSTG-CONF-12",
       }));
     }
   }
@@ -492,9 +506,11 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       severity: "medium",
       category: "UI Security",
       description: "The application does not set X-Frame-Options or CSP frame-ancestors. Attackers can embed your pages in invisible iframes on malicious sites and trick users into clicking UI elements (clickjacking).",
+      evidence: `GET ${finalUrl}\nX-Frame-Options: (header absent)\nCSP frame-ancestors: (not present in Content-Security-Policy)`,
       solution: "Add: X-Frame-Options: DENY (or SAMEORIGIN if you need to embed within your own domain). Alternatively use: Content-Security-Policy: frame-ancestors 'none'",
       cweId: "CWE-1021",
       cvssScore: 4.3,
+      wstgId: "WSTG-CLNT-09",
     }));
   }
 
@@ -506,10 +522,13 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       severity: "medium",
       category: "Content Sniffing",
       description: "The X-Content-Type-Options header is absent or not set to 'nosniff'. Browsers may MIME-sniff response content and execute it as a different content type, enabling content-injection attacks.",
-      evidence: xcto ? `X-Content-Type-Options: ${xcto}` : undefined,
+      evidence: xcto
+        ? `GET ${finalUrl}\nX-Content-Type-Options: ${xcto}\n(must be exactly "nosniff")`
+        : `GET ${finalUrl}\nX-Content-Type-Options: (header absent from response)`,
       solution: "Add to all responses: X-Content-Type-Options: nosniff",
       cweId: "CWE-16",
       cvssScore: 4.3,
+      wstgId: "WSTG-CONF-07",
     }));
   }
 
@@ -521,9 +540,11 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       severity: "low",
       category: "Information Disclosure",
       description: "No Referrer-Policy header is set. By default, browsers may include the full URL of the previous page in the Referer header, potentially leaking sensitive URL parameters (session tokens, search queries) to third-party sites.",
+      evidence: `GET ${finalUrl}\nReferrer-Policy: (header absent from response)`,
       solution: "Add: Referrer-Policy: strict-origin-when-cross-origin (or 'no-referrer' for maximum privacy)",
       cweId: "CWE-200",
       cvssScore: 3.1,
+      wstgId: "WSTG-CONF-07",
     }));
   }
 
@@ -535,9 +556,11 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       severity: "low",
       category: "Browser Feature Control",
       description: "No Permissions-Policy (formerly Feature-Policy) header is present. This header restricts which browser APIs (camera, microphone, geolocation, etc.) can be accessed from your pages and embedded iframes.",
+      evidence: `GET ${finalUrl}\nPermissions-Policy: (header absent from response)`,
       solution: "Add: Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=(). Adjust based on what your app actually needs.",
       cweId: "CWE-16",
       cvssScore: 2.4,
+      wstgId: "WSTG-CONF-07",
     }));
   }
 
@@ -549,9 +572,11 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       severity: "low",
       category: "Browser Feature Control",
       description: "The Cross-Origin-Opener-Policy header is not set. Without COOP, malicious cross-origin pages opened from your site (or that open your site) can retain a reference to your window object and exploit Spectre-class hardware vulnerabilities to read cross-origin memory. COOP is required to enable SharedArrayBuffer and high-resolution timers safely.",
+      evidence: `GET ${finalUrl}\nCross-Origin-Opener-Policy: (header absent from response)`,
       solution: "Add: Cross-Origin-Opener-Policy: same-origin (most secure) or same-origin-allow-popups if you need cross-origin popup interaction.",
       cweId: "CWE-346",
       cvssScore: 3.1,
+      wstgId: "WSTG-CONF-07",
     }));
   }
 
@@ -562,9 +587,11 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       severity: "low",
       category: "Browser Feature Control",
       description: "The Cross-Origin-Embedder-Policy header is not set. Without COEP, your page can embed cross-origin resources that have not explicitly opted in to cross-origin loading. COEP (require-corp) is required alongside COOP to achieve cross-origin isolation, which protects against Spectre-based side-channel attacks.",
+      evidence: `GET ${finalUrl}\nCross-Origin-Embedder-Policy: (header absent from response)`,
       solution: "Add: Cross-Origin-Embedder-Policy: require-corp. Note: this requires all subresources to serve a CORP header or CORS header. Use credentialless if full require-corp causes breakage.",
       cweId: "CWE-346",
       cvssScore: 3.1,
+      wstgId: "WSTG-CONF-07",
     }));
   }
 
@@ -575,9 +602,11 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       severity: "low",
       category: "Browser Feature Control",
       description: "The Cross-Origin-Resource-Policy header is absent. Without CORP, other origins can include this resource in their pages (via <img>, <script>, etc.) and potentially extract its content via Spectre-class timing attacks, even if CORS is not enabled.",
+      evidence: `GET ${finalUrl}\nCross-Origin-Resource-Policy: (header absent from response)`,
       solution: "Add: Cross-Origin-Resource-Policy: same-origin (for same-site-only resources) or same-site. Use cross-origin only for truly public resources.",
       cweId: "CWE-346",
       cvssScore: 2.4,
+      wstgId: "WSTG-CONF-07",
     }));
   }
 
@@ -589,10 +618,11 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       severity: "medium",
       category: "CORS Misconfiguration",
       description: "The server responds with Access-Control-Allow-Origin: *, meaning any website can make cross-origin requests to this endpoint and read the response. If this endpoint returns sensitive data, that data is exposed to all origins.",
-      evidence: "Access-Control-Allow-Origin: *",
+      evidence: `GET ${finalUrl}\nAccess-Control-Allow-Origin: *`,
       solution: "Replace the wildcard with a specific allowlist of trusted origins: Access-Control-Allow-Origin: https://your-frontend.com. Never use * on endpoints that return user-specific data.",
       cweId: "CWE-942",
       cvssScore: 6.5,
+      wstgId: "WSTG-CONF-07",
     }));
   }
 
@@ -603,9 +633,10 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       severity: "info",
       category: "Information Disclosure",
       description: `The Server header reveals detailed software version information: "${server}". Attackers use this to look up CVEs for the exact version and craft targeted exploits.`,
-      evidence: `Server: ${server}`,
+      evidence: `GET ${finalUrl}\nServer: ${server}`,
       solution: "Configure your web server to omit version numbers from the Server header, or remove the header entirely. In Nginx: server_tokens off; In Apache: ServerTokens Prod; ServerSignature Off",
       cweId: "CWE-200",
+      wstgId: "WSTG-INFO-02",
     }));
   }
 
@@ -616,9 +647,10 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       severity: "info",
       category: "Information Disclosure",
       description: `The X-Powered-By header advertises the underlying technology: "${poweredBy}". This helps attackers fingerprint your stack and search for known vulnerabilities.`,
-      evidence: `X-Powered-By: ${poweredBy}`,
+      evidence: `GET ${finalUrl}\nX-Powered-By: ${poweredBy}`,
       solution: "Remove the X-Powered-By header. In Express.js: app.disable('x-powered-by'); In PHP: expose_php = Off in php.ini",
       cweId: "CWE-200",
+      wstgId: "WSTG-INFO-09",
     }));
   }
 
@@ -633,9 +665,11 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       severity: "medium",
       category: "Transport Security",
       description: "The HTTPS page loads resources (scripts, stylesheets, images) over plain HTTP. Browsers block or warn about mixed content, and the HTTP resources can be intercepted and modified by attackers.",
+      evidence: `GET ${finalUrl}\nPage is served over HTTPS but contains src="http://..." resource references`,
       solution: "Update all resource URLs to use HTTPS. Use protocol-relative URLs (//example.com/resource) or absolute HTTPS URLs. Enable Content-Security-Policy: upgrade-insecure-requests",
       cweId: "CWE-311",
       cvssScore: 5.9,
+      wstgId: "WSTG-CRYP-01",
     }));
   }
 
@@ -647,8 +681,9 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       severity: "info",
       category: "Injection Defense",
       description: "X-XSS-Protection is explicitly set to 0, which disables the browser's built-in XSS auditor (in older browsers). While modern browsers have deprecated this header, setting it to 0 provides no benefit and may confuse automated scanners.",
-      evidence: "X-XSS-Protection: 0",
+      evidence: `GET ${finalUrl}\nX-XSS-Protection: 0`,
       solution: "Either remove the header entirely (recommended for modern browsers) or set X-XSS-Protection: 1; mode=block. Rely on CSP for actual XSS protection.",
+      wstgId: "WSTG-CLNT-01",
     }));
   }
 
@@ -661,8 +696,10 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       severity: "info",
       category: "Information Disclosure",
       description: "No Cache-Control or Pragma headers are set. Without explicit cache directives, proxies and shared caches may store sensitive page content, potentially serving it to other users or making it accessible after logout.",
+      evidence: `GET ${finalUrl}\nCache-Control: (header absent)\nPragma: (header absent)`,
       solution: "Set Cache-Control: no-store, no-cache, must-revalidate on pages with sensitive or personalized content. Use Cache-Control: public, max-age=3600 only for truly static, non-sensitive resources.",
       cweId: "CWE-524",
+      wstgId: "WSTG-CONF-07",
     }));
   }
 

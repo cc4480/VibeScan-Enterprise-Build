@@ -487,6 +487,7 @@ function checkLocalVulns(detected: DetectedVersion[]): ScanVulnerability[] {
             solution: `Upgrade Apache to the latest stable release. On Debian/Ubuntu: apt upgrade apache2. On RHEL/CentOS: yum update httpd. Confirm with: apache2 -v`,
             cweId: "CWE-1104",
             cvssScore: vuln_entry.cvss,
+            wstgId: "WSTG-INFO-02",
           }));
           break;
         }
@@ -565,9 +566,10 @@ export async function checkForKnownVulnerabilities(
           `${osvVuln.summary ?? "See CVE details."}` +
           (score > 0 ? ` CVSS score: ${score}.` : ""),
         evidence:
-          `Detected version: ${target.displayName} ${target.version}\n` +
+          `Detected: ${target.displayName} ${target.version}\n` +
           `CVE(s): ${cveList}\n` +
-          (osvVuln.details ? `Details: ${osvVuln.details.slice(0, 300)}...` : ""),
+          (fixedVersion ? `Fixed in: ${fixedVersion}\n` : "") +
+          (osvVuln.details ? `Details: ${osvVuln.details.slice(0, 300)}` : ""),
         solution:
           fixedVersion
             ? `Upgrade ${target.displayName} to version ${fixedVersion} or later. ` +
@@ -576,6 +578,7 @@ export async function checkForKnownVulnerabilities(
               `Check ${target.ecosystem === "npm" ? "https://www.npmjs.com/package/" + target.packageName : "the vendor advisory"} for patched releases.`,
         cweId: "CWE-1104",
         cvssScore: score > 0 ? score : null,
+        wstgId: "WSTG-INFO-09",
       }));
     }
   }

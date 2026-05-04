@@ -120,6 +120,7 @@ export async function checkSourceMaps(
           solution: "Disable source map generation in production builds. Webpack: set devtool: false or devtool: 'hidden-source-map' (generates maps but does not link them from the bundle). Vite: set build.sourcemap: false. If you need source maps for error tracking, upload them directly to your error tracker (Sentry, Datadog) and keep them off the public server.",
           cweId: "CWE-540",
           cvssScore: 7.5,
+          wstgId: "WSTG-CONF-04",
         });
       }
 
@@ -158,6 +159,7 @@ export async function checkSourceMaps(
         solution: "Set devtool: false (webpack) or build.sourcemap: false (Vite) in production. Upload maps to your error tracker instead of serving them publicly.",
         cweId: "CWE-540",
         cvssScore: 7.5,
+        wstgId: "WSTG-CONF-04",
       });
     }),
   );
