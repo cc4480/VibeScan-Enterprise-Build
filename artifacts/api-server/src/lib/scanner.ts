@@ -1,10 +1,20 @@
 /**
  * Black-box HTTP security scanner.
- * Fetches the target URL and analyses headers, TLS, cookies, CORS,
- * and page content to produce a list of vulnerabilities.
+ *
+ * Stage 1 (this file): Fetches the target URL, analyses response headers,
+ * cookies, TLS, CORS, and page content — produces an initial vulnerability list.
+ *
+ * Stage 2 (parallel, via worker.ts): SSL Labs TLS assessment.
+ *
+ * Stage 3 (parallel probes): Active HTTP probes via probes.ts,
+ * DNS security checks via dnsChecks.ts, and JavaScript secret scanning
+ * via jsScanner.ts — all run concurrently with stage 2.
  */
 
 import { randomUUID } from "node:crypto";
+import { runAllProbes } from "./probes";
+import { checkDnsSecurity } from "./dnsChecks";
+import { scanJavaScriptForSecrets } from "./jsScanner";
 
 export interface ScanVulnerability {
   id: string;
@@ -32,9 +42,7 @@ export interface ScanResult {
 
 const FETCH_TIMEOUT_MS = 20_000;
 
-function vuln(
-  partial: Omit<ScanVulnerability, "id">,
-): ScanVulnerability {
+function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
   return { id: randomUUID(), ...partial };
 }
 
@@ -165,7 +173,7 @@ function detectTechnologies(headers: Record<string, string>, html: string): stri
   if (/jquery[.-][0-9]|jquery\.min\.js|jQuery\.fn/i.test(s))                                     techs.add("jQuery");
   if (/lodash\.js|lodash\.min|_\.version/i.test(s))                                               techs.add("Lodash");
   if (/alpinejs|x-data=|x-show=/i.test(s))                                                        techs.add("Alpine.js");
-  if (/htmx\.org|hx-get|hx-post/i.test(s))                                                       techs.add("HTMX");
+  if (/htmx\.org|hx-get|hx-post/i.test(s))                                                        techs.add("HTMX");
 
   // Analytics & tracking
   if (/google-analytics\.com|gtag\(|ga\.js|GoogleAnalyticsObject/i.test(s))                      techs.add("Google Analytics");
@@ -195,7 +203,6 @@ function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[
   const findings: ScanVulnerability[] = [];
   if (!setCookieHeader) return findings;
 
-  // handle multiple Set-Cookie headers joined by newline (from node-fetch flattening)
   const cookies = setCookieHeader.split(/\n|,(?=[^;])/);
 
   for (const cookie of cookies) {
@@ -245,7 +252,7 @@ function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[
   return findings;
 }
 
-export async function runScan(targetUrl: string, _tier: string): Promise<ScanResult> {
+export async function runScan(targetUrl: string, tier: string): Promise<ScanResult> {
   const startedAt = Date.now();
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -312,6 +319,22 @@ export async function runScan(targetUrl: string, _tier: string): Promise<ScanRes
       cweId: "CWE-523",
       cvssScore: 7.4,
     }));
+  } else if (hsts) {
+    // Check for weak HSTS config
+    const maxAgeMatch = /max-age=(\d+)/i.exec(hsts);
+    const maxAge = maxAgeMatch ? parseInt(maxAgeMatch[1], 10) : 0;
+    if (maxAge < 15552000) { // less than 180 days
+      vulnerabilities.push(vuln({
+        name: "HSTS max-age Too Short",
+        severity: "low",
+        category: "Transport Security",
+        description: `The HSTS max-age is set to ${maxAge} seconds (${Math.round(maxAge / 86400)} days), which is below the recommended minimum of 180 days (15552000 seconds). Short max-age values mean users lose HTTPS protection shortly after their browser cache expires.`,
+        evidence: `Strict-Transport-Security: ${hsts}`,
+        solution: "Set max-age to at least 15552000 (180 days). For preloading eligibility, use max-age=31536000; includeSubDomains; preload.",
+        cweId: "CWE-523",
+        cvssScore: 3.1,
+      }));
+    }
   }
 
   // ── Content-Security-Policy ───────────────────────────────────────────
@@ -440,8 +463,7 @@ export async function runScan(targetUrl: string, _tier: string): Promise<ScanRes
 
   // ── Cookie analysis ───────────────────────────────────────────────────
   const setCookie = headerVal(rawHeaders, "set-cookie");
-  const cookieVulns = analyzeCookies(setCookie);
-  vulnerabilities.push(...cookieVulns);
+  vulnerabilities.push(...analyzeCookies(setCookie));
 
   // ── Mixed content ─────────────────────────────────────────────────────
   if (isHttps && /src=["']http:\/\//i.test(html.slice(0, 100_000))) {
@@ -456,7 +478,7 @@ export async function runScan(targetUrl: string, _tier: string): Promise<ScanRes
     }));
   }
 
-  // ── X-XSS-Protection (deprecated but useful to flag if set wrong) ─────
+  // ── X-XSS-Protection (deprecated but flag if disabled) ────────────────
   const xxss = headerVal(rawHeaders, "x-xss-protection");
   if (xxss && xxss.trim() === "0") {
     vulnerabilities.push(vuln({
@@ -467,6 +489,41 @@ export async function runScan(targetUrl: string, _tier: string): Promise<ScanRes
       evidence: "X-XSS-Protection: 0",
       solution: "Either remove the header entirely (recommended for modern browsers) or set X-XSS-Protection: 1; mode=block. Rely on CSP for actual XSS protection.",
     }));
+  }
+
+  // ── Cache-Control on sensitive-looking pages ───────────────────────────
+  const cacheControl = headerVal(rawHeaders, "cache-control");
+  const pragma = headerVal(rawHeaders, "pragma");
+  if (isHttps && !cacheControl && !pragma) {
+    vulnerabilities.push(vuln({
+      name: "Missing Cache-Control Headers",
+      severity: "info",
+      category: "Information Disclosure",
+      description: "No Cache-Control or Pragma headers are set. Without explicit cache directives, proxies and shared caches may store sensitive page content, potentially serving it to other users or making it accessible after logout.",
+      solution: "Set Cache-Control: no-store, no-cache, must-revalidate on pages with sensitive or personalized content. Use Cache-Control: public, max-age=3600 only for truly static, non-sensitive resources.",
+      cweId: "CWE-524",
+    }));
+  }
+
+  // ── Run all parallel probes ───────────────────────────────────────────
+  // These run concurrently — active HTTP probes, DNS checks, and (for deep tier)
+  // JavaScript secret scanning. Results are merged into vulnerabilities below.
+  const probePromises: Promise<ScanVulnerability[]>[] = [
+    runAllProbes(finalUrl, html).catch(() => []),
+    checkDnsSecurity(finalUrl).catch(() => []),
+  ];
+
+  if (tier === "deep") {
+    probePromises.push(
+      scanJavaScriptForSecrets(html, finalUrl).catch(() => []),
+    );
+  }
+
+  const probeResults = await Promise.allSettled(probePromises);
+  for (const result of probeResults) {
+    if (result.status === "fulfilled") {
+      vulnerabilities.push(...result.value);
+    }
   }
 
   return {
