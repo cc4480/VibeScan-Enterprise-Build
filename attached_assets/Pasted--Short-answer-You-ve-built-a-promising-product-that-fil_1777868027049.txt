@@ -1,0 +1,44 @@
+**Short answer:** **You’ve built a promising product that fills a real gap — focus next on reducing false positives, expanding authenticated and API coverage, and hardening DNS/HSTS checks; prioritize reproducible evidence and CI/CD integration to win developer trust.**  
+
+### Quick guide: key considerations, questions, decision points
+- **Scope:** public-only scans vs. authenticated/staging scans; which customers do you target first?  
+- **Accuracy:** how will you validate and triage findings to minimize false positives?  
+- **Risk/Legal:** do you require written permission or a safe-scanning policy for customer production sites?  
+- **Delivery:** will you offer SaaS dashboard, CLI, or CI/CD integrations first?  
+
+---
+
+### Comparison of core capabilities (decision table)
+| **Feature** | **Why it matters** | **Priority** | **Implementation note** |
+|---|---:|---:|---|
+| **Crawling depth & link discovery** | Finds hidden pages and endpoints | High | Use breadth-first crawl with sitemap and JS rendering.   [docs.cloud.google.com](https://docs.cloud.google.com/security-command-center/docs/concepts-web-security-scanner-overview) |
+| **Authenticated scans** | Reveals auth-only vulnerabilities | High | Support session tokens, OAuth, and test accounts.   [HackerOne](https://www.hackerone.com/knowledge-center/website-security-scans-process-and-tips-effective-scanning) |
+| **False-positive reduction / proof-of-concept** | Builds trust with developers | Critical | Provide request/response evidence and exploit PoC where safe.   [HackerOne](https://www.hackerone.com/knowledge-center/website-security-scans-process-and-tips-effective-scanning) |
+| **Dependency/CVE mapping** | Prioritizes fixes by exploitability | Medium | Keep OSV/CVE cache fresh and cap memory.   [replit.com](https://replit.com/@raceg52/VibeScan-Master)  [DEV Community](https://dev.to/freedom-coder/the-essential-guide-to-web-security-scanning-protecting-your-digital-assets-5dho) |
+| **Security headers & DNS checks** | Quick wins and misconfigurations | Medium | Handle HSTS preload edge-cases and sandbox proxy artifacts.   [replit.com](https://replit.com/@raceg52/VibeScan-Master)  [docs.cloud.google.com](https://docs.cloud.google.com/security-command-center/docs/concepts-web-security-scanner-overview) |
+
+---
+
+### Actionable next steps (prioritized)
+1. **Fix DNS/HSTS detection logic** — account for hardcoded browser lists vs. hstspreload API and sandbox proxy redirects (these caused false positives in your Google scan). **Test with direct curl and multiple resolvers.**   [replit.com](https://replit.com/@raceg52/VibeScan-Master)  [docs.cloud.google.com](https://docs.cloud.google.com/security-command-center/docs/concepts-web-security-scanner-overview)  
+2. **Add authenticated scanning flows** — support login scripts and token replay to scan post-auth pages.   [HackerOne](https://www.hackerone.com/knowledge-center/website-security-scans-process-and-tips-effective-scanning)  
+3. **Introduce evidence-first reporting** — include request/response, exploit steps, and CVE links to reduce triage time.   [HackerOne](https://www.hackerone.com/knowledge-center/website-security-scans-process-and-tips-effective-scanning)  
+4. **Integrate OWASP WSTG checks** — map your tests to WSTG scenarios for credibility and coverage gaps.   [OWASP Foundation](https://owasp.org/www-project-web-security-testing-guide/)  
+5. **CI/CD & staging pipelines** — provide a lightweight runner or API so teams can scan pre-deploy.   [DEV Community](https://dev.to/freedom-coder/the-essential-guide-to-web-security-scanning-protecting-your-digital-assets-5dho)
+
+---
+
+### Risks, limitations, and mitigations
+- **False positives and noisy scans** — automated scanners can over-report; mitigate with confidence scoring and manual verification workflows.   [HackerOne](https://www.hackerone.com/knowledge-center/website-security-scans-process-and-tips-effective-scanning)  
+- **Production impact** — aggressive crawling or form submissions can break apps; provide a “safe mode” (GET-only) and rate limits.   [docs.cloud.google.com](https://docs.cloud.google.com/security-command-center/docs/concepts-web-security-scanner-overview)  
+- **Legal/ethical exposure** — scanning without permission can be problematic; require authorization and publish a clear acceptable-use policy.   [HackerOne](https://www.hackerone.com/knowledge-center/website-security-scans-process-and-tips-effective-scanning)
+
+---
+
+### Suggested metrics to track
+- **False positive rate** (monthly)  
+- **Time-to-verify** (avg) for findings  
+- **Coverage** (pages/endpoints scanned per site)  
+- **CVE-to-fix time** for critical findings
+
+If you want, I can **draft a prioritized 8–12 week roadmap** (milestones, engineering tasks, QA, and go-to-market items) tailored to whether you want to target small teams, agencies, or enterprises first.
