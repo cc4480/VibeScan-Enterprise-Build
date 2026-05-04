@@ -1,27 +1,63 @@
 import { useGetReport, getGetReportQueryKey } from "@workspace/api-client-react";
 import { useRoute, Link } from "wouter";
-import { Shield, ShieldAlert, CheckCircle2, ArrowLeft, Loader2, Globe, Server, Lock, Activity, Share2, Plus } from "lucide-react";
+import {
+  Shield, ShieldAlert, CheckCircle2, ArrowLeft, Loader2, Globe, Server,
+  Lock, Activity, Share2, Plus, Mail, Database, FileCode, Eye, Package,
+  Bug, KeyRound, ArrowRightLeft, MonitorX, Filter, AlertTriangle,
+  GitBranch, Cpu, Wifi, Search,
+} from "lucide-react";
 import { cn, formatSeverity, getSeverityColors, getGradeColor } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type { Vulnerability } from "@workspace/api-client-react";
 
-function GradeRing({ grade, score }: { grade: string, score: number }) {
+// ── Category → icon mapping ──────────────────────────────────────────────────
+const CATEGORY_ICONS: Record<string, React.ReactNode> = {
+  "Transport Security":             <Lock className="w-3.5 h-3.5" />,
+  "HTTP Security":                  <Shield className="w-3.5 h-3.5" />,
+  "Injection Defense":              <Bug className="w-3.5 h-3.5" />,
+  "UI Security":                    <MonitorX className="w-3.5 h-3.5" />,
+  "CORS Misconfiguration":          <Wifi className="w-3.5 h-3.5" />,
+  "Content Sniffing":               <Search className="w-3.5 h-3.5" />,
+  "Information Disclosure":         <Eye className="w-3.5 h-3.5" />,
+  "Session Management":             <Lock className="w-3.5 h-3.5" />,
+  "CSRF Protection":                <Shield className="w-3.5 h-3.5" />,
+  "Brute Force Protection":         <Lock className="w-3.5 h-3.5" />,
+  "Browser Feature Control":        <MonitorX className="w-3.5 h-3.5" />,
+  // New categories from expanded scanner
+  "Source Code Exposure":           <FileCode className="w-3.5 h-3.5" />,
+  "Credential Exposure":            <KeyRound className="w-3.5 h-3.5" />,
+  "Data Exposure":                  <Database className="w-3.5 h-3.5" />,
+  "Email Security":                 <Mail className="w-3.5 h-3.5" />,
+  "DNS Security":                   <Globe className="w-3.5 h-3.5" />,
+  "Exposed Secrets / Credentials":  <KeyRound className="w-3.5 h-3.5" />,
+  "Unvalidated Redirects":          <ArrowRightLeft className="w-3.5 h-3.5" />,
+  "Supply Chain Security":          <Package className="w-3.5 h-3.5" />,
+  "Security Header Inconsistency":  <AlertTriangle className="w-3.5 h-3.5" />,
+  "Outdated Software":              <GitBranch className="w-3.5 h-3.5" />,
+  "Outdated Software / Known CVE":  <GitBranch className="w-3.5 h-3.5" />,
+};
+
+const SEVERITY_ORDER: Record<string, number> = {
+  critical: 0, high: 1, medium: 2, low: 3, info: 4,
+};
+
+function getCategoryIcon(category: string): React.ReactNode {
+  return CATEGORY_ICONS[category] ?? <ShieldAlert className="w-3.5 h-3.5" />;
+}
+
+// ── Grade ring ──────────────────────────────────────────────────────────────
+function GradeRing({ grade, score }: { grade: string; score: number }) {
   const colorMap: Record<string, string> = {
-    A: "#34d399",
-    B: "#a3e635",
-    C: "#facc15",
-    D: "#fb923c",
-    F: "#f87171",
+    A: "#34d399", B: "#a3e635", C: "#facc15", D: "#fb923c", F: "#f87171",
   };
   const color = colorMap[grade] || "#94a3b8";
-  
   return (
     <div className="relative w-48 h-48 flex items-center justify-center">
       <svg className="w-full h-full transform -rotate-90 absolute inset-0">
         <circle cx="96" cy="96" r="88" fill="none" stroke="currentColor" strokeWidth="8" className="text-secondary" />
-        <circle 
-          cx="96" cy="96" r="88" fill="none" stroke={color} strokeWidth="8" 
+        <circle
+          cx="96" cy="96" r="88" fill="none" stroke={color} strokeWidth="8"
           strokeDasharray={`${2 * Math.PI * 88}`}
           strokeDashoffset={`${2 * Math.PI * 88 * (1 - score / 100)}`}
           strokeLinecap="round"
@@ -41,34 +77,37 @@ function GradeRing({ grade, score }: { grade: string, score: number }) {
   );
 }
 
-function VulnCard({ vuln, index }: { vuln: Vulnerability, index: number }) {
+// ── Vuln card ────────────────────────────────────────────────────────────────
+function VulnCard({ vuln, index }: { vuln: Vulnerability; index: number }) {
   const [expanded, setExpanded] = useState(false);
-  
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.1 * index }}
+      transition={{ delay: Math.min(0.05 * index, 0.4) }}
       className="glass-card rounded-xl overflow-hidden border border-white/5"
     >
-      <button 
+      <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full p-5 flex items-start sm:items-center justify-between text-left hover:bg-white/[0.02] transition-colors"
+        className="w-full p-5 flex items-start sm:items-center justify-between text-left hover:bg-white/[0.02] transition-colors gap-4"
       >
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 min-w-0">
           <span className={cn("px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider shrink-0 border", getSeverityColors(vuln.severity))}>
             {vuln.severity}
           </span>
-          <h4 className="text-lg font-bold text-foreground">{vuln.name}</h4>
+          <h4 className="text-base font-bold text-foreground leading-snug">{vuln.name}</h4>
         </div>
-        <div className="text-sm text-muted-foreground hidden md:block">
-          {vuln.category}
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="hidden md:flex items-center gap-1.5 text-xs text-muted-foreground bg-secondary/60 px-2 py-1 rounded-md border border-white/5">
+            {getCategoryIcon(vuln.category)}
+            {vuln.category}
+          </span>
         </div>
       </button>
-      
+
       <AnimatePresence>
         {expanded && (
-          <motion.div 
+          <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
@@ -94,14 +133,31 @@ function VulnCard({ vuln, index }: { vuln: Vulnerability, index: number }) {
                   <h5 className="text-xs font-bold text-primary uppercase tracking-wider mb-2 flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4" /> Recommended Fix
                   </h5>
-                  <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 text-sm text-foreground/90 leading-relaxed prose prose-invert max-w-none">
+                  <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 text-sm text-foreground/90 leading-relaxed">
                     <div className="whitespace-pre-wrap">{vuln.solution}</div>
                   </div>
-                  
                   {(vuln.cweId || vuln.cvssScore) && (
-                    <div className="mt-4 flex gap-3">
-                      {vuln.cweId && <span className="text-xs text-muted-foreground bg-secondary px-2 py-1 rounded">{vuln.cweId}</span>}
-                      {vuln.cvssScore && <span className="text-xs text-muted-foreground bg-secondary px-2 py-1 rounded">CVSS: {vuln.cvssScore}</span>}
+                    <div className="mt-4 flex gap-3 flex-wrap">
+                      {vuln.cweId && (
+                        <a
+                          href={`https://cwe.mitre.org/data/definitions/${vuln.cweId.replace("CWE-", "")}.html`}
+                          target="_blank" rel="noreferrer"
+                          className="text-xs text-muted-foreground bg-secondary px-2 py-1 rounded hover:bg-secondary/80 transition-colors"
+                        >
+                          {vuln.cweId}
+                        </a>
+                      )}
+                      {vuln.cvssScore && (
+                        <span className={cn(
+                          "text-xs px-2 py-1 rounded font-medium",
+                          vuln.cvssScore >= 9 ? "bg-red-950 text-red-400" :
+                          vuln.cvssScore >= 7 ? "bg-orange-950 text-orange-400" :
+                          vuln.cvssScore >= 4 ? "bg-yellow-950 text-yellow-400" :
+                          "bg-secondary text-muted-foreground"
+                        )}>
+                          CVSS {vuln.cvssScore.toFixed(1)}
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -114,9 +170,9 @@ function VulnCard({ vuln, index }: { vuln: Vulnerability, index: number }) {
   );
 }
 
+// ── Share button ─────────────────────────────────────────────────────────────
 function ShareButton({ reportId }: { reportId: string }) {
   const [copied, setCopied] = useState(false);
-
   const handleShare = async () => {
     const url = `${window.location.origin}${window.location.pathname.split("/report/")[0]}/report/${reportId}`;
     try {
@@ -127,7 +183,6 @@ function ShareButton({ reportId }: { reportId: string }) {
       prompt("Copy this link:", url);
     }
   };
-
   return (
     <button
       onClick={handleShare}
@@ -139,6 +194,64 @@ function ShareButton({ reportId }: { reportId: string }) {
   );
 }
 
+// ── Category breakdown card ──────────────────────────────────────────────────
+function CategoryBreakdown({ vulnerabilities, activeCategory, onSelect }: {
+  vulnerabilities: Vulnerability[];
+  activeCategory: string | null;
+  onSelect: (cat: string | null) => void;
+}) {
+  const counts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const v of vulnerabilities) {
+      map.set(v.category, (map.get(v.category) ?? 0) + 1);
+    }
+    return [...map.entries()].sort((a, b) => b[1] - a[1]);
+  }, [vulnerabilities]);
+
+  if (counts.length === 0) return null;
+
+  return (
+    <div className="glass-card rounded-2xl p-6">
+      <h3 className="text-sm font-bold mb-4 flex items-center gap-2 text-muted-foreground uppercase tracking-wider">
+        <Filter className="w-4 h-4" /> Categories
+      </h3>
+      <div className="space-y-1.5">
+        <button
+          onClick={() => onSelect(null)}
+          className={cn(
+            "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors",
+            activeCategory === null
+              ? "bg-primary/20 text-primary border border-primary/30"
+              : "hover:bg-secondary/60 text-muted-foreground border border-transparent",
+          )}
+        >
+          <span className="font-medium">All findings</span>
+          <span className="text-xs bg-secondary px-2 py-0.5 rounded-full">{vulnerabilities.length}</span>
+        </button>
+        {counts.map(([cat, count]) => (
+          <button
+            key={cat}
+            onClick={() => onSelect(activeCategory === cat ? null : cat)}
+            className={cn(
+              "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors",
+              activeCategory === cat
+                ? "bg-primary/20 text-primary border border-primary/30"
+                : "hover:bg-secondary/60 text-muted-foreground border border-transparent",
+            )}
+          >
+            <span className="flex items-center gap-2">
+              {getCategoryIcon(cat)}
+              <span className="text-xs">{cat}</span>
+            </span>
+            <span className="text-xs bg-secondary px-2 py-0.5 rounded-full shrink-0">{count}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Main report viewer ────────────────────────────────────────────────────────
 export default function ReportViewer() {
   const [, params] = useRoute("/report/:id");
   const reportId = params?.id || "";
@@ -149,21 +262,54 @@ export default function ReportViewer() {
     },
   });
 
-  if (isLoading) return <div className="min-h-[80vh] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
-  if (error || !report) return <div className="min-h-[80vh] flex items-center justify-center text-red-400">Failed to load report.</div>;
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<"severity" | "category">("severity");
+
+  if (isLoading) {
+    return (
+      <div className="min-h-[80vh] flex flex-col items-center justify-center gap-4">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Loading report…</p>
+      </div>
+    );
+  }
+  if (error || !report) {
+    return <div className="min-h-[80vh] flex items-center justify-center text-red-400">Failed to load report.</div>;
+  }
 
   const { data: { summary, vulnerabilities, technologies, server, tlsGrade, aiAnalysis } } = report;
+
+  // Sort and filter
+  const sortedVulns = useMemo(() => {
+    return [...vulnerabilities].sort((a, b) => {
+      if (sortBy === "severity") {
+        const sd = (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99);
+        if (sd !== 0) return sd;
+        return (b.cvssScore ?? 0) - (a.cvssScore ?? 0);
+      }
+      // category sort: sort by category name then severity within
+      const cd = a.category.localeCompare(b.category);
+      if (cd !== 0) return cd;
+      return (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99);
+    });
+  }, [vulnerabilities, sortBy]);
+
+  const filteredVulns = useMemo(
+    () => activeCategory ? sortedVulns.filter((v) => v.category === activeCategory) : sortedVulns,
+    [sortedVulns, activeCategory],
+  );
 
   const severityCounts = {
     critical: summary.critical,
     high: summary.high,
     medium: summary.medium,
     low: summary.low,
-    info: summary.info
+    info: summary.info,
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
+      {/* Nav */}
       <div className="mb-8 flex items-center justify-between">
         <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="w-4 h-4" /> Back to Dashboard
@@ -174,9 +320,7 @@ export default function ReportViewer() {
       {/* Header / Cover */}
       <div className="glass-panel p-8 md:p-12 rounded-3xl mb-12 relative overflow-hidden flex flex-col md:flex-row items-center gap-12">
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[120px] pointer-events-none" />
-        
         <GradeRing grade={summary.grade} score={summary.riskScore} />
-        
         <div className="flex-1 text-center md:text-left z-10">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary border border-white/5 text-xs font-medium text-muted-foreground mb-6">
             <Globe className="w-3.5 h-3.5" /> {report.targetUrl}
@@ -185,82 +329,144 @@ export default function ReportViewer() {
           <p className="text-lg text-muted-foreground/80 leading-relaxed max-w-2xl">
             {summary.executiveSummary}
           </p>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
-        {/* Left Col: Findings Summary */}
-        <div className="lg:col-span-2 space-y-8">
-          <div className="flex items-center justify-between border-b border-white/10 pb-4">
-            <h2 className="text-2xl font-bold flex items-center gap-3">
-              <ShieldAlert className="w-6 h-6 text-primary" /> 
-              Identified Vulnerabilities
-              <span className="bg-secondary text-foreground text-sm py-1 px-3 rounded-full ml-2">{summary.totalVulnerabilities}</span>
-            </h2>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
+          {/* Severity pill summary */}
+          <div className="flex flex-wrap gap-2 mt-6">
             {Object.entries(severityCounts).map(([sev, count]) => {
               if (count === 0) return null;
               return (
-                <div key={sev} className={cn("px-4 py-2 rounded-lg border flex items-center gap-3", getSeverityColors(sev))}>
+                <button
+                  key={sev}
+                  onClick={() => {
+                    setSortBy("severity");
+                    setActiveCategory(null);
+                  }}
+                  className={cn("px-4 py-2 rounded-lg border flex items-center gap-2 transition-colors", getSeverityColors(sev))}
+                >
                   <span className="font-bold uppercase text-xs tracking-wider">{sev}</span>
                   <span className="w-6 h-6 rounded bg-black/20 flex items-center justify-center text-sm font-bold">{count}</span>
-                </div>
+                </button>
               );
             })}
           </div>
+        </div>
+      </div>
 
-          <div className="space-y-4">
-            {vulnerabilities.map((v, i) => (
+      {/* Body: 4-col grid — left sidebar (categories) | main (vulns) | right (AI + tech) */}
+      <div className="grid grid-cols-1 xl:grid-cols-[220px_1fr_300px] gap-8 mb-12">
+
+        {/* LEFT: Category filter sidebar */}
+        <div className="xl:col-span-1 space-y-4">
+          <CategoryBreakdown
+            vulnerabilities={sortedVulns}
+            activeCategory={activeCategory}
+            onSelect={setActiveCategory}
+          />
+        </div>
+
+        {/* CENTRE: Vulnerability list */}
+        <div className="space-y-6">
+          {/* Header + sort controls */}
+          <div className="flex items-center justify-between border-b border-white/10 pb-4">
+            <h2 className="text-2xl font-bold flex items-center gap-3">
+              <ShieldAlert className="w-6 h-6 text-primary" />
+              {activeCategory ? activeCategory : "All Findings"}
+              <span className="bg-secondary text-foreground text-sm py-1 px-3 rounded-full ml-2">
+                {filteredVulns.length}
+                {activeCategory && filteredVulns.length !== sortedVulns.length && (
+                  <span className="text-muted-foreground"> / {sortedVulns.length}</span>
+                )}
+              </span>
+            </h2>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground hidden sm:block">Sort:</span>
+              <button
+                onClick={() => setSortBy("severity")}
+                className={cn(
+                  "text-xs px-3 py-1.5 rounded-lg border transition-colors",
+                  sortBy === "severity"
+                    ? "bg-primary/20 border-primary/30 text-primary"
+                    : "border-white/10 text-muted-foreground hover:bg-secondary",
+                )}
+              >
+                Severity
+              </button>
+              <button
+                onClick={() => setSortBy("category")}
+                className={cn(
+                  "text-xs px-3 py-1.5 rounded-lg border transition-colors",
+                  sortBy === "category"
+                    ? "bg-primary/20 border-primary/30 text-primary"
+                    : "border-white/10 text-muted-foreground hover:bg-secondary",
+                )}
+              >
+                Category
+              </button>
+            </div>
+          </div>
+
+          {/* Findings */}
+          <div className="space-y-3">
+            {filteredVulns.map((v, i) => (
               <VulnCard key={v.id} vuln={v} index={i} />
             ))}
-            {vulnerabilities.length === 0 && (
+            {filteredVulns.length === 0 && (
               <div className="text-center py-12 glass-card rounded-xl">
                 <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-4" />
-                <h3 className="text-xl font-bold mb-2">No vulnerabilities found</h3>
-                <p className="text-muted-foreground">Excellent work. Your application appears secure based on our checks.</p>
+                <h3 className="text-xl font-bold mb-2">
+                  {activeCategory ? `No ${activeCategory} findings` : "No vulnerabilities found"}
+                </h3>
+                <p className="text-muted-foreground">
+                  {activeCategory
+                    ? "Try selecting a different category or viewing all findings."
+                    : "Excellent work. Your application passed all security checks."}
+                </p>
               </div>
             )}
           </div>
         </div>
 
-        {/* Right Col: AI & Tech Details */}
-        <div className="space-y-8">
+        {/* RIGHT: AI analysis + tech profile */}
+        <div className="space-y-6">
           {/* AI Analysis */}
           {aiAnalysis && (
             <div className="glass-card rounded-2xl p-6 border-t-4 border-t-primary">
               <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
                 <Activity className="w-5 h-5 text-primary" /> AI Analysis
               </h3>
-              
               <div className="space-y-6">
                 <div>
                   <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Overall Risk</h4>
-                  <p className="text-sm">{aiAnalysis.overallRisk}</p>
+                  <p className="text-sm leading-relaxed">{aiAnalysis.overallRisk}</p>
                 </div>
-                
                 <div>
                   <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Top Priorities</h4>
                   <ul className="space-y-2">
                     {aiAnalysis.topPriorities.map((p, i) => (
                       <li key={i} className="text-sm flex items-start gap-2">
-                        <span className="text-primary mt-0.5">•</span> <span>{p}</span>
+                        <span className="text-primary mt-0.5 shrink-0">•</span>
+                        <span>{p}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
-                
                 <div>
                   <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Quick Wins</h4>
                   <ul className="space-y-2">
                     {aiAnalysis.quickWins.map((w, i) => (
                       <li key={i} className="text-sm flex items-start gap-2">
-                        <span className="text-emerald-400 mt-0.5">✓</span> <span>{w}</span>
+                        <span className="text-emerald-400 mt-0.5 shrink-0">✓</span>
+                        <span>{w}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
+                {aiAnalysis.complianceNotes && (
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Compliance Notes</h4>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{aiAnalysis.complianceNotes}</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -270,27 +476,32 @@ export default function ReportViewer() {
             <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
               <Server className="w-5 h-5 text-muted-foreground" /> Tech Profile
             </h3>
-            
             <div className="space-y-4">
               {tlsGrade && (
                 <div className="flex items-center justify-between py-2 border-b border-white/5">
-                  <span className="text-sm text-muted-foreground flex items-center gap-2"><Lock className="w-4 h-4"/> SSL/TLS Grade</span>
-                  <span className={cn("font-bold", getGradeColor(tlsGrade))}>{tlsGrade}</span>
+                  <span className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Lock className="w-4 h-4" /> SSL/TLS Grade
+                  </span>
+                  <span className={cn("font-bold text-lg", getGradeColor(tlsGrade))}>{tlsGrade}</span>
                 </div>
               )}
               {server && (
                 <div className="flex items-center justify-between py-2 border-b border-white/5">
-                  <span className="text-sm text-muted-foreground">Server</span>
-                  <span className="text-sm font-medium">{server}</span>
+                  <span className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Cpu className="w-4 h-4" /> Server
+                  </span>
+                  <span className="text-sm font-mono text-right max-w-[140px] truncate">{server}</span>
                 </div>
               )}
               <div>
-                <span className="text-sm text-muted-foreground mb-3 block">Detected Technologies</span>
+                <span className="text-sm text-muted-foreground mb-3 block">Detected Stack</span>
                 <div className="flex flex-wrap gap-2">
                   {technologies.map((t, i) => (
-                    <span key={i} className="px-2.5 py-1 bg-secondary text-xs rounded-md border border-white/5">{t}</span>
+                    <span key={i} className="px-2.5 py-1 bg-secondary text-xs rounded-md border border-white/5 font-medium">{t}</span>
                   ))}
-                  {technologies.length === 0 && <span className="text-xs text-muted-foreground">None detected</span>}
+                  {technologies.length === 0 && (
+                    <span className="text-xs text-muted-foreground">None detected</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -304,7 +515,7 @@ export default function ReportViewer() {
         <Shield className="w-12 h-12 text-primary mx-auto mb-4" />
         <h2 className="text-2xl md:text-3xl font-bold mb-3">Scan another website</h2>
         <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-          Check a different URL, a staging environment, or a client's site — each scan takes under 10 minutes.
+          Check a staging environment, a client's site, or re-scan after fixing findings.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link
