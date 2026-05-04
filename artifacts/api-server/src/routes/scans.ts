@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, scansTable, reportsTable, creditsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import {
   CreateScanBody,
   ListScansResponseItem,
@@ -27,44 +27,49 @@ router.get("/scans", async (req, res): Promise<void> => {
     return;
   }
 
-  const scans = await db
-    .select()
-    .from(scansTable)
-    .where(eq(scansTable.userId, req.user.id))
-    .orderBy(scansTable.createdAt);
+  try {
+    const scans = await db
+      .select()
+      .from(scansTable)
+      .where(eq(scansTable.userId, req.user.id))
+      .orderBy(desc(scansTable.createdAt));
 
-  const scansWithReports = await Promise.all(
-    scans.map(async (scan) => {
-      if (scan.status !== "complete") {
-        return { ...scan, reportId: null };
-      }
-      const [report] = await db
-        .select({ id: reportsTable.id })
-        .from(reportsTable)
-        .where(eq(reportsTable.scanId, scan.id));
-      return { ...scan, reportId: report?.id ?? null };
-    }),
-  );
-
-  res.json(
-    scansWithReports.map((s) =>
-      ListScansResponseItem.parse({
-        id: s.id,
-        userId: s.userId,
-        userEmail: s.userEmail,
-        targetUrl: s.targetUrl,
-        tier: s.tier,
-        status: s.status,
-        stripeSessionId: s.stripeSessionId ?? null,
-        stripePaymentIntentId: s.stripePaymentIntentId ?? null,
-        createdAt: s.createdAt,
-        startedAt: s.startedAt ?? null,
-        completedAt: s.completedAt ?? null,
-        error: s.error ?? null,
-        reportId: s.reportId ?? null,
+    const scansWithReports = await Promise.all(
+      scans.map(async (scan) => {
+        if (scan.status !== "complete") {
+          return { ...scan, reportId: null };
+        }
+        const [report] = await db
+          .select({ id: reportsTable.id })
+          .from(reportsTable)
+          .where(eq(reportsTable.scanId, scan.id));
+        return { ...scan, reportId: report?.id ?? null };
       }),
-    ),
-  );
+    );
+
+    res.json(
+      scansWithReports.map((s) =>
+        ListScansResponseItem.parse({
+          id: s.id,
+          userId: s.userId,
+          userEmail: s.userEmail,
+          targetUrl: s.targetUrl,
+          tier: s.tier,
+          status: s.status,
+          stripeSessionId: s.stripeSessionId ?? null,
+          stripePaymentIntentId: s.stripePaymentIntentId ?? null,
+          createdAt: s.createdAt,
+          startedAt: s.startedAt ?? null,
+          completedAt: s.completedAt ?? null,
+          error: s.error ?? null,
+          reportId: s.reportId ?? null,
+        }),
+      ),
+    );
+  } catch (err) {
+    req.log.error({ err }, "Failed to list scans");
+    res.status(500).json({ error: "Failed to list scans" });
+  }
 });
 
 router.post("/scans", async (req, res): Promise<void> => {

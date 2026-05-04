@@ -39,8 +39,8 @@ const TIERS: TierConfig[] = [
     id: "deep",
     name: "Deep Scan",
     price: "$79",
-    desc: "Full analysis + DeepSeek AI report",
-    features: ["Everything in Basic", "DeepSeek AI analysis", "Remediation guide"],
+    desc: "Full analysis + AI-powered report",
+    features: ["Everything in Basic", "AI security analysis", "Remediation guide"],
     popular: true,
   },
   {

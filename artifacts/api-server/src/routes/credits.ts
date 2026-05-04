@@ -11,12 +11,17 @@ router.get("/credits", async (req, res): Promise<void> => {
     return;
   }
 
-  const [credit] = await db
-    .select()
-    .from(creditsTable)
-    .where(eq(creditsTable.userId, req.user.id));
+  try {
+    const [credit] = await db
+      .select()
+      .from(creditsTable)
+      .where(eq(creditsTable.userId, req.user.id));
 
-  res.json(GetCreditsResponse.parse({ balance: credit?.balance ?? 0 }));
+    res.json(GetCreditsResponse.parse({ balance: credit?.balance ?? 0 }));
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch credits");
+    res.status(500).json({ error: "Failed to fetch credits" });
+  }
 });
 
 export default router;
