@@ -746,6 +746,19 @@ export default function ReportViewer() {
     [sortedVulns],
   );
 
+  // Per-severity counts split by confidence — used for the header badges
+  const confirmedSeverityCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const v of allConfirmedVulns) counts[v.severity] = (counts[v.severity] ?? 0) + 1;
+    return counts;
+  }, [allConfirmedVulns]);
+
+  const unverifiedSeverityCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const v of allUnverifiedVulns) counts[v.severity] = (counts[v.severity] ?? 0) + 1;
+    return counts;
+  }, [allUnverifiedVulns]);
+
   if (isLoading) {
     return (
       <div className="min-h-[80vh] flex flex-col items-center justify-center gap-4">
@@ -833,6 +846,12 @@ export default function ReportViewer() {
             {summary.executiveSummary}
           </p>
           <SummaryNewFindings categories={categoryCounts} />
+          {allUnverifiedVulns.length > 0 && (
+            <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-xs text-amber-300">
+              <HelpCircle className="w-3.5 h-3.5 shrink-0" />
+              Grade includes {allUnverifiedVulns.length} heuristic finding{allUnverifiedVulns.length !== 1 ? "s" : ""} — see "Needs Verification" below before acting
+            </div>
+          )}
         </div>
       </div>
 
@@ -849,14 +868,21 @@ export default function ReportViewer() {
             </h2>
           </div>
 
-          {/* Severity badges */}
+          {/* Severity badges — split confirmed vs unverified */}
           <div className="flex flex-wrap gap-3">
-            {Object.entries(severityCounts).map(([sev, count]) => {
-              if (count === 0) return null;
+            {(["critical", "high", "medium", "low", "info"] as const).map((sev) => {
+              const confirmed = confirmedSeverityCounts[sev] ?? 0;
+              const unverified = unverifiedSeverityCounts[sev] ?? 0;
+              if (confirmed + unverified === 0) return null;
               return (
-                <div key={sev} className={cn("px-4 py-2 rounded-lg border flex items-center gap-3", getSeverityColors(sev))}>
+                <div key={sev} className={cn("px-4 py-2 rounded-lg border flex items-center gap-2.5", getSeverityColors(sev))}>
                   <span className="font-bold uppercase text-xs tracking-wider">{sev}</span>
-                  <span className="w-6 h-6 rounded bg-black/20 flex items-center justify-center text-sm font-bold">{count}</span>
+                  <span className="w-6 h-6 rounded bg-black/20 flex items-center justify-center text-sm font-bold">{confirmed + unverified}</span>
+                  {unverified > 0 && (
+                    <span className="text-xs text-amber-300/80 font-medium border-l border-current/20 pl-2.5">
+                      {confirmed} confirmed
+                    </span>
+                  )}
                 </div>
               );
             })}
@@ -938,9 +964,10 @@ export default function ReportViewer() {
           {/* Confirmed findings */}
           {confirmedVulns.length > 0 && (
             <div className="space-y-4">
-              <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 uppercase tracking-wider">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                Confirmed findings
+              <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-emerald-500/8 border border-emerald-500/20">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="text-sm font-bold text-emerald-400">Confirmed findings</span>
+                <span className="ml-auto text-xs text-emerald-400/60 font-medium">{confirmedVulns.length} finding{confirmedVulns.length !== 1 ? "s" : ""} — high confidence, act on these</span>
               </div>
               <AnimatePresence mode="popLayout">
                 {confirmedVulns.map((v, i) => (
@@ -953,14 +980,13 @@ export default function ReportViewer() {
           {/* Needs verification */}
           {unverifiedVulns.length > 0 && (
             <div className="space-y-4">
-              <div className="flex items-center gap-2 pt-2">
-                <div className="flex items-center gap-2 text-xs font-semibold text-amber-400 uppercase tracking-wider">
-                  <HelpCircle className="w-3.5 h-3.5" />
-                  Needs verification
+              <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-amber-500/8 border border-amber-500/20">
+                <HelpCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                <div className="min-w-0">
+                  <span className="text-sm font-bold text-amber-400">Needs verification</span>
+                  <span className="text-xs text-amber-400/60 ml-2 font-medium hidden sm:inline">— heuristic detections, confirm manually before acting</span>
                 </div>
-                <span className="text-xs text-muted-foreground ml-2">
-                  — heuristic detections, review before acting
-                </span>
+                <span className="ml-auto text-xs text-amber-400/60 font-medium shrink-0">{unverifiedVulns.length} finding{unverifiedVulns.length !== 1 ? "s" : ""}</span>
               </div>
               <AnimatePresence mode="popLayout">
                 {unverifiedVulns.map((v, i) => (
