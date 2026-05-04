@@ -1118,7 +1118,15 @@ export async function checkSRI(html: string, baseUrl: string): Promise<ScanVulne
     try {
       const u = new URL(src, baseUrl);
       if (u.hostname !== baseHost && !tag.includes("integrity=")) {
-        missingIntegrity.push(src);
+        // Skip resources whose URL pathname contains a long hex content hash.
+        // Content-addressed URLs (e.g. webpack chunks: "/chunk.a1b2c3d4e5f6a7b8.js")
+        // are effectively pinned by the hash in the filename — SRI is redundant
+        // because changing the file content would change the URL, not silently
+        // serve a tampered version. Flagging these would be a false positive.
+        const hasContentHash = /[a-f0-9]{16,}/i.test(u.pathname);
+        if (!hasContentHash) {
+          missingIntegrity.push(src);
+        }
       }
     } catch { /* relative URL */ }
   };
@@ -1242,15 +1250,27 @@ export async function checkHttpsRedirect(targetUrl: string): Promise<ScanVulnera
   }
 
   // We know HTTPS is accessible (the scan target IS https://) but HTTP doesn't
-  // redirect there. This is MEDIUM, not HIGH: the site could be relying on HSTS
-  // preloading (where browsers never send the initial HTTP request). Sites like
-  // google.com, youtube.com, etc. do exactly this.
+  // Before filing a finding, verify the domain is not on the HSTS preload list.
+  // Preloaded domains rely on browsers enforcing HTTPS natively — they intentionally
+  // omit HTTP-level redirects and this is NOT a vulnerability.
+  try {
+    const apex = hostname.replace(/^www\./, "");
+    const preloadRes = await safeGet(
+      `https://hstspreload.org/api/v2/status?domain=${encodeURIComponent(apex)}`,
+      {},
+      5_000,
+    );
+    if (preloadRes && /"status"\s*:\s*"preloaded"/.test(preloadRes.body)) {
+      return []; // domain is HSTS-preloaded — not a vulnerability
+    }
+  } catch { /* fail open — don't suppress on network error */ }
+
   return [vuln({
     name: "HTTP Traffic Not Redirected to HTTPS",
     severity: "medium",
     category: "Transport Security",
-    description: `The HTTP version of the site does not issue a redirect to HTTPS. Users arriving via plain HTTP (old bookmarks, typed URLs, email links) may communicate in plaintext. Note: sites on the HSTS preload list rely on browsers enforcing HTTPS natively instead of HTTP-level redirects — verify at https://hstspreload.org if this is intentional.`,
-    evidence: `GET http://${hostname}/ (followed up to 5 redirect hops)\nResult: request chain never reached https://${hostname}/`,
+    description: `The HTTP version of the site does not issue a redirect to HTTPS. Users arriving via plain HTTP (old bookmarks, typed URLs, email links) may communicate in plaintext.`,
+    evidence: `GET http://${hostname}/ (followed up to 5 redirect hops)\nResult: request chain never reached https://${hostname}/\nHSTS preload list: not preloaded`,
     solution: "Add a permanent 301 redirect from HTTP to HTTPS at the web server or load balancer:\n  Nginx: return 301 https://$host$request_uri;\n  Apache: Redirect permanent / https://yourdomain.com/\nAlternatively, submit your domain to the HSTS preload list (https://hstspreload.org) so browsers enforce HTTPS natively.",
     cweId: "CWE-319",
     cvssScore: 5.3,
@@ -1268,27 +1288,41 @@ export async function checkRateLimiting(targetUrl: string): Promise<ScanVulnerab
 
   const h = result.headers;
   const hasRateLimit =
+    // Standard rate-limit response headers (RFC 6585 / IETF draft)
     h["x-ratelimit-limit"] ||
     h["x-rate-limit-limit"] ||
     h["ratelimit-limit"] ||
     h["retry-after"] ||
     h["x-ratelimit-remaining"] ||
     h["ratelimit-remaining"] ||
-    h["cf-ray"] || // Cloudflare manages rate limiting
+    // API gateway / proxy headers
     h["x-kong-limit"] ||
-    h["x-envoy-ratelimited"];
+    h["x-envoy-ratelimited"] ||
+    // Enterprise CDN / infrastructure — these platforms enforce rate limiting
+    // at the infrastructure level and don't always expose headers for it.
+    h["cf-ray"] ||                                          // Cloudflare
+    h["x-akamai-request-id"] || h["akamai-grn"] ||         // Akamai WAF
+    h["x-amz-cf-id"] ||                                    // AWS CloudFront
+    /gfe|google-cloud|google-edge|google frontend/i.test(h["server"] ?? "") || // GFE
+    /google/i.test(h["via"] ?? "") ||                       // Google infra
+    /cloudfront/i.test(h["x-cache"] ?? "") ||               // CloudFront cache
+    h["x-azure-ref"] || h["x-ms-ref"] ||                   // Azure Front Door / CDN
+    /akamai/i.test(h["x-check-cacheable"] ?? "");           // Akamai edge
 
   if (!hasRateLimit) {
     return [vuln({
       name: "No Rate Limiting Detected",
       severity: "low",
       category: "Brute Force Protection",
-      description: "No rate limiting or throttling headers were detected. Without rate limiting, attackers can run automated brute-force attacks against login endpoints, enumerate valid user accounts through credential stuffing, abuse API endpoints at scale, or perform denial-of-service attacks by flooding your server.",
-      evidence: `GET ${targetUrl}\nNo rate-limit headers found (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, X-Kong-Limit, cf-ray)`,
+      description: "No rate limiting or throttling signals were detected in the response headers. Without rate limiting, attackers can run automated brute-force attacks against login endpoints, enumerate valid user accounts through credential stuffing, abuse API endpoints at scale, or perform denial-of-service attacks by flooding your server. Note: many load balancers and reverse proxies enforce rate limiting without exposing headers — verify your infrastructure configuration before treating this as confirmed.",
+      evidence: `GET ${targetUrl}\nNo rate-limit headers found (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)`,
       solution: "Implement rate limiting on all sensitive endpoints (login, registration, password reset, API). Node.js: express-rate-limit. Django: DRF throttling. Also implement: account lockout after N failures, CAPTCHA on login, and IP-based throttling at the CDN/load balancer level. Return standard headers: X-RateLimit-Limit, X-RateLimit-Remaining, Retry-After.",
       cweId: "CWE-307",
       cvssScore: 5.3,
       wstgId: "WSTG-ATHN-03",
+      // Header-absence check only; infra-level rate limiting leaves no HTTP evidence.
+      // Manually set confidence below the verification threshold so users know to confirm.
+      confidence: 52,
     })];
   }
 
