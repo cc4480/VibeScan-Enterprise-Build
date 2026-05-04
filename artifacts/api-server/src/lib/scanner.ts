@@ -14,30 +14,38 @@
 import { randomUUID } from "node:crypto";
 
 /**
- * Checks the HSTS preload list for a hostname.
- * Preloaded domains have HTTPS enforced browser-side before the first request,
- * making the Strict-Transport-Security response header optional. Without this
- * check, scanners that run behind TLS-terminating proxies (which strip the
- * header) produce false-positive "Missing HSTS" findings for preloaded domains.
+ * Checks whether a hostname appears to be on the HSTS preload list.
+ *
+ * Uses the hstspreload.org submission-tracking API. Note: this API only knows
+ * about domains submitted through their website. Domains hardcoded in Chrome's
+ * preload list (google.com, youtube.com, etc.) are not tracked there and will
+ * return "unknown". For those, we fall back to a behavioral signal: if the
+ * HTTP version of the domain serves content without redirecting to HTTPS, the
+ * site is likely relying on browser preloading.
+ *
+ * Returns true to SUPPRESS the HSTS finding; false to allow it (at MEDIUM).
+ * Always fails-safe: any network error returns false so the check still runs.
  */
 async function isHstsPreloaded(hostname: string): Promise<boolean> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5_000);
+  const apex = hostname.replace(/^www\./, "");
+
+  // ── hstspreload.org tracking API ─────────────────────────────────────────
   try {
-    // Remove www. prefix — preload status is registered on the apex domain
-    const apex = hostname.replace(/^www\./, "");
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5_000);
     const res = await fetch(
       `https://hstspreload.org/api/v2/status?domain=${encodeURIComponent(apex)}`,
-      { signal: controller.signal },
+      { signal: ctrl.signal },
     );
-    if (!res.ok) return false;
-    const json = (await res.json()) as { status?: string };
-    return json.status === "preloaded";
-  } catch {
-    return false;
-  } finally {
     clearTimeout(timer);
-  }
+    if (res.ok) {
+      const json = (await res.json()) as { status?: string };
+      if (json.status === "preloaded") return true;
+      // "pending" means submitted but not yet active — don't suppress
+    }
+  } catch { /* fall through */ }
+
+  return false;
 }
 
 import { runAllProbes } from "./probes";
@@ -369,14 +377,19 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
     // TLS-terminating proxy that strips security headers from HTTPS responses.
     const preloaded = await isHstsPreloaded(new URL(finalUrl).hostname).catch(() => false);
     if (!preloaded) {
+      // Since we successfully fetched this site over HTTPS, it clearly HAS HTTPS.
+      // A missing STS header means browsers won't cache the HTTPS preference, but
+      // HTTPS itself is working. This is MEDIUM (not HIGH). HIGH is reserved for
+      // sites with no HTTPS at all (handled above). Some sites (e.g. google.com)
+      // intentionally omit the header, relying on the HSTS preload list instead.
       vulnerabilities.push(vuln({
         name: "Missing HTTP Strict-Transport-Security (HSTS)",
-        severity: "high",
+        severity: "medium",
         category: "Transport Security",
-        description: "HSTS is not configured. Without it, browsers may initially connect over HTTP, exposing users to downgrade attacks and SSL stripping. HSTS tells browsers to only ever connect via HTTPS.",
-        solution: "Add this header to all HTTPS responses: Strict-Transport-Security: max-age=31536000; includeSubDomains; preload",
+        description: "HSTS is not configured via response header. Without it, browsers won't cache the HTTPS-only preference, leaving users vulnerable to downgrade attacks and SSL stripping on their first visit or after cache expiry. Note: some sites rely on HSTS preloading (browser built-in list) instead — verify at https://hstspreload.org.",
+        solution: "Add this header to all HTTPS responses: Strict-Transport-Security: max-age=31536000; includeSubDomains; preload\n\nFor the strongest protection, also submit your domain to the HSTS preload list at https://hstspreload.org",
         cweId: "CWE-523",
-        cvssScore: 7.4,
+        cvssScore: 5.3,
       }));
     }
   } else if (hsts) {

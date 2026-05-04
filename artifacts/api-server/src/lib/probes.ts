@@ -1193,45 +1193,55 @@ export async function checkHttpsRedirect(targetUrl: string): Promise<ScanVulnera
   let hostname: string;
   try {
     const parsed = new URL(targetUrl);
+    // This check only runs when the scan target is already HTTPS, meaning HTTPS
+    // is available and working. A missing redirect is therefore MEDIUM (not HIGH):
+    // the site has HTTPS, it just doesn't force HTTP visitors over to it.
+    // HIGH ("no HTTPS at all") is handled in scanner.ts.
     if (parsed.protocol !== "https:") return [];
     hostname = parsed.hostname;
   } catch {
     return [];
   }
 
-  const result = await safeGet(`http://${hostname}/`, { redirect: "manual" }, 6_000);
-  if (!result) return [];
+  // Follow the redirect chain manually (up to 5 hops) so we can tell whether
+  // HTTP traffic eventually reaches HTTPS — even through intermediate http:// hops.
+  let currentUrl = `http://${hostname}/`;
+  for (let hop = 0; hop < 5; hop++) {
+    const result = await safeGet(currentUrl, { redirect: "manual" }, 6_000);
+    if (!result) return []; // network error — don't false-positive
 
-  // Explicit 3xx with Location: https://... — clear redirect to HTTPS
-  if (result.status >= 300 && result.status < 400) {
-    const location = result.headers["location"] ?? "";
-    if (location.startsWith("https://")) return [];
-    // Some proxies/CDNs return a protocol-relative URL — resolve it:
-    // protocol-relative from an HTTP request means http://, so NOT a fix.
-    // Fall through and check finalUrl below.
+    // If the transparent proxy upgraded the connection, res.url will be https://
+    if (result.finalUrl?.startsWith("https://")) return [];
+
+    if (result.status >= 300 && result.status < 400) {
+      const location = result.headers["location"] ?? "";
+      if (!location) break;
+      // Reached HTTPS anywhere in the chain — redirect is in place
+      if (location.startsWith("https://")) return [];
+      // Still on HTTP — follow the next hop
+      currentUrl = location.startsWith("http")
+        ? location
+        : `http://${hostname}${location.startsWith("/") ? location : `/${location}`}`;
+    } else {
+      // 200 or error — chain ended without reaching HTTPS
+      break;
+    }
   }
 
-  // Some environments (reverse proxies, load balancers) transparently upgrade
-  // the connection. In that case the manual-redirect response may show status 200
-  // but res.url (finalUrl) is already https://. If we ended up on https://, the
-  // redirect chain is working — no finding.
-  if (result.finalUrl?.startsWith("https://")) return [];
-
-  // Confirmed: served HTTP without redirect to HTTPS
-  if (result.status === 200 || (result.status >= 300 && result.status < 400)) {
-    return [vuln({
-      name: "HTTP Traffic Not Redirected to HTTPS",
-      severity: "high",
-      category: "Transport Security",
-      description: "The HTTP version of the site does not redirect to HTTPS. Users who visit via HTTP (from bookmarks, old links, or typed URLs) communicate in plaintext—exposing session cookies, passwords, and all data to network interception. This also undermines HSTS since the first request is unprotected.",
-      evidence: `http://${hostname}/ → HTTP ${result.status} (not redirected to HTTPS)`,
-      solution: "Configure a permanent 301 redirect from HTTP to HTTPS at the web server or load balancer. Nginx: `return 301 https://$host$request_uri;` Apache: `Redirect permanent / https://yourdomain.com/` After HTTPS is stable, add HSTS with preloading.",
-      cweId: "CWE-319",
-      cvssScore: 7.4,
-    })];
-  }
-
-  return [];
+  // We know HTTPS is accessible (the scan target IS https://) but HTTP doesn't
+  // redirect there. This is MEDIUM, not HIGH: the site could be relying on HSTS
+  // preloading (where browsers never send the initial HTTP request). Sites like
+  // google.com, youtube.com, etc. do exactly this.
+  return [vuln({
+    name: "HTTP Traffic Not Redirected to HTTPS",
+    severity: "medium",
+    category: "Transport Security",
+    description: `The HTTP version of the site does not issue a redirect to HTTPS. Users arriving via plain HTTP (old bookmarks, typed URLs, email links) may communicate in plaintext. Note: sites on the HSTS preload list rely on browsers enforcing HTTPS natively instead of HTTP-level redirects — verify at https://hstspreload.org if this is intentional.`,
+    evidence: `http://${hostname}/ does not redirect to https://${hostname}/`,
+    solution: "Add a permanent 301 redirect from HTTP to HTTPS at the web server or load balancer:\n  Nginx: return 301 https://$host$request_uri;\n  Apache: Redirect permanent / https://yourdomain.com/\nAlternatively, submit your domain to the HSTS preload list (https://hstspreload.org) so browsers enforce HTTPS natively.",
+    cweId: "CWE-319",
+    cvssScore: 5.3,
+  })];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
