@@ -1,4 +1,5 @@
 import { PgBoss } from "pg-boss";
+import { logger } from "./logger";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 
@@ -16,7 +17,28 @@ export async function getBoss(): Promise<PgBoss> {
   if (startPromise) return startPromise;
 
   startPromise = (async () => {
-    const instance = new PgBoss(DATABASE_URL!);
+    const instance = new PgBoss({
+      connectionString: DATABASE_URL!,
+      // Small pool — production Postgres has strict connection limits.
+      max: 3,
+      connectionTimeoutMillis: 10_000,
+      // Run maintenance every 20 seconds instead of the default 60.
+      // This keeps the pg-boss Timekeeper connection active, preventing it
+      // from sitting idle long enough for Replit's production Postgres to
+      // drop it (~30–60 s idle timeout on hosted providers).
+      monitorIntervalSeconds: 20,
+      maintenanceIntervalSeconds: 20,
+    });
+
+    // ⚠️  CRITICAL: handle pg-boss internal error events.
+    // pg-boss emits 'error' on its instance when a maintenance connection
+    // drops (e.g. Timekeeper connection timeout).  Without this handler Node.js
+    // treats it as an uncaught error and kills the entire process — which is
+    // exactly why scans get stuck at "queued" in production.
+    instance.on("error", (err: unknown) => {
+      logger.warn({ err }, "pg-boss internal error (non-fatal) — pool will reconnect automatically");
+    });
+
     await instance.start();
     boss = instance;
     return boss;
