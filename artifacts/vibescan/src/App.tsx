@@ -5,7 +5,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 
 import { Layout } from "@/components/layout";
-import { ProtectedRoute } from "@/components/protected-route";
 import LandingPage from "@/pages/landing";
 import DashboardPage from "@/pages/dashboard";
 import ScanFormPage from "@/pages/scan-form";
@@ -25,17 +24,9 @@ function Router() {
     <Layout>
       <Switch>
         <Route path="/" component={LandingPage} />
-        
-        <Route path="/dashboard">
-          {() => <ProtectedRoute><DashboardPage /></ProtectedRoute>}
-        </Route>
-        
-        <Route path="/scan">
-          {() => <ProtectedRoute><ScanFormPage /></ProtectedRoute>}
-        </Route>
-        
+        <Route path="/dashboard" component={DashboardPage} />
+        <Route path="/scan" component={ScanFormPage} />
         <Route path="/report/:id" component={ReportViewer} />
-        
         <Route component={NotFound} />
       </Switch>
     </Layout>

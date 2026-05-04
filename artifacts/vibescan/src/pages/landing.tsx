@@ -1,12 +1,9 @@
 import { Link } from "wouter";
-import { useAuth } from "@workspace/replit-auth-web";
 import { motion } from "framer-motion";
 import { ShieldAlert, Key, Globe, CheckCircle2, ArrowRight, Activity, Code2, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function LandingPage() {
-  const { isAuthenticated, login } = useAuth();
-
   const containerVariants = {
     hidden: { opacity: 0 },
     show: {
@@ -25,16 +22,16 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="relative pt-12 pb-20 lg:pt-24 lg:pb-32 overflow-hidden">
         <div className="absolute inset-0 z-0">
-          <img 
-            src={`${import.meta.env.BASE_URL}images/hero-bg.png`} 
-            alt="Cyber security background" 
+          <img
+            src={`${import.meta.env.BASE_URL}images/hero-bg.png`}
+            alt="Cyber security background"
             className="w-full h-full object-cover opacity-30 mix-blend-screen"
           />
           <div className="absolute inset-0 bg-gradient-to-b from-background/10 via-background/80 to-background" />
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <motion.div 
+          <motion.div
             variants={containerVariants}
             initial="hidden"
             animate="show"
@@ -55,16 +52,16 @@ export default function LandingPage() {
             </motion.p>
 
             <motion.div variants={itemVariants} className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
-              {isAuthenticated ? (
-                <Link href="/scan" className="w-full sm:w-auto px-8 py-4 bg-primary text-primary-foreground text-lg font-bold rounded-xl shadow-[0_0_30px_rgba(20,184,120,0.25)] hover:shadow-[0_0_40px_rgba(20,184,120,0.4)] hover:-translate-y-1 transition-all duration-300 flex items-center justify-center gap-2">
-                  Scan Your App <ArrowRight className="w-5 h-5" />
-                </Link>
-              ) : (
-                <button onClick={() => login()} className="w-full sm:w-auto px-8 py-4 bg-white text-black text-lg font-bold rounded-xl shadow-xl hover:bg-gray-100 hover:-translate-y-1 transition-all duration-300 flex items-center justify-center gap-2">
-                  Get Started Free <ArrowRight className="w-5 h-5" />
-                </button>
-              )}
-              <a href="#pricing" className="w-full sm:w-auto px-8 py-4 bg-secondary text-foreground text-lg font-semibold rounded-xl border border-white/5 hover:bg-secondary/80 transition-all duration-300 text-center">
+              <Link
+                href="/scan"
+                className="w-full sm:w-auto px-8 py-4 bg-primary text-primary-foreground text-lg font-bold rounded-xl shadow-[0_0_30px_rgba(20,184,120,0.25)] hover:shadow-[0_0_40px_rgba(20,184,120,0.4)] hover:-translate-y-1 transition-all duration-300 flex items-center justify-center gap-2"
+              >
+                Scan Your App <ArrowRight className="w-5 h-5" />
+              </Link>
+              <a
+                href="#pricing"
+                className="w-full sm:w-auto px-8 py-4 bg-secondary text-foreground text-lg font-semibold rounded-xl border border-white/5 hover:bg-secondary/80 transition-all duration-300 text-center"
+              >
                 View Pricing
               </a>
             </motion.div>
@@ -106,7 +103,7 @@ export default function LandingPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-12 relative">
             <div className="hidden md:block absolute top-12 left-[15%] right-[15%] h-0.5 bg-gradient-to-r from-primary/0 via-primary/30 to-primary/0" />
-            
+
             {[
               { step: 1, icon: Code2, title: "Paste Any URL", desc: "Drop in any publicly accessible URL — your own app, a client's site, or any live website." },
               { step: 2, icon: Zap, title: "We Scan", desc: "Our engine analyzes headers, SSL, and runs a comprehensive black-box check." },
@@ -187,7 +184,7 @@ export default function LandingPage() {
                 {tier.name.includes("Pack") && <span className="text-muted-foreground text-sm">/ once</span>}
               </div>
               <p className="text-sm text-muted-foreground pb-6 border-b border-white/10 mb-6">{tier.desc}</p>
-              
+
               <ul className="flex flex-col gap-3 mb-8 flex-1">
                 {tier.features.map((feat, j) => (
                   <li key={j} className="flex items-start gap-2 text-sm">
@@ -196,10 +193,13 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
-              
-              <button onClick={() => isAuthenticated ? window.location.href = '/scan' : login()} className={cn("w-full py-3 rounded-xl font-bold transition-all", tier.highlight ? "bg-primary text-primary-foreground hover:shadow-[0_0_20px_rgba(20,184,120,0.4)]" : "bg-secondary text-foreground hover:bg-white/10")}>
+
+              <Link
+                href="/scan"
+                className={cn("w-full py-3 rounded-xl font-bold transition-all text-center block", tier.highlight ? "bg-primary text-primary-foreground hover:shadow-[0_0_20px_rgba(20,184,120,0.4)]" : "bg-secondary text-foreground hover:bg-white/10")}
+              >
                 {tier.cta}
-              </button>
+              </Link>
             </div>
           ))}
         </div>

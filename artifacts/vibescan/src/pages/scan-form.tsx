@@ -12,7 +12,7 @@ function getFriendlyError(err: unknown): string {
   if (/failed to fetch|networkerror|load failed/i.test(msg)) return "Could not reach the server. Check your connection and try again.";
   if (/not configured|503/i.test(msg)) return "Payment processing is not set up yet. Contact support.";
   if (/invalid url/i.test(msg)) return msg;
-  if (/unauthorized|401/i.test(msg)) return "You need to be signed in to scan.";
+  if (/unauthorized|401/i.test(msg)) return "Session token missing. Please refresh the page and try again.";
   const clean = msg.replace(/^HTTP \d{3} [^:]+:\s*/, "");
   return clean.length > 120 ? clean.slice(0, 120) + "…" : clean;
 }
