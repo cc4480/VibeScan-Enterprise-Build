@@ -291,27 +291,10 @@ export default function ReportViewer() {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"severity" | "category">("severity");
 
-  if (isLoading) {
-    return (
-      <div className="min-h-[80vh] flex flex-col items-center justify-center gap-4">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Loading report…</p>
-      </div>
-    );
-  }
-  if (error || !report) return <div className="min-h-[80vh] flex items-center justify-center text-red-400">Failed to load report.</div>;
+  const vulnerabilities = report?.data?.vulnerabilities ?? [];
+  const summary = report?.data?.summary;
 
-  const { data: { summary, vulnerabilities, technologies, server, tlsGrade, aiAnalysis } } = report;
-
-  const severityCounts = {
-    critical: summary.critical,
-    high: summary.high,
-    medium: summary.medium,
-    low: summary.low,
-    info: summary.info,
-  };
-
-  // Sort vulnerabilities
+  // All hooks must come before any early returns
   const sortedVulns = useMemo(() => {
     return [...vulnerabilities].sort((a, b) => {
       if (sortBy === "severity") {
@@ -325,7 +308,6 @@ export default function ReportViewer() {
     });
   }, [vulnerabilities, sortBy]);
 
-  // Per-category counts
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const v of vulnerabilities) {
@@ -343,6 +325,26 @@ export default function ReportViewer() {
     () => activeCategory ? sortedVulns.filter((v) => v.category === activeCategory) : sortedVulns,
     [sortedVulns, activeCategory],
   );
+
+  if (isLoading) {
+    return (
+      <div className="min-h-[80vh] flex flex-col items-center justify-center gap-4">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Loading report…</p>
+      </div>
+    );
+  }
+  if (error || !report || !summary) return <div className="min-h-[80vh] flex items-center justify-center text-red-400">Failed to load report.</div>;
+
+  const { data: { technologies, server, tlsGrade, aiAnalysis } } = report;
+
+  const severityCounts = {
+    critical: summary.critical,
+    high: summary.high,
+    medium: summary.medium,
+    low: summary.low,
+    info: summary.info,
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
