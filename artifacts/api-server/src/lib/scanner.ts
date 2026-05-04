@@ -17,6 +17,9 @@ import { checkDnsSecurity } from "./dnsChecks";
 import { scanJavaScriptForSecrets } from "./jsScanner";
 import { crawlAndCheck } from "./crawler";
 import { checkForKnownVulnerabilities } from "./cveCheck";
+import { analyzeJwts } from "./jwtAnalysis";
+import { checkSubdomainTakeover } from "./subdomainTakeover";
+import { checkPathTraversal } from "./pathTraversal";
 
 export interface ScanVulnerability {
   id: string;
@@ -509,18 +512,25 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
 
   // ── Run all parallel probes ───────────────────────────────────────────
   // All checks run concurrently — active HTTP probes, DNS checks, site crawl,
-  // CVE lookup, and (deep tier only) JavaScript secret scanning.
+  // CVE lookup, JWT analysis, subdomain takeover, and (deep only) JS secret
+  // scanning and path traversal.
   const probePromises: Promise<ScanVulnerability[]>[] = [
     runAllProbes(finalUrl, html).catch(() => []),
     checkDnsSecurity(finalUrl).catch(() => []),
     checkForKnownVulnerabilities(html, rawHeaders).catch(() => []),
     // Crawl deep tier: up to 15 inner pages; basic: up to 5
     crawlAndCheck(finalUrl, html, rawHeaders, tier === "deep" ? 15 : 5).catch(() => []),
+    // Passive JWT analysis — no extra HTTP requests
+    analyzeJwts(rawHeaders, html).catch(() => []),
+    // Subdomain takeover — 1-2 DNS + HTTP checks
+    checkSubdomainTakeover(finalUrl).catch(() => []),
   ];
 
   if (tier === "deep") {
     probePromises.push(
       scanJavaScriptForSecrets(html, finalUrl).catch(() => []),
+      // Active path traversal probing — multiple HTTP requests
+      checkPathTraversal(finalUrl, html).catch(() => []),
     );
   }
 
