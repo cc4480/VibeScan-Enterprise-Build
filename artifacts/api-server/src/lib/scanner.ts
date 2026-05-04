@@ -57,6 +57,7 @@ import { analyzeJwts } from "./jwtAnalysis";
 import { checkSubdomainTakeover } from "./subdomainTakeover";
 import { checkPathTraversal } from "./pathTraversal";
 import { checkSourceMaps } from "./sourceMaps";
+import { autoEnrichConfidence } from "./scoring";
 
 export interface ScanVulnerability {
   id: string;
@@ -69,6 +70,8 @@ export interface ScanVulnerability {
   cweId?: string | null;
   cvssScore?: number | null;
   wstgId?: string | null;
+  /** Confidence score 0–100: how certain we are this is a real finding, not a false positive */
+  confidence?: number | null;
 }
 
 export interface ScanResult {
@@ -743,7 +746,7 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
     server,
     tlsGrade,
     technologies,
-    vulnerabilities,
+    vulnerabilities: autoEnrichConfidence(vulnerabilities),
     requestDurationMs,
     rawHeaders,
   };
