@@ -431,7 +431,8 @@ const SENSITIVE_PATHS: SensitivePath[] = [
     category: "Information Disclosure",
     description: ".gitignore is publicly accessible. While not directly exploitable, it reveals the names of sensitive files on the server (e.g., '*.key', 'secrets/', 'credentials.json') that exist but aren't tracked in Git, giving attackers a targeted list of files to probe.",
     solution: "Consider blocking .gitignore at the web server to avoid disclosing the sensitive file structure.",
-    validate: (body) => body.includes(".env") || body.includes("secret") || body.includes("*.key") || body.length > 100,
+    // SPA catch-all returns text/html — a real .gitignore is plain text
+    validate: (body, ct) => !ct.includes("text/html") && (body.includes(".env") || body.includes("secret") || body.includes("*.key") || body.length > 100),
   },
   {
     path: "/server-status",

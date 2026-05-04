@@ -1,0 +1,365 @@
+# VibeScan Security Report
+
+**Target:** https://vibe-scan-master.replit.app/
+**Scanned:** May 3, 2026
+**Security Grade:** F | Risk Score: 98/100
+**Total Findings:** 20  (0 critical · 4 high · 7 medium · 3 low · 6 info)
+
+## Executive Summary
+
+Security scan of vibe-scan-master.replit.app identified 4 high-severity issues that should be addressed promptly, yielding an overall grade of F with a risk score of 98/100. Review the findings below and prioritise the high and critical items first.
+
+## ✅ Confirmed Findings (20)
+
+#### 🟠 HIGH — Missing DMARC Record — No Email Authentication Enforcement
+**Category:** Email Security
+
+**Description:** No DMARC (Domain-based Message Authentication, Reporting & Conformance) record exists for vibe-scan-master.replit.app. Without DMARC, even if SPF and DKIM are configured, there is no policy telling receiving mail servers what to do with messages that fail authentication. Attackers can bypass SPF/DKIM using the "From" header spoofing that DMARC is specifically designed to prevent.
+
+**Evidence:**
+```
+DNS TXT query: _dmarc.vibe-scan-master.replit.app
+Status: NOERROR (domain exists)
+No v=DMARC1 record found in 0 TXT record(s)
+```
+**How to Fix:** Add a TXT record for _dmarc.vibe-scan-master.replit.app:
+"v=DMARC1; p=quarantine; rua=mailto:dmarc@vibe-scan-master.replit.app; ruf=mailto:dmarc@vibe-scan-master.replit.app; fo=1"
+
+Start with p=none (monitoring) and progress to p=quarantine then p=reject once you verify legitimate email flows. Use https://dmarcian.com to monitor reports.
+
+**References:** CWE-290 | CVSS 7.5
+
+---
+
+#### 🟠 HIGH — Missing Content-Security-Policy (CSP)
+**Category:** Injection Defense
+
+**Description:** No Content-Security-Policy header was found. CSP is the primary browser-enforced defense against Cross-Site Scripting (XSS) attacks. Without it, injected scripts can run with full page privileges and steal session cookies or credentials.
+
+**Evidence:**
+```
+GET https://vibe-scan-master.replit.app/
+Content-Security-Policy: (header absent from response)
+```
+**How to Fix:** Implement a strict CSP. A starting point: Content-Security-Policy: default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'. Tighten over time using CSP violation reports.
+
+**References:** CWE-79 | CVSS 7.2
+
+---
+
+#### 🟠 HIGH — Cookie Missing Secure Flag
+**Category:** Session Management
+
+**Description:** The cookie "GAESA" is set without the Secure flag, meaning it can be transmitted over unencrypted HTTP connections, making it susceptible to interception.
+
+**Evidence:**
+```
+Set-Cookie: GAESA=Cp4BMDAwN2I3MzRkOWNhMjllNjQwMTExYTRlMjFiNTExYTVkZmMwNzBiMTAwYWU2NDQ1ZGEzZGE4MzI0NzY2YTAwMGFlMGZlODc2OTFmMGU1MGUzYmVjYWZlZmY5YmJhNTM4NTAyNTYwOWMyN2ViNTFkMjg5M2Q3NWQ4YjZlMDBjN2EyZDRiMmRiOGMzNzA3NmY2NjM4NWIzYzc5MmY5MDcQ1caRjd8z; expires=Wed
+```
+**How to Fix:** Add the Secure attribute to all cookies: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax
+
+**References:** CWE-614 | CVSS 6.5
+
+---
+
+#### 🟠 HIGH — Cookie Missing Secure Flag on Inner Page
+**Category:** Session Management
+
+**Description:** The page "/favicon.svg" sets the cookie "GAESA" without the Secure flag, allowing it to be transmitted over unencrypted HTTP even on an HTTPS site.
+
+**Evidence:**
+```
+GET https://vibe-scan-master.replit.app/favicon.svg
+Set-Cookie: GAESA=Cp4BMDAwN2I3MzRkOWNhMjllNjQwMTExYTRlMjFiNTExYTVkZmMwNzBiMTAwYWU2NDQ1ZGEzZGE4MzI0NzY2YTAwMGFlMGZlODc2OTFmMGU1MGUzYmVjYWZlZmY5YmJhNTM4NTAyNTYwOWMyN2ViNTFkMjg5M2Q3NWQ4YjZlMDBjN2EyZDRiMmRiOGMzNzA3NmY2NjM4NWIzYzc5MmY5MDcQocmRjd8z; expires=Wed, 03-Jun-2026 06:19:35 GMT; path=/
+```
+**How to Fix:** Add the Secure attribute to all cookies: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax
+
+**References:** CWE-614 | CVSS 6.5
+
+---
+
+#### 🟡 MEDIUM — External Resources Missing Subresource Integrity (SRI)
+**Category:** Supply Chain Security
+
+**Description:** 1 external script(s)/stylesheet(s) are loaded from third-party CDNs without Subresource Integrity hashes. If any of these CDNs are compromised (which has happened to major CDNs), attackers can inject arbitrary JavaScript that runs on your site for all visitors—stealing credentials, hijacking sessions, or installing skimmers.
+
+**Evidence:**
+```
+<script/link src="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" (no integrity= attribute)>
+```
+**How to Fix:** Add integrity and crossorigin to all external resources: `<script src="https://cdn.example.com/lib.js" integrity="sha384-..." crossorigin="anonymous">`. Generate hashes at https://www.srihash.org/ or using `openssl dgst -sha384 -binary FILE | openssl base64 -A`.
+
+**References:** CWE-353 | CVSS 6.1
+
+---
+
+#### 🟡 MEDIUM — Cookie Missing HttpOnly Flag
+**Category:** Session Management
+
+**Description:** The cookie "GAESA" is set without the HttpOnly flag, allowing client-side JavaScript to access it. This enables session theft via XSS attacks.
+
+**Evidence:**
+```
+Set-Cookie: GAESA=Cp4BMDAwN2I3MzRkOWNhMjllNjQwMTExYTRlMjFiNTExYTVkZmMwNzBiMTAwYWU2NDQ1ZGEzZGE4MzI0NzY2YTAwMGFlMGZlODc2OTFmMGU1MGUzYmVjYWZlZmY5YmJhNTM4NTAyNTYwOWMyN2ViNTFkMjg5M2Q3NWQ4YjZlMDBjN2EyZDRiMmRiOGMzNzA3NmY2NjM4NWIzYzc5MmY5MDcQ1caRjd8z; expires=Wed
+```
+**How to Fix:** Add the HttpOnly attribute to all session cookies: Set-Cookie: name=value; HttpOnly; Secure; SameSite=Lax
+
+**References:** CWE-1004 | CVSS 5.3
+
+---
+
+#### 🟡 MEDIUM — Missing SPF Record — Email Spoofing Possible
+**Category:** Email Security
+
+**Description:** No SPF (Sender Policy Framework) record was found for vibe-scan-master.replit.app. Without SPF, anyone can send emails that appear to come from @vibe-scan-master.replit.app. Attackers use this to send phishing emails to your customers, partners, and employees under your domain name, with no technical barrier to doing so.
+
+**Evidence:**
+```
+DNS TXT query: vibe-scan-master.replit.app
+Status: NOERROR (domain exists)
+No v=spf1 record found in 0 TXT record(s)
+```
+**How to Fix:** Add a TXT record to your DNS for vibe-scan-master.replit.app:
+"v=spf1 include:_spf.yourmailprovider.com ~all"
+
+Replace 'include:...' with your actual mail provider's SPF include. End with '-all' (hard fail) for strictest enforcement. Verify at: https://mxtoolbox.com/spf.aspx
+
+**References:** CWE-290 | CVSS 5.3
+
+---
+
+#### 🟡 MEDIUM — Cookie Missing HttpOnly Flag on Inner Page
+**Category:** Session Management
+
+**Description:** The page "/favicon.svg" sets the cookie "GAESA" without the HttpOnly flag, allowing client-side JavaScript to access it. This enables session theft via XSS.
+
+**Evidence:**
+```
+GET https://vibe-scan-master.replit.app/favicon.svg
+Set-Cookie: GAESA=Cp4BMDAwN2I3MzRkOWNhMjllNjQwMTExYTRlMjFiNTExYTVkZmMwNzBiMTAwYWU2NDQ1ZGEzZGE4MzI0NzY2YTAwMGFlMGZlODc2OTFmMGU1MGUzYmVjYWZlZmY5YmJhNTM4NTAyNTYwOWMyN2ViNTFkMjg5M2Q3NWQ4YjZlMDBjN2EyZDRiMmRiOGMzNzA3NmY2NjM4NWIzYzc5MmY5MDcQocmRjd8z; expires=Wed, 03-Jun-2026 06:19:35 GMT; path=/
+```
+**How to Fix:** Add the HttpOnly attribute to all session cookies: Set-Cookie: name=value; HttpOnly; Secure; SameSite=Lax
+
+**References:** CWE-1004 | CVSS 5.3
+
+---
+
+#### 🟡 MEDIUM — Missing Clickjacking Protection (X-Frame-Options)
+**Category:** UI Security
+
+**Description:** The application does not set X-Frame-Options or CSP frame-ancestors. Attackers can embed your pages in invisible iframes on malicious sites and trick users into clicking UI elements (clickjacking).
+
+**Evidence:**
+```
+GET https://vibe-scan-master.replit.app/
+X-Frame-Options: (header absent)
+CSP frame-ancestors: (not present in Content-Security-Policy)
+```
+**How to Fix:** Add: X-Frame-Options: DENY (or SAMEORIGIN if you need to embed within your own domain). Alternatively use: Content-Security-Policy: frame-ancestors 'none'
+
+**References:** CWE-1021 | CVSS 4.3
+
+---
+
+#### 🟡 MEDIUM — Missing X-Content-Type-Options: nosniff
+**Category:** Content Sniffing
+
+**Description:** The X-Content-Type-Options header is absent or not set to 'nosniff'. Browsers may MIME-sniff response content and execute it as a different content type, enabling content-injection attacks.
+
+**Evidence:**
+```
+GET https://vibe-scan-master.replit.app/
+X-Content-Type-Options: (header absent from response)
+```
+**How to Fix:** Add to all responses: X-Content-Type-Options: nosniff
+
+**References:** CWE-16 | CVSS 4.3
+
+---
+
+#### 🟡 MEDIUM — Cookie Missing SameSite Attribute
+**Category:** CSRF Protection
+
+**Description:** The cookie "GAESA" lacks the SameSite attribute, making the application potentially vulnerable to Cross-Site Request Forgery (CSRF) attacks.
+
+**Evidence:**
+```
+Set-Cookie: GAESA=Cp4BMDAwN2I3MzRkOWNhMjllNjQwMTExYTRlMjFiNTExYTVkZmMwNzBiMTAwYWU2NDQ1ZGEzZGE4MzI0NzY2YTAwMGFlMGZlODc2OTFmMGU1MGUzYmVjYWZlZmY5YmJhNTM4NTAyNTYwOWMyN2ViNTFkMjg5M2Q3NWQ4YjZlMDBjN2EyZDRiMmRiOGMzNzA3NmY2NjM4NWIzYzc5MmY5MDcQ1caRjd8z; expires=Wed
+```
+**How to Fix:** Set SameSite=Lax or SameSite=Strict on all cookies to prevent CSRF: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax
+
+**References:** CWE-352 | CVSS 4.3
+
+---
+
+#### 🔵 LOW — Missing Referrer-Policy Header
+**Category:** Information Disclosure
+
+**Description:** No Referrer-Policy header is set. By default, browsers may include the full URL of the previous page in the Referer header, potentially leaking sensitive URL parameters (session tokens, search queries) to third-party sites.
+
+**Evidence:**
+```
+GET https://vibe-scan-master.replit.app/
+Referrer-Policy: (header absent from response)
+```
+**How to Fix:** Add: Referrer-Policy: strict-origin-when-cross-origin (or 'no-referrer' for maximum privacy)
+
+**References:** CWE-200 | CVSS 3.1
+
+---
+
+#### 🔵 LOW — Missing Permissions-Policy Header
+**Category:** Browser Feature Control
+
+**Description:** No Permissions-Policy (formerly Feature-Policy) header is present. This header restricts which browser APIs (camera, microphone, geolocation, etc.) can be accessed from your pages and embedded iframes.
+
+**Evidence:**
+```
+GET https://vibe-scan-master.replit.app/
+Permissions-Policy: (header absent from response)
+```
+**How to Fix:** Add: Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=(). Adjust based on what your app actually needs.
+
+**References:** CWE-16 | CVSS 2.4
+
+---
+
+#### 🔵 LOW — No DKIM Records Found
+**Category:** Email Security
+
+**Description:** No DKIM (DomainKeys Identified Mail) TXT records were found for vibe-scan-master.replit.app under 41 commonly used selectors. DKIM adds a cryptographic signature to outgoing emails, allowing recipients to verify they weren't tampered with in transit. Without DKIM, your emails are more likely to be marked as spam and DMARC enforcement is weakened.
+
+**Evidence:**
+```
+Checked selectors: default, google, mail, smtp, k1, k2, selector1, selector2, and 33 more — none returned a valid DKIM record.
+```
+**How to Fix:** Enable DKIM signing in your email service provider (Google Workspace, Microsoft 365, SendGrid, Mailgun, etc.) and publish the provided TXT record under [selector]._domainkey.yourdomain.com. The exact steps depend on your mail provider.
+
+**References:** CWE-345
+
+---
+
+#### ⚪ INFO — Missing Cross-Origin-Opener-Policy (COOP)
+**Category:** Browser Feature Control
+
+**Description:** The Cross-Origin-Opener-Policy header is not set. COOP isolates your browsing context from cross-origin popups, preventing other pages from accessing your window object. It is required to safely enable SharedArrayBuffer and high-resolution timers. Most public web apps do not need these APIs, so absence is typically informational — but enabling COOP is a free defence-in-depth measure.
+
+**Evidence:**
+```
+GET https://vibe-scan-master.replit.app/
+Cross-Origin-Opener-Policy: (header absent from response)
+```
+**How to Fix:** Add: Cross-Origin-Opener-Policy: same-origin (most secure) or same-origin-allow-popups if you need cross-origin popup interaction. Only required if you use SharedArrayBuffer or high-resolution timers.
+
+**References:** CWE-346
+
+---
+
+#### ⚪ INFO — Missing Cross-Origin-Embedder-Policy (COEP)
+**Category:** Browser Feature Control
+
+**Description:** The Cross-Origin-Embedder-Policy header is not set. COEP (require-corp) prevents the page from loading cross-origin resources unless they explicitly opt in. It is required alongside COOP to achieve cross-origin isolation. Absence is informational for most sites — only needed if your app uses SharedArrayBuffer or high-resolution performance timers.
+
+**Evidence:**
+```
+GET https://vibe-scan-master.replit.app/
+Cross-Origin-Embedder-Policy: (header absent from response)
+```
+**How to Fix:** Add: Cross-Origin-Embedder-Policy: require-corp. Note: this requires all subresources to serve a CORP or CORS header. Use credentialless if require-corp causes third-party resource breakage.
+
+**References:** CWE-346
+
+---
+
+#### ⚪ INFO — Missing Cross-Origin-Resource-Policy (CORP)
+**Category:** Browser Feature Control
+
+**Description:** The Cross-Origin-Resource-Policy header is absent. Without CORP, other origins can include this resource in their pages (via <img>, <script>, etc.). In cross-origin isolated contexts this could expose content to Spectre-class timing attacks. For most public resources this is informational — but adding CORP: same-origin or same-site is a low-effort hardening step.
+
+**Evidence:**
+```
+GET https://vibe-scan-master.replit.app/
+Cross-Origin-Resource-Policy: (header absent from response)
+```
+**How to Fix:** Add: Cross-Origin-Resource-Policy: same-origin (for same-site-only resources) or same-site. Use cross-origin only for truly public resources.
+
+**References:** CWE-346
+
+---
+
+#### ⚪ INFO — .gitignore Exposes Sensitive Path Names
+**Category:** Information Disclosure
+
+**Description:** .gitignore is publicly accessible. While not directly exploitable, it reveals the names of sensitive files on the server (e.g., '*.key', 'secrets/', 'credentials.json') that exist but aren't tracked in Git, giving attackers a targeted list of files to probe.
+
+**Evidence:**
+```
+GET https://vibe-scan-master.replit.app/.gitignore → HTTP 200 (2,315 bytes)
+Content-Type: text/html; charset=utf-8
+```
+**How to Fix:** Consider blocking .gitignore at the web server to avoid disclosing the sensitive file structure.
+
+**References:** CWE-200
+
+---
+
+#### ⚪ INFO — Missing security.txt (RFC 9116)
+**Category:** Information Disclosure
+
+**Description:** No security.txt file was found at /.well-known/security.txt or /security.txt. RFC 9116 defines this as the standard way for security researchers to report vulnerabilities to your organisation. Without it, researchers may not know how to contact you responsibly, leading to public disclosure before you can patch.
+
+**Evidence:**
+```
+GET https://vibe-scan-master.replit.app/.well-known/security.txt → not found
+GET https://vibe-scan-master.replit.app/security.txt → not found
+```
+**How to Fix:** Create /.well-known/security.txt with at minimum: Contact (email or form URL), Expires (date after which the file is stale), and optionally Policy (URL of your vulnerability disclosure policy). Generator: https://securitytxt.org/
+
+**References:** CWE-205 | CVSS 0.0
+
+---
+
+#### ⚪ INFO — DNSSEC Not Enabled
+**Category:** DNS Security
+
+**Description:** DNSSEC is not configured for vibe-scan-master.replit.app. Without DNSSEC, DNS responses can be forged or tampered with in transit (DNS cache poisoning / Kaminsky attack). Attackers can redirect your domain's traffic to malicious servers without users or servers being able to detect it.
+
+**Evidence:**
+```
+No DNSKEY records found for vibe-scan-master.replit.app.
+```
+**How to Fix:** Enable DNSSEC through your domain registrar. Most major registrars (Cloudflare, AWS Route 53, Google Domains) offer one-click DNSSEC. Your DNS hosting provider must also support signed zones. This requires coordination between your registrar and DNS provider.
+
+**References:** CWE-350
+
+---
+
+## 🤖 AI Analysis
+
+### Overall Risk
+
+High. The most dangerous finding is the missing Content-Security-Policy header, which leaves the site vulnerable to XSS attacks that can steal user sessions and credentials. Combined with cookies lacking Secure, HttpOnly, and SameSite flags, an attacker who finds an XSS vector can easily hijack sessions.
+
+### Top Priorities
+
+1. Add a Content-Security-Policy header to block inline scripts and restrict script sources.
+2. Set the Secure, HttpOnly, and SameSite=Strict flags on the GAESA cookie.
+3. Configure SPF, DKIM, and DMARC records for vibe-scan-master.replit.app to prevent email spoofing.
+
+### Quick Wins
+
+- ✓ Add X-Frame-Options: DENY header to prevent clickjacking.
+- ✓ Add X-Content-Type-Options: nosniff header to stop MIME sniffing.
+
+### Compliance Notes
+
+Missing CSP and insecure cookies violate OWASP Top 10 categories A03 (Injection) and A07 (Identification and Authentication Failures). These issues also fail PCI DSS requirements for protecting stored data and session tokens.
+
+## 🖥️ Tech Profile
+
+- **TLS Grade:** A+
+- **Server:** Google Frontend
+- **Technologies:** Google Cloud / GFE
+
+---
+*Generated by VibeScan — https://vibescan.app*
