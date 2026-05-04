@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "APcLrv3Aokl_VpSQk6aDu"
+uri = "file://.local/vibescan-blueprint.md"
+type = "text"
+title = "VibeScan — Full Technical Blueprint"
