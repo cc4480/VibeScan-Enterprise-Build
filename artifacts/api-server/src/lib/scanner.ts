@@ -253,7 +253,13 @@ function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[
 
   for (const cookie of cookies) {
     if (!cookie.trim()) continue;
-    const namePart = cookie.split(";")[0]?.split("=")[0]?.trim() ?? "cookie";
+    // Skip malformed Set-Cookie fragments that have no name=value pair.
+    // These are date fragments produced when "expires=Wed, 03-Jan-2025" is
+    // mis-split at the comma (the regex above can't distinguish that comma from
+    // a multi-cookie separator). A valid Set-Cookie first segment MUST contain "=".
+    const firstSegment = cookie.split(";")[0] ?? "";
+    if (!firstSegment.includes("=")) continue;
+    const namePart = firstSegment.split("=")[0]?.trim() ?? "cookie";
 
     if (!/secure/i.test(cookie)) {
       findings.push(vuln({

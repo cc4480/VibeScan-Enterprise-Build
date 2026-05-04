@@ -353,47 +353,65 @@ const probeUrlFn = probeUrl;
 // PER-PAGE COOKIE CHECKS
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Check cookie security flags on a single inner page's Set-Cookie headers.
+ *
+ * @param seenCookieIssues - shared Set across the whole crawl; each entry is
+ *   "issueName::cookieName". Prevents the same cookie problem from being filed
+ *   once per crawled page (e.g. Replit's GAESA cookie on every response).
+ */
 function checkPageCookies(
   setCookies: string[],
   pageUrl: string,
   isHttps: boolean,
+  seenCookieIssues: Set<string>,
 ): ScanVulnerability[] {
   if (setCookies.length === 0) return [];
   const path = (() => { try { return new URL(pageUrl).pathname; } catch { return pageUrl; } })();
   const findings: ScanVulnerability[] = [];
-  // Each entry is already a single Set-Cookie value (no need to split on commas)
-  const cookies = setCookies;
 
-  for (const cookie of cookies) {
+  for (const cookie of setCookies) {
     if (!cookie.trim()) continue;
-    const namePart = cookie.split(";")[0]?.split("=")[0]?.trim() ?? "cookie";
+    // Skip malformed Set-Cookie fragments that have no name=value pair.
+    // These arise from dates in expires= values that get mis-split upstream.
+    const firstSegment = cookie.split(";")[0] ?? "";
+    if (!firstSegment.includes("=")) continue;
+    const namePart = firstSegment.split("=")[0]?.trim() ?? "cookie";
 
     if (isHttps && !/secure/i.test(cookie)) {
-      findings.push(vuln({
-        name: "Cookie Missing Secure Flag on Inner Page",
-        severity: "high",
-        category: "Session Management",
-        description: `The page "${path}" sets the cookie "${namePart}" without the Secure flag, allowing it to be transmitted over unencrypted HTTP even on an HTTPS site.`,
-        evidence: `GET ${pageUrl}\nSet-Cookie: ${cookie.trim()}`,
-        solution: "Add the Secure attribute to all cookies: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax",
-        cweId: "CWE-614",
-        cvssScore: 6.5,
-        wstgId: "WSTG-SESS-02",
-      }));
+      const key = `secure::${namePart}`;
+      if (!seenCookieIssues.has(key)) {
+        seenCookieIssues.add(key);
+        findings.push(vuln({
+          name: "Cookie Missing Secure Flag on Inner Page",
+          severity: "high",
+          category: "Session Management",
+          description: `The page "${path}" sets the cookie "${namePart}" without the Secure flag, allowing it to be transmitted over unencrypted HTTP even on an HTTPS site.`,
+          evidence: `GET ${pageUrl}\nSet-Cookie: ${cookie.trim()}`,
+          solution: "Add the Secure attribute to all cookies: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax",
+          cweId: "CWE-614",
+          cvssScore: 6.5,
+          wstgId: "WSTG-SESS-02",
+        }));
+      }
     }
 
     if (!/httponly/i.test(cookie)) {
-      findings.push(vuln({
-        name: "Cookie Missing HttpOnly Flag on Inner Page",
-        severity: "medium",
-        category: "Session Management",
-        description: `The page "${path}" sets the cookie "${namePart}" without the HttpOnly flag, allowing client-side JavaScript to access it. This enables session theft via XSS.`,
-        evidence: `GET ${pageUrl}\nSet-Cookie: ${cookie.trim()}`,
-        solution: "Add the HttpOnly attribute to all session cookies: Set-Cookie: name=value; HttpOnly; Secure; SameSite=Lax",
-        cweId: "CWE-1004",
-        cvssScore: 5.3,
-        wstgId: "WSTG-SESS-02",
-      }));
+      const key = `httponly::${namePart}`;
+      if (!seenCookieIssues.has(key)) {
+        seenCookieIssues.add(key);
+        findings.push(vuln({
+          name: "Cookie Missing HttpOnly Flag on Inner Page",
+          severity: "medium",
+          category: "Session Management",
+          description: `The page "${path}" sets the cookie "${namePart}" without the HttpOnly flag, allowing client-side JavaScript to access it. This enables session theft via XSS.`,
+          evidence: `GET ${pageUrl}\nSet-Cookie: ${cookie.trim()}`,
+          solution: "Add the HttpOnly attribute to all session cookies: Set-Cookie: name=value; HttpOnly; Secure; SameSite=Lax",
+          cweId: "CWE-1004",
+          cvssScore: 5.3,
+          wstgId: "WSTG-SESS-02",
+        }));
+      }
     }
   }
 
@@ -532,6 +550,11 @@ export async function crawlAndCheck(
   const rootSnapshot = snapshotHeaders(rootHeaders);
   const isHttps = rootUrl.startsWith("https://");
 
+  // Shared dedup set for cookie findings — prevents the same cookie issue
+  // (e.g. GAESA missing Secure) from being filed once per crawled page.
+  // Key format: "issueType::cookieName"
+  const seenCookieIssues = new Set<string>();
+
   // Track which header is missing on which paths (for gap aggregation)
   const gapMap = new Map<keyof typeof rootSnapshot, string[]>([
     ["hsts", []],
@@ -578,7 +601,7 @@ export async function crawlAndCheck(
     }
 
     // ── Cookie checks ──────────────────────────────────────────────────────
-    perPageFindings.push(...checkPageCookies(page.setCookies, url, isHttps));
+    perPageFindings.push(...checkPageCookies(page.setCookies, url, isHttps, seenCookieIssues));
 
     // ── Sensitive file probes under this path's directory ──────────────────
     const probeRemaining = crawlDeadline - Date.now();
