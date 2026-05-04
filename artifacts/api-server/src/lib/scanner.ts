@@ -245,6 +245,22 @@ function detectTechnologies(headers: Record<string, string>, html: string): stri
   return [...techs];
 }
 
+// Cookies set by third-party infrastructure (CDN proxies, load balancers, etc.)
+// that the site owner has no ability to modify.  Flagging these produces
+// unfixable false positives — the fix would require contacting the infra vendor.
+const INFRA_COOKIE_NAMES = new Set([
+  "gaesa",      // Replit CDN / proxy
+  "__cf_bm",    // Cloudflare Bot Management
+  "__cflb",     // Cloudflare Load Balancing
+  "_cfuvid",    // Cloudflare UVID
+  "cf_clearance", // Cloudflare challenge clearance
+  "__utmz",     // Google Analytics (legacy)
+  "__utma",     // Google Analytics (legacy)
+  "_ga",        // Google Analytics
+  "_gid",       // Google Analytics
+  "_gat",       // Google Analytics throttle
+]);
+
 function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[] {
   const findings: ScanVulnerability[] = [];
   if (!setCookieHeader) return findings;
@@ -260,6 +276,10 @@ function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[
     const firstSegment = cookie.split(";")[0] ?? "";
     if (!firstSegment.includes("=")) continue;
     const namePart = firstSegment.split("=")[0]?.trim() ?? "cookie";
+
+    // Skip cookies owned by third-party infrastructure — the site operator
+    // cannot add Secure/HttpOnly/SameSite to cookies they don't set.
+    if (INFRA_COOKIE_NAMES.has(namePart.toLowerCase())) continue;
 
     if (!/secure/i.test(cookie)) {
       findings.push(vuln({
