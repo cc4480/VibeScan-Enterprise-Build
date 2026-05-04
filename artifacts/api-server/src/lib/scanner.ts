@@ -20,6 +20,7 @@ import { checkForKnownVulnerabilities } from "./cveCheck";
 import { analyzeJwts } from "./jwtAnalysis";
 import { checkSubdomainTakeover } from "./subdomainTakeover";
 import { checkPathTraversal } from "./pathTraversal";
+import { checkSourceMaps } from "./sourceMaps";
 
 export interface ScanVulnerability {
   id: string;
@@ -367,6 +368,54 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
     }));
   }
 
+  // ── CSP deep analysis (when CSP exists) ──────────────────────────────
+  if (csp) {
+    // object-src 'none' prevents Flash/Java plugins and data: URI XSS escalation
+    if (!/object-src\s+'none'/i.test(csp) && !/object-src\s+['"]\s*['"]/i.test(csp)) {
+      const hasDefaultNone = /default-src\s+'none'/i.test(csp);
+      if (!hasDefaultNone) {
+        vulnerabilities.push(vuln({
+          name: "CSP Missing object-src 'none' Directive",
+          severity: "medium",
+          category: "Injection Defense",
+          description: "The Content-Security-Policy does not include 'object-src: none'. Without this, browsers may allow Flash, Java, or other plugin content to load, which can bypass script-src restrictions entirely. XSS via plugin content is a known CSP bypass technique.",
+          evidence: `CSP: ${csp}`,
+          solution: "Add object-src 'none' to your CSP. If you use default-src 'none', object-src is implicitly restricted.",
+          cweId: "CWE-79",
+          cvssScore: 4.3,
+        }));
+      }
+    }
+
+    // base-uri restriction prevents base-tag injection attacks
+    if (!/base-uri/i.test(csp)) {
+      vulnerabilities.push(vuln({
+        name: "CSP Missing base-uri Directive",
+        severity: "low",
+        category: "Injection Defense",
+        description: "The Content-Security-Policy does not restrict base-uri. Without this directive, an attacker who can inject a <base href='https://attacker.com'> tag can redirect all relative URLs on the page to their own server, hijacking resource loads and form submissions.",
+        evidence: `CSP: ${csp}`,
+        solution: "Add base-uri 'self' to your CSP to prevent base-tag injection attacks.",
+        cweId: "CWE-79",
+        cvssScore: 3.5,
+      }));
+    }
+
+    // Wildcard script-src defeats the entire point of CSP
+    if (/script-src\s+[^;]*\*/.test(csp)) {
+      vulnerabilities.push(vuln({
+        name: "CSP script-src Contains Wildcard — XSS Protection Bypassed",
+        severity: "high",
+        category: "Injection Defense",
+        description: "The script-src directive in the Content-Security-Policy contains a wildcard (*), which allows scripts to be loaded from any origin. This completely defeats the purpose of CSP as an XSS mitigation.",
+        evidence: `CSP: ${csp}`,
+        solution: "Remove wildcards from script-src. Use an explicit allowlist of trusted origins, or switch to nonce-based CSP: script-src 'nonce-{random}'.",
+        cweId: "CWE-79",
+        cvssScore: 7.2,
+      }));
+    }
+  }
+
   // ── X-Frame-Options ───────────────────────────────────────────────────
   const xfo = headerVal(rawHeaders, "x-frame-options");
   const cspFrameAncestors = csp && /frame-ancestors/i.test(csp);
@@ -421,6 +470,46 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       description: "No Permissions-Policy (formerly Feature-Policy) header is present. This header restricts which browser APIs (camera, microphone, geolocation, etc.) can be accessed from your pages and embedded iframes.",
       solution: "Add: Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=(). Adjust based on what your app actually needs.",
       cweId: "CWE-16",
+      cvssScore: 2.4,
+    }));
+  }
+
+  // ── Cross-Origin isolation headers (COOP / COEP / CORP) ─────────────
+  const coop = headerVal(rawHeaders, "cross-origin-opener-policy");
+  if (!coop) {
+    vulnerabilities.push(vuln({
+      name: "Missing Cross-Origin-Opener-Policy (COOP)",
+      severity: "low",
+      category: "Browser Feature Control",
+      description: "The Cross-Origin-Opener-Policy header is not set. Without COOP, malicious cross-origin pages opened from your site (or that open your site) can retain a reference to your window object and exploit Spectre-class hardware vulnerabilities to read cross-origin memory. COOP is required to enable SharedArrayBuffer and high-resolution timers safely.",
+      solution: "Add: Cross-Origin-Opener-Policy: same-origin (most secure) or same-origin-allow-popups if you need cross-origin popup interaction.",
+      cweId: "CWE-346",
+      cvssScore: 3.1,
+    }));
+  }
+
+  const coep = headerVal(rawHeaders, "cross-origin-embedder-policy");
+  if (!coep) {
+    vulnerabilities.push(vuln({
+      name: "Missing Cross-Origin-Embedder-Policy (COEP)",
+      severity: "low",
+      category: "Browser Feature Control",
+      description: "The Cross-Origin-Embedder-Policy header is not set. Without COEP, your page can embed cross-origin resources that have not explicitly opted in to cross-origin loading. COEP (require-corp) is required alongside COOP to achieve cross-origin isolation, which protects against Spectre-based side-channel attacks.",
+      solution: "Add: Cross-Origin-Embedder-Policy: require-corp. Note: this requires all subresources to serve a CORP header or CORS header. Use credentialless if full require-corp causes breakage.",
+      cweId: "CWE-346",
+      cvssScore: 3.1,
+    }));
+  }
+
+  const corp = headerVal(rawHeaders, "cross-origin-resource-policy");
+  if (!corp) {
+    vulnerabilities.push(vuln({
+      name: "Missing Cross-Origin-Resource-Policy (CORP)",
+      severity: "low",
+      category: "Browser Feature Control",
+      description: "The Cross-Origin-Resource-Policy header is absent. Without CORP, other origins can include this resource in their pages (via <img>, <script>, etc.) and potentially extract its content via Spectre-class timing attacks, even if CORS is not enabled.",
+      solution: "Add: Cross-Origin-Resource-Policy: same-origin (for same-site-only resources) or same-site. Use cross-origin only for truly public resources.",
+      cweId: "CWE-346",
       cvssScore: 2.4,
     }));
   }
@@ -524,6 +613,8 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
     analyzeJwts(rawHeaders, html).catch(() => []),
     // Subdomain takeover — 1-2 DNS + HTTP checks
     checkSubdomainTakeover(finalUrl).catch(() => []),
+    // Source map exposure — checks JS bundles for .map files
+    checkSourceMaps(html, finalUrl).catch(() => []),
   ];
 
   if (tier === "deep") {
