@@ -5,7 +5,7 @@ import {
   Lock, Activity, Share2, Plus, Mail, GitBranch, KeyRound, Database,
   Terminal, ExternalLink, Package, RefreshCw, Eye, Code2, Wifi,
   AlertTriangle, Monitor, Info, Settings, Network, EyeOff, Filter, X,
-  ArrowUpDown,
+  ArrowUpDown, HelpCircle,
 } from "lucide-react";
 import { cn, formatSeverity, getSeverityColors, getGradeColor } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -79,6 +79,33 @@ function getCategoryMeta(category: string): CategoryMeta {
   };
 }
 
+// ─── Verification threshold ───────────────────────────────────────────────────
+// Findings below this confidence score are shown in a separate "Needs Verification"
+// section so confirmed findings stay trustworthy and nothing gets silently dropped.
+
+const VERIFICATION_THRESHOLD = 65;
+
+// Per-category explanation shown inside unverified finding cards
+const VERIFICATION_NOTES: Record<string, string> = {
+  "Outdated Software / Known CVE":
+    "Detected by matching a version string in the HTTP response against known CVEs. CDNs and load balancers sometimes expose version headers from underlying infrastructure that isn't directly exploitable, or the version may be masked. Confirm the version is accurate and check whether the CVE applies to your specific deployment configuration.",
+  "Outdated Software":
+    "Detected by matching a version string against known CVEs. Verify the version is accurate and not a proxy artifact, then confirm whether this CVE is exploitable in your environment.",
+  "DNS Security":
+    "Detected via DNS lookups. Subdomain takeover findings require manual confirmation — verify the CNAME target is genuinely unclaimed and that a hostile party could register it.",
+  "Supply Chain Security":
+    "Detected by checking external script URLs for Subresource Integrity attributes. Confirm the CDN is trusted and whether your CSP already mitigates this risk.",
+  "Exposed Secrets / Credentials":
+    "Detected by regex pattern matching in JavaScript source. The scanner applies filters for common placeholders, but confirm the matched value is a live credential and not an example, test fixture, or already-rotated key.",
+};
+
+function getVerificationNote(category: string): string {
+  return (
+    VERIFICATION_NOTES[category] ??
+    "This finding was detected using a heuristic or pattern-based method. Reproduce it manually with a raw HTTP request to confirm it is a real, exploitable issue before prioritising remediation."
+  );
+}
+
 // ─── Severity sort order ──────────────────────────────────────────────────────
 
 const SEVERITY_ORDER: Record<string, number> = {
@@ -120,7 +147,7 @@ function GradeRing({ grade, score }: { grade: string; score: number }) {
 
 // ─── Vuln card ────────────────────────────────────────────────────────────────
 
-function VulnCard({ vuln, index }: { vuln: Vulnerability; index: number }) {
+function VulnCard({ vuln, index, needsVerification }: { vuln: Vulnerability; index: number; needsVerification?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const meta = getCategoryMeta(vuln.category);
 
@@ -156,6 +183,15 @@ function VulnCard({ vuln, index }: { vuln: Vulnerability; index: number }) {
             className="overflow-hidden"
           >
             <div className="p-5 pt-0 border-t border-white/5 mt-2 bg-secondary/20">
+              {needsVerification && (
+                <div className="mt-4 mb-1 flex gap-3 p-3 rounded-lg bg-amber-500/8 border border-amber-500/25">
+                  <HelpCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-semibold text-amber-300 mb-0.5">Manual verification recommended</p>
+                    <p className="text-xs text-amber-200/70 leading-relaxed">{getVerificationNote(vuln.category)}</p>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-5">
                 <div className="flex flex-col gap-4">
                   <div>
@@ -376,6 +412,16 @@ export default function ReportViewer() {
     [sortedVulns, activeCategory],
   );
 
+  // Split into confirmed (confidence ≥ threshold) vs. needs verification
+  const confirmedVulns = useMemo(
+    () => filteredVulns.filter((v) => (v.confidence ?? 100) >= VERIFICATION_THRESHOLD),
+    [filteredVulns],
+  );
+  const unverifiedVulns = useMemo(
+    () => filteredVulns.filter((v) => (v.confidence ?? 100) < VERIFICATION_THRESHOLD),
+    [filteredVulns],
+  );
+
   if (isLoading) {
     return (
       <div className="min-h-[80vh] flex flex-col items-center justify-center gap-4">
@@ -500,28 +546,76 @@ export default function ReportViewer() {
             </div>
           )}
 
-          {/* Vuln list */}
-          <div className="space-y-4">
-            <AnimatePresence mode="popLayout">
-              {filteredVulns.map((v, i) => (
-                <VulnCard key={v.id} vuln={v} index={i} />
-              ))}
-            </AnimatePresence>
-
-            {filteredVulns.length === 0 && activeCategory && (
-              <div className="text-center py-10 glass-card rounded-xl text-muted-foreground text-sm">
-                No findings in this category.
+          {/* Accuracy bar */}
+          {filteredVulns.length > 0 && (
+            <div className="flex items-center gap-4 p-3 rounded-xl bg-secondary/40 border border-white/5 text-xs">
+              <div className="flex items-center gap-1.5 text-emerald-400 font-medium">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>{confirmedVulns.length} confirmed</span>
               </div>
-            )}
-
-            {vulnerabilities.length === 0 && (
-              <div className="text-center py-12 glass-card rounded-xl">
-                <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-4" />
-                <h3 className="text-xl font-bold mb-2">No vulnerabilities found</h3>
-                <p className="text-muted-foreground">Excellent work. Your application appears secure based on our checks.</p>
+              {unverifiedVulns.length > 0 && (
+                <>
+                  <div className="w-px h-4 bg-white/10" />
+                  <div className="flex items-center gap-1.5 text-amber-400 font-medium">
+                    <HelpCircle className="w-3.5 h-3.5" />
+                    <span>{unverifiedVulns.length} need{unverifiedVulns.length === 1 ? "s" : ""} verification</span>
+                  </div>
+                </>
+              )}
+              <div className="ml-auto text-muted-foreground">
+                {filteredVulns.length === 0 ? "–" : `${Math.round((confirmedVulns.length / filteredVulns.length) * 100)}% high-confidence`}
               </div>
-            )}
-          </div>
+            </div>
+          )}
+
+          {/* Confirmed findings */}
+          {confirmedVulns.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 uppercase tracking-wider">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Confirmed findings
+              </div>
+              <AnimatePresence mode="popLayout">
+                {confirmedVulns.map((v, i) => (
+                  <VulnCard key={v.id} vuln={v} index={i} />
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+
+          {/* Needs verification */}
+          {unverifiedVulns.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 pt-2">
+                <div className="flex items-center gap-2 text-xs font-semibold text-amber-400 uppercase tracking-wider">
+                  <HelpCircle className="w-3.5 h-3.5" />
+                  Needs verification
+                </div>
+                <span className="text-xs text-muted-foreground ml-2">
+                  — heuristic detections, review before acting
+                </span>
+              </div>
+              <AnimatePresence mode="popLayout">
+                {unverifiedVulns.map((v, i) => (
+                  <VulnCard key={v.id} vuln={v} index={i} needsVerification />
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+
+          {filteredVulns.length === 0 && activeCategory && (
+            <div className="text-center py-10 glass-card rounded-xl text-muted-foreground text-sm">
+              No findings in this category.
+            </div>
+          )}
+
+          {vulnerabilities.length === 0 && (
+            <div className="text-center py-12 glass-card rounded-xl">
+              <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-4" />
+              <h3 className="text-xl font-bold mb-2">No vulnerabilities found</h3>
+              <p className="text-muted-foreground">Excellent work. Your application appears secure based on our checks.</p>
+            </div>
+          )}
         </div>
 
         {/* Right Col: Category sidebar + AI + Tech */}
