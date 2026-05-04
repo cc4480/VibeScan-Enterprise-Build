@@ -16,7 +16,7 @@ import { runAllProbes } from "./probes";
 import { checkDnsSecurity } from "./dnsChecks";
 import { scanJavaScriptForSecrets } from "./jsScanner";
 import { crawlAndCheck } from "./crawler";
-import { checkForKnownVulnerabilities } from "./cveCheck";
+import { checkForKnownVulnerabilities, extractVersionedTechnologies } from "./cveCheck";
 import { analyzeJwts } from "./jwtAnalysis";
 import { checkSubdomainTakeover } from "./subdomainTakeover";
 import { checkPathTraversal } from "./pathTraversal";
@@ -295,7 +295,26 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
   const isHttps = finalUrl.startsWith("https://");
   const tlsGrade = isHttps ? "A" : null;
   const server = headerVal(rawHeaders, "server") ?? null;
-  const technologies = detectTechnologies(rawHeaders, html);
+
+  // Detect technologies and enrich with version numbers where available
+  // e.g. "jQuery" → "jQuery 1.11.3", "Nginx" → "Nginx 1.18.0"
+  const baseTechs = detectTechnologies(rawHeaders, html);
+  const versionedTechs = extractVersionedTechnologies(html, rawHeaders);
+  // Match by techName (canonical name from detectTechnologies) to avoid duplicates
+  // e.g. "Apache HTTPD" techName="Apache" matches base tech "Apache" correctly
+  const versionMap = new Map(versionedTechs.map((v) => [v.techName.toLowerCase(), v.version]));
+  const technologies = baseTechs.map((tech) => {
+    const ver = versionMap.get(tech.toLowerCase());
+    return ver ? `${tech} ${ver}` : tech;
+  });
+  // Surface any additional versioned techs not already in the base list (by techName)
+  const techNamesInBase = new Set(technologies.map((t) => t.split(" ")[0]?.toLowerCase()));
+  for (const vt of versionedTechs) {
+    if (!techNamesInBase.has(vt.techName.toLowerCase())) {
+      technologies.push(`${vt.displayName} ${vt.version}`);
+    }
+  }
+
   const requestDurationMs = Date.now() - startedAt;
   const vulnerabilities: ScanVulnerability[] = [];
 
