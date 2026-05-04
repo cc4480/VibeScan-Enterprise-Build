@@ -199,10 +199,21 @@ export async function checkDmarc(hostname: string): Promise<ScanVulnerability[]>
 // ─────────────────────────────────────────────────────────────────────────────
 
 const COMMON_DKIM_SELECTORS = [
+  // Standard / service-specific selectors
   "default", "google", "mail", "smtp", "k1", "k2",
   "selector1", "selector2", "email", "mailjet", "mandrill",
   "sendgrid", "pm", "s1", "s2", "dkim", "key1", "key2",
   "mxvault", "everlytickey1", "everlytickey2", "litesrv",
+  // Additional common selectors
+  "m1", "m2", "dkim1", "dkim2", "mx", "mailgun", "cm",
+  "proddkim1024", "sf2", "zendesk1", "zendesk2",
+  // Date-based selectors — Google Workspace, Microsoft 365, and many
+  // enterprise mail platforms rotate keys with date-stamped selectors.
+  // We probe the most recent windows; note that missing these does NOT
+  // mean DKIM is absent — only that we couldn't find the active selector.
+  "20221201", "20230601", "20231201",
+  "20240101", "20240601", "20241201",
+  "20250101", "20250601",
 ];
 
 export async function checkDkim(hostname: string): Promise<ScanVulnerability[]> {
@@ -275,16 +286,37 @@ export async function checkDnsSecurity(targetUrl: string): Promise<ScanVulnerabi
     return [];
   }
 
-  const [spf, dmarc, dkim, dnssec] = await Promise.allSettled([
+  // Run SPF and DMARC first so we can decide whether to suppress DKIM brute-force.
+  const [spf, dmarc] = await Promise.allSettled([
     checkSpf(hostname),
     checkDmarc(hostname),
-    checkDkim(hostname),
+  ]);
+
+  const dmarcVulns = dmarc.status === "fulfilled" ? dmarc.value : [];
+
+  // DMARC is "enforcing" when there is no "Missing DMARC" finding AND no
+  // "p=none" finding.  An enforcing DMARC policy (p=quarantine or p=reject)
+  // requires at least one aligned authentication mechanism — which means the
+  // domain almost certainly has DKIM configured under a non-standard selector
+  // (e.g. a date-based key like "20230601") that our brute-force list doesn't
+  // cover.  Reporting "No DKIM found" in that case is a false positive.
+  const dmarcIsEnforcing =
+    !dmarcVulns.some((v) => v.name.includes("Missing DMARC")) &&
+    !dmarcVulns.some((v) =>
+      v.name.toLowerCase().includes("none") ||
+      v.name.toLowerCase().includes("monitoring only"),
+    );
+
+  const [dkim, dnssec] = await Promise.allSettled([
+    // Skip DKIM selector probing when DMARC is enforcing — the domain has DKIM
+    // configured; we just can't discover the selector by brute-force.
+    dmarcIsEnforcing ? Promise.resolve([]) : checkDkim(hostname),
     checkDnssec(hostname),
   ]);
 
   return [
     ...(spf.status === "fulfilled" ? spf.value : []),
-    ...(dmarc.status === "fulfilled" ? dmarc.value : []),
+    ...dmarcVulns,
     ...(dkim.status === "fulfilled" ? dkim.value : []),
     ...(dnssec.status === "fulfilled" ? dnssec.value : []),
   ];
