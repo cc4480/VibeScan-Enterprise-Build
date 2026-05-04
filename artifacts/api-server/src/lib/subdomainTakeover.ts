@@ -270,6 +270,7 @@ export async function checkSubdomainTakeover(
       solution: `Immediately either: (1) Remove the dangling CNAME DNS record for ${hostname}, or (2) Reprovision the ${service.name} resource to reclaim ownership. Audit all DNS CNAME records regularly — especially after decommissioning cloud services — to catch dangling entries before attackers do.`,
       cweId: "CWE-350",
       cvssScore: service.cvssScore,
+      wstgId: "WSTG-CONF-10",
     }),
   ];
 }

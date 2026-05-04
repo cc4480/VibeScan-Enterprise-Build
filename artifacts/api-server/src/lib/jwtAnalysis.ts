@@ -117,11 +117,12 @@ export async function analyzeJwts(
         category: "Session Management",
         description:
           "A JWT was found using algorithm 'none', meaning no cryptographic signature is required. Any server that trusts the token's own 'alg' claim will accept a forged token with an arbitrary payload. This completely breaks authentication.",
-        evidence: `Token: ${short}\nHeader: ${JSON.stringify(header)}`,
+        evidence: `Token (truncated): ${short}\nHeader: ${JSON.stringify(header)}\nalg:none means the signature is not verified`,
         solution:
           "Never use alg:none in production. Enforce a specific algorithm server-side and reject any token whose 'alg' header does not match. Use a library that rejects 'none' by default (e.g. jsonwebtoken with algorithms: ['RS256']).",
         cweId: "CWE-347",
         cvssScore: 9.8,
+        wstgId: "WSTG-SESS-10",
       }));
     }
 
@@ -133,11 +134,12 @@ export async function analyzeJwts(
         category: "Session Management",
         description:
           "A JWT was found with an empty signature segment while the header declares a non-none algorithm. If the server accepts this token, it is not verifying signatures at all — an attacker can forge any payload.",
-        evidence: `Token: ${short}\nalg: ${header.alg}, signature part: (empty)`,
+        evidence: `Token (truncated): ${short}\nalg: ${header.alg}\nSignature segment: (empty string)`,
         solution:
           "Verify your JWT library rejects tokens with empty signatures. Audit all endpoints that accept tokens for consistent signature verification.",
         cweId: "CWE-347",
         cvssScore: 9.8,
+        wstgId: "WSTG-SESS-10",
       }));
     }
 
@@ -149,11 +151,12 @@ export async function analyzeJwts(
         category: "Session Management",
         description:
           "A JWT in this application has no 'exp' (expiration) claim. Tokens without expiry are valid indefinitely — if stolen, an attacker can use them forever with no way to invalidate them short of rotating the signing secret, which logs out all users.",
-        evidence: `Token: ${short}\nPayload keys: ${Object.keys(payload).join(", ") || "(none)"}`,
+        evidence: `Token (truncated): ${short}\nPayload claims: ${Object.keys(payload).join(", ") || "(none)"}\n(exp claim absent — token never expires)`,
         solution:
           "Always include 'exp'. Access tokens: 15 min–1 hour. Refresh tokens: 7–30 days. Implement token rotation and a revocation store for high-value sessions.",
         cweId: "CWE-613",
         cvssScore: 7.5,
+        wstgId: "WSTG-SESS-10",
       }));
     }
 
@@ -169,11 +172,12 @@ export async function analyzeJwts(
         severity: "medium",
         category: "Session Management",
         description: `A JWT was found with a lifetime of ${days} days. Stolen long-lived tokens give attackers an extended exploitation window. They also prevent effective session revocation after a breach.`,
-        evidence: `Token: ${short}\nLifetime: ${days} days (iat=${payload.iat}, exp=${payload.exp})`,
+        evidence: `Token (truncated): ${short}\niat: ${payload.iat}, exp: ${payload.exp}\nLifetime: ${days} days (recommended max: 1 day for access tokens)`,
         solution:
           "Reduce token lifetime. Use short-lived access tokens (15 min–1 hour) paired with refresh tokens. Implement silent token rotation on each refresh.",
         cweId: "CWE-613",
         cvssScore: 5.3,
+        wstgId: "WSTG-SESS-10",
       }));
     }
 
@@ -185,11 +189,12 @@ export async function analyzeJwts(
         category: "Session Management",
         description:
           "A JWT signed with HS256 (HMAC-SHA256) has no expiry. HS256 tokens are vulnerable to offline brute-force attacks if the secret is weak or leaked. Without expiry, a cracked token grants indefinite access.",
-        evidence: `Token: ${short}\nalg: HS256, exp: (missing)`,
+        evidence: `Token (truncated): ${short}\nalg: HS256\nexp: (absent — token is permanent)`,
         solution:
           "Prefer RS256 or ES256 (asymmetric algorithms — the private key cannot be brute-forced from the token alone). If staying with HS256, use a cryptographically random secret of at least 256 bits and always set 'exp'.",
         cweId: "CWE-327",
         cvssScore: 7.5,
+        wstgId: "WSTG-SESS-10",
       }));
     }
 
@@ -203,11 +208,12 @@ export async function analyzeJwts(
         severity: "medium",
         category: "Session Management",
         description: `The JWT payload contains sensitive-looking fields: ${sensitiveFound.join(", ")}. JWT payloads are Base64-encoded — not encrypted — so anyone who intercepts or logs the token can read these values in plain text.`,
-        evidence: `Token: ${short}\nSensitive keys: ${sensitiveFound.join(", ")}`,
+        evidence: `Token (truncated): ${short}\nSensitive keys found in payload: ${sensitiveFound.join(", ")}\n(JWT payload is base64-encoded, not encrypted)`,
         solution:
           "Store only opaque identifiers (user ID, session ID) in JWT payloads. If sensitive claims are required, use JWE (JSON Web Encryption) to encrypt the payload.",
         cweId: "CWE-312",
         cvssScore: 5.3,
+        wstgId: "WSTG-SESS-10",
       }));
     }
   }

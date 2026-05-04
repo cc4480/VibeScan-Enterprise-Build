@@ -154,6 +154,8 @@ export interface Vulnerability {
   cweId?: string | null;
   /** @nullable */
   cvssScore?: number | null;
+  /** @nullable */
+  wstgId?: string | null;
 }
 
 export interface ScanSummary {

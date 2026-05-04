@@ -45,6 +45,32 @@ const CATEGORY_META: Record<string, CategoryMeta> = {
   "Outdated Software":               { label: "Outdated Software",              icon: <GitBranch className="w-4 h-4" />,     color: "text-red-400" },
 };
 
+// Maps a WSTG ID like "WSTG-CONF-07" to its OWASP Testing Guide URL path fragment
+const WSTG_PATHS: Record<string, string> = {
+  "WSTG-CONF-02": "02-Configuration_and_Deployment_Management_Testing/02-Test_Application_Platform_Configuration",
+  "WSTG-CONF-04": "02-Configuration_and_Deployment_Management_Testing/04-Review_Old_Backup_and_Unreferenced_Files_for_Sensitive_Information",
+  "WSTG-CONF-05": "02-Configuration_and_Deployment_Management_Testing/05-Enumerate_Infrastructure_and_Application_Admin_Interfaces",
+  "WSTG-CONF-06": "02-Configuration_and_Deployment_Management_Testing/06-Test_HTTP_Methods",
+  "WSTG-CONF-07": "02-Configuration_and_Deployment_Management_Testing/07-Test_HTTP_Strict_Transport_Security",
+  "WSTG-CONF-10": "02-Configuration_and_Deployment_Management_Testing/10-Test_for_Subdomain_Takeover",
+  "WSTG-CONF-12": "02-Configuration_and_Deployment_Management_Testing/12-Test_for_Content_Security_Policy",
+  "WSTG-CRYP-01": "09-Testing_for_Weak_Cryptography/01-Testing_for_Weak_Transport_Layer_Security",
+  "WSTG-INFO-01": "01-Information_Gathering/01-Conduct_Search_Engine_Discovery_Reconnaissance_for_Information_Leakage",
+  "WSTG-INFO-02": "01-Information_Gathering/02-Fingerprint_Web_Server",
+  "WSTG-INFO-09": "01-Information_Gathering/09-Fingerprint_Web_Application_Framework",
+  "WSTG-CLNT-01": "11-Client-Side_Testing/01-Testing_for_DOM-Based_Cross_Site_Scripting",
+  "WSTG-CLNT-04": "11-Client-Side_Testing/04-Testing_for_Client-Side_URL_Redirect",
+  "WSTG-CLNT-09": "11-Client-Side_Testing/09-Testing_for_Clickjacking",
+  "WSTG-SESS-02": "06-Testing_for_Session_Management/02-Testing_for_Cookies_Attributes",
+  "WSTG-SESS-10": "06-Testing_for_Session_Management/10-Testing_JSON_Web_Tokens",
+  "WSTG-ATHN-03": "04-Testing_for_Authentication/03-Testing_for_Weak_Lock_Out_Mechanism",
+  "WSTG-AUTHZ-01": "05-Testing_for_Authorization/01-Testing_Directory_Traversal_File_Include",
+};
+
+function wstgCategoryPath(id: string): string {
+  return WSTG_PATHS[id] ?? "";
+}
+
 function getCategoryMeta(category: string): CategoryMeta {
   return CATEGORY_META[category] ?? {
     label: category,
@@ -153,7 +179,7 @@ function VulnCard({ vuln, index }: { vuln: Vulnerability; index: number }) {
                     <div className="whitespace-pre-wrap">{vuln.solution}</div>
                   </div>
 
-                  {(vuln.cweId || vuln.cvssScore) && (
+                  {(vuln.cweId || vuln.cvssScore != null || vuln.wstgId) && (
                     <div className="mt-4 flex gap-3 flex-wrap">
                       {vuln.cweId && (
                         <a
@@ -174,6 +200,15 @@ function VulnCard({ vuln, index }: { vuln: Vulnerability; index: number }) {
                         )}>
                           CVSS {vuln.cvssScore.toFixed(1)}
                         </span>
+                      )}
+                      {vuln.wstgId && (
+                        <a
+                          href={`https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/${wstgCategoryPath(vuln.wstgId)}`}
+                          target="_blank" rel="noreferrer"
+                          className="text-xs text-muted-foreground bg-secondary px-2 py-1 rounded hover:bg-secondary/80 transition-colors"
+                        >
+                          {vuln.wstgId}
+                        </a>
                       )}
                     </div>
                   )}
