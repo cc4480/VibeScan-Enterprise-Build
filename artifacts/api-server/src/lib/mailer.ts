@@ -59,7 +59,7 @@ function buildHtml(opts: SendReportEmailOptions): string {
         <!-- Footer -->
         <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
           <p style="margin:0;">You received this because you ran a VibeScan deep scan.</p>
-          <p style="margin:4px 0 0;">© 2025 VibeScan</p>
+          <p style="margin:4px 0 0;">© 2026 VibeScan</p>
         </td></tr>
       </table>
     </td></tr>

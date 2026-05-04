@@ -91,9 +91,11 @@ async function processScanJob(job: ScanJob): Promise<void> {
     .set({ status: "analyzing" })
     .where(eq(scansTable.id, scanId));
 
-  // ── 4. AI analysis (deep tier and above) ─────────────────────────────
+  // ── 4. AI analysis (deep tier only) ──────────────────────────────────
+  // Note: pack_5/pack_20 are credit-purchase tiers — scan records are always
+  // created with "basic" or "deep", so only "deep" needs to be checked here.
   let aiAnalysis = null;
-  if (tier === "deep" || tier === "pack_5" || tier === "pack_20") {
+  if (tier === "deep") {
     log.info("Calling DeepSeek AI analysis");
     aiAnalysis = await callDeepSeek(
       targetUrl,
@@ -174,9 +176,8 @@ async function processScanJob(job: ScanJob): Promise<void> {
 
     log.info({ reportId: report.id, grade, riskScore }, "Scan complete");
 
-    // ── 8. Send report-ready email (deep / pack tiers only) ───────────
-    const isDeep = tier === "deep" || tier === "pack_5" || tier === "pack_20";
-    if (isDeep) {
+    // ── 8. Send report-ready email (deep tier only) ───────────────────
+    if (tier === "deep") {
       const [scan] = await db
         .select({ userEmail: scansTable.userEmail })
         .from(scansTable)

@@ -20,7 +20,11 @@ export async function getBoss(): Promise<PgBoss> {
     await instance.start();
     boss = instance;
     return boss;
-  })();
+  })().catch((err) => {
+    // Reset so the next caller can retry initialisation
+    startPromise = null;
+    throw err;
+  });
 
   return startPromise;
 }
@@ -32,18 +36,8 @@ export interface ScanJobData {
   tier: string;
 }
 
-export async function ensureQueue(): Promise<void> {
-  const b = await getBoss();
-  await b.createQueue(SCAN_QUEUE, {
-    retryLimit: 2,
-    retryDelay: 30,
-    expireInSeconds: 7200,
-  });
-}
-
 export async function enqueueScan(data: ScanJobData): Promise<string | null> {
   const b = await getBoss();
-  // Ensure queue exists (idempotent) before sending
   await b.createQueue(SCAN_QUEUE, { retryLimit: 2, retryDelay: 30, expireInSeconds: 7200 });
   return b.send(SCAN_QUEUE, data);
 }
