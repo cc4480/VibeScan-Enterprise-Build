@@ -518,8 +518,8 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
     runAllProbes(finalUrl, html).catch(() => []),
     checkDnsSecurity(finalUrl).catch(() => []),
     checkForKnownVulnerabilities(html, rawHeaders).catch(() => []),
-    // Crawl deep tier: up to 15 inner pages; basic: up to 5
-    crawlAndCheck(finalUrl, html, rawHeaders, tier === "deep" ? 15 : 5).catch(() => []),
+    // Deep tier crawls up to 20 inner pages; basic tier scans root only
+    crawlAndCheck(finalUrl, html, rawHeaders, tier === "deep" ? 20 : 0).catch(() => []),
     // Passive JWT analysis — no extra HTTP requests
     analyzeJwts(rawHeaders, html).catch(() => []),
     // Subdomain takeover — 1-2 DNS + HTTP checks
