@@ -1,0 +1,31 @@
+**Short answer:** **Most scanner findings against large providers like Google are often *misclassifications or false positives* rather than true exploitable issues — validate each high‑severity finding with reproducible request/response evidence, independent detection signals, and canary callbacks before acting.**   [docs.cloud.google.com](https://docs.cloud.google.com/security-command-center/docs/concepts-web-security-scanner-overview)  [Invicti](https://www.invicti.com/white-papers/false-positives-in-application-security-whitepaper)
+
+### Key considerations and decision points
+- **Scope:** Were you scanning public endpoints only (GET‑only) or did the scan include authenticated flows?   [docs.cloud.google.com](https://docs.cloud.google.com/security-command-center/docs/concepts-web-security-scanner-overview)  
+- **Evidence:** Does each finding include the raw HTTP request/response, DOM snapshot, and a reproducible PoC? **If not, treat it as unverified.**   [Invicti](https://www.invicti.com/white-papers/false-positives-in-application-security-whitepaper)  
+- **Provider quirks:** Big platforms often return generic error pages, redirects, or multi‑layered proxies that trigger signature matches; this causes cross‑ecosystem and CPE mismatches.   [Security Boulevard](https://securityboulevard.com/2025/05/false-positives-and-false-negatives-in-vulnerability-scanning-lessons-from-the-trenches/)
+
+---
+
+### Likely causes and how to validate (comparison)
+| **Cause** | **Why it triggers** | **How to validate** | **What to accept as proof** |
+|---|---:|---|---|
+| **Signature/CPE mismatch** | Scanner maps CVE to wrong package or platform. | Check package ecosystem and CPE mapping; confirm with vendor advisory. | Matching vendor advisory or reproducible exploit on same ecosystem.   [Security Boulevard](https://securityboulevard.com/2025/05/false-positives-and-false-negatives-in-vulnerability-scanning-lessons-from-the-trenches/) |
+| **Misinterpreted redirects / proxies** | Load balancers or CDN alter responses, creating false error fingerprints. | Replay request with curl, different UA, and multiple resolvers. | Consistent response divergence across resolvers + logs.   [docs.cloud.google.com](https://docs.cloud.google.com/security-command-center/docs/concepts-web-security-scanner-overview) |
+| **False positive from heuristic tests** | Heuristic payloads match benign behavior (e.g., search pages). | Run headless browser render and check for actual script execution or side effects. | Console marker or DOM change captured by headless browser.   [Invicti](https://www.invicti.com/white-papers/false-positives-in-application-security-whitepaper) |
+| **Outbound detection (SSRF) ambiguity** | Noisy callback services or third‑party canaries used. | Use Vibecoders‑owned ephemeral canary domain and verify server logs. | Canary token hit from target host IP. |
+
+---
+
+### Concrete validation steps (prioritized)
+1. **Require evidence before severity:** Only mark high severity when **two independent signals** (e.g., error fingerprint + DOM execution + canary hit) are present.   [Invicti](https://www.invicti.com/white-papers/false-positives-in-application-security-whitepaper)  
+2. **Replay and isolate:** Reproduce each finding with `curl`/HTTPie and a headless browser; test with different user agents and resolvers to rule out CDN/proxy artifacts.   [docs.cloud.google.com](https://docs.cloud.google.com/security-command-center/docs/concepts-web-security-scanner-overview)  
+3. **Use controlled canaries for outbound tests:** For SSRF/redirects, use Vibecoders‑owned ephemeral domains to avoid third‑party noise.  
+4. **Audit CVE mapping:** Cross‑check package names and ecosystems to avoid cross‑ecosystem false positives (CPE mismatches).   [Security Boulevard](https://securityboulevard.com/2025/05/false-positives-and-false-negatives-in-vulnerability-scanning-lessons-from-the-trenches/)  [Github](https://github.com/google/osv-scanner)  
+5. **Flag prompt‑injection style findings separately:** Content that looks like prompt injection or AI‑targeted artifacts should be treated as informational and validated against known threat research.   [The Keyword](https://blog.google/security/prompt-injections-web/)
+
+---
+
+### Risks and next steps
+- **Risk:** Acting on false positives wastes developer time and erodes trust. **Mitigation:** enforce evidence thresholds and a lightweight triage UI for Vibecoders to mark findings.   [Invicti](https://www.invicti.com/white-papers/false-positives-in-application-security-whitepaper)  
+- **Next step I can produce now:** a **reproducibility checklist** script (curl + headless steps + canary token template) you can drop into VibeScan Master to auto‑validate Google findings. Tell me if you want that checklist and I’ll generate it.
