@@ -1,11 +1,9 @@
 import { Link, useLocation } from "wouter";
-import { useAuth } from "@workspace/replit-auth-web";
-import { Shield, LogOut, ChevronRight, Menu, X } from "lucide-react";
+import { Shield, LayoutDashboard, Menu, X, Plus } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { user, isAuthenticated, login, logout } = useAuth();
   const [location] = useLocation();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -24,12 +22,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] rounded-full bg-blue-500/5 blur-[100px]" />
       </div>
 
-      <header 
+      <header
         className={cn(
           "fixed top-0 left-0 right-0 z-50 transition-all duration-300 border-b",
-          scrolled 
-            ? "bg-background/80 backdrop-blur-lg border-white/5 shadow-lg shadow-black/20 py-3" 
-            : "bg-transparent border-transparent py-5"
+          scrolled
+            ? "bg-background/80 backdrop-blur-lg border-white/5 shadow-lg shadow-black/20 py-3"
+            : "bg-transparent border-transparent py-5",
         )}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
@@ -44,64 +42,37 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
           {/* Desktop Nav */}
           <nav className="hidden md:flex items-center gap-8">
-            <Link href="/" className={cn("text-sm font-medium transition-colors hover:text-foreground", location === "/" ? "text-foreground" : "text-muted-foreground")}>
+            <Link
+              href="/"
+              className={cn(
+                "text-sm font-medium transition-colors hover:text-foreground",
+                location === "/" ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
               Home
             </Link>
-            {isAuthenticated && (
-              <Link href="/dashboard" className={cn("text-sm font-medium transition-colors hover:text-foreground", location === "/dashboard" ? "text-foreground" : "text-muted-foreground")}>
-                Dashboard
-              </Link>
-            )}
-            
+            <Link
+              href="/dashboard"
+              className={cn(
+                "text-sm font-medium transition-colors hover:text-foreground flex items-center gap-1.5",
+                location === "/dashboard" ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              <LayoutDashboard className="w-3.5 h-3.5" /> Dashboard
+            </Link>
+
             <div className="w-px h-6 bg-border" />
-            
-            {isAuthenticated ? (
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-secondary overflow-hidden border border-white/10">
-                    {user?.profileImageUrl ? (
-                      <img src={user.profileImageUrl} alt="Profile" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-xs font-bold text-muted-foreground">
-                        {user?.firstName?.[0] || user?.email?.[0] || '?'}
-                      </div>
-                    )}
-                  </div>
-                  <span className="text-sm font-medium text-foreground hidden lg:block">
-                    {user?.firstName || 'User'}
-                  </span>
-                </div>
-                <button 
-                  onClick={() => logout()}
-                  className="p-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors"
-                  title="Log out"
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
-                <Link href="/scan" className="px-5 py-2.5 bg-primary text-primary-foreground text-sm font-semibold rounded-lg shadow-[0_0_15px_rgba(20,184,120,0.3)] hover:shadow-[0_0_25px_rgba(20,184,120,0.5)] hover:-translate-y-0.5 transition-all duration-200">
-                  New Scan
-                </Link>
-              </div>
-            ) : (
-              <div className="flex items-center gap-4">
-                <button 
-                  onClick={() => login()}
-                  className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Sign In
-                </button>
-                <button 
-                  onClick={() => login()}
-                  className="flex items-center gap-1 px-5 py-2.5 bg-white text-black text-sm font-semibold rounded-lg hover:bg-gray-100 hover:-translate-y-0.5 transition-all duration-200"
-                >
-                  Get Started <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            )}
+
+            <Link
+              href="/scan"
+              className="flex items-center gap-1.5 px-5 py-2.5 bg-primary text-primary-foreground text-sm font-semibold rounded-lg shadow-[0_0_15px_rgba(20,184,120,0.3)] hover:shadow-[0_0_25px_rgba(20,184,120,0.5)] hover:-translate-y-0.5 transition-all duration-200"
+            >
+              <Plus className="w-4 h-4" /> New Scan
+            </Link>
           </nav>
 
           {/* Mobile toggle */}
-          <button 
+          <button
             className="md:hidden p-2 text-foreground"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
@@ -111,20 +82,29 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Mobile menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden absolute top-full left-0 right-0 bg-background/95 backdrop-blur-xl border-b border-white/5 py-4 px-4 flex flex-col gap-4 shadow-2xl">
-            <Link href="/" onClick={() => setMobileMenuOpen(false)} className="px-4 py-2 text-foreground font-medium rounded-lg hover:bg-secondary">Home</Link>
-            {isAuthenticated && (
-              <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)} className="px-4 py-2 text-foreground font-medium rounded-lg hover:bg-secondary">Dashboard</Link>
-            )}
-            <div className="h-px bg-border my-2 mx-4" />
-            {isAuthenticated ? (
-              <>
-                <Link href="/scan" onClick={() => setMobileMenuOpen(false)} className="mx-4 px-4 py-3 bg-primary text-primary-foreground text-center font-semibold rounded-lg">New Scan</Link>
-                <button onClick={() => { logout(); setMobileMenuOpen(false); }} className="mx-4 px-4 py-3 bg-secondary text-foreground text-center font-semibold rounded-lg">Sign Out</button>
-              </>
-            ) : (
-              <button onClick={() => login()} className="mx-4 px-4 py-3 bg-white text-black text-center font-semibold rounded-lg">Sign In / Get Started</button>
-            )}
+          <div className="md:hidden absolute top-full left-0 right-0 bg-background/95 backdrop-blur-xl border-b border-white/5 py-4 px-4 flex flex-col gap-3 shadow-2xl">
+            <Link
+              href="/"
+              onClick={() => setMobileMenuOpen(false)}
+              className="px-4 py-2 text-foreground font-medium rounded-lg hover:bg-secondary"
+            >
+              Home
+            </Link>
+            <Link
+              href="/dashboard"
+              onClick={() => setMobileMenuOpen(false)}
+              className="px-4 py-2 text-foreground font-medium rounded-lg hover:bg-secondary flex items-center gap-2"
+            >
+              <LayoutDashboard className="w-4 h-4" /> Dashboard
+            </Link>
+            <div className="h-px bg-border mx-4" />
+            <Link
+              href="/scan"
+              onClick={() => setMobileMenuOpen(false)}
+              className="mx-4 px-4 py-3 bg-primary text-primary-foreground text-center font-semibold rounded-lg flex items-center justify-center gap-2"
+            >
+              <Plus className="w-4 h-4" /> New Scan
+            </Link>
           </div>
         )}
       </header>
