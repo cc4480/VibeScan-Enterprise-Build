@@ -15,6 +15,8 @@ import { randomUUID } from "node:crypto";
 import { runAllProbes } from "./probes";
 import { checkDnsSecurity } from "./dnsChecks";
 import { scanJavaScriptForSecrets } from "./jsScanner";
+import { crawlAndCheck } from "./crawler";
+import { checkForKnownVulnerabilities } from "./cveCheck";
 
 export interface ScanVulnerability {
   id: string;
@@ -506,11 +508,14 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
   }
 
   // ── Run all parallel probes ───────────────────────────────────────────
-  // These run concurrently — active HTTP probes, DNS checks, and (for deep tier)
-  // JavaScript secret scanning. Results are merged into vulnerabilities below.
+  // All checks run concurrently — active HTTP probes, DNS checks, site crawl,
+  // CVE lookup, and (deep tier only) JavaScript secret scanning.
   const probePromises: Promise<ScanVulnerability[]>[] = [
     runAllProbes(finalUrl, html).catch(() => []),
     checkDnsSecurity(finalUrl).catch(() => []),
+    checkForKnownVulnerabilities(html, rawHeaders).catch(() => []),
+    // Crawl deep tier: up to 15 inner pages; basic: up to 5
+    crawlAndCheck(finalUrl, html, rawHeaders, tier === "deep" ? 15 : 5).catch(() => []),
   ];
 
   if (tier === "deep") {
