@@ -52,7 +52,7 @@ const BASE_SCORES: Record<DetectionClass, number> = {
   validated_passive:    72,
   header_absent:        68,
   header_misconfigured: 65,
-  secret_regex:         65,
+  secret_regex:         55,
   subdomain_heuristic:  52,
   version_heuristic:    48,
   info_disclosure:      42,
