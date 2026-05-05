@@ -185,7 +185,17 @@ function extractInnerPageSource(evidence: string | null | undefined, rootUrl: st
 
 // ─── Vuln card ────────────────────────────────────────────────────────────────
 
-function VulnCard({ vuln, index, needsVerification, rootUrl }: { vuln: Vulnerability; index: number; needsVerification?: boolean; rootUrl?: string }) {
+function VulnCard({
+  vuln,
+  index,
+  needsVerification,
+  rootUrl,
+}: {
+  vuln: Vulnerability;
+  index: number;
+  needsVerification?: boolean;
+  rootUrl?: string;
+}) {
   const [expanded, setExpanded] = useState(false);
   const meta = getCategoryMeta(vuln.category);
 
@@ -523,6 +533,69 @@ function SoftwareInventoryCard({
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Grouped category section ─────────────────────────────────────────────────
+
+function CategorySection({
+  category,
+  vulns,
+  defaultOpen = true,
+  needsVerification = false,
+  globalIndex,
+  rootUrl,
+}: {
+  category: string;
+  vulns: Vulnerability[];
+  defaultOpen?: boolean;
+  needsVerification?: boolean;
+  globalIndex: number;
+  rootUrl?: string;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const meta = getCategoryMeta(category);
+
+  const highestSeverity = vulns.reduce<string | null>((acc, v) => {
+    if (acc === null) return v.severity;
+    return (SEVERITY_ORDER[v.severity] ?? 99) < (SEVERITY_ORDER[acc] ?? 99) ? v.severity : acc;
+  }, null);
+
+  return (
+    <div className="rounded-xl overflow-hidden border border-white/5 bg-secondary/10">
+      <button
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-label={`${meta.label} — ${vulns.length} finding${vulns.length !== 1 ? "s" : ""}, ${open ? "collapse" : "expand"}`}
+        className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-white/[0.03] transition-colors text-left"
+      >
+        <span className={meta.color}>{meta.icon}</span>
+        <span className="font-bold text-sm text-foreground flex-1">{meta.label}</span>
+        {highestSeverity && (
+          <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border shrink-0", getSeverityColors(highestSeverity))}>
+            {highestSeverity}
+          </span>
+        )}
+        <span className="text-xs font-bold bg-secondary rounded-full w-6 h-6 flex items-center justify-center text-muted-foreground shrink-0">
+          {vulns.length}
+        </span>
+        <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform shrink-0", open && "rotate-180")} />
+      </button>
+
+      {open && (
+        <div className="px-3 pb-3 pt-1 space-y-2 border-t border-white/5">
+          {vulns.map((v, i) => (
+            <VulnCard
+              key={v.id}
+              vuln={v}
+              index={globalIndex + i}
+              needsVerification={needsVerification}
+              rootUrl={rootUrl}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1004,6 +1077,7 @@ export default function ReportViewer() {
 
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"severity" | "category">("severity");
+  const [viewMode, setViewMode] = useState<"grouped" | "flat">("grouped");
 
   const vulnerabilities = report?.data?.vulnerabilities ?? [];
   const summary = report?.data?.summary;
@@ -1049,6 +1123,25 @@ export default function ReportViewer() {
     () => filteredVulns.filter((v) => (v.confidence ?? 100) < VERIFICATION_THRESHOLD),
     [filteredVulns],
   );
+
+  // Grouped confirmed/unverified vulns by category (for grouped view)
+  const groupedConfirmedVulns = useMemo(() => {
+    const groups: Map<string, Vulnerability[]> = new Map();
+    for (const v of confirmedVulns) {
+      if (!groups.has(v.category)) groups.set(v.category, []);
+      groups.get(v.category)!.push(v);
+    }
+    return groups;
+  }, [confirmedVulns]);
+
+  const groupedUnverifiedVulns = useMemo(() => {
+    const groups: Map<string, Vulnerability[]> = new Map();
+    for (const v of unverifiedVulns) {
+      if (!groups.has(v.category)) groups.set(v.category, []);
+      groups.get(v.category)!.push(v);
+    }
+    return groups;
+  }, [unverifiedVulns]);
 
   // Unfiltered splits — used for PDF/copy so nothing is omitted when a category filter is active
   const allConfirmedVulns = useMemo(
@@ -1211,25 +1304,46 @@ export default function ReportViewer() {
             })}
           </div>
 
-          {/* Sort toggle */}
-          <div className="flex items-center gap-2">
-            <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Sort by</span>
-            <div className="flex rounded-lg overflow-hidden border border-white/10 ml-1">
-              {(["severity", "category"] as const).map((opt) => (
-                <button
-                  key={opt}
-                  onClick={() => setSortBy(opt)}
-                  className={cn(
-                    "px-3 py-1.5 text-xs font-medium capitalize transition-colors",
-                    sortBy === opt
-                      ? "bg-primary/20 text-primary"
-                      : "text-muted-foreground hover:text-foreground hover:bg-white/5",
-                  )}
-                >
-                  {opt}
-                </button>
-              ))}
+          {/* Sort + View mode toggles */}
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-2">
+              <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Sort by</span>
+              <div className="flex rounded-lg overflow-hidden border border-white/10 ml-1">
+                {(["severity", "category"] as const).map((opt) => (
+                  <button
+                    key={opt}
+                    onClick={() => setSortBy(opt)}
+                    className={cn(
+                      "px-3 py-1.5 text-xs font-medium capitalize transition-colors",
+                      sortBy === opt
+                        ? "bg-primary/20 text-primary"
+                        : "text-muted-foreground hover:text-foreground hover:bg-white/5",
+                    )}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground uppercase tracking-wider font-medium">View</span>
+              <div className="flex rounded-lg overflow-hidden border border-white/10">
+                {(["grouped", "flat"] as const).map((opt) => (
+                  <button
+                    key={opt}
+                    onClick={() => setViewMode(opt)}
+                    className={cn(
+                      "px-3 py-1.5 text-xs font-medium capitalize transition-colors",
+                      viewMode === opt
+                        ? "bg-primary/20 text-primary"
+                        : "text-muted-foreground hover:text-foreground hover:bg-white/5",
+                    )}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -1292,11 +1406,31 @@ export default function ReportViewer() {
                 <span className="text-sm font-bold text-emerald-400">Confirmed findings</span>
                 <span className="ml-auto text-xs text-emerald-400/60 font-medium">{confirmedVulns.length} finding{confirmedVulns.length !== 1 ? "s" : ""} — high confidence, act on these</span>
               </div>
-              <AnimatePresence mode="popLayout">
-                {confirmedVulns.map((v, i) => (
-                  <VulnCard key={v.id} vuln={v} index={i} rootUrl={report.targetUrl} />
-                ))}
-              </AnimatePresence>
+              {viewMode === "grouped" ? (
+                <div className="space-y-2">
+                  {Array.from(groupedConfirmedVulns.entries()).map(([cat, vulns]) => {
+                    const priorCount = Array.from(groupedConfirmedVulns.entries())
+                      .filter(([c]) => c < cat)
+                      .reduce((sum, [, vs]) => sum + vs.length, 0);
+                    return (
+                      <CategorySection
+                        key={cat}
+                        category={cat}
+                        vulns={vulns}
+                        globalIndex={priorCount}
+                        defaultOpen
+                        rootUrl={report.targetUrl}
+                      />
+                    );
+                  })}
+                </div>
+              ) : (
+                <AnimatePresence mode="popLayout">
+                  {confirmedVulns.map((v, i) => (
+                    <VulnCard key={v.id} vuln={v} index={i} rootUrl={report.targetUrl} />
+                  ))}
+                </AnimatePresence>
+              )}
             </div>
           )}
 
@@ -1311,11 +1445,32 @@ export default function ReportViewer() {
                 </div>
                 <span className="ml-auto text-xs text-amber-400/60 font-medium shrink-0">{unverifiedVulns.length} finding{unverifiedVulns.length !== 1 ? "s" : ""}</span>
               </div>
-              <AnimatePresence mode="popLayout">
-                {unverifiedVulns.map((v, i) => (
-                  <VulnCard key={v.id} vuln={v} index={i} needsVerification rootUrl={report.targetUrl} />
-                ))}
-              </AnimatePresence>
+              {viewMode === "grouped" ? (
+                <div className="space-y-2">
+                  {Array.from(groupedUnverifiedVulns.entries()).map(([cat, vulns]) => {
+                    const priorCount = Array.from(groupedUnverifiedVulns.entries())
+                      .filter(([c]) => c < cat)
+                      .reduce((sum, [, vs]) => sum + vs.length, 0);
+                    return (
+                      <CategorySection
+                        key={cat}
+                        category={cat}
+                        vulns={vulns}
+                        globalIndex={priorCount}
+                        needsVerification
+                        defaultOpen
+                        rootUrl={report.targetUrl}
+                      />
+                    );
+                  })}
+                </div>
+              ) : (
+                <AnimatePresence mode="popLayout">
+                  {unverifiedVulns.map((v, i) => (
+                    <VulnCard key={v.id} vuln={v} index={i} needsVerification rootUrl={report.targetUrl} />
+                  ))}
+                </AnimatePresence>
+              )}
             </div>
           )}
 
