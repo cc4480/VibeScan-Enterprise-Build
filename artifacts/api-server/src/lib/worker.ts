@@ -12,6 +12,7 @@ import { db, scansTable, reportsTable, monitorSubscriptionsTable } from "@worksp
 import { eq, and } from "drizzle-orm";
 import { getBoss, SCAN_QUEUE, type ScanJobData } from "./queue";
 import { runScan, computeRiskScore, computeGrade, type ScanVulnerability } from "./scanner";
+import { warnIfLocalDataStale } from "./cveCheck";
 import { callDeepSeek } from "./deepseek";
 import { checkSslLabs } from "./ssllabs";
 import { sendReportReadyEmail } from "./mailer";
@@ -261,6 +262,9 @@ function buildExecutiveSummary(
 }
 
 export async function startWorker(): Promise<void> {
+  // Check freshness of bundled local CVE / EOL data at startup
+  warnIfLocalDataStale();
+
   const boss = await getBoss();
 
   // pg-boss v12 requires queues to be explicitly created before workers can bind

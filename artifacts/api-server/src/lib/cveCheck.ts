@@ -15,6 +15,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
+import { logger } from "./logger";
 
 const OSV_TIMEOUT_MS = 8_000;
 const OSV_ENDPOINT = "https://api.osv.dev/v1/query";
@@ -395,6 +396,52 @@ function cveIds(osvVuln: OsvVuln): string[] {
 // LOCAL CHECKS (no network call)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LOCAL DATA FRESHNESS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * ISO date when the local vuln tables below (PHP_EOL, NGINX_VULN_RANGES,
+ * APACHE_VULN_RANGES, IIS_EOL_MAJOR) were last reviewed and updated.
+ * Update this whenever you add, modify, or verify the data below.
+ */
+const LOCAL_VULN_DATA_UPDATED = "2026-05-05";
+
+const LOCAL_DATA_STALE_DAYS = 90;
+
+/**
+ * Logs a warning at startup when the bundled local CVE / EOL data is older
+ * than LOCAL_DATA_STALE_DAYS days. Call this once from startWorker().
+ *
+ * The warning reminds developers that PHP_EOL, NGINX_VULN_RANGES,
+ * APACHE_VULN_RANGES, and IIS_EOL_MAJOR may need refreshing against
+ * current vendor advisories and EOL schedules.
+ */
+export function warnIfLocalDataStale(): void {
+  const updatedMs = new Date(LOCAL_VULN_DATA_UPDATED).getTime();
+  const ageMs = Date.now() - updatedMs;
+  const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+
+  if (ageDays >= LOCAL_DATA_STALE_DAYS) {
+    logger.warn(
+      {
+        localVulnDataUpdated: LOCAL_VULN_DATA_UPDATED,
+        ageDays,
+        staleThresholdDays: LOCAL_DATA_STALE_DAYS,
+        action: "Review and update LOCAL_VULN_DATA_UPDATED and the local vuln tables in cveCheck.ts",
+      },
+      `[cveCheck] Local CVE/EOL data is ${ageDays} days old (threshold: ${LOCAL_DATA_STALE_DAYS} days). ` +
+      `Review PHP_EOL, NGINX_VULN_RANGES, APACHE_VULN_RANGES, and IIS_EOL_MAJOR in cveCheck.ts ` +
+      `against current vendor advisories, then bump LOCAL_VULN_DATA_UPDATED to today's date.`,
+    );
+  } else {
+    logger.info(
+      { localVulnDataUpdated: LOCAL_VULN_DATA_UPDATED, ageDays },
+      "[cveCheck] Local CVE/EOL data freshness OK",
+    );
+  }
+}
+
 // PHP EOL dates — versions that are fully end-of-life as of 2026
 const PHP_EOL: Record<string, string> = {
   "5": "Reached EOL in December 2018",
@@ -404,7 +451,8 @@ const PHP_EOL: Record<string, string> = {
   "7.3": "Reached EOL in December 2021",
   "7.4": "Reached EOL in November 2022",
   "8.0": "Reached EOL in November 2023",
-  "8.1": "Reaches EOL in December 2025",
+  "8.1": "Reached EOL in December 2025",
+  "8.2": "Reaches EOL in December 2026",
 };
 
 // Nginx versions known to have critical CVEs
