@@ -56,6 +56,8 @@ export interface ScanJobData {
   userId: string;
   targetUrl: string;
   tier: string;
+  /** Set when this scan was triggered by the monitor scheduler */
+  monitorSubscriptionId?: string;
 }
 
 export async function enqueueScan(data: ScanJobData): Promise<string | null> {

@@ -5,7 +5,7 @@ import {
   Lock, Activity, Share2, Plus, Mail, GitBranch, KeyRound, Database,
   Terminal, ExternalLink, Package, RefreshCw, Eye, Code2, Wifi,
   AlertTriangle, Monitor, Info, Settings, Network, EyeOff, Filter, X,
-  ArrowUpDown, HelpCircle, Download, Copy, Check,
+  ArrowUpDown, HelpCircle, Download, Copy, Check, Bell,
 } from "lucide-react";
 import { cn, formatSeverity, getSeverityColors, getGradeColor } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -1140,6 +1140,25 @@ export default function ReportViewer() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Monitor CTA banner */}
+      <div className="glass-panel rounded-2xl p-6 border border-indigo-500/25 bg-indigo-500/5 flex flex-col sm:flex-row items-center gap-6">
+        <div className="w-12 h-12 rounded-xl bg-indigo-500/15 border border-indigo-500/25 flex items-center justify-center shrink-0">
+          <Bell className="w-6 h-6 text-indigo-400" />
+        </div>
+        <div className="flex-1 text-center sm:text-left">
+          <h3 className="font-bold text-lg mb-1">Keep watching this URL</h3>
+          <p className="text-sm text-muted-foreground">
+            Weekly automated rescans + instant CVE alerts when new vulnerabilities match your tech stack. <span className="text-indigo-400 font-semibold">$129/yr</span>
+          </p>
+        </div>
+        <Link
+          href="/monitor"
+          className="shrink-0 px-6 py-3 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-xl font-bold hover:bg-indigo-500/30 transition-all whitespace-nowrap flex items-center gap-2"
+        >
+          <Bell className="w-4 h-4" /> Start Monitoring
+        </Link>
       </div>
 
       {/* Bottom CTA */}

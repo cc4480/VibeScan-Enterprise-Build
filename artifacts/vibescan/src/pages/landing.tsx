@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { ShieldAlert, Key, Globe, CheckCircle2, ArrowRight, Activity, Code2, Zap } from "lucide-react";
+import { ShieldAlert, Key, Globe, CheckCircle2, ArrowRight, Activity, Code2, Zap, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function LandingPage() {
@@ -162,41 +162,51 @@ export default function LandingPage() {
       <section id="pricing" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">Pay only when you scan</h2>
-          <p className="text-muted-foreground">No monthly subscriptions. Buy single scans or save with a pack.</p>
+          <p className="text-muted-foreground">No monthly subscriptions. Buy single scans, save with a pack, or monitor continuously.</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
           {[
-            { name: "Basic Scan", price: "$29", desc: "Core checks for quick health checks.", features: ["Header analysis", "SSL/TLS grading", "Basic tech fingerprint", "Letter grade & score"], cta: "Buy Basic", highlight: false },
-            { name: "Deep Scan", price: "$79", desc: "Full analysis with AI remediation.", features: ["Everything in Basic", "DeepSeek AI analysis", "Plain-English explanations", "Step-by-step fix guides"], cta: "Buy Deep", highlight: true },
-            { name: "5-Scan Pack", price: "$99", desc: "Save $296 on Deep Scans.", features: ["5× Deep Scan credits", "Credits never expire", "Use on any project", "Priority queue"], cta: "Get 5 Pack", highlight: false },
-            { name: "20-Scan Pack", price: "$299", desc: "For agencies and dev shops.", features: ["20× Deep Scan credits", "Highest priority queue", "API access (soon)", "White-label reports (soon)"], cta: "Get 20 Pack", highlight: false },
+            { name: "Basic Scan", price: "$29", period: null, desc: "Core checks for quick health checks.", features: ["Header analysis", "SSL/TLS grading", "Basic tech fingerprint", "Letter grade & score"], cta: "Buy Basic", highlight: false, monitor: false },
+            { name: "Deep Scan", price: "$79", period: null, desc: "Full analysis with AI remediation.", features: ["Everything in Basic", "DeepSeek AI analysis", "Plain-English explanations", "Step-by-step fix guides"], cta: "Buy Deep", highlight: true, monitor: false },
+            { name: "5-Scan Pack", price: "$99", period: null, desc: "Save $296 on Deep Scans.", features: ["5× Deep Scan credits", "Credits never expire", "Use on any project", "Priority queue"], cta: "Get 5 Pack", highlight: false, monitor: false },
+            { name: "20-Scan Pack", price: "$299", period: null, desc: "For agencies and dev shops.", features: ["20× Deep Scan credits", "Highest priority queue", "API access (soon)", "White-label reports (soon)"], cta: "Get 20 Pack", highlight: false, monitor: false },
+            { name: "Monitor", price: "$129", period: "/yr", desc: "Continuous automated security.", features: ["Weekly deep rescans", "Daily CVE feed monitoring", "Instant alerts when new CVEs match your stack", "1 year · per URL"], cta: "Start Monitoring", highlight: false, monitor: true },
           ].map((tier, i) => (
-            <div key={i} className={cn("glass-panel p-8 rounded-2xl flex flex-col", tier.highlight ? "border-primary/50 relative transform md:-translate-y-4 shadow-[0_0_30px_rgba(20,184,120,0.1)]" : "")}>
+            <div key={i} className={cn("glass-panel p-8 rounded-2xl flex flex-col", tier.highlight ? "border-primary/50 relative transform md:-translate-y-4 shadow-[0_0_30px_rgba(20,184,120,0.1)]" : "", tier.monitor ? "border-indigo-500/30 bg-indigo-500/5" : "")}>
               {tier.highlight && (
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-primary text-primary-foreground px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
                   Most Popular
                 </div>
               )}
+              {tier.monitor && (
+                <div className="flex items-center gap-1.5 mb-3">
+                  <Bell className="w-4 h-4 text-indigo-400" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">Always-On</span>
+                </div>
+              )}
               <h3 className="text-xl font-bold mb-2">{tier.name}</h3>
               <div className="flex items-baseline gap-1 mb-4">
                 <span className="text-4xl font-black">{tier.price}</span>
-                {tier.name.includes("Pack") && <span className="text-muted-foreground text-sm">/ once</span>}
+                {tier.period && <span className="text-muted-foreground text-sm">{tier.period}</span>}
               </div>
               <p className="text-sm text-muted-foreground pb-6 border-b border-white/10 mb-6">{tier.desc}</p>
 
               <ul className="flex flex-col gap-3 mb-8 flex-1">
                 {tier.features.map((feat, j) => (
                   <li key={j} className="flex items-start gap-2 text-sm">
-                    <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
+                    <CheckCircle2 className={cn("w-5 h-5 shrink-0", tier.monitor ? "text-indigo-400" : "text-primary")} />
                     <span>{feat}</span>
                   </li>
                 ))}
               </ul>
 
               <Link
-                href="/scan"
-                className={cn("w-full py-3 rounded-xl font-bold transition-all text-center block", tier.highlight ? "bg-primary text-primary-foreground hover:shadow-[0_0_20px_rgba(20,184,120,0.4)]" : "bg-secondary text-foreground hover:bg-white/10")}
+                href={tier.monitor ? "/monitor" : "/scan"}
+                className={cn("w-full py-3 rounded-xl font-bold transition-all text-center block",
+                  tier.highlight ? "bg-primary text-primary-foreground hover:shadow-[0_0_20px_rgba(20,184,120,0.4)]"
+                  : tier.monitor ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30"
+                  : "bg-secondary text-foreground hover:bg-white/10")}
               >
                 {tier.cta}
               </Link>
