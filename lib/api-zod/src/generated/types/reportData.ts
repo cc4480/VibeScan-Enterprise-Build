@@ -20,4 +20,5 @@ export interface ReportData {
   openPorts?: number[];
   targetUrl: string;
   aiAnalysis?: AiAnalysis;
+  pagesScanned?: string[];
 }
