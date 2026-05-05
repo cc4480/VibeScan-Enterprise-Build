@@ -9,6 +9,7 @@ import LandingPage from "@/pages/landing";
 import DashboardPage from "@/pages/dashboard";
 import ScanFormPage from "@/pages/scan-form";
 import ReportViewer from "@/pages/report-viewer";
+import MonitorPage from "@/pages/monitor";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,6 +28,7 @@ function Router() {
         <Route path="/dashboard" component={DashboardPage} />
         <Route path="/scan" component={ScanFormPage} />
         <Route path="/report/:id" component={ReportViewer} />
+        <Route path="/monitor" component={MonitorPage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

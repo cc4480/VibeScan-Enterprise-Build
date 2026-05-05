@@ -45,13 +45,45 @@ export const creditsTable = pgTable("credits", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const monitorSubscriptionsTable = pgTable("monitor_subscriptions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: text("user_id").notNull(),
+  userEmail: text("user_email").notNull(),
+  targetUrl: text("target_url").notNull(),
+  status: text("status", { enum: ["active", "cancelled", "expired"] }).notNull().default("active"),
+  subscribedAt: timestamp("subscribed_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  lastScanAt: timestamp("last_scan_at", { withTimezone: true }),
+  lastReportId: uuid("last_report_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("idx_monitor_user_id").on(table.userId),
+  index("idx_monitor_status").on(table.status),
+  index("idx_monitor_target").on(table.targetUrl),
+]);
+
+export const cveAlertsTable = pgTable("cve_alerts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  subscriptionId: uuid("subscription_id").notNull().references(() => monitorSubscriptionsTable.id, { onDelete: "cascade" }),
+  cveId: text("cve_id").notNull(),
+  cveSummary: text("cve_summary").notNull(),
+  affectedTech: text("affected_tech").notNull(),
+  severity: text("severity").notNull(),
+  triggerScanId: uuid("trigger_scan_id"),
+  detectedAt: timestamp("detected_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("idx_cve_alerts_subscription_id").on(table.subscriptionId),
+  index("idx_cve_alerts_cve_id").on(table.cveId),
+]);
+
 export const insertScanSchema = createInsertSchema(scansTable).omit({
   id: true,
   createdAt: true,
   startedAt: true,
   completedAt: true,
 });
-export type InsertScan = z.infer<typeof insertScanSchema>;
+export type InsertScan = typeof scansTable.$inferInsert;
 export type Scan = typeof scansTable.$inferSelect;
 
 export const insertReportSchema = createInsertSchema(reportsTable).omit({
@@ -59,12 +91,27 @@ export const insertReportSchema = createInsertSchema(reportsTable).omit({
   scannedAt: true,
   createdAt: true,
 });
-export type InsertReport = z.infer<typeof insertReportSchema>;
+export type InsertReport = typeof reportsTable.$inferInsert;
 export type Report = typeof reportsTable.$inferSelect;
 
 export const insertCreditSchema = createInsertSchema(creditsTable).omit({
   id: true,
   updatedAt: true,
 });
-export type InsertCredit = z.infer<typeof insertCreditSchema>;
+export type InsertCredit = typeof creditsTable.$inferInsert;
 export type Credit = typeof creditsTable.$inferSelect;
+
+export const insertMonitorSubscriptionSchema = createInsertSchema(monitorSubscriptionsTable).omit({
+  id: true,
+  subscribedAt: true,
+  createdAt: true,
+});
+export type InsertMonitorSubscription = typeof monitorSubscriptionsTable.$inferInsert;
+export type MonitorSubscription = typeof monitorSubscriptionsTable.$inferSelect;
+
+export const insertCveAlertSchema = createInsertSchema(cveAlertsTable).omit({
+  id: true,
+  detectedAt: true,
+});
+export type InsertCveAlert = typeof cveAlertsTable.$inferInsert;
+export type CveAlert = typeof cveAlertsTable.$inferSelect;

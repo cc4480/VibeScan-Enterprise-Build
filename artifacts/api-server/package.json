@@ -20,7 +20,8 @@
     "pg-boss": "^12.14.0",
     "pino": "^9",
     "pino-http": "^10",
-    "stripe": "^20.4.1"
+    "stripe": "^20.4.1",
+    "zod": "^3"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",

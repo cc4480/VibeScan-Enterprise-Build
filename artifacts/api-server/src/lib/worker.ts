@@ -8,8 +8,8 @@
  *            failed
  */
 
-import { db, scansTable, reportsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, scansTable, reportsTable, monitorSubscriptionsTable } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
 import { getBoss, SCAN_QUEUE, type ScanJobData } from "./queue";
 import { runScan, computeRiskScore, computeGrade, type ScanVulnerability } from "./scanner";
 import { callDeepSeek } from "./deepseek";
@@ -22,8 +22,8 @@ import type { Job } from "pg-boss";
 type ScanJob = Job<ScanJobData>;
 
 async function processScanJob(job: ScanJob): Promise<void> {
-  const { scanId, userId, targetUrl, tier } = job.data;
-  const log = logger.child({ scanId, targetUrl, tier });
+  const { scanId, userId, targetUrl, tier, monitorSubscriptionId } = job.data;
+  const log = logger.child({ scanId, targetUrl, tier, monitorSubscriptionId });
 
   log.info("Scan job started");
 
@@ -176,7 +176,29 @@ async function processScanJob(job: ScanJob): Promise<void> {
 
     log.info({ reportId: report.id, grade, riskScore }, "Scan complete");
 
-    // ── 8. Send report-ready email (deep tier only) ───────────────────
+    // ── 8. Update monitor subscription if this was a monitored scan ───
+    if (monitorSubscriptionId) {
+      try {
+        await db
+          .update(monitorSubscriptionsTable)
+          .set({
+            lastScanAt: completedAt,
+            lastReportId: report.id,
+          })
+          .where(
+            and(
+              eq(monitorSubscriptionsTable.id, monitorSubscriptionId),
+              eq(monitorSubscriptionsTable.userId, userId),
+            ),
+          );
+        log.info({ monitorSubscriptionId, reportId: report.id }, "Monitor subscription updated");
+      } catch (monitorErr) {
+        log.warn({ err: monitorErr }, "Failed to update monitor subscription (non-fatal)");
+      }
+    }
+
+    // ── 9. Send report-ready email ────────────────────────────────────
+    // Deep scans and monitor-triggered scans always send email.
     if (tier === "deep") {
       const [scan] = await db
         .select({ userEmail: scansTable.userEmail })
