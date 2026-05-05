@@ -482,6 +482,38 @@ const SEVERITY_EMOJI: Record<string, string> = {
   critical: "🔴", high: "🟠", medium: "🟡", low: "🔵", info: "⚪",
 };
 
+// ─── Print-friendly grade ring ────────────────────────────────────────────────
+
+function PrintGradeRing({ grade, score }: { grade: string; score: number }) {
+  const colorMap: Record<string, string> = {
+    A: "#059669", B: "#16a34a", C: "#ca8a04", D: "#ea580c", F: "#dc2626",
+  };
+  const color = colorMap[grade] ?? "#6b7280";
+  const r = 52;
+  const circumference = 2 * Math.PI * r;
+  const dash = circumference * (score / 100);
+
+  return (
+    <div style={{ position: "relative", width: 120, height: 120, flexShrink: 0 }}>
+      <svg width="120" height="120" style={{ transform: "rotate(-90deg)" }}>
+        <circle cx="60" cy="60" r={r} fill="none" stroke="#e5e7eb" strokeWidth="6" />
+        <circle
+          cx="60" cy="60" r={r} fill="none" stroke={color} strokeWidth="6"
+          strokeDasharray={`${dash} ${circumference - dash}`}
+          strokeLinecap="round"
+        />
+      </svg>
+      <div style={{
+        position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center",
+      }}>
+        <span style={{ fontSize: 36, fontWeight: 900, lineHeight: 1, color }}>{grade}</span>
+        <span style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>Risk: {score}</span>
+      </div>
+    </div>
+  );
+}
+
 // ─── Print-friendly vuln card (used inside PrintableReport) ───────────────────
 
 function PrintVulnCard({ vuln, index }: { vuln: Vulnerability; index: number }) {
@@ -541,7 +573,7 @@ function PrintVulnCard({ vuln, index }: { vuln: Vulnerability; index: number }) 
 
 function PrintableReport({
   targetUrl, scannedAt, summary, confirmedVulns, unverifiedVulns,
-  technologies, server, tlsGrade, aiAnalysis,
+  technologies, server, tlsGrade, aiAnalysis, categoryCounts,
 }: {
   targetUrl: string;
   scannedAt: string | Date;
@@ -552,29 +584,27 @@ function PrintableReport({
   server?: string | null;
   tlsGrade?: string | null;
   aiAnalysis?: { overallRisk: string; topPriorities: string[]; quickWins: string[]; complianceNotes?: string | null } | null;
+  categoryCounts: Record<string, number>;
 }) {
   const dateStr = new Date(scannedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-  const gradeColors: Record<string, string> = { A: "#059669", B: "#16a34a", C: "#ca8a04", D: "#ea580c", F: "#dc2626" };
-  const gradeColor = gradeColors[summary.grade] ?? "#6b7280";
+
+  const sortedCategories = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1]);
 
   return (
     <div className="text-gray-900 bg-white font-sans text-sm leading-relaxed max-w-4xl mx-auto py-4">
       {/* Cover */}
       <div className="mb-8 pb-6 border-b-2 border-gray-300">
-        <div className="flex items-center gap-4 mb-4">
-          <div style={{ backgroundColor: gradeColor }} className="w-14 h-14 rounded-xl flex items-center justify-center text-white font-black text-2xl shrink-0">
-            {summary.grade}
+        <div className="flex items-start gap-6 mb-4">
+          <PrintGradeRing grade={summary.grade} score={summary.riskScore} />
+          <div className="flex-1 pt-2">
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">Security Report</h1>
+            <p className="text-gray-500 text-sm mb-3">{targetUrl}</p>
+            <div className="flex flex-wrap gap-6 text-sm text-gray-600">
+              <span><strong>Total Findings:</strong> {summary.totalVulnerabilities}</span>
+              <span><strong>Scanned:</strong> {dateStr}</span>
+              {tlsGrade && <span><strong>TLS Grade:</strong> {tlsGrade}</span>}
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Security Report</h1>
-            <p className="text-gray-500 text-sm">{targetUrl}</p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-6 text-sm text-gray-600">
-          <span><strong>Grade:</strong> {summary.grade}</span>
-          <span><strong>Risk Score:</strong> {summary.riskScore}/100</span>
-          <span><strong>Total Findings:</strong> {summary.totalVulnerabilities}</span>
-          <span><strong>Scanned:</strong> {dateStr}</span>
         </div>
       </div>
 
@@ -586,6 +616,21 @@ function PrintableReport({
         {summary.low > 0 && <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded text-sm font-medium border border-blue-200">🔵 Low: {summary.low}</span>}
         {summary.info > 0 && <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded text-sm font-medium border border-gray-200">⚪ Info: {summary.info}</span>}
       </div>
+
+      {/* Category breakdown */}
+      {sortedCategories.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-lg font-bold mb-3 text-gray-900">📋 Finding Categories</h2>
+          <div className="grid grid-cols-2 gap-2">
+            {sortedCategories.map(([cat, count]) => (
+              <div key={cat} className="flex items-center justify-between px-3 py-2 bg-gray-50 border border-gray-200 rounded">
+                <span className="text-sm text-gray-700">{getCategoryMeta(cat).label}</span>
+                <span className="text-xs font-bold text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">{count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Executive Summary */}
       <div className="mb-8">
@@ -667,10 +712,24 @@ function PrintableReport({
 
 // ─── Download PDF button ──────────────────────────────────────────────────────
 
-function DownloadPDFButton() {
+function DownloadPDFButton({ targetUrl }: { targetUrl?: string }) {
+  const handlePrint = () => {
+    const prev = document.title;
+    if (targetUrl) {
+      try {
+        const host = new URL(targetUrl).hostname.replace(/^www\./, "");
+        document.title = `VibeScan Security Report — ${host}`;
+      } catch {
+        document.title = "VibeScan Security Report";
+      }
+    }
+    window.print();
+    document.title = prev;
+  };
+
   return (
     <button
-      onClick={() => window.print()}
+      onClick={handlePrint}
       className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary border border-white/10 text-sm font-medium hover:bg-white/10 transition-colors"
     >
       <Download className="w-4 h-4" />
@@ -956,6 +1015,7 @@ export default function ReportViewer() {
           server={server}
           tlsGrade={tlsGrade}
           aiAnalysis={aiAnalysis}
+          categoryCounts={categoryCounts}
         />
       </div>
 
@@ -967,7 +1027,7 @@ export default function ReportViewer() {
         </Link>
         <div className="flex items-center gap-2">
           <CopyReportButton data={copyData} />
-          <DownloadPDFButton />
+          <DownloadPDFButton targetUrl={report.targetUrl} />
           <ShareButton reportId={reportId} />
         </div>
       </div>
@@ -1331,7 +1391,7 @@ export default function ReportViewer() {
             <Plus className="w-5 h-5" /> New Scan
           </Link>
           <CopyReportButton data={copyData} />
-          <DownloadPDFButton />
+          <DownloadPDFButton targetUrl={report.targetUrl} />
           <ShareButton reportId={reportId} />
         </div>
       </div>
