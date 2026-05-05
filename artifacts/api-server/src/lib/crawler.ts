@@ -20,6 +20,32 @@ const CRAWL_TIMEOUT_MS = 30_000;
 // Paths that could trigger destructive actions — skip these
 const DANGEROUS_PATH_PATTERNS = /logout|signout|delete|remove|destroy|unsubscribe|reset|drop/i;
 
+/**
+ * Curated high-value paths probed on every deep scan regardless of whether
+ * they appear in the site's HTML — many sensitive endpoints are never linked
+ * from the homepage but are reachable by direct URL.
+ *
+ * Exported so tests and the report UI can reference the canonical list.
+ */
+export const HIGH_VALUE_PROBE_PATHS: string[] = [
+  // Admin / management interfaces
+  "/admin", "/administrator", "/wp-admin",
+  // API roots (versioned and unversioned)
+  "/api", "/api/v1", "/api/v2", "/api/v3",
+  // GraphQL
+  "/graphql", "/gql",
+  // Health / liveness / readiness probes (often unprotected)
+  "/health", "/healthz", "/status", "/ping", "/ready", "/live",
+  // Authentication entry points
+  "/login", "/auth", "/signin",
+  // Application dashboard
+  "/dashboard",
+  // Observability endpoints (often leaked in dev)
+  "/metrics",
+  // Debug surfaces
+  "/debug", "/console",
+];
+
 function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
   return { id: randomUUID(), ...partial };
 }
@@ -54,13 +80,7 @@ export function extractInternalLinks(html: string, baseUrl: string): string[] {
   while ((m = hrefRegex.exec(html)) !== null) process(m[1]);
   while ((m = srcRegex.exec(html)) !== null) process(m[1]);
 
-  // Also probe high-value paths that are often present but not linked from the root
-  const probeExtra = ["/api", "/api/v1", "/api/v2", "/graphql", "/admin", "/health", "/status"];
-  probeExtra.forEach((p) => {
-    if (!seen.has(p)) seen.add(p);
-  });
-
-  // Return as full URLs
+  // Return as full URLs (high-value path probing is handled separately in crawlAndCheck)
   return [...seen].map((path) => `${base.origin}${path}`);
 }
 
@@ -380,10 +400,13 @@ function checkPageCookies(
   pageUrl: string,
   isHttps: boolean,
   seenCookieIssues: Set<string>,
+  discoveredBy: "crawl" | "probe",
 ): ScanVulnerability[] {
   if (setCookies.length === 0) return [];
   const path = (() => { try { return new URL(pageUrl).pathname; } catch { return pageUrl; } })();
   const findings: ScanVulnerability[] = [];
+  // Prefix added to evidence lines so the report UI can distinguish how the page was found
+  const sourcePrefix = discoveredBy === "probe" ? "[Direct probe] " : "";
 
   for (const cookie of setCookies) {
     if (!cookie.trim()) continue;
@@ -405,7 +428,7 @@ function checkPageCookies(
           severity: "high",
           category: "Session Management",
           description: `The page "${path}" sets the cookie "${namePart}" without the Secure flag, allowing it to be transmitted over unencrypted HTTP even on an HTTPS site.`,
-          evidence: `GET ${pageUrl}\nSet-Cookie: ${cookie.trim()}`,
+          evidence: `${sourcePrefix}GET ${pageUrl}\nSet-Cookie: ${cookie.trim()}`,
           solution: "Add the Secure attribute to all cookies: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax",
           cweId: "CWE-614",
           cvssScore: 6.5,
@@ -423,7 +446,7 @@ function checkPageCookies(
           severity: "medium",
           category: "Session Management",
           description: `The page "${path}" sets the cookie "${namePart}" without the HttpOnly flag, allowing client-side JavaScript to access it. This enables session theft via XSS.`,
-          evidence: `GET ${pageUrl}\nSet-Cookie: ${cookie.trim()}`,
+          evidence: `${sourcePrefix}GET ${pageUrl}\nSet-Cookie: ${cookie.trim()}`,
           solution: "Add the HttpOnly attribute to all session cookies: Set-Cookie: name=value; HttpOnly; Secure; SameSite=Lax",
           cweId: "CWE-1004",
           cvssScore: 5.3,
@@ -509,6 +532,7 @@ const HEADER_GAP_META: Record<keyof HeaderSnapshot, HeaderGapMeta> = {
 function buildHeaderGapVulns(
   rootSnapshot: HeaderSnapshot,
   gapMap: Map<keyof HeaderSnapshot, string[]>,
+  probedSet: Set<string>,
 ): ScanVulnerability[] {
   const results: ScanVulnerability[] = [];
 
@@ -521,7 +545,11 @@ function buildHeaderGapVulns(
     if (!rootSnapshot[key]) continue;
 
     const displayPaths = paths.slice(0, 6).map((p) => {
-      try { return new URL(p).pathname; } catch { return p; }
+      try {
+        const pathname = new URL(p).pathname;
+        const tag = probedSet.has(p) ? " (probed)" : " (crawled)";
+        return pathname + tag;
+      } catch { return p; }
     });
 
     results.push(vuln({
@@ -556,11 +584,6 @@ export async function crawlAndCheck(
   rootHeaders: Record<string, string>,
   maxPages: number,
 ): Promise<CrawlResult> {
-  if (maxPages <= 0) return { vulnerabilities: [], pagesVisited: [] };
-
-  const urls = extractInternalLinks(rootHtml, rootUrl).slice(0, maxPages);
-  if (urls.length === 0) return { vulnerabilities: [], pagesVisited: [] };
-
   let origin: string;
   let expectedHostname: string;
   try {
@@ -568,6 +591,36 @@ export async function crawlAndCheck(
     origin = parsed.origin;
     expectedHostname = parsed.hostname;
   } catch {
+    return { vulnerabilities: [], pagesVisited: [] };
+  }
+
+  // ── URL list construction ────────────────────────────────────────────────
+  //
+  // Two separate sources:
+  //   1. linkedUrls  — URLs discovered in the root page HTML (capped by maxPages)
+  //   2. probedUrls  — HIGH_VALUE_PROBE_PATHS always checked regardless of maxPages
+  //
+  // Probed paths skip any path that overlaps with a crawled link (same pathname)
+  // and any path that matches the dangerous-action pattern.
+
+  const linkedUrls: string[] = maxPages > 0
+    ? extractInternalLinks(rootHtml, rootUrl).slice(0, maxPages)
+    : [];
+
+  const linkedPathnames = new Set(
+    linkedUrls.map((u) => { try { return new URL(u).pathname; } catch { return u; } }),
+  );
+
+  const probedUrls: string[] = HIGH_VALUE_PROBE_PATHS
+    .filter((p) => !DANGEROUS_PATH_PATTERNS.test(p))
+    .filter((p) => !linkedPathnames.has(p))
+    .map((p) => `${origin}${p}`);
+
+  // Set of probed URLs for labelling findings — checked with full URL equality
+  const probedSet = new Set<string>(probedUrls);
+
+  // If there's nothing to check at all, bail early
+  if (linkedUrls.length === 0 && probedUrls.length === 0) {
     return { vulnerabilities: [], pagesVisited: [] };
   }
 
@@ -596,23 +649,27 @@ export async function crawlAndCheck(
   // a request that can never complete within the overall time bound)
   const MIN_BUDGET_MS = 1_000;
 
-  // Process each page sequentially to respect the time budget
-  for (const url of urls) {
+  /**
+   * Fetch and analyse a single page.
+   * @param url         Full URL to fetch
+   * @param discoveredBy  Whether this URL came from HTML crawling or direct probing
+   */
+  const processPage = async (url: string, discoveredBy: "crawl" | "probe") => {
     const remaining = crawlDeadline - Date.now();
-    if (remaining < MIN_BUDGET_MS) break;
+    if (remaining < MIN_BUDGET_MS) return;
 
     // Cap per-fetch timeout to whatever budget remains (hard deadline enforcement)
     const fetchTimeout = Math.min(PAGE_TIMEOUT_MS, remaining);
 
     const page = await fetchPage(url, fetchTimeout);
-    if (!page || page.status === 0 || page.status >= 400) continue;
+    if (!page || page.status === 0 || page.status >= 400) return;
 
     // Verify we didn't get redirected off-domain (catch-all login redirects, etc.)
     try {
       const finalHostname = new URL(page.finalUrl).hostname;
-      if (finalHostname !== expectedHostname) continue;
+      if (finalHostname !== expectedHostname) return;
     } catch {
-      continue;
+      return;
     }
 
     // Record this URL as successfully visited
@@ -629,7 +686,9 @@ export async function crawlAndCheck(
     }
 
     // ── Cookie checks ──────────────────────────────────────────────────────
-    perPageFindings.push(...checkPageCookies(page.setCookies, url, isHttps, seenCookieIssues));
+    perPageFindings.push(
+      ...checkPageCookies(page.setCookies, url, isHttps, seenCookieIssues, discoveredBy),
+    );
 
     // ── Sensitive file probes under this path's directory ──────────────────
     const probeRemaining = crawlDeadline - Date.now();
@@ -638,10 +697,22 @@ export async function crawlAndCheck(
       const pathFindings = await probePathSensitiveFiles(url, origin, expectedHostname, probeTimeout);
       perPageFindings.push(...pathFindings);
     }
+  };
+
+  // Process linked pages first (sequential — respects time budget per iteration)
+  for (const url of linkedUrls) {
+    if (Date.now() + MIN_BUDGET_MS > crawlDeadline) break;
+    await processPage(url, "crawl");
+  }
+
+  // Process directly-probed high-value paths (also sequential to respect budget)
+  for (const url of probedUrls) {
+    if (Date.now() + MIN_BUDGET_MS > crawlDeadline) break;
+    await processPage(url, "probe");
   }
 
   // Aggregate header gap findings (one finding per header type covering all affected paths)
-  const headerGapFindings = buildHeaderGapVulns(rootSnapshot, gapMap);
+  const headerGapFindings = buildHeaderGapVulns(rootSnapshot, gapMap, probedSet);
 
   // Deduplicate: sensitive file probes may return the same finding for different paths
   const seenSensitiveKeys = new Set<string>();
