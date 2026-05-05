@@ -84,6 +84,8 @@ export interface ScanResult {
   vulnerabilities: ScanVulnerability[];
   requestDurationMs: number;
   rawHeaders: Record<string, string>;
+  /** URLs of inner pages actually fetched during the deep crawl (excludes the root URL) */
+  pagesScanned: string[];
 }
 
 const FETCH_TIMEOUT_MS = 20_000;
@@ -738,12 +740,15 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
   // All checks run concurrently — active HTTP probes, DNS checks, site crawl,
   // CVE lookup, JWT analysis, subdomain takeover, and (deep only) JS secret
   // scanning and path traversal.
+  // Run crawl separately to capture pagesVisited alongside findings
+  const crawlPromise = crawlAndCheck(
+    finalUrl, html, rawHeaders, tier === "deep" ? 20 : 0,
+  ).catch(() => ({ vulnerabilities: [], pagesVisited: [] }));
+
   const probePromises: Promise<ScanVulnerability[]>[] = [
     runAllProbes(finalUrl, html).catch(() => []),
     checkDnsSecurity(finalUrl).catch(() => []),
     checkForKnownVulnerabilities(html, rawHeaders).catch(() => []),
-    // Deep tier crawls up to 20 inner pages; basic tier scans root only
-    crawlAndCheck(finalUrl, html, rawHeaders, tier === "deep" ? 20 : 0).catch(() => []),
     // Passive JWT analysis — no extra HTTP requests
     analyzeJwts(rawHeaders, html).catch(() => []),
     // Subdomain takeover — 1-2 DNS + HTTP checks
@@ -760,8 +765,14 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
     );
   }
 
-  const probeResults = await Promise.allSettled(probePromises);
-  for (const result of probeResults) {
+  const [crawlResult, ...probeResults] = await Promise.all([
+    crawlPromise,
+    Promise.allSettled(probePromises),
+  ]);
+
+  vulnerabilities.push(...crawlResult.vulnerabilities);
+  const settledProbes = probeResults[0] as PromiseSettledResult<ScanVulnerability[]>[];
+  for (const result of settledProbes) {
     if (result.status === "fulfilled") {
       vulnerabilities.push(...result.value);
     }
@@ -777,6 +788,7 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
     vulnerabilities: autoEnrichConfidence(vulnerabilities),
     requestDurationMs,
     rawHeaders,
+    pagesScanned: crawlResult.pagesVisited,
   };
 }
 

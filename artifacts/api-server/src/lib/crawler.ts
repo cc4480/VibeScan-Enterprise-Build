@@ -544,16 +544,22 @@ function buildHeaderGapVulns(
 // ORCHESTRATOR
 // ─────────────────────────────────────────────────────────────────────────────
 
+export interface CrawlResult {
+  vulnerabilities: ScanVulnerability[];
+  /** URLs that were actually fetched (status < 400, not redirected off-domain) */
+  pagesVisited: string[];
+}
+
 export async function crawlAndCheck(
   rootUrl: string,
   rootHtml: string,
   rootHeaders: Record<string, string>,
   maxPages: number,
-): Promise<ScanVulnerability[]> {
-  if (maxPages <= 0) return [];
+): Promise<CrawlResult> {
+  if (maxPages <= 0) return { vulnerabilities: [], pagesVisited: [] };
 
   const urls = extractInternalLinks(rootHtml, rootUrl).slice(0, maxPages);
-  if (urls.length === 0) return [];
+  if (urls.length === 0) return { vulnerabilities: [], pagesVisited: [] };
 
   let origin: string;
   let expectedHostname: string;
@@ -562,7 +568,7 @@ export async function crawlAndCheck(
     origin = parsed.origin;
     expectedHostname = parsed.hostname;
   } catch {
-    return [];
+    return { vulnerabilities: [], pagesVisited: [] };
   }
 
   const rootSnapshot = snapshotHeaders(rootHeaders);
@@ -584,6 +590,7 @@ export async function crawlAndCheck(
 
   const crawlDeadline = Date.now() + CRAWL_TIMEOUT_MS;
   const perPageFindings: ScanVulnerability[] = [];
+  const pagesVisited: string[] = [];
 
   // Minimum remaining budget required to start a new page fetch (avoids starting
   // a request that can never complete within the overall time bound)
@@ -607,6 +614,9 @@ export async function crawlAndCheck(
     } catch {
       continue;
     }
+
+    // Record this URL as successfully visited
+    pagesVisited.push(url);
 
     // ── Header gap tracking ────────────────────────────────────────────────
     const snap = snapshotHeaders(page.headers);
@@ -644,5 +654,8 @@ export async function crawlAndCheck(
     }
   }
 
-  return [...headerGapFindings, ...dedupedPerPage];
+  return {
+    vulnerabilities: [...headerGapFindings, ...dedupedPerPage],
+    pagesVisited,
+  };
 }

@@ -244,6 +244,7 @@ export const GetReportResponse = zod.object({
     tlsGrade: zod.string().nullish(),
     openPorts: zod.array(zod.number()).optional(),
     targetUrl: zod.string(),
+    pagesScanned: zod.array(zod.string()).optional(),
     aiAnalysis: zod
       .object({
         overallRisk: zod.string(),
