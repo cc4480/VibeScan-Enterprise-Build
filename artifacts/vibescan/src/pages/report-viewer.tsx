@@ -333,8 +333,6 @@ function SoftwareInventoryCard({
   technologies: string[];
   vulnerabilities: Vulnerability[];
 }) {
-  const [open, setOpen] = useState(false);
-
   const versionedTechs = useMemo(() => {
     const seen = new Set<string>();
     return technologies
@@ -348,8 +346,6 @@ function SoftwareInventoryCard({
       });
   }, [technologies]);
 
-  if (versionedTechs.length === 0) return null;
-
   // Count CVEs per tech by matching vuln names like "jQuery 1.11.3 — Known Vulnerability ..."
   // or evidence lines like "Detected: jQuery 1.11.3" as a fallback
   const cveCountFor = (name: string, version: string) => {
@@ -360,6 +356,12 @@ function SoftwareInventoryCard({
       (v.evidence?.toLowerCase().includes(evidenceTag) ?? false)
     ).length;
   };
+
+  const [open, setOpen] = useState(() =>
+    versionedTechs.some((t) => cveCountFor(t.name, t.version!) > 0)
+  );
+
+  if (versionedTechs.length === 0) return null;
 
   return (
     <div className="glass-card rounded-2xl overflow-hidden">
