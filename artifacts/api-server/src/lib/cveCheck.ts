@@ -28,7 +28,54 @@ function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
 // IN-PROCESS CACHE — avoids duplicate OSV.dev calls for same version
 // ─────────────────────────────────────────────────────────────────────────────
 
-const osvCache = new Map<string, OsvVuln[]>();
+/**
+ * Size-bounded Map with LRU eviction.
+ *
+ * JS Maps preserve insertion order. On `get()` the accessed entry is moved
+ * to the end (most-recently-used). On `set()` when the map is full, the
+ * first entry (least-recently-used) is deleted before inserting the new key.
+ *
+ * This gives O(1) get, set, and eviction — no extra bookkeeping needed.
+ */
+class BoundedMap<K, V> {
+  private readonly map = new Map<K, V>();
+
+  constructor(private readonly maxSize: number) {}
+
+  has(key: K): boolean {
+    return this.map.has(key);
+  }
+
+  get(key: K): V | undefined {
+    if (!this.map.has(key)) return undefined;
+    // Move to end (most-recently-used) by deleting and re-inserting
+    const value = this.map.get(key)!;
+    this.map.delete(key);
+    this.map.set(key, value);
+    return value;
+  }
+
+  set(key: K, value: V): void {
+    if (this.map.has(key)) {
+      // Update existing key — delete first so re-insertion moves it to end
+      this.map.delete(key);
+    } else if (this.map.size >= this.maxSize) {
+      // Evict the least-recently-used entry (first key in insertion order)
+      const lruKey = this.map.keys().next().value as K;
+      this.map.delete(lruKey);
+    }
+    this.map.set(key, value);
+  }
+
+  get size(): number {
+    return this.map.size;
+  }
+}
+
+/** Maximum number of (package, version, ecosystem) entries to keep in memory. */
+const OSV_CACHE_MAX_SIZE = 1_000;
+
+const osvCache = new BoundedMap<string, OsvVuln[]>(OSV_CACHE_MAX_SIZE);
 
 function osvCacheKey(packageName: string, version: string, ecosystem: string): string {
   return `${ecosystem}:${packageName}@${version}`;
