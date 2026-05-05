@@ -75,8 +75,9 @@ class BoundedMap<K, V> {
 /**
  * Maximum number of (package, version, ecosystem) entries to keep in memory.
  * Override via OSV_CACHE_MAX_SIZE env var. Falls back to 1000 if unset or invalid.
+ * Exported so the worker can log the effective value at startup.
  */
-const OSV_CACHE_MAX_SIZE = (() => {
+export const OSV_CACHE_MAX_SIZE = (() => {
   const raw = process.env["OSV_CACHE_MAX_SIZE"];
   if (!raw) return 1_000;
   const n = parseInt(raw, 10);
@@ -473,12 +474,6 @@ const LOCAL_DATA_STALE_DAYS = 90;
  * current vendor advisories and EOL schedules.
  */
 export function warnIfLocalDataStale(): void {
-  // Log configured cache size so operators can verify the env var took effect
-  logger.info(
-    { osvCacheMaxSize: OSV_CACHE_MAX_SIZE, envVar: "OSV_CACHE_MAX_SIZE" },
-    "[cveCheck] OSV cache initialised",
-  );
-
   const updatedMs = new Date(LOCAL_VULN_DATA_UPDATED).getTime();
   const ageMs = Date.now() - updatedMs;
   const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
