@@ -136,6 +136,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
     technologies: scanResult.technologies,
     server: scanResult.server,
     tlsGrade: scanResult.tlsGrade,
+    pagesScanned: scanResult.pagesScanned,
     summary: {
       totalVulnerabilities: scanResult.vulnerabilities.length,
       critical: severityCounts["critical"] ?? 0,

@@ -190,6 +190,7 @@ export interface ReportData {
   tlsGrade?: string | null;
   openPorts?: number[];
   targetUrl: string;
+  pagesScanned?: string[];
   aiAnalysis?: AiAnalysis;
 }
 

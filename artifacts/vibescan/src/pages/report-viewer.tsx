@@ -5,7 +5,7 @@ import {
   Lock, Activity, Share2, Plus, Mail, GitBranch, KeyRound, Database,
   Terminal, ExternalLink, Package, RefreshCw, Eye, Code2, Wifi,
   AlertTriangle, Monitor, Info, Settings, Network, EyeOff, Filter, X,
-  ArrowUpDown, HelpCircle, Download, Copy, Check, Bell, ChevronDown,
+  ArrowUpDown, HelpCircle, Download, Copy, Check, Bell, ChevronDown, Search,
 } from "lucide-react";
 import { cn, formatSeverity, getSeverityColors, getGradeColor } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -321,6 +321,83 @@ function VulnCard({ vuln, index, needsVerification }: { vuln: Vulnerability; ind
         )}
       </AnimatePresence>
     </motion.div>
+  );
+}
+
+// ─── Pages Scanned card ───────────────────────────────────────────────────────
+
+function PagesScannedCard({
+  rootUrl,
+  pagesScanned,
+}: {
+  rootUrl: string;
+  pagesScanned: string[];
+}) {
+  const [open, setOpen] = useState(false);
+
+  const allPages = useMemo(() => {
+    const pages: { label: string; url: string; isRoot: boolean }[] = [
+      { label: rootUrl, url: rootUrl, isRoot: true },
+    ];
+    for (const url of pagesScanned) {
+      try {
+        const path = new URL(url).pathname;
+        pages.push({ label: path, url, isRoot: false });
+      } catch {
+        pages.push({ label: url, url, isRoot: false });
+      }
+    }
+    return pages;
+  }, [rootUrl, pagesScanned]);
+
+  return (
+    <div className="glass-card rounded-2xl overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between p-5 hover:bg-white/[0.02] transition-colors"
+      >
+        <h3 className="text-sm font-bold flex items-center gap-2">
+          <Search className="w-4 h-4 text-sky-400" />
+          Pages Scanned
+          <span className="px-1.5 py-0.5 bg-secondary text-xs rounded-full text-muted-foreground">{allPages.length}</span>
+        </h3>
+        <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="px-5 pb-5 border-t border-white/5 pt-3 space-y-1">
+              <p className="text-xs text-muted-foreground mb-3">All URLs visited during this scan, including the root page and crawled inner pages.</p>
+              {allPages.map((page, i) => (
+                <div key={i} className="flex items-center gap-2 py-1">
+                  <Globe className={cn("w-3 h-3 shrink-0", page.isRoot ? "text-sky-400" : "text-muted-foreground/50")} />
+                  <a
+                    href={page.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors truncate"
+                    title={page.url}
+                  >
+                    {page.label}
+                  </a>
+                  {page.isRoot && (
+                    <span className="shrink-0 text-[9px] px-1 py-0.5 bg-sky-500/10 text-sky-400/70 border border-sky-500/20 rounded font-medium leading-none">
+                      root
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -971,7 +1048,7 @@ export default function ReportViewer() {
   }
   if (error || !report || !summary) return <div className="min-h-[80vh] flex items-center justify-center text-red-400">Failed to load report.</div>;
 
-  const { data: { technologies, server, tlsGrade, aiAnalysis } } = report;
+  const { data: { technologies, server, tlsGrade, aiAnalysis, pagesScanned } } = report;
 
   const severityCounts = {
     critical: summary.critical,
@@ -1041,8 +1118,16 @@ export default function ReportViewer() {
         <GradeRing grade={summary.grade} score={summary.riskScore} />
 
         <div className="flex-1 text-center md:text-left z-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary border border-white/5 text-xs font-medium text-muted-foreground mb-6">
-            <Globe className="w-3.5 h-3.5" /> {report.targetUrl}
+          <div className="flex flex-wrap items-center gap-2 mb-6">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary border border-white/5 text-xs font-medium text-muted-foreground">
+              <Globe className="w-3.5 h-3.5" /> {report.targetUrl}
+            </div>
+            {(pagesScanned && pagesScanned.length > 0) && (
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-500/10 border border-sky-500/20 text-xs font-medium text-sky-400/80">
+                <Search className="w-3 h-3" />
+                Scanned {pagesScanned.length + 1} page{pagesScanned.length !== 0 ? "s" : ""}
+              </div>
+            )}
           </div>
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">Security Report</h1>
           <p className="text-lg text-muted-foreground/80 leading-relaxed max-w-2xl">
@@ -1314,6 +1399,9 @@ export default function ReportViewer() {
 
           {/* Software Inventory */}
           <SoftwareInventoryCard technologies={technologies ?? []} vulnerabilities={vulnerabilities} />
+
+          {/* Pages Scanned */}
+          <PagesScannedCard rootUrl={report.targetUrl} pagesScanned={pagesScanned ?? []} />
 
           {/* Tech Profile */}
           <div className="glass-card rounded-2xl p-6">
