@@ -165,6 +165,20 @@ function VulnCard({ vuln, index, needsVerification }: { vuln: Vulnerability; ind
   const [expanded, setExpanded] = useState(false);
   const meta = getCategoryMeta(vuln.category);
 
+  // Extract the affected component for CVE / outdated-software findings.
+  // Hoisted here so both the header chip and the expanded detail share the same value.
+  const isCveCategory =
+    vuln.category === "Outdated Software / Known CVE" ||
+    vuln.category === "Outdated Software";
+  const rawComponent = isCveCategory
+    ? (/^(.+?)\s+—/.exec(vuln.name)?.[1] ??
+       /^Detected:\s+(.+)$/m.exec(vuln.evidence ?? "")?.[1] ??
+       null)
+    : null;
+  const { name: compName, version: compVersion } = rawComponent
+    ? parseTechVersion(rawComponent)
+    : { name: null, version: null };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -180,7 +194,15 @@ function VulnCard({ vuln, index, needsVerification }: { vuln: Vulnerability; ind
           <span className={cn("px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider shrink-0 border", getSeverityColors(vuln.severity))}>
             {vuln.severity}
           </span>
-          <h4 className="text-base font-bold text-foreground leading-snug">{vuln.name}</h4>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 min-w-0">
+            <h4 className="text-base font-bold text-foreground leading-snug">{vuln.name}</h4>
+            {compName && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-yellow-500/10 border border-yellow-500/20 rounded text-[10px] font-mono leading-none text-yellow-400/80 shrink-0 self-start sm:self-auto">
+                <Package className="w-2.5 h-2.5" />
+                {compName}{compVersion ? `@${compVersion}` : ""}
+              </span>
+            )}
+          </div>
         </div>
         <div className={cn("hidden md:flex items-center gap-1.5 text-xs font-medium shrink-0 ml-4", meta.color)}>
           {meta.icon}
@@ -207,29 +229,20 @@ function VulnCard({ vuln, index, needsVerification }: { vuln: Vulnerability; ind
                 </div>
               )}
               {/* Detected component badge for CVE/outdated-software findings */}
-              {(vuln.category === "Outdated Software / Known CVE" || vuln.category === "Outdated Software") && (() => {
-                // Primary: parse "Name Version — ..." pattern from vuln name
-                const nameMatch = /^(.+?)\s+—/.exec(vuln.name);
-                // Fallback: parse "Detected: Name Version\n..." from structured evidence
-                const evidenceMatch = /^Detected:\s+(.+)$/m.exec(vuln.evidence ?? "");
-                const component = nameMatch?.[1] ?? evidenceMatch?.[1] ?? null;
-                if (!component) return null;
-                const { name: compName, version: compVersion } = parseTechVersion(component);
-                return (
-                  <div className="mt-4 flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground font-medium">Detected component:</span>
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-secondary rounded-md border border-white/10 text-xs font-mono">
-                      <Package className="w-3 h-3 text-yellow-400 shrink-0" />
-                      <span className="font-medium text-foreground/90">{compName}</span>
-                      {compVersion && (
-                        <span className="px-1.5 py-0.5 bg-yellow-500/15 text-yellow-400 text-[10px] rounded border border-yellow-500/20 leading-none font-mono">
-                          {compVersion}
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                );
-              })()}
+              {compName && (
+                <div className="mt-4 flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground font-medium">Detected component:</span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-secondary rounded-md border border-white/10 text-xs font-mono">
+                    <Package className="w-3 h-3 text-yellow-400 shrink-0" />
+                    <span className="font-medium text-foreground/90">{compName}</span>
+                    {compVersion && (
+                      <span className="px-1.5 py-0.5 bg-yellow-500/15 text-yellow-400 text-[10px] rounded border border-yellow-500/20 leading-none font-mono">
+                        {compVersion}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-5">
                 <div className="flex flex-col gap-4">
