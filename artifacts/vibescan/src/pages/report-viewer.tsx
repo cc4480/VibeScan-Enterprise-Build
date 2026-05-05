@@ -159,9 +159,33 @@ function GradeRing({ grade, score }: { grade: string; score: number }) {
   );
 }
 
+// ─── Inner-page source extractor ─────────────────────────────────────────────
+
+/**
+ * Tries to extract a non-root path from a finding's evidence field.
+ * Crawler findings for inner pages embed the fetched URL in the first
+ * "GET https://..." line of the evidence string.
+ * Returns the pathname (e.g. "/api/v1") when it's not the root, otherwise null.
+ */
+function extractInnerPageSource(evidence: string | null | undefined, rootUrl: string): string | null {
+  if (!evidence) return null;
+  const getMatch = /^GET\s+(https?:\/\/\S+)/m.exec(evidence);
+  if (!getMatch) return null;
+  try {
+    const url = new URL(getMatch[1]);
+    const root = new URL(rootUrl);
+    if (url.hostname !== root.hostname) return null;
+    const path = url.pathname;
+    if (!path || path === "/" || path === root.pathname) return null;
+    return path;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Vuln card ────────────────────────────────────────────────────────────────
 
-function VulnCard({ vuln, index, needsVerification }: { vuln: Vulnerability; index: number; needsVerification?: boolean }) {
+function VulnCard({ vuln, index, needsVerification, rootUrl }: { vuln: Vulnerability; index: number; needsVerification?: boolean; rootUrl?: string }) {
   const [expanded, setExpanded] = useState(false);
   const meta = getCategoryMeta(vuln.category);
 
@@ -178,6 +202,11 @@ function VulnCard({ vuln, index, needsVerification }: { vuln: Vulnerability; ind
   const { name: compName, version: compVersion } = rawComponent
     ? parseTechVersion(rawComponent)
     : { name: null, version: null };
+
+  // Extract inner-page source path (e.g. "/api/v1") for crawler findings
+  const innerPageSource = rootUrl
+    ? extractInnerPageSource(vuln.evidence, rootUrl)
+    : null;
 
   return (
     <motion.div
@@ -200,6 +229,12 @@ function VulnCard({ vuln, index, needsVerification }: { vuln: Vulnerability; ind
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-yellow-500/10 border border-yellow-500/20 rounded text-[10px] font-mono leading-none text-yellow-400/80 shrink-0 self-start sm:self-auto">
                 <Package className="w-2.5 h-2.5" />
                 {compName}{compVersion ? `@${compVersion}` : ""}
+              </span>
+            )}
+            {innerPageSource && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-sky-500/10 border border-sky-500/20 rounded text-[10px] font-mono leading-none text-sky-400/70 shrink-0 self-start sm:self-auto" title={`Found on inner page: ${innerPageSource}`}>
+                <Globe className="w-2.5 h-2.5" />
+                {innerPageSource}
               </span>
             )}
           </div>
@@ -1122,10 +1157,10 @@ export default function ReportViewer() {
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary border border-white/5 text-xs font-medium text-muted-foreground">
               <Globe className="w-3.5 h-3.5" /> {report.targetUrl}
             </div>
-            {(pagesScanned && pagesScanned.length > 0) && (
+            {pagesScanned != null && (
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-500/10 border border-sky-500/20 text-xs font-medium text-sky-400/80">
                 <Search className="w-3 h-3" />
-                Scanned {pagesScanned.length + 1} page{pagesScanned.length !== 0 ? "s" : ""}
+                Scanned {pagesScanned.length + 1} page{pagesScanned.length + 1 !== 1 ? "s" : ""}
               </div>
             )}
           </div>
@@ -1259,7 +1294,7 @@ export default function ReportViewer() {
               </div>
               <AnimatePresence mode="popLayout">
                 {confirmedVulns.map((v, i) => (
-                  <VulnCard key={v.id} vuln={v} index={i} />
+                  <VulnCard key={v.id} vuln={v} index={i} rootUrl={report.targetUrl} />
                 ))}
               </AnimatePresence>
             </div>
@@ -1278,7 +1313,7 @@ export default function ReportViewer() {
               </div>
               <AnimatePresence mode="popLayout">
                 {unverifiedVulns.map((v, i) => (
-                  <VulnCard key={v.id} vuln={v} index={i} needsVerification />
+                  <VulnCard key={v.id} vuln={v} index={i} needsVerification rootUrl={report.targetUrl} />
                 ))}
               </AnimatePresence>
             </div>
