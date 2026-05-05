@@ -5,7 +5,7 @@ import {
   Lock, Activity, Share2, Plus, Mail, GitBranch, KeyRound, Database,
   Terminal, ExternalLink, Package, RefreshCw, Eye, Code2, Wifi,
   AlertTriangle, Monitor, Info, Settings, Network, EyeOff, Filter, X,
-  ArrowUpDown, HelpCircle, Download, Copy, Check, Bell,
+  ArrowUpDown, HelpCircle, Download, Copy, Check, Bell, ChevronDown,
 } from "lucide-react";
 import { cn, formatSeverity, getSeverityColors, getGradeColor } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -106,6 +106,20 @@ function getVerificationNote(category: string): string {
   );
 }
 
+// ─── Tech version parsing ─────────────────────────────────────────────────────
+// Technologies are stored as "jQuery 1.11.3" or "Nginx 1.18.0".
+// Split on the last whitespace-separated token that starts with a digit.
+
+function parseTechVersion(tech: string): { name: string; version: string | null } {
+  // Space-separated: "jQuery 1.11.3" or "Nginx 1.18.0" (canonical scanner output)
+  const spaceMatch = /^(.+?)\s+(\d[\w.\-]*)$/.exec(tech);
+  if (spaceMatch) return { name: spaceMatch[1], version: spaceMatch[2] };
+  // Slash-separated: "nginx/1.18.0" (raw header values surfaced directly)
+  const slashMatch = /^(.+?)\/(\d[\w.\-]*)$/.exec(tech);
+  if (slashMatch) return { name: slashMatch[1], version: slashMatch[2] };
+  return { name: tech, version: null };
+}
+
 // ─── Severity sort order ──────────────────────────────────────────────────────
 
 const SEVERITY_ORDER: Record<string, number> = {
@@ -192,6 +206,31 @@ function VulnCard({ vuln, index, needsVerification }: { vuln: Vulnerability; ind
                   </div>
                 </div>
               )}
+              {/* Detected component badge for CVE/outdated-software findings */}
+              {(vuln.category === "Outdated Software / Known CVE" || vuln.category === "Outdated Software") && (() => {
+                // Primary: parse "Name Version — ..." pattern from vuln name
+                const nameMatch = /^(.+?)\s+—/.exec(vuln.name);
+                // Fallback: parse "Detected: Name Version\n..." from structured evidence
+                const evidenceMatch = /^Detected:\s+(.+)$/m.exec(vuln.evidence ?? "");
+                const component = nameMatch?.[1] ?? evidenceMatch?.[1] ?? null;
+                if (!component) return null;
+                const { name: compName, version: compVersion } = parseTechVersion(component);
+                return (
+                  <div className="mt-4 flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground font-medium">Detected component:</span>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-secondary rounded-md border border-white/10 text-xs font-mono">
+                      <Package className="w-3 h-3 text-yellow-400 shrink-0" />
+                      <span className="font-medium text-foreground/90">{compName}</span>
+                      {compVersion && (
+                        <span className="px-1.5 py-0.5 bg-yellow-500/15 text-yellow-400 text-[10px] rounded border border-yellow-500/20 leading-none font-mono">
+                          {compVersion}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                );
+              })()}
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-5">
                 <div className="flex flex-col gap-4">
                   <div>
@@ -269,6 +308,95 @@ function VulnCard({ vuln, index, needsVerification }: { vuln: Vulnerability; ind
         )}
       </AnimatePresence>
     </motion.div>
+  );
+}
+
+// ─── Software Inventory card ──────────────────────────────────────────────────
+
+function SoftwareInventoryCard({
+  technologies,
+  vulnerabilities,
+}: {
+  technologies: string[];
+  vulnerabilities: Vulnerability[];
+}) {
+  const [open, setOpen] = useState(false);
+
+  const versionedTechs = useMemo(() => {
+    const seen = new Set<string>();
+    return technologies
+      .map(parseTechVersion)
+      .filter((t) => {
+        if (t.version === null) return false;
+        const key = `${t.name.toLowerCase()}@${t.version.toLowerCase()}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }, [technologies]);
+
+  if (versionedTechs.length === 0) return null;
+
+  // Count CVEs per tech by matching vuln names like "jQuery 1.11.3 — Known Vulnerability ..."
+  // or evidence lines like "Detected: jQuery 1.11.3" as a fallback
+  const cveCountFor = (name: string, version: string) => {
+    const namePrefix = `${name.toLowerCase()} ${version.toLowerCase()} \u2014`; // em dash separator
+    const evidenceTag = `detected: ${name.toLowerCase()} ${version.toLowerCase()}`;
+    return vulnerabilities.filter((v) =>
+      v.name.toLowerCase().startsWith(namePrefix) ||
+      (v.evidence?.toLowerCase().includes(evidenceTag) ?? false)
+    ).length;
+  };
+
+  return (
+    <div className="glass-card rounded-2xl overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between p-5 hover:bg-white/[0.02] transition-colors"
+      >
+        <h3 className="text-sm font-bold flex items-center gap-2">
+          <Package className="w-4 h-4 text-yellow-400" />
+          Software Inventory
+          <span className="px-1.5 py-0.5 bg-secondary text-xs rounded-full text-muted-foreground">{versionedTechs.length}</span>
+        </h3>
+        <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="px-5 pb-5 space-y-2 border-t border-white/5 pt-3">
+              <p className="text-xs text-muted-foreground mb-3">Versioned components found during the scan that were checked for known CVEs.</p>
+              {versionedTechs.map((t, i) => {
+                const cveCount = cveCountFor(t.name, t.version!);
+                return (
+                  <div key={i} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-foreground/90">{t.name}</span>
+                      <span className="px-1.5 py-0.5 bg-yellow-500/15 text-yellow-400 text-[10px] font-mono rounded border border-yellow-500/20 leading-none">
+                        {t.version}
+                      </span>
+                    </div>
+                    {cveCount > 0 ? (
+                      <span className="flex items-center gap-1 text-xs font-semibold text-red-400 bg-red-950/50 px-2 py-0.5 rounded-full border border-red-500/20">
+                        <AlertTriangle className="w-3 h-3" /> {cveCount} CVE{cveCount !== 1 ? "s" : ""}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">No CVEs found</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -1109,6 +1237,9 @@ export default function ReportViewer() {
             </div>
           )}
 
+          {/* Software Inventory */}
+          <SoftwareInventoryCard technologies={technologies ?? []} vulnerabilities={vulnerabilities} />
+
           {/* Tech Profile */}
           <div className="glass-card rounded-2xl p-6">
             <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
@@ -1131,9 +1262,19 @@ export default function ReportViewer() {
               <div>
                 <span className="text-sm text-muted-foreground mb-3 block">Detected Technologies</span>
                 <div className="flex flex-wrap gap-2">
-                  {technologies.map((t, i) => (
-                    <span key={i} className="px-2.5 py-1 bg-secondary text-xs rounded-md border border-white/5">{t}</span>
-                  ))}
+                  {technologies.map((t, i) => {
+                    const { name, version } = parseTechVersion(t);
+                    return (
+                      <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 bg-secondary text-xs rounded-md border border-white/5">
+                        <span>{name}</span>
+                        {version && (
+                          <span className="px-1.5 py-0.5 bg-yellow-500/15 text-yellow-400 text-[10px] font-mono rounded border border-yellow-500/20 leading-none">
+                            {version}
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })}
                   {technologies.length === 0 && <span className="text-xs text-muted-foreground">None detected</span>}
                 </div>
               </div>
