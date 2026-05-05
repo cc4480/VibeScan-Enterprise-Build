@@ -422,7 +422,7 @@ export function warnIfLocalDataStale(): void {
   const ageMs = Date.now() - updatedMs;
   const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
 
-  if (ageDays >= LOCAL_DATA_STALE_DAYS) {
+  if (ageDays > LOCAL_DATA_STALE_DAYS) {
     logger.warn(
       {
         localVulnDataUpdated: LOCAL_VULN_DATA_UPDATED,
@@ -435,7 +435,7 @@ export function warnIfLocalDataStale(): void {
       `against current vendor advisories, then bump LOCAL_VULN_DATA_UPDATED to today's date.`,
     );
   } else {
-    logger.info(
+    logger.debug(
       { localVulnDataUpdated: LOCAL_VULN_DATA_UPDATED, ageDays },
       "[cveCheck] Local CVE/EOL data freshness OK",
     );
