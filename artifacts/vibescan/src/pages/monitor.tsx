@@ -245,8 +245,12 @@ function AddSubscriptionForm({ onSuccess }: { onSuccess: () => void }) {
     setError(null);
     setLoading(true);
     try {
-      await createMonitorSubscription(url.trim());
-      toast({ title: "Monitoring activated", description: `Initial scan queued for ${url}` });
+      const result = await createMonitorSubscription(url.trim());
+      if (result.initialScanId) {
+        toast({ title: "Monitoring activated", description: `Baseline scan queued for ${url.trim()} — results will appear shortly.` });
+      } else {
+        toast({ title: "Monitoring activated", description: `Using your most recent scan results. Next automated rescan in ~7 days.` });
+      }
       onSuccess();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to create subscription";

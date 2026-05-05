@@ -1,10 +1,27 @@
 import { Router, type IRouter } from "express";
 import { db, monitorSubscriptionsTable, cveAlertsTable, reportsTable } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, count } from "drizzle-orm";
 import { z } from "zod";
 import { enqueueScan } from "../lib/queue";
 import { scansTable } from "@workspace/db";
 import { logger } from "../lib/logger";
+
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Fetch the most recent completed report for a user+URL pair. */
+async function fetchLatestReport(userId: string, targetUrl: string) {
+  const [report] = await db
+    .select({
+      id: reportsTable.id,
+      scannedAt: reportsTable.scannedAt,
+      data: reportsTable.data,
+    })
+    .from(reportsTable)
+    .where(and(eq(reportsTable.userId, userId), eq(reportsTable.targetUrl, targetUrl)))
+    .orderBy(desc(reportsTable.scannedAt))
+    .limit(1);
+  return report ?? null;
+}
 
 const router: IRouter = Router();
 
@@ -57,6 +74,12 @@ router.post("/monitor/subscriptions", async (req, res): Promise<void> => {
   const expiresAt = new Date(now);
   expiresAt.setFullYear(expiresAt.getFullYear() + 1);
 
+  // Seed from the most recent existing report for this URL so the card
+  // immediately shows the last grade/scan date instead of "Never".
+  const existingReport = await fetchLatestReport(req.user.id, targetUrl);
+  const seedReportId = existingReport?.id ?? null;
+  const seedScanAt = existingReport?.scannedAt ?? null;
+
   const [sub] = await db
     .insert(monitorSubscriptionsTable)
     .values({
@@ -65,10 +88,27 @@ router.post("/monitor/subscriptions", async (req, res): Promise<void> => {
       targetUrl,
       status: "active",
       expiresAt,
+      lastReportId: seedReportId,
+      lastScanAt: seedScanAt,
     })
     .returning();
 
-  // Immediately trigger an initial deep scan so the user has a baseline
+  // Only enqueue a new scan if there is no recent report (> 7 days old counts as stale).
+  const reportAge = existingReport
+    ? now.getTime() - new Date(existingReport.scannedAt).getTime()
+    : Infinity;
+  const needsInitialScan = reportAge > SEVEN_DAYS_MS;
+
+  if (!needsInitialScan) {
+    logger.info(
+      { subscriptionId: sub.id, existingReportId: seedReportId },
+      "Recent report found — skipping initial scan",
+    );
+    res.status(201).json({ subscription: sub, initialScanId: null });
+    return;
+  }
+
+  // No recent report — trigger a baseline deep scan.
   try {
     const [scan] = await db
       .insert(scansTable)
@@ -121,37 +161,61 @@ router.get("/monitor/subscriptions", async (req, res): Promise<void> => {
     .where(eq(monitorSubscriptionsTable.userId, req.user.id))
     .orderBy(desc(monitorSubscriptionsTable.createdAt));
 
-  // Attach latest report info to each subscription
+  // Attach latest report info and alert count to each subscription
   const enriched = await Promise.all(
     subs.map(async (sub) => {
-      let lastReport: { id: string; grade: string | null; riskScore: number | null } | null = null;
+      // Resolve the report: prefer lastReportId, fall back to most-recent report for the URL
+      let resolvedReport: { id: string; scannedAt: Date; data: unknown } | null = null;
 
       if (sub.lastReportId) {
-        const [report] = await db
-          .select({ id: reportsTable.id, data: reportsTable.data })
+        const [r] = await db
+          .select({ id: reportsTable.id, scannedAt: reportsTable.scannedAt, data: reportsTable.data })
           .from(reportsTable)
           .where(eq(reportsTable.id, sub.lastReportId));
+        resolvedReport = r ?? null;
+      }
 
-        if (report) {
-          const data = report.data as { summary?: { grade?: string; riskScore?: number } };
-          lastReport = {
-            id: report.id,
-            grade: data.summary?.grade ?? null,
-            riskScore: data.summary?.riskScore ?? null,
-          };
+      // Fallback: look up the most recent report for this user+URL
+      if (!resolvedReport) {
+        resolvedReport = await fetchLatestReport(sub.userId, sub.targetUrl);
+        // If we found one via fallback, backfill the subscription row so future
+        // calls use the fast path.
+        if (resolvedReport) {
+          await db
+            .update(monitorSubscriptionsTable)
+            .set({
+              lastReportId: resolvedReport.id,
+              lastScanAt: resolvedReport.scannedAt,
+            })
+            .where(eq(monitorSubscriptionsTable.id, sub.id));
         }
       }
 
-      // Count pending alerts
-      const alerts = await db
-        .select()
+      let lastReport: { id: string; grade: string | null; riskScore: number | null } | null = null;
+      if (resolvedReport) {
+        const data = resolvedReport.data as { summary?: { grade?: string; riskScore?: number } };
+        lastReport = {
+          id: resolvedReport.id,
+          grade: data.summary?.grade ?? null,
+          riskScore: data.summary?.riskScore ?? null,
+        };
+      }
+
+      // Count CVE alerts
+      const [{ value: alertCount }] = await db
+        .select({ value: count() })
         .from(cveAlertsTable)
         .where(eq(cveAlertsTable.subscriptionId, sub.id));
 
+      // Use the resolved scanAt so the card shows the correct date even before
+      // the subscription row was backfilled.
+      const lastScanAt = sub.lastScanAt ?? resolvedReport?.scannedAt ?? null;
+
       return {
         ...sub,
+        lastScanAt,
         lastReport,
-        alertCount: alerts.length,
+        alertCount,
       };
     }),
   );
