@@ -261,56 +261,90 @@ function buildEolCycleSet(cycles: EolCycle[]): Set<string> {
  * Fetches current EOL data for PHP, Nginx, and Apache from endoflife.date,
  * updates the in-memory cache, and persists the result to the DB.
  *
+ * Uses Promise.allSettled so that a single provider failure is non-fatal:
+ * the successfully fetched products still update the cache, while failed
+ * products retain their last known-good (DB-loaded or bundled) values.
+ *
  * Called:
  *   - At startup (non-blocking void call from worker.ts, after DB load)
  *   - Daily via pg-boss schedule (EOL_REFRESH_QUEUE)
  *
- * On fetch failure: cache is NOT updated; last DB-loaded or bundled data stays active.
- * On DB write failure: cache IS updated (current process has fresh data) but the
- *   next restart may load stale data — logged at WARN level.
+ * On all-product failure: cache not updated; DB-loaded or bundled data stays.
+ * On DB write failure: in-memory cache IS updated; WARN logged.
  */
 export async function refreshEolData(): Promise<void> {
   const log = logger.child({ job: EOL_REFRESH_QUEUE });
   log.info("[eolFetcher] Fetching EOL data from endoflife.date");
 
-  try {
-    const [phpCycles, nginxCycles, apacheCycles] = await Promise.all([
-      fetchEolCycles("php"),
-      fetchEolCycles("nginx"),
-      fetchEolCycles("apache"),
-    ]);
+  const [phpResult, nginxResult, apacheResult] = await Promise.allSettled([
+    fetchEolCycles("php"),
+    fetchEolCycles("nginx"),
+    fetchEolCycles("apache"),
+  ]);
 
-    const phpEol = buildPhpEolMap(phpCycles);
-    const nginxEolCycles = buildEolCycleSet(nginxCycles);
-    const apacheEolCycles = buildEolCycleSet(apacheCycles);
-    const fetchedAt = new Date();
+  const failed = (
+    [
+      phpResult.status === "rejected" ? "php" : null,
+      nginxResult.status === "rejected" ? "nginx" : null,
+      apacheResult.status === "rejected" ? "apache" : null,
+    ] as (string | null)[]
+  ).filter((p): p is string => p !== null);
 
-    cache = { phpEol, nginxEolCycles, apacheEolCycles, fetchedAt };
-
-    log.info(
-      {
-        phpEolEntries: Object.keys(phpEol).length,
-        nginxEolCycles: nginxEolCycles.size,
-        apacheEolCycles: apacheEolCycles.size,
-        fetchedAt: fetchedAt.toISOString(),
-      },
-      "[eolFetcher] EOL data refreshed successfully — persisting to DB",
-    );
-
-    // Persist to DB — non-fatal if it fails (in-memory cache is already updated)
-    try {
-      await saveEolCacheToDb(cache);
-      log.info("[eolFetcher] EOL data persisted to DB");
-    } catch (dbErr) {
-      log.warn(
-        { err: dbErr },
-        "[eolFetcher] EOL data refresh succeeded but DB persist failed — restart may load stale data",
-      );
-    }
-  } catch (err) {
+  if (failed.length === 3) {
+    // All products failed — do not update cache at all
     log.warn(
-      { err },
-      "[eolFetcher] EOL data refresh failed — last persisted / bundled fallback data remains active",
+      { failed, errors: [phpResult, nginxResult, apacheResult].map((r) => r.status === "rejected" ? String(r.reason) : null) },
+      "[eolFetcher] All product fetches failed — last persisted / bundled fallback data remains active",
+    );
+    return;
+  }
+
+  if (failed.length > 0) {
+    log.warn(
+      { failed },
+      `[eolFetcher] Partial fetch — ${failed.join(", ")} failed; succeeded products will update cache`,
+    );
+  }
+
+  // For failed products, fall back to the last cached or bundled values
+  const phpEol =
+    phpResult.status === "fulfilled"
+      ? buildPhpEolMap(phpResult.value)
+      : (cache?.phpEol ?? FALLBACK_PHP_EOL);
+
+  const nginxEolCycles =
+    nginxResult.status === "fulfilled"
+      ? buildEolCycleSet(nginxResult.value)
+      : (cache?.nginxEolCycles ?? FALLBACK_NGINX_EOL_CYCLES);
+
+  const apacheEolCycles =
+    apacheResult.status === "fulfilled"
+      ? buildEolCycleSet(apacheResult.value)
+      : (cache?.apacheEolCycles ?? FALLBACK_APACHE_EOL_CYCLES);
+
+  const fetchedAt = new Date();
+  cache = { phpEol, nginxEolCycles, apacheEolCycles, fetchedAt };
+
+  log.info(
+    {
+      phpEolEntries: Object.keys(phpEol).length,
+      nginxEolCycles: nginxEolCycles.size,
+      apacheEolCycles: apacheEolCycles.size,
+      partialRefresh: failed.length > 0,
+      failed: failed.length > 0 ? failed : undefined,
+      fetchedAt: fetchedAt.toISOString(),
+    },
+    "[eolFetcher] EOL data refreshed — persisting to DB",
+  );
+
+  // Persist to DB — non-fatal if it fails (in-memory cache is already updated)
+  try {
+    await saveEolCacheToDb(cache);
+    log.info("[eolFetcher] EOL data persisted to DB");
+  } catch (dbErr) {
+    log.warn(
+      { err: dbErr },
+      "[eolFetcher] DB persist failed — restart may load stale data",
     );
   }
 }

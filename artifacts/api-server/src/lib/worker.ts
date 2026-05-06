@@ -296,7 +296,12 @@ export async function startWorker(): Promise<void> {
     "[cveCheck] OSV cache initialised",
   );
 
-  // Check freshness of bundled local CVE / EOL data at startup
+  // Hydrate EOL cache from the last DB-persisted fetch BEFORE the staleness check
+  // so that warnIfLocalDataStale() uses the live fetchedAt timestamp, not the
+  // bundled LOCAL_VULN_DATA_UPDATED date, when persisted data is available.
+  await loadEolCacheFromDb();
+
+  // Check freshness — uses live DB timestamp when available, bundled date otherwise
   warnIfLocalDataStale();
 
   const boss = await getBoss();
@@ -333,11 +338,6 @@ export async function startWorker(): Promise<void> {
     { queue: EOL_REFRESH_QUEUE, cron: "0 3 * * *" },
     "EOL refresh schedule registered (daily 03:00 UTC)",
   );
-
-  // Hydrate EOL cache from the last DB-persisted fetch before accepting any scans.
-  // This is synchronous so that live data is available immediately after startup
-  // without waiting for a network fetch to endoflife.date to complete.
-  await loadEolCacheFromDb();
 
   // Kick off a fresh fetch in the background to update the in-memory cache and DB.
   // Failures are logged at WARN; the DB-loaded or bundled fallback data stays active.
