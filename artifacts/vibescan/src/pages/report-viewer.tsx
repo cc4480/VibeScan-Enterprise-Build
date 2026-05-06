@@ -575,6 +575,51 @@ function ReconCard({ recon }: { recon: ReconData }) {
   );
 }
 
+// ─── Agent Fix Prompt card ────────────────────────────────────────────────────
+
+function AgentFixPromptCard({ prompt }: { prompt: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    void navigator.clipboard.writeText(prompt).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [prompt]);
+
+  return (
+    <div className="glass-card rounded-2xl p-6 border-t-4 border-t-violet-500">
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <h3 className="text-lg font-bold flex items-center gap-2">
+          <Terminal className="w-5 h-5 text-violet-400" />
+          Fix with your AI agent
+        </h3>
+        <button
+          onClick={handleCopy}
+          className={cn(
+            "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200",
+            copied
+              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+              : "bg-violet-500/20 text-violet-300 border border-violet-500/30 hover:bg-violet-500/30",
+          )}
+        >
+          {copied ? (
+            <><Check className="w-4 h-4" /> Copied!</>
+          ) : (
+            <><Copy className="w-4 h-4" /> Copy prompt</>
+          )}
+        </button>
+      </div>
+      <p className="text-xs text-muted-foreground mb-3">
+        Paste this prompt into Cursor, Claude, GitHub Copilot, or any coding agent to get all findings fixed at once.
+      </p>
+      <div className="bg-background border border-white/10 rounded-lg p-4 max-h-64 overflow-y-auto">
+        <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed">{prompt}</pre>
+      </div>
+    </div>
+  );
+}
+
 // ─── Pages Scanned card ───────────────────────────────────────────────────────
 
 function PagesScannedCard({
@@ -1857,6 +1902,11 @@ export default function ReportViewer() {
                 )}
               </div>
             </div>
+          )}
+
+          {/* Fix with your AI agent */}
+          {aiAnalysis?.agentFixPrompt && (
+            <AgentFixPromptCard prompt={aiAnalysis.agentFixPrompt} />
           )}
 
           {/* Software Inventory */}

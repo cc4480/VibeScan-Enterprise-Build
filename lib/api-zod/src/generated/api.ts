@@ -252,6 +252,7 @@ export const GetReportResponse = zod.object({
         topPriorities: zod.array(zod.string()),
         quickWins: zod.array(zod.string()),
         complianceNotes: zod.string().nullish(),
+        agentFixPrompt: zod.string().optional(),
       })
       .optional(),
     recon: zod

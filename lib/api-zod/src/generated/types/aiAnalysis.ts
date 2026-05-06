@@ -12,4 +12,5 @@ export interface AiAnalysis {
   quickWins: string[];
   /** @nullable */
   complianceNotes?: string | null;
+  agentFixPrompt?: string;
 }
