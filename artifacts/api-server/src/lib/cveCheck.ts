@@ -16,6 +16,12 @@
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 import { logger } from "./logger";
+import {
+  getLivePhpEol,
+  getLiveNginxEolCycles,
+  getLiveApacheEolCycles,
+  getEolDataFetchedAt,
+} from "./eolFetcher";
 
 const OSV_TIMEOUT_MS = 8_000;
 const OSV_ENDPOINT = "https://api.osv.dev/v1/query";
@@ -474,26 +480,34 @@ const LOCAL_DATA_STALE_DAYS = 90;
  * current vendor advisories and EOL schedules.
  */
 export function warnIfLocalDataStale(): void {
-  const updatedMs = new Date(LOCAL_VULN_DATA_UPDATED).getTime();
-  const ageMs = Date.now() - updatedMs;
-  const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+  // Prefer the live EOL refresh timestamp (updated by eolFetcher.ts after each
+  // successful daily fetch) over the static bundled date.  At initial startup
+  // the live timestamp is null and we fall back to the bundled date.
+  const liveDate = getEolDataFetchedAt();
+  const bundledDate = new Date(LOCAL_VULN_DATA_UPDATED);
+  const effectiveDate = liveDate && liveDate > bundledDate ? liveDate : bundledDate;
+  const source = liveDate && liveDate > bundledDate ? "live EOL refresh" : "bundled tables";
+  const ageDays = Math.floor((Date.now() - effectiveDate.getTime()) / (1000 * 60 * 60 * 24));
 
   if (ageDays > LOCAL_DATA_STALE_DAYS) {
     logger.warn(
       {
-        localVulnDataUpdated: LOCAL_VULN_DATA_UPDATED,
+        effectiveDate: effectiveDate.toISOString(),
+        source,
         ageDays,
         staleThresholdDays: LOCAL_DATA_STALE_DAYS,
-        action: "Review and update LOCAL_VULN_DATA_UPDATED and the local vuln tables in cveCheck.ts",
+        action: liveDate
+          ? "Check EOL refresh schedule — daily pg-boss job may be failing"
+          : "Review and update LOCAL_VULN_DATA_UPDATED and the local vuln tables in cveCheck.ts",
       },
-      `[cveCheck] Local CVE/EOL data is ${ageDays} days old (threshold: ${LOCAL_DATA_STALE_DAYS} days). ` +
-      `Review PHP_EOL, NGINX_VULN_RANGES, APACHE_VULN_RANGES, and IIS_EOL_MAJOR in cveCheck.ts ` +
-      `against current vendor advisories, then bump LOCAL_VULN_DATA_UPDATED to today's date.`,
+      `[cveCheck] CVE/EOL data is ${ageDays} days old (threshold: ${LOCAL_DATA_STALE_DAYS} days). ` +
+      `Source: ${source}. IIS_EOL_MAJOR and NGINX_VULN_RANGES / APACHE_VULN_RANGES CVE entries ` +
+      `still require manual review — check current vendor advisories.`,
     );
   } else {
     logger.debug(
-      { localVulnDataUpdated: LOCAL_VULN_DATA_UPDATED, ageDays },
-      "[cveCheck] Local CVE/EOL data freshness OK",
+      { effectiveDate: effectiveDate.toISOString(), source, ageDays },
+      "[cveCheck] CVE/EOL data freshness OK",
     );
   }
 }
@@ -546,7 +560,8 @@ function checkLocalVulns(detected: DetectedVersion[]): ScanVulnerability[] {
     if (d.packageName === "php") {
       const major = d.version.split(".").slice(0, 1).join(".");
       const majorMinor = d.version.split(".").slice(0, 2).join(".");
-      const eolMsg = PHP_EOL[majorMinor] || PHP_EOL[major];
+      const phpEol = getLivePhpEol();
+      const eolMsg = phpEol[majorMinor] || phpEol[major];
       if (eolMsg) {
         findings.push(vuln({
           name: `PHP ${d.version} is End-of-Life`,
@@ -562,6 +577,7 @@ function checkLocalVulns(detected: DetectedVersion[]): ScanVulnerability[] {
     }
 
     if (d.packageName === "nginx") {
+      let nginxCveFlagged = false;
       for (const vuln_entry of NGINX_VULN_RANGES) {
         if (semverLt(d.version, vuln_entry.lt)) {
           findings.push(vuln({
@@ -574,12 +590,38 @@ function checkLocalVulns(detected: DetectedVersion[]): ScanVulnerability[] {
             cweId: "CWE-1104",
             cvssScore: vuln_entry.cvss,
           }));
+          nginxCveFlagged = true;
           break; // report worst one only
+        }
+      }
+      // Supplement: if no CVE-specific finding was raised, check live EOL cycle data.
+      // This catches versions in EOL cycles not covered by the hardcoded CVE ranges
+      // (e.g. Nginx 1.24.x — EOL but newer than any hardcoded CVE threshold).
+      if (!nginxCveFlagged) {
+        const nginxCycle = d.version.split(".").slice(0, 2).join(".");
+        if (getLiveNginxEolCycles().has(nginxCycle)) {
+          findings.push(vuln({
+            name: `Nginx ${d.version} — End-of-Life Release Cycle`,
+            severity: "medium",
+            category: "Outdated Software",
+            description:
+              `Nginx ${d.version} belongs to the ${nginxCycle}.x release cycle, which has reached ` +
+              `end-of-life and no longer receives security patches from the Nginx team. ` +
+              `Running an unsupported Nginx version means future CVEs will not be fixed for your release.`,
+            evidence: `Server: nginx/${d.version}`,
+            solution:
+              `Upgrade to the current Nginx stable release. ` +
+              `On Debian/Ubuntu: apt upgrade nginx. On RHEL/CentOS: yum update nginx. ` +
+              `See https://nginx.org/en/download.html for the latest stable version.`,
+            cweId: "CWE-1104",
+            cvssScore: 6.5,
+          }));
         }
       }
     }
 
     if (d.packageName === "apache") {
+      let apacheCveFlagged = false;
       for (const vuln_entry of APACHE_VULN_RANGES) {
         if (semverLt(d.version, vuln_entry.lt)) {
           findings.push(vuln({
@@ -593,7 +635,32 @@ function checkLocalVulns(detected: DetectedVersion[]): ScanVulnerability[] {
             cvssScore: vuln_entry.cvss,
             wstgId: "WSTG-INFO-02",
           }));
+          apacheCveFlagged = true;
           break;
+        }
+      }
+      // Supplement: if no CVE-specific finding was raised, check live EOL cycle data.
+      // This catches EOL Apache branches (e.g. 2.2.x) not covered by CVE thresholds.
+      if (!apacheCveFlagged) {
+        const apacheCycle = d.version.split(".").slice(0, 2).join(".");
+        if (getLiveApacheEolCycles().has(apacheCycle)) {
+          findings.push(vuln({
+            name: `Apache HTTPD ${d.version} — End-of-Life Release Branch`,
+            severity: "medium",
+            category: "Outdated Software",
+            description:
+              `Apache HTTPD ${d.version} belongs to the ${apacheCycle}.x branch, which has reached ` +
+              `end-of-life and no longer receives security patches from the Apache Software Foundation. ` +
+              `Running an unsupported branch means future CVEs will not be addressed for your version.`,
+            evidence: `Server: Apache/${d.version}`,
+            solution:
+              `Upgrade to the current Apache HTTPD stable release. ` +
+              `On Debian/Ubuntu: apt upgrade apache2. On RHEL/CentOS: yum update httpd. ` +
+              `See https://httpd.apache.org/download.cgi for the latest stable version.`,
+            cweId: "CWE-1104",
+            cvssScore: 6.5,
+            wstgId: "WSTG-INFO-02",
+          }));
         }
       }
     }
