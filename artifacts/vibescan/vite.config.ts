@@ -11,7 +11,6 @@ import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 //
 // CSP notes:
 //  - 'unsafe-inline' for scripts is required by Vite's HMR runtime in dev mode.
-//  - fonts.googleapis.com / fonts.gstatic.com cover the Inter font loaded in index.html.
 //  - connect-src includes wss:/ws: for Vite HMR WebSocket and https: for the API server.
 const securityHeaders: Record<string, string> = {
   "X-Frame-Options": "DENY",
@@ -22,8 +21,6 @@ const securityHeaders: Record<string, string> = {
   "Cross-Origin-Resource-Policy": "same-origin",
   "Content-Security-Policy": [
     "default-src 'self'",
-    // 'unsafe-inline' is required by Vite's dev-server HMR runtime.
-    // Fonts are now self-hosted so no external font origins are needed.
     "script-src 'self' 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
@@ -36,27 +33,10 @@ const securityHeaders: Record<string, string> = {
   ].join("; "),
 };
 
-const rawPort = process.env.PORT;
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
-
-const port = Number(rawPort);
-
-if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
-
-const basePath = process.env.BASE_PATH;
-
-if (!basePath) {
-  throw new Error(
-    "BASE_PATH environment variable is required but was not provided.",
-  );
-}
+// PORT and BASE_PATH are injected by the artifact router via artifact.toml [services.env].
+// Defaults match the artifact.toml values so the config also works when run directly.
+const port = Number(process.env.PORT ?? "18425");
+const basePath = process.env.BASE_PATH ?? "/";
 
 export default defineConfig({
   base: basePath,
@@ -99,6 +79,12 @@ export default defineConfig({
       deny: ["**/.*"],
     },
     headers: securityHeaders,
+    proxy: {
+      "/api": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+      },
+    },
   },
   preview: {
     port,
