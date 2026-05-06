@@ -21,5 +21,5 @@ export interface ReportData {
   targetUrl: string;
   aiAnalysis?: AiAnalysis;
   pagesScanned?: string[];
-  pagesAttempted?: string[];
+  probedNotFound?: string[];
 }

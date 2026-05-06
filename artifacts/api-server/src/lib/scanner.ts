@@ -86,8 +86,8 @@ export interface ScanResult {
   rawHeaders: Record<string, string>;
   /** URLs of inner pages actually fetched during the deep crawl (excludes the root URL) */
   pagesScanned: string[];
-  /** High-value probe paths that returned HTTP 404 during the crawl (see CrawlResult.pagesAttempted) */
-  pagesAttempted: string[];
+  /** High-value probe paths that returned HTTP 404 during the crawl (see CrawlResult.probedNotFound) */
+  probedNotFound: string[];
 }
 
 const FETCH_TIMEOUT_MS = 20_000;
@@ -745,7 +745,7 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
   // Run crawl separately to capture pagesVisited alongside findings
   const crawlPromise = crawlAndCheck(
     finalUrl, html, rawHeaders, tier === "deep" ? 20 : 0,
-  ).catch(() => ({ vulnerabilities: [], pagesVisited: [], pagesAttempted: [] }));
+  ).catch(() => ({ vulnerabilities: [], pagesVisited: [], probedNotFound: [] }));
 
   const probePromises: Promise<ScanVulnerability[]>[] = [
     runAllProbes(finalUrl, html).catch(() => []),
@@ -791,7 +791,7 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
     requestDurationMs,
     rawHeaders,
     pagesScanned: crawlResult.pagesVisited,
-    pagesAttempted: crawlResult.pagesAttempted,
+    probedNotFound: crawlResult.probedNotFound,
   };
 }
 

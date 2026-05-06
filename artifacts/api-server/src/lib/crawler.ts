@@ -583,7 +583,7 @@ export interface CrawlResult {
    * were redirected off-domain are also excluded; they are not "not found", they
    * were actively blocked or unavailable.
    */
-  pagesAttempted: string[];
+  probedNotFound: string[];
 }
 
 export async function crawlAndCheck(
@@ -599,7 +599,7 @@ export async function crawlAndCheck(
     origin = parsed.origin;
     expectedHostname = parsed.hostname;
   } catch {
-    return { vulnerabilities: [], pagesVisited: [], pagesAttempted: [] };
+    return { vulnerabilities: [], pagesVisited: [], probedNotFound: [] };
   }
 
   // ── URL list construction ────────────────────────────────────────────────
@@ -629,7 +629,7 @@ export async function crawlAndCheck(
 
   // If there's nothing to check at all, bail early
   if (linkedUrls.length === 0 && probedUrls.length === 0) {
-    return { vulnerabilities: [], pagesVisited: [], pagesAttempted: [] };
+    return { vulnerabilities: [], pagesVisited: [], probedNotFound: [] };
   }
 
   const rootSnapshot = snapshotHeaders(rootHeaders);
@@ -719,12 +719,12 @@ export async function crawlAndCheck(
   }
 
   // Process directly-probed high-value paths (also sequential to respect budget).
-  // Track those that returned exactly 404 — "probed but not found" for the report.
-  const pagesAttempted: string[] = [];
+  // Collect those that returned exactly HTTP 404 — "probed but not found" in the report.
+  const probedNotFound: string[] = [];
   for (const url of probedUrls) {
     if (Date.now() + MIN_BUDGET_MS > crawlDeadline) break;
     const status = await processPage(url, "probe");
-    if (status === 404) pagesAttempted.push(url);
+    if (status === 404) probedNotFound.push(url);
   }
 
   // Aggregate header gap findings (one finding per header type covering all affected paths)
@@ -744,6 +744,6 @@ export async function crawlAndCheck(
   return {
     vulnerabilities: [...headerGapFindings, ...dedupedPerPage],
     pagesVisited,
-    pagesAttempted,
+    probedNotFound,
   };
 }

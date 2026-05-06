@@ -545,11 +545,11 @@ function ReconCard({ recon }: { recon: ReconData }) {
 function PagesScannedCard({
   rootUrl,
   pagesScanned,
-  pagesAttempted,
+  probedNotFound,
 }: {
   rootUrl: string;
   pagesScanned: string[];
-  pagesAttempted?: string[];
+  probedNotFound?: string[];
 }) {
   const [open, setOpen] = useState(false);
 
@@ -569,11 +569,11 @@ function PagesScannedCard({
   }, [rootUrl, pagesScanned]);
 
   const notFoundPages = useMemo(() => {
-    return (pagesAttempted ?? []).map((url) => {
+    return (probedNotFound ?? []).map((url) => {
       try { return { label: new URL(url).pathname, url }; }
       catch { return { label: url, url }; }
     });
-  }, [pagesAttempted]);
+  }, [probedNotFound]);
 
   return (
     <div className="glass-card rounded-2xl overflow-hidden">
@@ -1400,7 +1400,7 @@ export default function ReportViewer() {
   }
   if (error || !report || !summary) return <div className="min-h-[80vh] flex items-center justify-center text-red-400">Failed to load report.</div>;
 
-  const { data: { technologies, server, tlsGrade, aiAnalysis, pagesScanned, pagesAttempted, recon } } = report;
+  const { data: { technologies, server, tlsGrade, aiAnalysis, pagesScanned, probedNotFound, recon } } = report;
 
   const severityCounts = {
     critical: summary.critical,
@@ -1816,7 +1816,7 @@ export default function ReportViewer() {
           <SoftwareInventoryCard technologies={technologies ?? []} vulnerabilities={vulnerabilities} />
 
           {/* Pages Scanned */}
-          <PagesScannedCard rootUrl={report.targetUrl} pagesScanned={pagesScanned ?? []} pagesAttempted={pagesAttempted ?? []} />
+          <PagesScannedCard rootUrl={report.targetUrl} pagesScanned={pagesScanned ?? []} probedNotFound={probedNotFound ?? []} />
 
           {/* Reconnaissance */}
           {recon && <ReconCard recon={recon} />}
