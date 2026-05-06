@@ -584,6 +584,8 @@ function AgentFixPromptCard({ prompt }: { prompt: string }) {
     void navigator.clipboard.writeText(prompt).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      // Clipboard API unavailable (insecure context or permission denied) — fail silently
     });
   }, [prompt]);
 
