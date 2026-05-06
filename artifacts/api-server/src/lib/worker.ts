@@ -12,6 +12,7 @@ import { db, scansTable, reportsTable, monitorSubscriptionsTable } from "@worksp
 import { eq, and } from "drizzle-orm";
 import { getBoss, SCAN_QUEUE, type ScanJobData } from "./queue";
 import { runScan, computeRiskScore, computeGrade, type ScanVulnerability } from "./scanner";
+import { runRecon } from "./recon";
 import { warnIfLocalDataStale, OSV_CACHE_MAX_SIZE } from "./cveCheck";
 import { callDeepSeek } from "./deepseek";
 import { checkSslLabs } from "./ssllabs";
@@ -35,11 +36,17 @@ async function processScanJob(job: ScanJob): Promise<void> {
     .where(eq(scansTable.id, scanId));
 
   // ── 2. Run header scan + SSL Labs check in parallel ───────────────────
-  log.info("Running HTTP security scan and SSL Labs check in parallel");
+  log.info("Starting HTTP scan, SSL Labs check, and reconnaissance in parallel");
 
   // SSL Labs is best-effort and can take up to 120 seconds — start it early
   const sslLabsPromise = checkSslLabs(targetUrl).catch((err) => {
     log.warn({ err }, "SSL Labs check failed (non-fatal)");
+    return null;
+  });
+
+  // Recon runs concurrently: DNS enumeration, subdomain brute-force, port scan
+  const reconPromise = runRecon(targetUrl).catch((err) => {
+    log.warn({ err }, "Recon failed (non-fatal)");
     return null;
   });
 
@@ -84,6 +91,25 @@ async function processScanJob(job: ScanJob): Promise<void> {
     }
   } else {
     log.warn("SSL Labs assessment not available — using basic TLS detection");
+  }
+
+  // ── 2b. Merge reconnaissance results ─────────────────────────────────
+  log.info("Waiting for reconnaissance to complete");
+  const reconRunResult = await reconPromise;
+  if (reconRunResult) {
+    // Dangerous-port findings surface as first-class vulnerabilities
+    scanResult.vulnerabilities.push(...reconRunResult.vulns);
+    log.info(
+      {
+        portVulns: reconRunResult.vulns.length,
+        openPorts: reconRunResult.recon.openPorts.length,
+        subdomains: reconRunResult.recon.subdomains.length,
+        dnsRecords: reconRunResult.recon.dnsRecords.length,
+      },
+      "Recon complete — merged into scan result",
+    );
+  } else {
+    log.warn("Recon results unavailable — continuing without reconnaissance data");
   }
 
   // ── 3. Mark as analyzing (AI phase) ──────────────────────────────────
@@ -149,6 +175,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
       grade,
       executiveSummary,
     },
+    recon: reconRunResult?.recon ?? undefined,
     aiAnalysis: aiAnalysis ?? undefined,
   };
 
