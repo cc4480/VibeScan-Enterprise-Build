@@ -86,7 +86,7 @@ export interface ScanResult {
   rawHeaders: Record<string, string>;
   /** URLs of inner pages actually fetched during the deep crawl (excludes the root URL) */
   pagesScanned: string[];
-  /** High-value probe paths that were attempted but returned 404 / failed (not found) */
+  /** High-value probe paths that returned HTTP 404 during the crawl (see CrawlResult.pagesAttempted) */
   pagesAttempted: string[];
 }
 
