@@ -14,7 +14,7 @@ import { getBoss, SCAN_QUEUE, type ScanJobData } from "./queue";
 import { runScan, computeRiskScore, computeGrade, type ScanVulnerability } from "./scanner";
 import { runRecon } from "./recon";
 import { warnIfLocalDataStale, OSV_CACHE_MAX_SIZE } from "./cveCheck";
-import { refreshEolData, EOL_REFRESH_QUEUE } from "./eolFetcher";
+import { refreshEolData, loadEolCacheFromDb, EOL_REFRESH_QUEUE } from "./eolFetcher";
 import { callDeepSeek } from "./deepseek";
 import { checkSslLabs } from "./ssllabs";
 import { sendReportReadyEmail } from "./mailer";
@@ -334,7 +334,12 @@ export async function startWorker(): Promise<void> {
     "EOL refresh schedule registered (daily 03:00 UTC)",
   );
 
-  // Warm the EOL cache immediately at startup — non-blocking.
-  // Failures are logged at WARN and the bundled fallback tables remain active.
+  // Hydrate EOL cache from the last DB-persisted fetch before accepting any scans.
+  // This is synchronous so that live data is available immediately after startup
+  // without waiting for a network fetch to endoflife.date to complete.
+  await loadEolCacheFromDb();
+
+  // Kick off a fresh fetch in the background to update the in-memory cache and DB.
+  // Failures are logged at WARN; the DB-loaded or bundled fallback data stays active.
   void refreshEolData();
 }

@@ -115,3 +115,13 @@ export const insertCveAlertSchema = createInsertSchema(cveAlertsTable).omit({
 });
 export type InsertCveAlert = typeof cveAlertsTable.$inferInsert;
 export type CveAlert = typeof cveAlertsTable.$inferSelect;
+
+/**
+ * Single-row key-value store for persisting EOL data fetched from endoflife.date.
+ * Used by eolFetcher.ts to survive server restarts between daily pg-boss schedule runs.
+ */
+export const eolCacheTable = pgTable("eol_cache", {
+  key: text("key").primaryKey(),
+  payload: jsonb("payload").notNull(),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
+});
