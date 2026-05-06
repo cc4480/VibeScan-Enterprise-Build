@@ -575,6 +575,16 @@ components:
             type: integer
         targetUrl:
           type: string
+        pagesScanned:
+          type: array
+          items:
+            type: string
+          description: URLs of inner pages successfully fetched during the deep crawl (excludes the root URL).
+        probedNotFound:
+          type: array
+          items:
+            type: string
+          description: High-value probe paths that returned HTTP 404. Only explicitly probed paths (HIGH_VALUE_PROBE_PATHS) are included — crawled links that 404'd are excluded.
         aiAnalysis:
           $ref: '#/components/schemas/AiAnalysis'
 
