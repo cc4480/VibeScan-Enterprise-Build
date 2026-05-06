@@ -1,134 +1,73 @@
 # VibeScan
 
-Pay-per-scan black-box penetration testing SaaS for vibe coders. Users paste a URL, choose a tier, pay, and receive a plain-English security report powered by DeepSeek AI.
+A website and vulnerability scanning SaaS that runs black-box security scans and produces plain-English reports powered by DeepSeek AI.
+
+## Run & Operate
+
+| Command | Purpose |
+|---|---|
+| `pnpm --filter @workspace/api-server run dev` | Start API server (port 8080) |
+| `pnpm --filter @workspace/vibescan run dev` | Start frontend (port 18425 via artifact router, 5000 for webview) |
+| `pnpm --filter @workspace/db run db:push` | Push Drizzle schema to DB |
+| `pnpm --filter @workspace/api-server run typecheck` | TypeScript check (API) |
+
+Required env vars (secrets):
+- `DATABASE_URL` — auto-provisioned by Replit PostgreSQL
+- `DEEPSEEK_API_KEY` — AI analysis in Deep scan reports
+- `RESEND_API_KEY` — Email notifications (report ready, CVE alerts)
+- `STRIPE_SECRET_KEY` — Payments (set `DISABLE_PAYMENTS=true` in dev to skip)
 
 ## Stack
 
-- **Monorepo tool**: pnpm workspaces
-- **Node.js version**: 24
-- **Package manager**: pnpm
-- **Frontend**: React + Vite (artifacts/vibescan)
-- **API**: Express 5 (artifacts/api-server)
-- **Auth**: Replit Auth (OIDC/PKCE) — NOT Clerk
-- **Database**: Replit PostgreSQL + Drizzle ORM — NOT Supabase
-- **AI**: DeepSeek AI (model: deepseek-chat, endpoint: https://api.deepseek.com/v1/chat/completions, env: DEEPSEEK_API_KEY) — NOT Claude/Anthropic
-- **Queue**: pg-boss (PostgreSQL-backed job queue) — NOT Redis/BullMQ
-- **Payments**: Stripe (manual keys: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET) — Replit integration was dismissed, use env secrets
-- **Validation**: Zod (zod/v4), drizzle-zod
-- **API codegen**: Orval (from OpenAPI spec)
-- **TypeScript version**: 5.9
+- **Frontend**: React 19 + Vite 7, Tailwind CSS, Wouter (routing), TanStack Query
+- **Backend**: Express 5, TypeScript (ESM), pino logging, pg-boss job queue
+- **Database**: PostgreSQL 16 via Drizzle ORM
+- **Build**: pnpm workspaces monorepo, esbuild for API bundling
+- **Runtime**: Node 24, NixOS (stable-25_05)
 
-## Pricing Tiers
+## Where things live
 
-- Basic Scan: $29 (headers + SSL + tech fingerprint)
-- Deep Scan: $79 (all Basic + deeper analysis + DeepSeek AI report)
-- 5-Scan Pack: $99 credits (5 Deep Scan credits)
-- 20-Scan Pack: $299 credits (20 Deep Scan credits)
-
-## Structure
-
-```text
-vibescan/
-├── artifacts/
-│   ├── api-server/         # Express API server (port 8080)
-│   │   └── src/
-│   │       ├── app.ts          # CORS, raw body, auth middleware, routes
-│   │       ├── routes/         # auth, scans, reports, credits, scan/webhook
-│   │       ├── middlewares/    # authMiddleware.ts
-│   │       └── lib/
-│   │           ├── auth.ts     # OIDC session management
-│   │           ├── stripe.ts   # Stripe client + PRICE_MAP
-│   │           ├── queue.ts    # pg-boss singleton + enqueueScan()
-│   │           ├── scanner.ts  # HTTP security scanner (headers/TLS/CORS/cookies)
-│   │           ├── deepseek.ts # DeepSeek AI client (overallRisk/priorities/quickWins)
-│   │           └── worker.ts   # pg-boss worker: queued→scanning→analyzing→complete
-│   └── vibescan/           # React+Vite frontend (previewPath: /)
-│       └── src/
-│           ├── pages/      # landing, dashboard, scan-form, report-viewer
-│           ├── components/ # layout, protected-route
-│           └── lib/utils.ts
-├── lib/
-│   ├── api-spec/           # OpenAPI spec + Orval codegen config
-│   ├── api-client-react/   # Generated React Query hooks
-│   ├── api-zod/            # Generated Zod schemas from OpenAPI
-│   ├── db/                 # Drizzle ORM schema + DB connection
-│   │   └── src/schema/
-│   │       ├── auth.ts         # users, sessions tables
-│   │       └── vibescan.ts     # scans, reports, credits tables
-│   └── replit-auth-web/    # useAuth() hook for OIDC login/logout
-└── scripts/                # Utility scripts
+```
+artifacts/
+  api-server/      — Express API (src/routes, src/lib, src/middlewares)
+  vibescan/        — React frontend (src/pages, src/components)
+  mockup-sandbox/  — Design component preview server
+lib/
+  api-client-react/ — Generated API client + custom fetch
+  api-zod/          — Shared Zod schemas (source of truth for API contracts)
+  db/               — Drizzle schema + migrations (schema at lib/db/src/schema.ts)
+  replit-auth-web/  — Auth utilities (not used — app uses UUID tokens)
 ```
 
-## Scan Worker Flow
+## Architecture decisions
 
-1. User submits URL + tier → POST /api/scans
-2. If credits available → deduct credit, mark paid, enqueue immediately
-3. If no credits → create Stripe Checkout Session → redirect to Stripe
-4. On `checkout.session.completed` webhook → mark paid, enqueue, mark queued
-5. pg-boss worker picks up job:
-   - `queued → scanning`: fetch target URL, analyze headers/TLS/cookies/CORS
-   - `scanning → analyzing`: call DeepSeek AI (deep/pack tiers only)
-   - `analyzing → complete`: write report to DB, mark scan complete
-   - Any error → `failed` with error message
-6. Dashboard polls `/api/scans/:id/status` every 3s while in-flight
+- **Artifact router handles external routing**: The Replit artifact router (`REPLIT_ARTIFACT_ROUTER`) proxies `/api` to Express (port 8080) and `/` to Vite (port 18425). The `Start application` webview workflow runs Vite on port 5000 for the Replit preview pane.
+- **No login required**: Auth is a UUID token auto-generated in `localStorage` (`vibescan_client_token`). The `authMiddleware` reads it from the `Authorization: Bearer` header.
+- **Graceful degradation**: All three external services (DeepSeek, Resend, Stripe) check for their env var and skip with a warning if not set — the app remains fully functional.
+- **Payments gated**: `DISABLE_PAYMENTS=true` disables Stripe in development. Set to `false` in production after configuring `STRIPE_SECRET_KEY`.
+- **Job queue**: pg-boss runs inside the API server process, handling async scan jobs and the EOL/CVE refresh scheduler.
 
-## Security Checks Implemented
+## Product
 
-- HTTPS / TLS enforcement (Critical if no HTTPS)
-- HTTP Strict Transport Security (HSTS)
-- Content-Security-Policy (including unsafe-inline/unsafe-eval detection)
-- X-Frame-Options / clickjacking protection
-- X-Content-Type-Options: nosniff
-- Referrer-Policy
-- Permissions-Policy / Feature-Policy
-- CORS wildcard origin (Access-Control-Allow-Origin: *)
-- Server version disclosure
-- X-Powered-By technology disclosure
-- Cookie flags: Secure, HttpOnly, SameSite
-- Mixed content detection (HTTP resources on HTTPS pages)
-- Technology fingerprinting (15+ frameworks/servers)
+- **Free tier**: Basic black-box scan (headers, SSL/TLS, tech fingerprint)
+- **Paid tiers**: Deep scan with DeepSeek AI report, scan credit packs (5 or 20)
+- **Monitor**: Continuous monitoring with weekly rescans and CVE-triggered alerts via email
+- **Reports**: Graded A–F with CVSS scores, remediation steps, and paste-ready AI fix prompt
 
-## Auth Flow
+## User preferences
 
-Replit OIDC (not Clerk). The auth lib (`lib/replit-auth-web`) exports `useAuth()` with `login()` and `logout()` that redirect to `/api/login` and `/api/logout`. Sessions are stored in the `sessions` table.
+- Keep `DISABLE_PAYMENTS=true` in development `.replit` userenv
 
-## Key Env Vars
+## Gotchas
 
-- `DATABASE_URL` — auto-provided by Replit
-- `REPL_ID` — Replit OIDC client ID (auto-provided)
-- `DEEPSEEK_API_KEY` — for AI scan analysis (user must set)
-- `STRIPE_SECRET_KEY` — for Stripe payments (user must set)
-- `STRIPE_WEBHOOK_SECRET` — for Stripe webhook verification (user must set)
+- API server build step is part of `pnpm run dev` (builds then starts) — cold starts take ~5s
+- `NODE_TLS_REJECT_UNAUTHORIZED=0` is set in dev userenv (Replit internal TLS) — never set this in production
+- Vite runs on port 18425 (artifact router) AND port 5000 (webview) simultaneously — both are separate workflow instances
+- The artifact router config lives in `artifacts/*/replit-artifact/artifact.toml` — do not delete these files
 
-## Webhook URL
+## Pointers
 
-`POST /api/scan/webhook` — Stripe webhook endpoint. Requires `express.raw()` middleware (configured in app.ts before `express.json()`).
-
-## TypeScript Project References
-
-Every lib package has `composite: true`. Build order: run `npx tsc -b tsconfig.json` from root to emit declarations for all libs before typechecking individual artifacts.
-
-Typecheck command: `pnpm --filter @workspace/api-server run typecheck && pnpm --filter @workspace/vibescan run typecheck`
-
-## Task Status
-
-- [x] Task 1: Foundation, Auth, Landing Page — COMPLETE
-- [x] Task 2: Stripe Payments & Scan Queue — COMPLETE
-- [x] Task 3: Scan Worker Engine & DeepSeek Report Generation — COMPLETE
-- [x] Task 4: Polish & Production Readiness — COMPLETE
-
-## Task 4 Polish Applied
-
-- **Security headers** on all API responses: X-Content-Type-Options, X-Frame-Options: DENY, X-XSS-Protection, Referrer-Policy, Permissions-Policy, Content-Security-Policy; HSTS in production
-- **Grade badge** in dashboard Security column — colorized letter grade (A/B/C/D/F) fetched from the status polling endpoint (GET /api/scans/:id/status returns `grade`)
-- **Auto-redirect to report** when scan transitions from in-progress to `complete` (via `wasPolling` ref + `setLocation`)
-- **OG/SEO meta tags** in index.html (Open Graph, Twitter Card, description, theme-color)
-- **.env.example** at project root with all env vars documented
-
-## For Production
-
-1. Set `DEEPSEEK_API_KEY` secret in the Replit Secrets panel
-2. Set `STRIPE_SECRET_KEY` secret for payments
-3. Set `STRIPE_WEBHOOK_SECRET` and point Stripe dashboard webhook to `https://<domain>/api-server/api/scan/webhook`
-4. Set `RESEND_API_KEY` for email notifications on Deep/Pack scan completion (optional)
-5. Set `APP_ORIGIN` to the production URL for email links
+- DB schema: `lib/db/src/schema.ts`
+- API routes: `artifacts/api-server/src/routes/index.ts`
+- Scan engine: `artifacts/api-server/src/lib/scanner.ts`
+- AI analysis: `artifacts/api-server/src/lib/deepseek.ts`
