@@ -5,7 +5,7 @@ import {
   Lock, Activity, Share2, Plus, Mail, GitBranch, KeyRound, Database,
   Terminal, ExternalLink, Package, RefreshCw, Eye, Code2, Wifi,
   AlertTriangle, Monitor, Info, Settings, Network, EyeOff, Filter, X,
-  ArrowUpDown, HelpCircle, Download, Copy, Check, Bell, ChevronDown, Search,
+  ArrowUpDown, HelpCircle, Download, Copy, Check, Bell, ChevronDown, Search, Minus,
 } from "lucide-react";
 import { cn, formatSeverity, getSeverityColors, getGradeColor } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -545,9 +545,11 @@ function ReconCard({ recon }: { recon: ReconData }) {
 function PagesScannedCard({
   rootUrl,
   pagesScanned,
+  pagesAttempted,
 }: {
   rootUrl: string;
   pagesScanned: string[];
+  pagesAttempted?: string[];
 }) {
   const [open, setOpen] = useState(false);
 
@@ -566,6 +568,13 @@ function PagesScannedCard({
     return pages;
   }, [rootUrl, pagesScanned]);
 
+  const notFoundPages = useMemo(() => {
+    return (pagesAttempted ?? []).map((url) => {
+      try { return { label: new URL(url).pathname, url }; }
+      catch { return { label: url, url }; }
+    });
+  }, [pagesAttempted]);
+
   return (
     <div className="glass-card rounded-2xl overflow-hidden">
       <button
@@ -576,6 +585,11 @@ function PagesScannedCard({
           <Search className="w-4 h-4 text-sky-400" />
           Pages Scanned
           <span className="px-1.5 py-0.5 bg-secondary text-xs rounded-full text-muted-foreground">{allPages.length}</span>
+          {notFoundPages.length > 0 && (
+            <span className="px-1.5 py-0.5 bg-secondary text-xs rounded-full text-muted-foreground/60">
+              {notFoundPages.length} not found
+            </span>
+          )}
         </h3>
         <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", open && "rotate-180")} />
       </button>
@@ -609,6 +623,23 @@ function PagesScannedCard({
                   )}
                 </div>
               ))}
+
+              {notFoundPages.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-white/5">
+                  <p className="text-xs text-muted-foreground/60 mb-2 font-medium">Probed (not found)</p>
+                  {notFoundPages.map((page, i) => (
+                    <div key={i} className="flex items-center gap-2 py-1">
+                      <Minus className="w-3 h-3 shrink-0 text-muted-foreground/30" />
+                      <span
+                        className="text-xs font-mono text-muted-foreground/40 truncate"
+                        title={page.url}
+                      >
+                        {page.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </motion.div>
         )}
@@ -1369,7 +1400,7 @@ export default function ReportViewer() {
   }
   if (error || !report || !summary) return <div className="min-h-[80vh] flex items-center justify-center text-red-400">Failed to load report.</div>;
 
-  const { data: { technologies, server, tlsGrade, aiAnalysis, pagesScanned, recon } } = report;
+  const { data: { technologies, server, tlsGrade, aiAnalysis, pagesScanned, pagesAttempted, recon } } = report;
 
   const severityCounts = {
     critical: summary.critical,
@@ -1785,7 +1816,7 @@ export default function ReportViewer() {
           <SoftwareInventoryCard technologies={technologies ?? []} vulnerabilities={vulnerabilities} />
 
           {/* Pages Scanned */}
-          <PagesScannedCard rootUrl={report.targetUrl} pagesScanned={pagesScanned ?? []} />
+          <PagesScannedCard rootUrl={report.targetUrl} pagesScanned={pagesScanned ?? []} pagesAttempted={pagesAttempted ?? []} />
 
           {/* Reconnaissance */}
           {recon && <ReconCard recon={recon} />}

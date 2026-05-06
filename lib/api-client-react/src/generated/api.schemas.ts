@@ -220,6 +220,7 @@ export interface ReportData {
   openPorts?: number[];
   targetUrl: string;
   pagesScanned?: string[];
+  pagesAttempted?: string[];
   aiAnalysis?: AiAnalysis;
   recon?: ReconData;
 }
