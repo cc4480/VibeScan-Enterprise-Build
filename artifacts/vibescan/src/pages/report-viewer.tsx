@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { cn, formatSeverity, getSeverityColors, getGradeColor } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import type { Vulnerability } from "@workspace/api-client-react";
 
 // ─── Category metadata ────────────────────────────────────────────────────────
@@ -672,18 +672,24 @@ function SoftwareInventoryCard({
 
   // Count CVEs per tech by matching vuln names like "jQuery 1.11.3 — Known Vulnerability ..."
   // or evidence lines like "Detected: jQuery 1.11.3" as a fallback
-  const cveCountFor = (name: string, version: string) => {
-    const namePrefix = `${name.toLowerCase()} ${version.toLowerCase()} \u2014`; // em dash separator
-    const evidenceTag = `detected: ${name.toLowerCase()} ${version.toLowerCase()}`;
-    return vulnerabilities.filter((v) =>
-      v.name.toLowerCase().startsWith(namePrefix) ||
-      (v.evidence?.toLowerCase().includes(evidenceTag) ?? false)
-    ).length;
-  };
-
-  const [open, setOpen] = useState(() =>
-    versionedTechs.some((t) => cveCountFor(t.name, t.version!) > 0)
+  const cveCountFor = useCallback(
+    (name: string, version: string) => {
+      const namePrefix = `${name.toLowerCase()} ${version.toLowerCase()} \u2014`; // em dash separator
+      const evidenceTag = `detected: ${name.toLowerCase()} ${version.toLowerCase()}`;
+      return vulnerabilities.filter((v) =>
+        v.name.toLowerCase().startsWith(namePrefix) ||
+        (v.evidence?.toLowerCase().includes(evidenceTag) ?? false)
+      ).length;
+    },
+    [vulnerabilities],
   );
+
+  const cveTotal = useMemo(
+    () => versionedTechs.reduce((sum, t) => sum + cveCountFor(t.name, t.version!), 0),
+    [versionedTechs, cveCountFor],
+  );
+
+  const [open, setOpen] = useState(() => cveTotal > 0);
 
   if (versionedTechs.length === 0) return null;
 
@@ -697,6 +703,12 @@ function SoftwareInventoryCard({
           <Package className="w-4 h-4 text-yellow-400" />
           Software Inventory
           <span className="px-1.5 py-0.5 bg-secondary text-xs rounded-full text-muted-foreground">{versionedTechs.length}</span>
+          {cveTotal > 0 && (
+            <span className="flex items-center gap-1 text-[11px] font-semibold text-red-400 bg-red-950/60 px-2 py-0.5 rounded-full border border-red-500/25 leading-none">
+              <AlertTriangle className="w-3 h-3" />
+              {cveTotal} CVE{cveTotal !== 1 ? "s" : ""}
+            </span>
+          )}
         </h3>
         <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", open && "rotate-180")} />
       </button>
