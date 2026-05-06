@@ -576,6 +576,12 @@ export interface CrawlResult {
   vulnerabilities: ScanVulnerability[];
   /** URLs that were actually fetched (status < 400, not redirected off-domain) */
   pagesVisited: string[];
+  /**
+   * High-value probe paths that were attempted but returned 404 / failed / redirected
+   * off-domain — i.e. they were checked but not found. Crawled links that 404'd are
+   * NOT included here; only explicitly probed HIGH_VALUE_PROBE_PATHS appear.
+   */
+  pagesAttempted: string[];
 }
 
 export async function crawlAndCheck(
@@ -591,7 +597,7 @@ export async function crawlAndCheck(
     origin = parsed.origin;
     expectedHostname = parsed.hostname;
   } catch {
-    return { vulnerabilities: [], pagesVisited: [] };
+    return { vulnerabilities: [], pagesVisited: [], pagesAttempted: [] };
   }
 
   // ── URL list construction ────────────────────────────────────────────────
@@ -621,7 +627,7 @@ export async function crawlAndCheck(
 
   // If there's nothing to check at all, bail early
   if (linkedUrls.length === 0 && probedUrls.length === 0) {
-    return { vulnerabilities: [], pagesVisited: [] };
+    return { vulnerabilities: [], pagesVisited: [], pagesAttempted: [] };
   }
 
   const rootSnapshot = snapshotHeaders(rootHeaders);
@@ -644,6 +650,8 @@ export async function crawlAndCheck(
   const crawlDeadline = Date.now() + CRAWL_TIMEOUT_MS;
   const perPageFindings: ScanVulnerability[] = [];
   const pagesVisited: string[] = [];
+  // Tracks which high-value probe URLs we actually attempted (had budget to try)
+  const attemptedProbes = new Set<string>();
 
   // Minimum remaining budget required to start a new page fetch (avoids starting
   // a request that can never complete within the overall time bound)
@@ -708,6 +716,7 @@ export async function crawlAndCheck(
   // Process directly-probed high-value paths (also sequential to respect budget)
   for (const url of probedUrls) {
     if (Date.now() + MIN_BUDGET_MS > crawlDeadline) break;
+    attemptedProbes.add(url);
     await processPage(url, "probe");
   }
 
@@ -725,8 +734,14 @@ export async function crawlAndCheck(
     }
   }
 
+  // Probed-but-not-found = attempted probe paths that weren't added to pagesVisited
+  // (returned 404, network error, or redirected off-domain)
+  const pagesVisitedSet = new Set(pagesVisited);
+  const pagesAttempted = [...attemptedProbes].filter((u) => !pagesVisitedSet.has(u));
+
   return {
     vulnerabilities: [...headerGapFindings, ...dedupedPerPage],
     pagesVisited,
+    pagesAttempted,
   };
 }
