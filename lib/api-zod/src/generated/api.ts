@@ -245,7 +245,7 @@ export const GetReportResponse = zod.object({
     openPorts: zod.array(zod.number()).optional(),
     targetUrl: zod.string(),
     pagesScanned: zod.array(zod.string()).optional(),
-    pagesAttempted: zod.array(zod.string()).optional(),
+    probedNotFound: zod.array(zod.string()).optional(),
     aiAnalysis: zod
       .object({
         overallRisk: zod.string(),
