@@ -14,6 +14,7 @@ import { getBoss, SCAN_QUEUE, type ScanJobData } from "./queue";
 import { runScan, computeRiskScore, computeGrade, type ScanVulnerability } from "./scanner";
 import { runRecon } from "./recon";
 import { warnIfLocalDataStale, OSV_CACHE_MAX_SIZE } from "./cveCheck";
+import { refreshEolData, EOL_REFRESH_QUEUE } from "./eolFetcher";
 import { callDeepSeek } from "./deepseek";
 import { checkSslLabs } from "./ssllabs";
 import { sendReportReadyEmail } from "./mailer";
@@ -319,4 +320,21 @@ export async function startWorker(): Promise<void> {
   });
 
   logger.info({ queue: SCAN_QUEUE }, "Scan worker registered and listening");
+
+  // ── EOL data auto-refresh ─────────────────────────────────────────────────
+  // Scheduled daily at 03:00 UTC to keep PHP / Nginx / Apache EOL tables
+  // current without manual code changes (fetches from endoflife.date API).
+  await boss.createQueue(EOL_REFRESH_QUEUE);
+  await boss.schedule(EOL_REFRESH_QUEUE, "0 3 * * *", {});
+  await boss.work(EOL_REFRESH_QUEUE, async () => {
+    await refreshEolData();
+  });
+  logger.info(
+    { queue: EOL_REFRESH_QUEUE, cron: "0 3 * * *" },
+    "EOL refresh schedule registered (daily 03:00 UTC)",
+  );
+
+  // Warm the EOL cache immediately at startup — non-blocking.
+  // Failures are logged at WARN and the bundled fallback tables remain active.
+  void refreshEolData();
 }
