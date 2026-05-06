@@ -180,6 +180,35 @@ export interface AiAnalysis {
   complianceNotes?: string | null;
 }
 
+export interface ReconSubdomain {
+  subdomain: string;
+  /** @nullable */
+  ip: string | null;
+  /** @nullable */
+  cname: string | null;
+  source: "crt.sh" | "wordlist";
+}
+
+export interface ReconPort {
+  port: number;
+  service: string;
+  /** @nullable */
+  banner: string | null;
+}
+
+export interface ReconDnsRecord {
+  type: string;
+  value: string;
+  ttl?: number;
+}
+
+export interface ReconData {
+  subdomains?: ReconSubdomain[];
+  openPorts?: ReconPort[];
+  dnsRecords?: ReconDnsRecord[];
+  reconDurationMs?: number;
+}
+
 export interface ReportData {
   vulnerabilities: Vulnerability[];
   summary: ScanSummary;
@@ -192,6 +221,7 @@ export interface ReportData {
   targetUrl: string;
   pagesScanned?: string[];
   aiAnalysis?: AiAnalysis;
+  recon?: ReconData;
 }
 
 export interface Report {

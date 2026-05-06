@@ -253,6 +253,39 @@ export const GetReportResponse = zod.object({
         complianceNotes: zod.string().nullish(),
       })
       .optional(),
+    recon: zod
+      .object({
+        subdomains: zod
+          .array(
+            zod.object({
+              subdomain: zod.string(),
+              ip: zod.string().nullable(),
+              cname: zod.string().nullable(),
+              source: zod.enum(["crt.sh", "wordlist"]),
+            }),
+          )
+          .optional(),
+        openPorts: zod
+          .array(
+            zod.object({
+              port: zod.number(),
+              service: zod.string(),
+              banner: zod.string().nullable(),
+            }),
+          )
+          .optional(),
+        dnsRecords: zod
+          .array(
+            zod.object({
+              type: zod.string(),
+              value: zod.string(),
+              ttl: zod.number().optional(),
+            }),
+          )
+          .optional(),
+        reconDurationMs: zod.number().optional(),
+      })
+      .optional(),
   }),
 });
 
