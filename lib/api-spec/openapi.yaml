@@ -550,6 +550,8 @@ components:
             type: string
         complianceNotes:
           type: [string, 'null']
+        agentFixPrompt:
+          type: string
 
     ReportData:
       type: object

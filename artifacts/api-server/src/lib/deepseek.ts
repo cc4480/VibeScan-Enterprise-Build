@@ -11,6 +11,7 @@ export interface AiAnalysisResult {
   topPriorities: string[];
   quickWins: string[];
   complianceNotes: string | null;
+  agentFixPrompt: string;
 }
 
 const DEEPSEEK_ENDPOINT = "https://api.deepseek.com/v1/chat/completions";
@@ -21,38 +22,61 @@ function buildPrompt(
   technologies: string[],
   tier: string,
 ): string {
-  const vulnSummary = vulnerabilities
-    .map(
-      (v) =>
-        `- [${v.severity.toUpperCase()}] ${v.name} (${v.category}): ${v.description}`,
-    )
-    .join("\n");
-
   const techStack = technologies.length > 0 ? technologies.join(", ") : "unknown";
 
-  return `You are a senior application security engineer writing a plain-English penetration test summary for a developer.
+  const domain = (() => {
+    try { return new URL(targetUrl).hostname; } catch { return targetUrl; }
+  })();
 
-Target URL: ${targetUrl}
-Scan Tier: ${tier}
-Detected Technologies: ${techStack}
+  const structuredVulns = vulnerabilities
+    .map((v, i) => {
+      const parts = [
+        `Finding ${i + 1}: ${v.name}`,
+        `  Severity: ${v.severity.toUpperCase()}`,
+        `  Category: ${v.category}`,
+      ];
+      if (v.cvssScore != null) parts.push(`  CVSS: ${v.cvssScore}`);
+      if (v.cweId) parts.push(`  CWE: ${v.cweId}`);
+      parts.push(`  Description: ${v.description}`);
+      if (v.evidence) parts.push(`  Evidence: ${v.evidence.slice(0, 250)}`);
+      parts.push(`  Fix: ${v.solution}`);
+      return parts.join("\n");
+    })
+    .join("\n\n");
 
-Identified Security Issues:
-${vulnSummary || "No significant vulnerabilities detected."}
+  return `You are a senior application security engineer (AppSec) writing a penetration test summary for a developer who is not a security expert.
 
-Based on the above, provide a JSON response with exactly these fields:
+Target: ${targetUrl}
+Scan tier: ${tier}
+Detected technologies: ${techStack}
+
+─── Security Findings ───
+${structuredVulns || "No significant vulnerabilities detected."}
+
+Return a JSON object with EXACTLY these five fields:
+
 {
-  "overallRisk": "<2-3 sentences: plain-English overall risk level and most dangerous finding>",
-  "topPriorities": ["<actionable fix 1>", "<actionable fix 2>", "<actionable fix 3>"],
-  "quickWins": ["<easy 5-min fix 1>", "<easy 5-min fix 2>"],
-  "complianceNotes": "<1-2 sentences about OWASP Top 10 or compliance implications, or null>"
+  "overallRisk": "<2-3 sentence plain-English assessment: biggest risk and its real-world impact. Reference the most dangerous finding by name. No jargon without explanation.>",
+  "topPriorities": [
+    "<Specific, actionable fix — what to do, not just what is wrong. Max 150 chars.>",
+    "<Second priority>",
+    "<Third priority>"
+  ],
+  "quickWins": [
+    "<A change that takes under 5 minutes — e.g. adding a response header or disabling a setting. Max 150 chars.>",
+    "<Second quick win>"
+  ],
+  "complianceNotes": "<1-2 sentences on OWASP Top 10 or regulatory (GDPR/PCI-DSS) implications, or null if none apply>",
+  "agentFixPrompt": "<A complete, paste-ready prompt for a coding AI agent such as Cursor, Claude, or GitHub Copilot. Structure it as follows — (1) open with: 'I ran a penetration test on ${domain} and found the following security issues that need to be fixed in my codebase.'; (2) for each finding use a markdown heading like '### 1. <Finding Name> (<SEVERITY>)' followed by a one-sentence description and then the exact remediation the developer should implement in their code; (3) close with: 'Please fix all of the above issues in my codebase. For each fix, show me the exact code change.' Use plain text with markdown headings only — do not wrap the entire thing in a code fence. Keep the total under 3000 characters.>"
 }
 
 Rules:
-- Write for a developer who isn't a security expert. No jargon without explanation.
-- topPriorities must be specific and actionable (what to do, not just what's wrong)
-- quickWins are changes that take under 5 minutes to implement (adding a header, disabling a setting)
-- Keep each string under 150 characters
-- Return ONLY the JSON object, no markdown fences, no explanations`;
+- Write for a developer who is not a security expert
+- topPriorities must be specific and actionable (what to do, not just what is wrong)
+- quickWins are changes under 5 minutes (adding a header, disabling a config flag, etc.)
+- Keep overallRisk, each topPriorities item, and each quickWins item under 150 characters
+- agentFixPrompt must be self-contained and paste-ready — a developer should be able to copy it directly into any coding agent and get working fixes
+- Return ONLY the JSON object — no markdown fences, no preamble, no explanation`;
 }
 
 export async function callDeepSeek(
@@ -83,7 +107,7 @@ export async function callDeepSeek(
       },
     ],
     temperature: 0.3,
-    max_tokens: 800,
+    max_tokens: 2000,
     response_format: { type: "json_object" },
   };
 
@@ -128,6 +152,8 @@ export async function callDeepSeek(
         : [],
       complianceNotes:
         typeof parsed.complianceNotes === "string" ? parsed.complianceNotes : null,
+      agentFixPrompt:
+        typeof parsed.agentFixPrompt === "string" ? parsed.agentFixPrompt : "",
     };
   } catch (err) {
     console.error("[deepseek] AI analysis failed:", err);
