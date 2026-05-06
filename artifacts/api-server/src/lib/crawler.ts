@@ -650,8 +650,6 @@ export async function crawlAndCheck(
   const crawlDeadline = Date.now() + CRAWL_TIMEOUT_MS;
   const perPageFindings: ScanVulnerability[] = [];
   const pagesVisited: string[] = [];
-  // Tracks which high-value probe URLs we actually attempted (had budget to try)
-  const attemptedProbes = new Set<string>();
 
   // Minimum remaining budget required to start a new page fetch (avoids starting
   // a request that can never complete within the overall time bound)
@@ -659,25 +657,28 @@ export async function crawlAndCheck(
 
   /**
    * Fetch and analyse a single page.
-   * @param url         Full URL to fetch
-   * @param discoveredBy  Whether this URL came from HTML crawling or direct probing
+   * @param url          Full URL to fetch
+   * @param discoveredBy Whether this URL came from HTML crawling or direct probing
+   * @returns The HTTP status code returned by the server, or null if the request
+   *          was not attempted (budget exhausted) or resulted in a network error.
+   *          Callers can check for 404 specifically to record "probed but not found".
    */
-  const processPage = async (url: string, discoveredBy: "crawl" | "probe") => {
+  const processPage = async (url: string, discoveredBy: "crawl" | "probe"): Promise<number | null> => {
     const remaining = crawlDeadline - Date.now();
-    if (remaining < MIN_BUDGET_MS) return;
+    if (remaining < MIN_BUDGET_MS) return null;
 
     // Cap per-fetch timeout to whatever budget remains (hard deadline enforcement)
     const fetchTimeout = Math.min(PAGE_TIMEOUT_MS, remaining);
 
     const page = await fetchPage(url, fetchTimeout);
-    if (!page || page.status === 0 || page.status >= 400) return;
+    if (!page || page.status === 0 || page.status >= 400) return page?.status ?? null;
 
     // Verify we didn't get redirected off-domain (catch-all login redirects, etc.)
     try {
       const finalHostname = new URL(page.finalUrl).hostname;
-      if (finalHostname !== expectedHostname) return;
+      if (finalHostname !== expectedHostname) return page.status;
     } catch {
-      return;
+      return page.status;
     }
 
     // Record this URL as successfully visited
@@ -705,6 +706,8 @@ export async function crawlAndCheck(
       const pathFindings = await probePathSensitiveFiles(url, origin, expectedHostname, probeTimeout);
       perPageFindings.push(...pathFindings);
     }
+
+    return page.status;
   };
 
   // Process linked pages first (sequential — respects time budget per iteration)
@@ -713,11 +716,13 @@ export async function crawlAndCheck(
     await processPage(url, "crawl");
   }
 
-  // Process directly-probed high-value paths (also sequential to respect budget)
+  // Process directly-probed high-value paths (also sequential to respect budget).
+  // Track those that returned exactly 404 — "probed but not found" for the report.
+  const pagesAttempted: string[] = [];
   for (const url of probedUrls) {
     if (Date.now() + MIN_BUDGET_MS > crawlDeadline) break;
-    attemptedProbes.add(url);
-    await processPage(url, "probe");
+    const status = await processPage(url, "probe");
+    if (status === 404) pagesAttempted.push(url);
   }
 
   // Aggregate header gap findings (one finding per header type covering all affected paths)
@@ -733,11 +738,6 @@ export async function crawlAndCheck(
       dedupedPerPage.push(finding);
     }
   }
-
-  // Probed-but-not-found = attempted probe paths that weren't added to pagesVisited
-  // (returned 404, network error, or redirected off-domain)
-  const pagesVisitedSet = new Set(pagesVisited);
-  const pagesAttempted = [...attemptedProbes].filter((u) => !pagesVisitedSet.has(u));
 
   return {
     vulnerabilities: [...headerGapFindings, ...dedupedPerPage],
