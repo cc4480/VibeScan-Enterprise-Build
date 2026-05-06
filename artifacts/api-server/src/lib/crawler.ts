@@ -577,9 +577,11 @@ export interface CrawlResult {
   /** URLs that were actually fetched (status < 400, not redirected off-domain) */
   pagesVisited: string[];
   /**
-   * High-value probe paths that were attempted but returned 404 / failed / redirected
-   * off-domain — i.e. they were checked but not found. Crawled links that 404'd are
-   * NOT included here; only explicitly probed HIGH_VALUE_PROBE_PATHS appear.
+   * High-value probe paths (from HIGH_VALUE_PROBE_PATHS) that returned HTTP 404.
+   * Only explicit probes are included — crawled links that 404'd are excluded.
+   * Paths that failed with other status codes (401, 403, 5xx), timed out, or
+   * were redirected off-domain are also excluded; they are not "not found", they
+   * were actively blocked or unavailable.
    */
   pagesAttempted: string[];
 }
