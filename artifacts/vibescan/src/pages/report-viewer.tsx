@@ -931,7 +931,7 @@ function PrintVulnCard({ vuln, index }: { vuln: Vulnerability; index: number }) 
 
 function PrintableReport({
   targetUrl, scannedAt, summary, confirmedVulns, unverifiedVulns,
-  technologies, server, tlsGrade, aiAnalysis, categoryCounts,
+  technologies, server, tlsGrade, aiAnalysis, categoryCounts, pagesScanned,
 }: {
   targetUrl: string;
   scannedAt: string | Date;
@@ -943,6 +943,7 @@ function PrintableReport({
   tlsGrade?: string | null;
   aiAnalysis?: { overallRisk: string; topPriorities: string[]; quickWins: string[]; complianceNotes?: string | null } | null;
   categoryCounts: Record<string, number>;
+  pagesScanned?: string[];
 }) {
   const dateStr = new Date(scannedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
@@ -995,6 +996,27 @@ function PrintableReport({
         <h2 className="text-lg font-bold mb-2 text-gray-900">Executive Summary</h2>
         <p className="text-gray-700 leading-relaxed">{summary.executiveSummary}</p>
       </div>
+
+      {/* Pages Scanned */}
+      {((): React.ReactNode => {
+        const allPages = [targetUrl, ...Array.from(new Set(pagesScanned ?? []))];
+        return (
+          <div className="mb-8 pt-6 border-t-2 border-gray-200">
+            <h2 className="text-lg font-bold mb-3 text-gray-900">🔍 Pages Scanned ({allPages.length})</h2>
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
+              {allPages.map((url, i) => (
+                <div
+                  key={i}
+                  className={`px-3 py-2 font-mono text-xs text-gray-700 break-all ${i % 2 === 0 ? "bg-white" : "bg-gray-50"} border-b border-gray-100 last:border-b-0`}
+                >
+                  {url}
+                  {i === 0 && <span className="ml-2 text-gray-400 font-sans not-italic">(root)</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Confirmed Findings */}
       {confirmedVulns.length > 0 && (
@@ -1394,6 +1416,7 @@ export default function ReportViewer() {
           tlsGrade={tlsGrade}
           aiAnalysis={aiAnalysis}
           categoryCounts={categoryCounts}
+          pagesScanned={pagesScanned ?? []}
         />
       </div>
 
