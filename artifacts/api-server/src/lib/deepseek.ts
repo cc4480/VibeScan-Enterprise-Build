@@ -99,7 +99,7 @@ export async function callDeepSeek(
       {
         role: "system",
         content:
-          "You are a cybersecurity expert. You respond only with valid JSON as instructed. Do not add markdown, preamble, or explanation.",
+          "You are a senior application security engineer writing penetration test reports. Your writing is direct, jargon-free, and developer-focused — every finding comes with a concrete, actionable fix. Respond only with valid JSON as instructed. Do not add markdown fences, preamble, or explanation.",
       },
       {
         role: "user",
