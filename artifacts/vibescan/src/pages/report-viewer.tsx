@@ -162,26 +162,60 @@ function GradeRing({ grade, score }: { grade: string; score: number }) {
 
 // ─── Inner-page source extractor ─────────────────────────────────────────────
 
+const INNER_PAGE_CATEGORIES = new Set([
+  "Security Header Inconsistency",
+  "Session Management",
+]);
+
 /**
  * Tries to extract a non-root path from a finding's evidence field.
- * Crawler findings for inner pages embed the fetched URL in the first
- * "GET https://..." line of the evidence string.
- * Returns the pathname (e.g. "/api/v1") when it's not the root, otherwise null.
+ * Only applies to "Security Header Inconsistency" and "Session Management" categories.
+ *
+ * Handles two evidence formats produced by the crawler:
+ *   1. Session Management: "GET https://host/path\nSet-Cookie: ..."
+ *      → extracts the pathname from the full URL
+ *   2. Security Header Inconsistency: "Routes missing X:\n  • /path (crawled)\n..."
+ *      → extracts the first bullet-list path
+ *
+ * Returns the pathname (e.g. "/api/v1") when it's a non-root inner page, else null.
  */
-function extractInnerPageSource(evidence: string | null | undefined, rootUrl: string): string | null {
-  if (!evidence) return null;
-  const getMatch = /^GET\s+(https?:\/\/\S+)/m.exec(evidence);
-  if (!getMatch) return null;
-  try {
-    const url = new URL(getMatch[1]);
-    const root = new URL(rootUrl);
-    if (url.hostname !== root.hostname) return null;
-    const path = url.pathname;
-    if (!path || path === "/" || path === root.pathname) return null;
-    return path;
-  } catch {
-    return null;
+function extractInnerPageSource(
+  evidence: string | null | undefined,
+  rootUrl: string,
+  category: string,
+): string | null {
+  if (!evidence || !INNER_PAGE_CATEGORIES.has(category)) return null;
+
+  // Format 1: "GET https://host/path" — Session Management cookie findings
+  // Also matches "[Direct probe] GET https://host/path" prefix variant
+  const getMatch = /^(?:\[[^\]]*\]\s+)?GET\s+(https?:\/\/\S+)/m.exec(evidence);
+  if (getMatch) {
+    try {
+      const url = new URL(getMatch[1]);
+      const root = new URL(rootUrl);
+      if (url.hostname !== root.hostname) return null;
+      const path = url.pathname;
+      if (!path || path === "/" || path === root.pathname) return null;
+      return path;
+    } catch {
+      return null;
+    }
   }
+
+  // Format 2: "Routes missing X:\n  • /path (crawled)" — Security Header Inconsistency
+  const bulletMatch = /•\s+(\/[^\s(]*)/.exec(evidence);
+  if (bulletMatch) {
+    const path = bulletMatch[1];
+    try {
+      const root = new URL(rootUrl);
+      if (!path || path === "/" || path === root.pathname) return null;
+    } catch {
+      // ignore URL parse errors; still return the path
+    }
+    return path;
+  }
+
+  return null;
 }
 
 // ─── Vuln card ────────────────────────────────────────────────────────────────
@@ -215,8 +249,9 @@ function VulnCard({
     : { name: null, version: null };
 
   // Extract inner-page source path (e.g. "/api/v1") for crawler findings
+  // Only shown for Security Header Inconsistency and Session Management categories
   const innerPageSource = rootUrl
-    ? extractInnerPageSource(vuln.evidence, rootUrl)
+    ? extractInnerPageSource(vuln.evidence, rootUrl, vuln.category)
     : null;
 
   return (
