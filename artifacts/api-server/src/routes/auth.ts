@@ -94,7 +94,6 @@ router.get("/callback", async (req: Request, res: Response): Promise<void> => {
     const tokens = await client.authorizationCodeGrant(config, currentUrl, {
       pkceCodeVerifier: codeVerifier,
       expectedState,
-      redirectUri: callbackUrl,
     });
 
     const claims = tokens.claims();
