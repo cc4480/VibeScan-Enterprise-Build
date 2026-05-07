@@ -99,6 +99,12 @@ export default defineConfig({
       deny: ["**/.*"],
     },
     headers: securityHeaders,
+    proxy: {
+      "/api": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+      },
+    },
   },
   preview: {
     port,
