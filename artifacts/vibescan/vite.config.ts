@@ -5,32 +5,31 @@ import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 // Security headers applied to both the dev server and preview server.
-// These eliminate the most common scanner findings on the frontend:
-// missing CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy,
-// Permissions-Policy, and Cross-Origin-Opener-Policy.
-//
-// CSP notes:
-//  - 'unsafe-inline' for scripts is required by Vite's HMR runtime in dev mode.
-//  - fonts.googleapis.com / fonts.gstatic.com cover the Inter font loaded in index.html.
-//  - connect-src includes wss:/ws: for Vite HMR WebSocket and https: for the API server.
+// In development (Replit preview), X-Frame-Options and frame-ancestors are
+// omitted so the app renders correctly inside Replit's preview iframe.
+// In production these restrictive headers are applied via the API server.
+const isProduction = process.env.NODE_ENV === "production";
+
 const securityHeaders: Record<string, string> = {
-  "X-Frame-Options": "DENY",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()",
-  "Cross-Origin-Opener-Policy": "same-origin",
-  "Cross-Origin-Resource-Policy": "same-origin",
+  ...(isProduction
+    ? {
+        "X-Frame-Options": "DENY",
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "Cross-Origin-Resource-Policy": "same-origin",
+      }
+    : {}),
   "Content-Security-Policy": [
     "default-src 'self'",
-    // 'unsafe-inline' is required by Vite's dev-server HMR runtime.
-    // Fonts are now self-hosted so no external font origins are needed.
     "script-src 'self' 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
     "img-src 'self' data: https: blob:",
     "connect-src 'self' https: wss: ws:",
     "worker-src 'self' blob:",
-    "frame-ancestors 'none'",
+    ...(isProduction ? ["frame-ancestors 'none'"] : []),
     "object-src 'none'",
     "base-uri 'self'",
   ].join("; "),
