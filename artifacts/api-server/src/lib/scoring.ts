@@ -160,10 +160,14 @@ export function corroborateMerge(vulns: ScanVulnerability[]): ScanVulnerability[
       continue;
     }
 
-    // Pick the canonical finding (highest confidence, most evidence)
-    const canonical = group.reduce((best, v) =>
-      (v.confidence ?? 0) >= (best.confidence ?? 0) ? v : best,
-    );
+    // Pick the canonical finding — highest severity first, then confidence as tiebreaker
+    const SEVERITY_ORDER: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
+    const canonical = group.reduce((best, v) => {
+      const bSev = SEVERITY_ORDER[best.severity?.toLowerCase() ?? ""] ?? 0;
+      const vSev = SEVERITY_ORDER[v.severity?.toLowerCase() ?? ""] ?? 0;
+      if (vSev !== bSev) return vSev > bSev ? v : best;
+      return (v.confidence ?? 0) >= (best.confidence ?? 0) ? v : best;
+    });
 
     const highestConf = canonical.confidence ?? 50;
     const merged: ScanVulnerability = {

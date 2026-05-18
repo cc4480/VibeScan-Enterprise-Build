@@ -109,6 +109,8 @@ function checkHeaderFinding(
   }
   if (/referrer-policy/.test(name) && /missing|absent/.test(name))
     return !("referrer-policy" in headers);
+  if (/permissions.policy|feature.policy/.test(name) && /missing|absent/.test(name))
+    return !("permissions-policy" in headers) && !("feature-policy" in headers);
   if (cat.includes("cors") || /\bcors\b/.test(name))
     return headers["access-control-allow-origin"] === "*";
   if (/server version|server disclosure/.test(name)) {
@@ -117,6 +119,19 @@ function checkHeaderFinding(
   }
   if (/x-powered-by/.test(name))
     return "x-powered-by" in headers;
+  // Cookie flag checks — best effort from Set-Cookie in the fresh response
+  if (/cookie.*secure|secure.*cookie/.test(name)) {
+    const sc = headers["set-cookie"] ?? "";
+    return sc.length > 0 && !/;\s*secure/i.test(sc);
+  }
+  if (/cookie.*httponly|httponly/.test(name)) {
+    const sc = headers["set-cookie"] ?? "";
+    return sc.length > 0 && !/;\s*httponly/i.test(sc);
+  }
+  if (/cookie.*samesite|samesite/.test(name)) {
+    const sc = headers["set-cookie"] ?? "";
+    return sc.length > 0 && !/;\s*samesite/i.test(sc);
+  }
 
   return null;
 }
@@ -223,10 +238,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
 
   // ── 2e. Filter previously dismissed false positives ───────────────────
   const dismissals = await db
-    .select({
-      findingName: dismissedFindingsTable.findingName,
-      findingCategory: dismissedFindingsTable.findingCategory,
-    })
+    .select({ fingerprint: dismissedFindingsTable.findingFingerprint })
     .from(dismissedFindingsTable)
     .where(
       and(
@@ -237,12 +249,13 @@ async function processScanJob(job: ScanJob): Promise<void> {
 
   let autoSuppressedCount = 0;
   if (dismissals.length > 0) {
-    const dismissedKeys = new Set(
-      dismissals.map((d) => `${d.findingCategory}::${d.findingName.toLowerCase().trim()}`),
-    );
+    const { createHash } = await import("node:crypto");
+    const dismissedFps = new Set(dismissals.map((d) => d.fingerprint));
+    const fpOf = (v: { category: string; name: string }) =>
+      createHash("sha256").update(`${v.category}::${v.name}`).digest("hex").slice(0, 20);
     const beforeDismiss = scanResult.vulnerabilities.length;
     scanResult.vulnerabilities = scanResult.vulnerabilities.filter(
-      (v) => !dismissedKeys.has(`${v.category}::${v.name.toLowerCase().trim()}`),
+      (v) => !dismissedFps.has(fpOf(v)),
     );
     autoSuppressedCount = beforeDismiss - scanResult.vulnerabilities.length;
     if (autoSuppressedCount > 0) {

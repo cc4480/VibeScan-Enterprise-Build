@@ -1740,6 +1740,11 @@ export default function ReportViewer() {
                   ({dismissedCount} dismissed)
                 </span>
               )}
+              {(report?.data as { autoSuppressedCount?: number } | undefined)?.autoSuppressedCount && (
+                <span className="text-xs font-normal text-muted-foreground">
+                  ({(report.data as { autoSuppressedCount?: number }).autoSuppressedCount} auto-suppressed from prior scans)
+                </span>
+              )}
             </h2>
           </div>
 
