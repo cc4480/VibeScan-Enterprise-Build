@@ -20,20 +20,57 @@ interface DismissalEntry {
   findingCategory: string;
 }
 
+// ─── Client-side fingerprint helpers (mirror server lib/fingerprint.ts) ────────
+
+function normalizeEvidenceKeyClient(evidence?: string | null): string {
+  if (!evidence) return "";
+  return evidence
+    .toLowerCase()
+    .replace(/https?:\/\/[^\s]+/g, "url")
+    .replace(/\b[0-9a-f]{8,}\b/gi, "hash")
+    .replace(/\b\d[\d.]+\d\b/g, "N")
+    .replace(/['"`;,]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 50);
+}
+
+async function computeVulnFp(
+  category: string,
+  name: string,
+  evidence?: string | null,
+): Promise<string> {
+  const evidenceKey = normalizeEvidenceKeyClient(evidence);
+  const input = evidenceKey
+    ? `${category.toLowerCase().trim()}::${name.toLowerCase().trim()}::${evidenceKey}`
+    : `${category.toLowerCase().trim()}::${name.toLowerCase().trim()}`;
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 20);
+}
+
+function vulnUniqueKey(v: { category: string; name: string; evidence?: string | null }): string {
+  return `${v.category}:${v.name}:${v.evidence ?? ""}`;
+}
+
+// ─── Dismissals context ──────────────────────────────────────────────────────
+
 interface DismissalsCtx {
   dismissedFps: Set<string>;
+  vulnFpMap: Map<string, string>;
   optimisticDismissKeys: Set<string>;
   dismiss: (vuln: Vulnerability, targetUrl: string) => Promise<void>;
   undismiss: (vuln: Vulnerability) => Promise<void>;
-  fingerprints: Map<string, string>;
 }
 
 const DismissalsContext = createContext<DismissalsCtx>({
   dismissedFps: new Set(),
+  vulnFpMap: new Map(),
   optimisticDismissKeys: new Set(),
   dismiss: async () => {},
   undismiss: async () => {},
-  fingerprints: new Map(),
 });
 
 // ─── Category metadata ────────────────────────────────────────────────────────
@@ -256,10 +293,10 @@ function VulnCard({
   rootUrl?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const { dismiss, undismiss, dismissedFps, optimisticDismissKeys, fingerprints } = useContext(DismissalsContext);
-  const dismissKey = `${vuln.category}:${vuln.name.toLowerCase().trim()}`;
-  const fp = fingerprints.get(dismissKey);
-  const isDismissed = optimisticDismissKeys.has(dismissKey) || (fp !== undefined && dismissedFps.has(fp));
+  const { dismiss, undismiss, dismissedFps, vulnFpMap, optimisticDismissKeys } = useContext(DismissalsContext);
+  const vKey = vulnUniqueKey(vuln);
+  const fp = vulnFpMap.get(vKey);
+  const isDismissed = optimisticDismissKeys.has(vKey) || (fp !== undefined && dismissedFps.has(fp));
   const [dismissPending, setDismissPending] = useState(false);
   const meta = getCategoryMeta(vuln.category);
 
@@ -1462,8 +1499,8 @@ export default function ReportViewer() {
   const [viewMode, setViewMode] = useState<"grouped" | "flat">("grouped");
 
   const [dismissedFps, setDismissedFps] = useState<Set<string>>(new Set());
+  const [vulnFpMap, setVulnFpMap] = useState<Map<string, string>>(new Map());
   const [optimisticDismissKeys, setOptimisticDismissKeys] = useState<Set<string>>(new Set());
-  const [fpFingerprints, setFpFingerprints] = useState<Map<string, string>>(new Map());
   const [undoToast, setUndoToast] = useState<{ key: string; vuln: Vulnerability } | null>(null);
   const undoToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1473,27 +1510,21 @@ export default function ReportViewer() {
       .then((r) => (r.ok ? r.json() : []))
       .then((items: DismissalEntry[]) => {
         const fpSet = new Set<string>();
-        const fpMap = new Map<string, string>();
-        for (const item of items) {
-          const k = `${item.findingCategory}:${item.findingName.toLowerCase().trim()}`;
-          fpSet.add(item.fingerprint);
-          fpMap.set(k, item.fingerprint);
-        }
+        for (const item of items) fpSet.add(item.fingerprint);
         setDismissedFps(fpSet);
-        setFpFingerprints(fpMap);
       })
       .catch(() => {});
   }, [report?.targetUrl]);
 
   const dismissFinding = useCallback(async (vuln: Vulnerability, targetUrl: string) => {
-    const k = `${vuln.category}:${vuln.name.toLowerCase().trim()}`;
+    const vKey = vulnUniqueKey(vuln);
 
-    // Optimistic hide via category:name key (stays until server fingerprint arrives)
-    setOptimisticDismissKeys((prev) => new Set([...prev, k]));
+    // Optimistic hide via per-vuln unique key (stays until server fingerprint arrives)
+    setOptimisticDismissKeys((prev) => new Set([...prev, vKey]));
 
     // Show external undo toast (per-card button is gone once the card is hidden)
     if (undoToastTimerRef.current) clearTimeout(undoToastTimerRef.current);
-    setUndoToast({ key: k, vuln });
+    setUndoToast({ key: vKey, vuln });
     undoToastTimerRef.current = setTimeout(() => setUndoToast(null), 5000);
 
     try {
@@ -1509,30 +1540,30 @@ export default function ReportViewer() {
         }),
       });
       if (!res.ok) {
-        setOptimisticDismissKeys((prev) => { const n = new Set(prev); n.delete(k); return n; });
+        setOptimisticDismissKeys((prev) => { const n = new Set(prev); n.delete(vKey); return n; });
         if (undoToastTimerRef.current) clearTimeout(undoToastTimerRef.current);
         setUndoToast(null);
         return;
       }
       const { fingerprint } = (await res.json()) as { fingerprint: string };
       // Promote from optimistic key to confirmed fingerprint
-      setFpFingerprints((prev) => new Map([...prev, [k, fingerprint]]));
+      setVulnFpMap((prev) => new Map([...prev, [vKey, fingerprint]]));
       setDismissedFps((prev) => new Set([...prev, fingerprint]));
-      setOptimisticDismissKeys((prev) => { const n = new Set(prev); n.delete(k); return n; });
+      setOptimisticDismissKeys((prev) => { const n = new Set(prev); n.delete(vKey); return n; });
     } catch {
-      setOptimisticDismissKeys((prev) => { const n = new Set(prev); n.delete(k); return n; });
+      setOptimisticDismissKeys((prev) => { const n = new Set(prev); n.delete(vKey); return n; });
       if (undoToastTimerRef.current) clearTimeout(undoToastTimerRef.current);
       setUndoToast(null);
     }
   }, []);
 
   const undismissFinding = useCallback(async (vuln: Vulnerability) => {
-    const k = `${vuln.category}:${vuln.name.toLowerCase().trim()}`;
-    const fp = fpFingerprints.get(k);
+    const vKey = vulnUniqueKey(vuln);
+    const fp = vulnFpMap.get(vKey);
     const tUrl = report?.targetUrl;
     // Optimistically show the finding again
     setDismissedFps((prev) => { const n = new Set(prev); if (fp) n.delete(fp); return n; });
-    setOptimisticDismissKeys((prev) => { const n = new Set(prev); n.delete(k); return n; });
+    setOptimisticDismissKeys((prev) => { const n = new Set(prev); n.delete(vKey); return n; });
     if (fp && tUrl) {
       try {
         const res = await fetch(
@@ -1543,15 +1574,36 @@ export default function ReportViewer() {
           setDismissedFps((prev) => new Set([...prev, fp]));
           return;
         }
-        setFpFingerprints((prev) => { const n = new Map(prev); n.delete(k); return n; });
+        setVulnFpMap((prev) => { const n = new Map(prev); n.delete(vKey); return n; });
       } catch {
         setDismissedFps((prev) => new Set([...prev, fp]));
       }
     }
-  }, [fpFingerprints, report?.targetUrl]);
+  }, [vulnFpMap, report?.targetUrl]);
 
   const vulnerabilities = report?.data?.vulnerabilities ?? [];
   const summary = report?.data?.summary;
+
+  // Pre-compute per-vuln fingerprints using the same SHA-256 algorithm as the server.
+  // Runs as a fast async batch whenever the vulnerability list changes.
+  useEffect(() => {
+    if (!vulnerabilities.length) return;
+    let cancelled = false;
+    Promise.all(
+      vulnerabilities.map((v) =>
+        computeVulnFp(v.category, v.name, v.evidence).then(
+          (fp) => [vulnUniqueKey(v), fp] as [string, string],
+        ),
+      ),
+    ).then((pairs) => {
+      if (!cancelled) setVulnFpMap((prev) => {
+        const next = new Map(prev);
+        for (const [k, fp] of pairs) next.set(k, fp);
+        return next;
+      });
+    });
+    return () => { cancelled = true; };
+  }, [vulnerabilities]);
 
   // All hooks must come before any early returns
   const sortedVulns = useMemo(() => {
@@ -1582,12 +1634,12 @@ export default function ReportViewer() {
 
   const visibleVulns = useMemo(
     () => sortedVulns.filter((v) => {
-      const k = `${v.category}:${v.name.toLowerCase().trim()}`;
-      if (optimisticDismissKeys.has(k)) return false;
-      const fp = fpFingerprints.get(k);
+      const vKey = vulnUniqueKey(v);
+      if (optimisticDismissKeys.has(vKey)) return false;
+      const fp = vulnFpMap.get(vKey);
       return !fp || !dismissedFps.has(fp);
     }),
-    [sortedVulns, dismissedFps, fpFingerprints, optimisticDismissKeys],
+    [sortedVulns, dismissedFps, vulnFpMap, optimisticDismissKeys],
   );
 
   const dismissedCount = sortedVulns.length - visibleVulns.length;
@@ -1695,10 +1747,10 @@ export default function ReportViewer() {
     <DismissalsContext.Provider
       value={{
         dismissedFps,
+        vulnFpMap,
         optimisticDismissKeys,
         dismiss: dismissFinding,
         undismiss: undismissFinding,
-        fingerprints: fpFingerprints,
       }}
     >
     <>

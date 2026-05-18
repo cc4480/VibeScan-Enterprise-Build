@@ -125,8 +125,9 @@ const ROOT_CAUSE_PATTERNS: Array<{ pattern: RegExp; key: string }> = [
   { pattern: /referrer.policy/i,                                        key: "browser::referrer-policy" },
   // Browser Feature Control — Permissions-Policy
   { pattern: /permissions.policy|feature.policy/i,                      key: "browser::permissions-policy" },
-  // Session Management — cookie flags
-  { pattern: /cookie.*(secure|httponly|samesite)/i,                     key: "session::cookie-flags" },
+  // NOTE: cookie flag findings (Secure / HttpOnly / SameSite) are intentionally
+  // NOT merged — each controls a distinct security property and must remain
+  // independently reportable and dismissible.
 ];
 
 function getRootCauseKey(category: string, name: string): string {
