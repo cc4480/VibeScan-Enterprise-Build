@@ -205,6 +205,9 @@ export const GetReportHeader = zod.object({
     .describe("Opaque session token — `Bearer <sid>`."),
 });
 
+export const getReportResponseDataVulnerabilitiesItemConfidenceMin = 0;
+export const getReportResponseDataVulnerabilitiesItemConfidenceMax = 100;
+
 export const GetReportResponse = zod.object({
   id: zod.string(),
   scanId: zod.string(),
@@ -226,6 +229,15 @@ export const GetReportResponse = zod.object({
         solution: zod.string(),
         cweId: zod.string().nullish(),
         cvssScore: zod.number().nullish(),
+        wstgId: zod.string().nullish(),
+        confidence: zod
+          .number()
+          .min(getReportResponseDataVulnerabilitiesItemConfidenceMin)
+          .max(getReportResponseDataVulnerabilitiesItemConfidenceMax)
+          .nullish()
+          .describe(
+            "Confidence score 0–100. Measures how certain the scanner is that this\nfinding is a real, reproducible issue (not a false positive). Distinct\nfrom CVSS severity — a low-severity finding can have high confidence\nand vice versa.\n",
+          ),
       }),
     ),
     summary: zod.object({
@@ -244,8 +256,18 @@ export const GetReportResponse = zod.object({
     tlsGrade: zod.string().nullish(),
     openPorts: zod.array(zod.number()).optional(),
     targetUrl: zod.string(),
-    pagesScanned: zod.array(zod.string()).optional(),
-    probedNotFound: zod.array(zod.string()).optional(),
+    pagesScanned: zod
+      .array(zod.string())
+      .optional()
+      .describe(
+        "URLs of inner pages successfully fetched during the deep crawl (excludes the root URL).",
+      ),
+    probedNotFound: zod
+      .array(zod.string())
+      .optional()
+      .describe(
+        "High-value probe paths that returned HTTP 404. Only explicitly probed paths (HIGH_VALUE_PROBE_PATHS) are included — crawled links that 404'd are excluded.",
+      ),
     aiAnalysis: zod
       .object({
         overallRisk: zod.string(),
@@ -261,9 +283,9 @@ export const GetReportResponse = zod.object({
           .array(
             zod.object({
               subdomain: zod.string(),
-              ip: zod.string().nullable(),
-              cname: zod.string().nullable(),
-              source: zod.enum(["crt.sh", "wordlist"]),
+              ip: zod.string().nullish(),
+              cname: zod.string().nullish(),
+              source: zod.string(),
             }),
           )
           .optional(),
@@ -272,7 +294,7 @@ export const GetReportResponse = zod.object({
             zod.object({
               port: zod.number(),
               service: zod.string(),
-              banner: zod.string().nullable(),
+              banner: zod.string().nullish(),
             }),
           )
           .optional(),
@@ -288,6 +310,12 @@ export const GetReportResponse = zod.object({
         reconDurationMs: zod.number().optional(),
       })
       .optional(),
+    autoSuppressedCount: zod
+      .number()
+      .optional()
+      .describe(
+        "Number of findings automatically suppressed on this scan because the user previously dismissed them as false positives on the same target URL.",
+      ),
   }),
 });
 

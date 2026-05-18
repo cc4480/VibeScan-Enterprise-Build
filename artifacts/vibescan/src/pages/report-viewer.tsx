@@ -472,8 +472,8 @@ const DANGEROUS_RECON_PORTS = new Set([23, 445, 2375, 6379, 27017, 9200, 1433, 3
 const MEDIUM_RECON_PORTS = new Set([2376, 8888, 9000]);
 
 interface ReconData {
-  subdomains?: Array<{ subdomain: string; ip: string | null; cname: string | null; source: string }>;
-  openPorts?: Array<{ port: number; service: string; banner: string | null }>;
+  subdomains?: Array<{ subdomain: string; ip?: string | null; cname?: string | null; source: string }>;
+  openPorts?: Array<{ port: number; service: string; banner?: string | null }>;
   dnsRecords?: Array<{ type: string; value: string; ttl?: number }>;
   reconDurationMs?: number;
 }
@@ -1488,10 +1488,12 @@ export default function ReportViewer() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ targetUrl, findingName: vuln.name, findingCategory: vuln.category }),
       });
-      if (res.ok) {
-        const { fingerprint } = (await res.json()) as { fingerprint: string };
-        setFpFingerprints((prev) => new Map([...prev, [k, fingerprint]]));
+      if (!res.ok) {
+        setDismissedKeys((prev) => { const n = new Set(prev); n.delete(k); return n; });
+        return;
       }
+      const { fingerprint } = (await res.json()) as { fingerprint: string };
+      setFpFingerprints((prev) => new Map([...prev, [k, fingerprint]]));
     } catch {
       setDismissedKeys((prev) => { const n = new Set(prev); n.delete(k); return n; });
     }
@@ -1504,10 +1506,14 @@ export default function ReportViewer() {
     setDismissedKeys((prev) => { const n = new Set(prev); n.delete(k); return n; });
     if (fp && tUrl) {
       try {
-        await fetch(
+        const res = await fetch(
           `/api/dismissals/${fp}?targetUrl=${encodeURIComponent(tUrl)}`,
           { method: "DELETE" },
         );
+        if (!res.ok) {
+          setDismissedKeys((prev) => new Set([...prev, k]));
+          return;
+        }
         setFpFingerprints((prev) => { const n = new Map(prev); n.delete(k); return n; });
       } catch {
         setDismissedKeys((prev) => new Set([...prev, k]));

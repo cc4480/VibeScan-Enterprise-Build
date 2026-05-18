@@ -55,51 +55,54 @@ async function reprobe(
 
   log.info({ borderlineCount: borderline.length }, "[reprobe] Re-probing borderline findings");
 
-  // ── Passive GET probe: re-check all header-based findings ───────────────────
-  const getCtrl = new AbortController();
-  const getTimer = setTimeout(() => getCtrl.abort(), REPROBE_TIMEOUT_MS);
-  let freshHeaders: Record<string, string> | null = null;
+  // ── Single global 15s budget shared across all probes ───────────────────────
+  const globalCtrl = new AbortController();
+  const globalTimer = setTimeout(() => globalCtrl.abort(), REPROBE_TIMEOUT_MS);
 
-  try {
-    const res = await fetch(targetUrl, { method: "GET", signal: getCtrl.signal, redirect: "follow" });
-    const raw: Record<string, string> = {};
-    res.headers.forEach((value, key) => { raw[key.toLowerCase()] = value; });
-    freshHeaders = raw;
-  } catch (err) {
-    log.warn({ err }, "[reprobe] GET re-probe failed — keeping original confidences");
-    return vulns;
-  } finally {
-    clearTimeout(getTimer);
-  }
-
-  // ── Active OPTIONS probe: corroborate CORS wildcard findings ────────────────
-  // Sends a preflight-style request with a foreign Origin to accurately test
-  // whether the server reflects wildcard CORS headers under real conditions.
+  // Determine whether we have CORS findings that need an active OPTIONS probe
   const hasBorderlineCors = borderline.some(
     (v) => /cors/i.test(v.category) || /cors.*wildcard|access.control.allow.origin/i.test(v.name),
   );
-  let corsProbeHeaders: Record<string, string> | null = null;
-  if (hasBorderlineCors) {
-    const corsCtrl = new AbortController();
-    const corsTimer = setTimeout(() => corsCtrl.abort(), REPROBE_TIMEOUT_MS);
-    try {
-      const res = await fetch(targetUrl, {
+
+  // Launch GET + OPTIONS probes in parallel under the shared time budget
+  const getProbe = fetch(targetUrl, {
+    method: "GET",
+    signal: globalCtrl.signal,
+    redirect: "follow",
+  }).then((res) => {
+    const raw: Record<string, string> = {};
+    res.headers.forEach((value, key) => { raw[key.toLowerCase()] = value; });
+    return raw;
+  }).catch(() => null as Record<string, string> | null);
+
+  const corsProbe = hasBorderlineCors
+    ? fetch(targetUrl, {
         method: "OPTIONS",
         headers: {
           "Origin": "https://cors-probe.vibescan.io",
           "Access-Control-Request-Method": "GET",
         },
-        signal: corsCtrl.signal,
+        signal: globalCtrl.signal,
         redirect: "follow",
-      });
-      const raw: Record<string, string> = {};
-      res.headers.forEach((value, key) => { raw[key.toLowerCase()] = value; });
-      corsProbeHeaders = raw;
-    } catch {
-      // CORS options probe is best-effort — fall back to GET headers
-    } finally {
-      clearTimeout(corsTimer);
-    }
+      }).then((res) => {
+        const raw: Record<string, string> = {};
+        res.headers.forEach((value, key) => { raw[key.toLowerCase()] = value; });
+        return raw;
+      }).catch(() => null as Record<string, string> | null)
+    : Promise.resolve(null as Record<string, string> | null);
+
+  let freshHeaders: Record<string, string> | null;
+  let corsProbeHeaders: Record<string, string> | null;
+
+  try {
+    [freshHeaders, corsProbeHeaders] = await Promise.all([getProbe, corsProbe]);
+  } finally {
+    clearTimeout(globalTimer);
+  }
+
+  if (!freshHeaders) {
+    log.warn({}, "[reprobe] GET re-probe failed — keeping original confidences");
+    return vulns;
   }
 
   let boosted = 0;

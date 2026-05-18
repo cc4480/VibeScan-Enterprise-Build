@@ -156,7 +156,16 @@ export interface Vulnerability {
   cvssScore?: number | null;
   /** @nullable */
   wstgId?: string | null;
-  /** @nullable */
+  /**
+   * Confidence score 0–100. Measures how certain the scanner is that this
+finding is a real, reproducible issue (not a false positive). Distinct
+from CVSS severity — a low-severity finding can have high confidence
+and vice versa.
+
+   * @minimum 0
+   * @maximum 100
+   * @nullable
+   */
   confidence?: number | null;
 }
 
@@ -181,32 +190,32 @@ export interface AiAnalysis {
   agentFixPrompt?: string;
 }
 
-export interface ReconSubdomain {
+export type ReconResultSubdomainsItem = {
   subdomain: string;
   /** @nullable */
-  ip: string | null;
+  ip?: string | null;
   /** @nullable */
-  cname: string | null;
-  source: "crt.sh" | "wordlist";
-}
+  cname?: string | null;
+  source: string;
+};
 
-export interface ReconPort {
+export type ReconResultOpenPortsItem = {
   port: number;
   service: string;
   /** @nullable */
-  banner: string | null;
-}
+  banner?: string | null;
+};
 
-export interface ReconDnsRecord {
+export type ReconResultDnsRecordsItem = {
   type: string;
   value: string;
   ttl?: number;
-}
+};
 
-export interface ReconData {
-  subdomains?: ReconSubdomain[];
-  openPorts?: ReconPort[];
-  dnsRecords?: ReconDnsRecord[];
+export interface ReconResult {
+  subdomains?: ReconResultSubdomainsItem[];
+  openPorts?: ReconResultOpenPortsItem[];
+  dnsRecords?: ReconResultDnsRecordsItem[];
   reconDurationMs?: number;
 }
 
@@ -220,10 +229,14 @@ export interface ReportData {
   tlsGrade?: string | null;
   openPorts?: number[];
   targetUrl: string;
+  /** URLs of inner pages successfully fetched during the deep crawl (excludes the root URL). */
   pagesScanned?: string[];
+  /** High-value probe paths that returned HTTP 404. Only explicitly probed paths (HIGH_VALUE_PROBE_PATHS) are included — crawled links that 404'd are excluded. */
   probedNotFound?: string[];
   aiAnalysis?: AiAnalysis;
-  recon?: ReconData;
+  recon?: ReconResult;
+  /** Number of findings automatically suppressed on this scan because the user previously dismissed them as false positives on the same target URL. */
+  autoSuppressedCount?: number;
 }
 
 export interface Report {

@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { AiAnalysis } from "./aiAnalysis";
+import type { ReconResult } from "./reconResult";
 import type { ScanSummary } from "./scanSummary";
 import type { Vulnerability } from "./vulnerability";
 
@@ -19,7 +20,12 @@ export interface ReportData {
   tlsGrade?: string | null;
   openPorts?: number[];
   targetUrl: string;
-  aiAnalysis?: AiAnalysis;
+  /** URLs of inner pages successfully fetched during the deep crawl (excludes the root URL). */
   pagesScanned?: string[];
+  /** High-value probe paths that returned HTTP 404. Only explicitly probed paths (HIGH_VALUE_PROBE_PATHS) are included — crawled links that 404'd are excluded. */
   probedNotFound?: string[];
+  aiAnalysis?: AiAnalysis;
+  recon?: ReconResult;
+  /** Number of findings automatically suppressed on this scan because the user previously dismissed them as false positives on the same target URL. */
+  autoSuppressedCount?: number;
 }
