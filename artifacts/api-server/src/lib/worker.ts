@@ -13,7 +13,7 @@ import { eq, and } from "drizzle-orm";
 import { getBoss, SCAN_QUEUE, type ScanJobData } from "./queue";
 import { runScan, computeRiskScore, computeGrade, type ScanVulnerability } from "./scanner";
 import { corroborateMerge } from "./scoring";
-import { findingFingerprint, normalizeEvidenceKey } from "./fingerprint";
+import { findingFingerprint, normalizeEvidenceKey, canonicalizeTargetUrl } from "./fingerprint";
 import { runRecon } from "./recon";
 import { warnIfLocalDataStale, OSV_CACHE_MAX_SIZE } from "./cveCheck";
 import { refreshEolData, loadEolCacheFromDb, EOL_REFRESH_QUEUE } from "./eolFetcher";
@@ -327,9 +327,9 @@ async function processScanJob(job: ScanJob): Promise<void> {
   scanResult.vulnerabilities = await reprobe(targetUrl, scanResult.vulnerabilities, log);
 
   // ── 2e. Filter previously dismissed false positives ───────────────────
-  // Use the canonicalized final URL (after redirects) so dismissals match
-  // across re-scans regardless of whether the user typed http:// or https://.
-  const canonicalUrl = scanResult.finalUrl ?? targetUrl;
+  // Use the same canonicalized URL as the dismissals route so DB keys always match.
+  // canonicalizeTargetUrl: lowercase scheme+host, strip trailing slash on non-root paths.
+  const canonicalUrl = canonicalizeTargetUrl(scanResult.finalUrl ?? targetUrl);
   const dismissals = await db
     .select({ fingerprint: dismissedFindingsTable.findingFingerprint })
     .from(dismissedFindingsTable)

@@ -1,6 +1,30 @@
 import { createHash } from "node:crypto";
 
 /**
+ * Canonicalizes a target URL for consistent storage and lookup across all
+ * dismissal code paths (routes and scan worker).
+ *
+ * Rules applied:
+ *   - Lowercase scheme and hostname
+ *   - Strip trailing slash from non-root pathnames
+ *
+ * Falls back to the raw string on parse failure so callers always get a value.
+ */
+export function canonicalizeTargetUrl(rawUrl: string): string {
+  try {
+    const u = new URL(rawUrl);
+    u.protocol = u.protocol.toLowerCase();
+    u.hostname = u.hostname.toLowerCase();
+    if (u.pathname !== "/" && u.pathname.endsWith("/")) {
+      u.pathname = u.pathname.slice(0, -1);
+    }
+    return u.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
+/**
  * Strips volatile/runtime parts from evidence text to produce a stable
  * structural key. Removes URLs, version numbers, quoted values, and specific
  * header/cookie values — keeping only structural keywords that stay the same

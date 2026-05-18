@@ -2,28 +2,9 @@ import { Router, type IRouter } from "express";
 import { db, dismissedFindingsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
-import { findingFingerprint } from "../lib/fingerprint";
+import { findingFingerprint, canonicalizeTargetUrl } from "../lib/fingerprint";
 
 const router: IRouter = Router();
-
-/**
- * Normalizes a target URL for consistent storage and lookup across clients.
- * Lowercases scheme + host, strips trailing slash from non-root paths.
- * Matches the canonicalization strategy used by the scanner (following redirects).
- */
-function canonicalizeTargetUrl(rawUrl: string): string {
-  try {
-    const u = new URL(rawUrl);
-    u.protocol = u.protocol.toLowerCase();
-    u.hostname = u.hostname.toLowerCase();
-    if (u.pathname !== "/" && u.pathname.endsWith("/")) {
-      u.pathname = u.pathname.slice(0, -1);
-    }
-    return u.toString();
-  } catch {
-    return rawUrl;
-  }
-}
 
 const DismissBody = z.object({
   targetUrl: z.string().min(1),
