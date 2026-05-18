@@ -277,6 +277,29 @@ export interface CreateDismissalResponse {
   fingerprint: string;
 }
 
+export interface ReportShare {
+  id: string;
+  token: string;
+  /** @nullable */
+  expiresAt?: string | null;
+  createdAt: string;
+  /** @nullable */
+  revokedAt?: string | null;
+}
+
+export type CreateShareRequestExpiresIn =
+  (typeof CreateShareRequestExpiresIn)[keyof typeof CreateShareRequestExpiresIn];
+
+export const CreateShareRequestExpiresIn = {
+  "7d": "7d",
+  "30d": "30d",
+  never: "never",
+} as const;
+
+export interface CreateShareRequest {
+  expiresIn?: CreateShareRequestExpiresIn;
+}
+
 export interface Credits {
   balance: number;
 }

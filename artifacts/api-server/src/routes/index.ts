@@ -7,6 +7,7 @@ import creditsRouter from "./credits";
 import stripeRouter from "./stripe";
 import monitorRouter from "./monitor";
 import dismissalsRouter from "./dismissals";
+import sharesRouter from "./shares";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(creditsRouter);
 router.use(stripeRouter);
 router.use(monitorRouter);
 router.use(dismissalsRouter);
+router.use(sharesRouter);
 
 export default router;

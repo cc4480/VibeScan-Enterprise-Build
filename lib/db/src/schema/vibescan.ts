@@ -136,6 +136,26 @@ export type DismissedFinding = typeof dismissedFindingsTable.$inferSelect;
  * Single-row key-value store for persisting EOL data fetched from endoflife.date.
  * Used by eolFetcher.ts to survive server restarts between daily pg-boss schedule runs.
  */
+export const reportSharesTable = pgTable("report_shares", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  reportId: uuid("report_id").notNull().references(() => reportsTable.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  token: text("token").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+}, (table) => [
+  uniqueIndex("uq_report_shares_token").on(table.token),
+  index("idx_report_shares_report_id").on(table.reportId),
+  index("idx_report_shares_user_id").on(table.userId),
+]);
+
+export type ReportShare = typeof reportSharesTable.$inferSelect;
+
+/**
+ * Single-row key-value store for persisting EOL data fetched from endoflife.date.
+ * Used by eolFetcher.ts to survive server restarts between daily pg-boss schedule runs.
+ */
 export const eolCacheTable = pgTable("eol_cache", {
   key: text("key").primaryKey(),
   payload: jsonb("payload").notNull(),
