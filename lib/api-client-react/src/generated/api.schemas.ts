@@ -252,6 +252,31 @@ export interface Report {
   data: ReportData;
 }
 
+export interface DismissalEntry {
+  /** Stable SHA-256 fingerprint (20 hex chars) identifying this finding instance. */
+  fingerprint: string;
+  findingName: string;
+  findingCategory: string;
+}
+
+export interface CreateDismissalRequest {
+  /** @minLength 1 */
+  targetUrl: string;
+  /** @minLength 1 */
+  findingName: string;
+  /** @minLength 1 */
+  findingCategory: string;
+  /** Raw evidence text — normalized server-side before hashing. */
+  findingEvidence?: string;
+  /** Dismissal reason (default "false_positive"). */
+  reason?: string;
+}
+
+export interface CreateDismissalResponse {
+  /** Stable SHA-256 fingerprint (20 hex chars) computed for this dismissal. */
+  fingerprint: string;
+}
+
 export interface Credits {
   balance: number;
 }
@@ -272,4 +297,18 @@ export type HandleBrowserLoginCallbackParams = {
   code?: string;
   state?: string;
   iss?: string;
+};
+
+export type ListDismissalsParams = {
+  /**
+   * The canonicalized target URL to fetch dismissals for.
+   */
+  targetUrl: string;
+};
+
+export type DeleteDismissalParams = {
+  /**
+   * The target URL the dismissal belongs to.
+   */
+  targetUrl: string;
 };

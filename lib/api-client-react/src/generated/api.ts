@@ -19,12 +19,17 @@ import type {
 import type {
   AuthUserEnvelope,
   BeginBrowserLoginParams,
+  CreateDismissalRequest,
+  CreateDismissalResponse,
   CreateScanRequest,
   CreateScanResponse,
   Credits,
+  DeleteDismissalParams,
+  DismissalEntry,
   ErrorEnvelope,
   HandleBrowserLoginCallbackParams,
   HealthStatus,
+  ListDismissalsParams,
   LogoutSuccess,
   MobileTokenExchangeRequest,
   MobileTokenExchangeSuccess,
@@ -964,6 +969,286 @@ export function useGetReport<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary List dismissed findings for a target URL
+ */
+export const getListDismissalsUrl = (params: ListDismissalsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/dismissals?${stringifiedParams}`
+    : `/api/dismissals`;
+};
+
+export const listDismissals = async (
+  params: ListDismissalsParams,
+  options?: RequestInit,
+): Promise<DismissalEntry[]> => {
+  return customFetch<DismissalEntry[]>(getListDismissalsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListDismissalsQueryKey = (params?: ListDismissalsParams) => {
+  return [`/api/dismissals`, ...(params ? [params] : [])] as const;
+};
+
+export const getListDismissalsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listDismissals>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params: ListDismissalsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listDismissals>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListDismissalsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listDismissals>>> = ({
+    signal,
+  }) => listDismissals(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listDismissals>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListDismissalsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listDismissals>>
+>;
+export type ListDismissalsQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary List dismissed findings for a target URL
+ */
+
+export function useListDismissals<
+  TData = Awaited<ReturnType<typeof listDismissals>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params: ListDismissalsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listDismissals>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListDismissalsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Dismiss a finding as a false positive
+ */
+export const getCreateDismissalUrl = () => {
+  return `/api/dismissals`;
+};
+
+export const createDismissal = async (
+  createDismissalRequest: CreateDismissalRequest,
+  options?: RequestInit,
+): Promise<CreateDismissalResponse> => {
+  return customFetch<CreateDismissalResponse>(getCreateDismissalUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createDismissalRequest),
+  });
+};
+
+export const getCreateDismissalMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createDismissal>>,
+    TError,
+    { data: BodyType<CreateDismissalRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createDismissal>>,
+  TError,
+  { data: BodyType<CreateDismissalRequest> },
+  TContext
+> => {
+  const mutationKey = ["createDismissal"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createDismissal>>,
+    { data: BodyType<CreateDismissalRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createDismissal(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateDismissalMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createDismissal>>
+>;
+export type CreateDismissalMutationBody = BodyType<CreateDismissalRequest>;
+export type CreateDismissalMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Dismiss a finding as a false positive
+ */
+export const useCreateDismissal = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createDismissal>>,
+    TError,
+    { data: BodyType<CreateDismissalRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createDismissal>>,
+  TError,
+  { data: BodyType<CreateDismissalRequest> },
+  TContext
+> => {
+  return useMutation(getCreateDismissalMutationOptions(options));
+};
+
+/**
+ * @summary Remove a dismissed finding (undo false-positive mark)
+ */
+export const getDeleteDismissalUrl = (
+  fingerprint: string,
+  params: DeleteDismissalParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/dismissals/${fingerprint}?${stringifiedParams}`
+    : `/api/dismissals/${fingerprint}`;
+};
+
+export const deleteDismissal = async (
+  fingerprint: string,
+  params: DeleteDismissalParams,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteDismissalUrl(fingerprint, params), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteDismissalMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteDismissal>>,
+    TError,
+    { fingerprint: string; params: DeleteDismissalParams },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteDismissal>>,
+  TError,
+  { fingerprint: string; params: DeleteDismissalParams },
+  TContext
+> => {
+  const mutationKey = ["deleteDismissal"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteDismissal>>,
+    { fingerprint: string; params: DeleteDismissalParams }
+  > = (props) => {
+    const { fingerprint, params } = props ?? {};
+
+    return deleteDismissal(fingerprint, params, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteDismissalMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteDismissal>>
+>;
+
+export type DeleteDismissalMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Remove a dismissed finding (undo false-positive mark)
+ */
+export const useDeleteDismissal = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteDismissal>>,
+    TError,
+    { fingerprint: string; params: DeleteDismissalParams },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteDismissal>>,
+  TError,
+  { fingerprint: string; params: DeleteDismissalParams },
+  TContext
+> => {
+  return useMutation(getDeleteDismissalMutationOptions(options));
+};
 
 /**
  * @summary Get the current user's credit balance

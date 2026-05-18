@@ -6,6 +6,25 @@ import { findingFingerprint } from "../lib/fingerprint";
 
 const router: IRouter = Router();
 
+/**
+ * Normalizes a target URL for consistent storage and lookup across clients.
+ * Lowercases scheme + host, strips trailing slash from non-root paths.
+ * Matches the canonicalization strategy used by the scanner (following redirects).
+ */
+function canonicalizeTargetUrl(rawUrl: string): string {
+  try {
+    const u = new URL(rawUrl);
+    u.protocol = u.protocol.toLowerCase();
+    u.hostname = u.hostname.toLowerCase();
+    if (u.pathname !== "/" && u.pathname.endsWith("/")) {
+      u.pathname = u.pathname.slice(0, -1);
+    }
+    return u.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
 const DismissBody = z.object({
   targetUrl: z.string().min(1),
   findingName: z.string().min(1),
@@ -20,11 +39,12 @@ router.get("/dismissals", async (req, res): Promise<void> => {
     return;
   }
 
-  const targetUrl = typeof req.query.targetUrl === "string" ? req.query.targetUrl : null;
-  if (!targetUrl) {
+  const rawTargetUrl = typeof req.query.targetUrl === "string" ? req.query.targetUrl : null;
+  if (!rawTargetUrl) {
     res.status(400).json({ error: "targetUrl query parameter is required" });
     return;
   }
+  const targetUrl = canonicalizeTargetUrl(rawTargetUrl);
 
   try {
     const items = await db
@@ -62,7 +82,8 @@ router.post("/dismissals", async (req, res): Promise<void> => {
     return;
   }
 
-  const { targetUrl, findingName, findingCategory, findingEvidence, reason } = parsed.data;
+  const { targetUrl: rawTargetUrlPost, findingName, findingCategory, findingEvidence, reason } = parsed.data;
+  const targetUrl = canonicalizeTargetUrl(rawTargetUrlPost);
   const fingerprint = findingFingerprint(findingCategory, findingName, findingEvidence);
 
   try {
@@ -92,11 +113,12 @@ router.delete("/dismissals/:fingerprint", async (req, res): Promise<void> => {
   }
 
   const { fingerprint } = req.params;
-  const targetUrl = typeof req.query.targetUrl === "string" ? req.query.targetUrl : null;
-  if (!targetUrl) {
+  const rawTargetUrlDelete = typeof req.query.targetUrl === "string" ? req.query.targetUrl : null;
+  if (!rawTargetUrlDelete) {
     res.status(400).json({ error: "targetUrl query parameter is required" });
     return;
   }
+  const targetUrl = canonicalizeTargetUrl(rawTargetUrlDelete);
 
   try {
     await db

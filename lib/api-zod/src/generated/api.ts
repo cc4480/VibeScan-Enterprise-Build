@@ -320,6 +320,77 @@ export const GetReportResponse = zod.object({
 });
 
 /**
+ * @summary List dismissed findings for a target URL
+ */
+export const ListDismissalsQueryParams = zod.object({
+  targetUrl: zod.coerce
+    .string()
+    .describe("The canonicalized target URL to fetch dismissals for."),
+});
+
+export const ListDismissalsHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — `Bearer <sid>`."),
+});
+
+export const ListDismissalsResponseItem = zod.object({
+  fingerprint: zod
+    .string()
+    .describe(
+      "Stable SHA-256 fingerprint (20 hex chars) identifying this finding instance.",
+    ),
+  findingName: zod.string(),
+  findingCategory: zod.string(),
+});
+export const ListDismissalsResponse = zod.array(ListDismissalsResponseItem);
+
+/**
+ * @summary Dismiss a finding as a false positive
+ */
+export const CreateDismissalHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — `Bearer <sid>`."),
+});
+
+export const CreateDismissalBody = zod.object({
+  targetUrl: zod.string().min(1),
+  findingName: zod.string().min(1),
+  findingCategory: zod.string().min(1),
+  findingEvidence: zod
+    .string()
+    .optional()
+    .describe("Raw evidence text — normalized server-side before hashing."),
+  reason: zod
+    .string()
+    .optional()
+    .describe('Dismissal reason (default \"false_positive\").'),
+});
+
+/**
+ * @summary Remove a dismissed finding (undo false-positive mark)
+ */
+export const DeleteDismissalParams = zod.object({
+  fingerprint: zod.coerce.string(),
+});
+
+export const DeleteDismissalQueryParams = zod.object({
+  targetUrl: zod.coerce
+    .string()
+    .describe("The target URL the dismissal belongs to."),
+});
+
+export const DeleteDismissalHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — `Bearer <sid>`."),
+});
+
+/**
  * @summary Get the current user's credit balance
  */
 export const GetCreditsHeader = zod.object({

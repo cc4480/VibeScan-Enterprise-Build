@@ -17,6 +17,8 @@ tags:
     description: Report retrieval
   - name: credits
     description: Credit balance management
+  - name: dismissals
+    description: Per-user false-positive dismissals scoped to a target URL
 paths:
   /healthz:
     get:
@@ -266,6 +268,109 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '404':
           description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /dismissals:
+    get:
+      tags: [dismissals]
+      operationId: listDismissals
+      summary: List dismissed findings for a target URL
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+        - name: targetUrl
+          in: query
+          required: true
+          description: The canonicalized target URL to fetch dismissals for.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of dismissed findings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DismissalEntry'
+        '400':
+          description: Missing targetUrl
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    post:
+      tags: [dismissals]
+      operationId: createDismissal
+      summary: Dismiss a finding as a false positive
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDismissalRequest'
+      responses:
+        '201':
+          description: Dismissal created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateDismissalResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /dismissals/{fingerprint}:
+    delete:
+      tags: [dismissals]
+      operationId: deleteDismissal
+      summary: Remove a dismissed finding (undo false-positive mark)
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+        - name: fingerprint
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: targetUrl
+          in: query
+          required: true
+          description: The target URL the dismissal belongs to.
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Dismissal removed
+        '400':
+          description: Missing targetUrl
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
           content:
             application/json:
               schema:
@@ -663,6 +768,46 @@ components:
           format: date-time
         data:
           $ref: '#/components/schemas/ReportData'
+
+    DismissalEntry:
+      type: object
+      required: [fingerprint, findingName, findingCategory]
+      properties:
+        fingerprint:
+          type: string
+          description: Stable SHA-256 fingerprint (20 hex chars) identifying this finding instance.
+        findingName:
+          type: string
+        findingCategory:
+          type: string
+
+    CreateDismissalRequest:
+      type: object
+      required: [targetUrl, findingName, findingCategory]
+      properties:
+        targetUrl:
+          type: string
+          minLength: 1
+        findingName:
+          type: string
+          minLength: 1
+        findingCategory:
+          type: string
+          minLength: 1
+        findingEvidence:
+          type: string
+          description: Raw evidence text — normalized server-side before hashing.
+        reason:
+          type: string
+          description: Dismissal reason (default "false_positive").
+
+    CreateDismissalResponse:
+      type: object
+      required: [fingerprint]
+      properties:
+        fingerprint:
+          type: string
+          description: Stable SHA-256 fingerprint (20 hex chars) computed for this dismissal.
 
     Credits:
       type: object
