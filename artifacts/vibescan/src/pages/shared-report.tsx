@@ -190,6 +190,11 @@ export default function SharedReport() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ status: number; message: string } | null>(null);
 
+  // PDF generation state — must be declared before any conditional returns (Rules of Hooks)
+  const pdfContainerRef = useRef<HTMLDivElement>(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [showPdfContainer, setShowPdfContainer] = useState(false);
+
   useEffect(() => {
     if (!token) return;
     fetch(`/api/share/${token}`)
@@ -258,10 +263,6 @@ export default function SharedReport() {
   const dateStr = new Date(report.scannedAt).toLocaleDateString("en-US", {
     year: "numeric", month: "long", day: "numeric",
   });
-
-  const pdfContainerRef = useRef<HTMLDivElement>(null);
-  const [generatingPdf, setGeneratingPdf] = useState(false);
-  const [showPdfContainer, setShowPdfContainer] = useState(false);
 
   const handleDownloadPDF = async () => {
     if (generatingPdf) return;
