@@ -13,7 +13,7 @@ import { eq, and } from "drizzle-orm";
 import { getBoss, SCAN_QUEUE, type ScanJobData } from "./queue";
 import { runScan, computeRiskScore, computeGrade, type ScanVulnerability } from "./scanner";
 import { corroborateMerge } from "./scoring";
-import { findingFingerprint } from "./fingerprint";
+import { findingFingerprint, normalizeEvidenceKey } from "./fingerprint";
 import { runRecon } from "./recon";
 import { warnIfLocalDataStale, OSV_CACHE_MAX_SIZE } from "./cveCheck";
 import { refreshEolData, loadEolCacheFromDb, EOL_REFRESH_QUEUE } from "./eolFetcher";
@@ -59,12 +59,21 @@ async function reprobe(
   const globalCtrl = new AbortController();
   const globalTimer = setTimeout(() => globalCtrl.abort(), REPROBE_TIMEOUT_MS);
 
-  // Determine whether we have CORS findings that need an active OPTIONS probe
+  // Determine which probe types are needed
   const hasBorderlineCors = borderline.some(
     (v) => /cors/i.test(v.category) || /cors.*wildcard|access.control.allow.origin/i.test(v.name),
   );
+  const hasBorderlineDns = borderline.some(
+    (v) => /spf|dmarc|dkim|dnssec|email.*security|dns/i.test(v.name),
+  );
 
-  // Launch GET + OPTIONS probes in parallel under the shared time budget
+  // Extract hostname for DNS probe
+  let targetHostname = "";
+  try { targetHostname = new URL(targetUrl).hostname; } catch { /* ignore */ }
+
+  // ── Launch all probes in parallel under the shared 15s budget ────────────────
+
+  // Probe 1: Passive GET — re-validates all header-based findings
   const getProbe = fetch(targetUrl, {
     method: "GET",
     signal: globalCtrl.signal,
@@ -75,6 +84,7 @@ async function reprobe(
     return raw;
   }).catch(() => null as Record<string, string> | null);
 
+  // Probe 2: Active OPTIONS — corroborates CORS wildcard findings
   const corsProbe = hasBorderlineCors
     ? fetch(targetUrl, {
         method: "OPTIONS",
@@ -91,11 +101,22 @@ async function reprobe(
       }).catch(() => null as Record<string, string> | null)
     : Promise.resolve(null as Record<string, string> | null);
 
+  // Probe 3: DNS TXT probe — corroborates SPF/DMARC/email-security findings
+  const dnsProbe = (hasBorderlineDns && targetHostname)
+    ? fetch(
+        `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(targetHostname)}&type=TXT`,
+        { headers: { Accept: "application/dns-json" }, signal: globalCtrl.signal },
+      ).then((res) => res.json() as Promise<{ Answer?: Array<{ data: string }> }>)
+       .then((data) => data.Answer?.map((a) => a.data.toLowerCase()) ?? [] as string[])
+       .catch(() => null as string[] | null)
+    : Promise.resolve(null as string[] | null);
+
   let freshHeaders: Record<string, string> | null;
   let corsProbeHeaders: Record<string, string> | null;
+  let dnsTxtRecords: string[] | null;
 
   try {
-    [freshHeaders, corsProbeHeaders] = await Promise.all([getProbe, corsProbe]);
+    [freshHeaders, corsProbeHeaders, dnsTxtRecords] = await Promise.all([getProbe, corsProbe, dnsProbe]);
   } finally {
     clearTimeout(globalTimer);
   }
@@ -112,20 +133,48 @@ async function reprobe(
     const c = v.confidence ?? 100;
     if (c < REPROBE_MIN || c >= REPROBE_MAX) return [v];
 
+    const vName = v.name.toLowerCase();
+    const vCat = v.category.toLowerCase();
+
+    // DNS-based findings: use TXT record probe result
+    if (/spf|dmarc|dkim|dnssec|email.*security/i.test(vName) && dnsTxtRecords !== null) {
+      const confirmed = checkDnsFinding(vName, dnsTxtRecords);
+      if (confirmed !== null) {
+        if (confirmed) { boosted++; return [{ ...v, confidence: Math.min(95, c + 10) }]; }
+        dropped++;
+        return [];
+      }
+    }
+
     // For CORS findings, prefer the active OPTIONS probe result
-    const isCors = /cors/i.test(v.category) || /cors.*wildcard|access.control.allow.origin/i.test(v.name);
+    const isCors = /cors/i.test(vCat) || /cors.*wildcard|access.control.allow.origin/i.test(vName);
     const headersToCheck = (isCors && corsProbeHeaders) ? corsProbeHeaders : freshHeaders;
     if (!headersToCheck) return [v];
 
     const confirmed = checkHeaderFinding(v, headersToCheck);
-    if (confirmed === null) return [v]; // finding class not verifiable via headers — keep as-is
+    if (confirmed === null) return [v]; // finding class not verifiable by any current probe — keep as-is
     if (confirmed) { boosted++; return [{ ...v, confidence: Math.min(95, c + 10) }]; }
-    dropped++; // disconfirmed on second probe — remove from report
+    dropped++; // disconfirmed — remove from report
     return [];
   });
 
   log.info({ boosted, dropped }, "[reprobe] Re-probe adjustments applied");
   return updated;
+}
+
+/**
+ * Validates DNS-based security findings against live TXT record data from
+ * a DNS-over-HTTPS probe. Returns true if the finding is confirmed (issue
+ * still present), false if disconfirmed, or null if undecidable.
+ */
+function checkDnsFinding(nameLower: string, txtRecords: string[]): boolean | null {
+  if (/spf|sender policy framework/.test(nameLower))
+    return !txtRecords.some((r) => r.includes("v=spf1"));
+  if (/dmarc/.test(nameLower))
+    return !txtRecords.some((r) => r.includes("v=dmarc1"));
+  if (/dkim/.test(nameLower))
+    return !txtRecords.some((r) => r.includes("v=dkim1"));
+  return null;
 }
 
 function checkHeaderFinding(
@@ -296,7 +345,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
     const dismissedFps = new Set(dismissals.map((d) => d.fingerprint));
     const beforeDismiss = scanResult.vulnerabilities.length;
     scanResult.vulnerabilities = scanResult.vulnerabilities.filter(
-      (v) => !dismissedFps.has(findingFingerprint(v.category, v.name)),
+      (v) => !dismissedFps.has(findingFingerprint(v.category, v.name, normalizeEvidenceKey(v.evidence))),
     );
     autoSuppressedCount = beforeDismiss - scanResult.vulnerabilities.length;
     if (autoSuppressedCount > 0) {

@@ -10,6 +10,7 @@ const DismissBody = z.object({
   targetUrl: z.string().min(1),
   findingName: z.string().min(1),
   findingCategory: z.string().min(1),
+  findingEvidence: z.string().optional(),
 });
 
 router.get("/dismissals", async (req, res): Promise<void> => {
@@ -60,8 +61,8 @@ router.post("/dismissals", async (req, res): Promise<void> => {
     return;
   }
 
-  const { targetUrl, findingName, findingCategory } = parsed.data;
-  const fingerprint = findingFingerprint(findingCategory, findingName);
+  const { targetUrl, findingName, findingCategory, findingEvidence } = parsed.data;
+  const fingerprint = findingFingerprint(findingCategory, findingName, findingEvidence);
 
   try {
     await db

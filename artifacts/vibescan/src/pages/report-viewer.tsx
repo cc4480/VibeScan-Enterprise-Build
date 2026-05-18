@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { cn, formatSeverity, getSeverityColors, getGradeColor } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useMemo, useCallback, useEffect, createContext, useContext } from "react";
+import { useState, useMemo, useCallback, useEffect, createContext, useContext, useRef } from "react";
 import type { Vulnerability } from "@workspace/api-client-react";
 
 // ─── Dismissals context ───────────────────────────────────────────────────────
@@ -1460,6 +1460,8 @@ export default function ReportViewer() {
 
   const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set());
   const [fpFingerprints, setFpFingerprints] = useState<Map<string, string>>(new Map());
+  const [undoToast, setUndoToast] = useState<{ key: string; vuln: Vulnerability } | null>(null);
+  const undoToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!report?.targetUrl) return;
@@ -1481,21 +1483,38 @@ export default function ReportViewer() {
 
   const dismissFinding = useCallback(async (vuln: Vulnerability, targetUrl: string) => {
     const k = `${vuln.category}:${vuln.name.toLowerCase().trim()}`;
+
+    // Optimistically hide the finding immediately
     setDismissedKeys((prev) => new Set([...prev, k]));
+
+    // Show external undo toast (the per-card undo button disappears when the card is hidden)
+    if (undoToastTimerRef.current) clearTimeout(undoToastTimerRef.current);
+    setUndoToast({ key: k, vuln });
+    undoToastTimerRef.current = setTimeout(() => setUndoToast(null), 5000);
+
     try {
       const res = await fetch("/api/dismissals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetUrl, findingName: vuln.name, findingCategory: vuln.category }),
+        body: JSON.stringify({
+          targetUrl,
+          findingName: vuln.name,
+          findingCategory: vuln.category,
+          findingEvidence: vuln.evidence ?? undefined,
+        }),
       });
       if (!res.ok) {
         setDismissedKeys((prev) => { const n = new Set(prev); n.delete(k); return n; });
+        if (undoToastTimerRef.current) clearTimeout(undoToastTimerRef.current);
+        setUndoToast(null);
         return;
       }
       const { fingerprint } = (await res.json()) as { fingerprint: string };
       setFpFingerprints((prev) => new Map([...prev, [k, fingerprint]]));
     } catch {
       setDismissedKeys((prev) => { const n = new Set(prev); n.delete(k); return n; });
+      if (undoToastTimerRef.current) clearTimeout(undoToastTimerRef.current);
+      setUndoToast(null);
     }
   }, []);
 
@@ -2154,6 +2173,27 @@ export default function ReportViewer() {
         </div>
       </div>
       </div>
+
+      {/* ── Timed undo toast ── shown for 5s after a finding is dismissed ── */}
+      {undoToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-background border border-border rounded-xl px-4 py-3 shadow-2xl text-sm animate-in slide-in-from-bottom-2 duration-200">
+          <span className="text-muted-foreground">
+            <span className="font-semibold text-foreground truncate max-w-[200px] inline-block align-bottom">{undoToast.vuln.name}</span>
+            {" "}dismissed as false positive
+          </span>
+          <button
+            onClick={async () => {
+              if (undoToastTimerRef.current) clearTimeout(undoToastTimerRef.current);
+              const toastVuln = undoToast.vuln;
+              setUndoToast(null);
+              await undismissFinding(toastVuln);
+            }}
+            className="text-primary hover:text-primary/80 font-bold underline underline-offset-2 shrink-0"
+          >
+            Undo
+          </button>
+        </div>
+      )}
     </>
     </DismissalsContext.Provider>
   );
