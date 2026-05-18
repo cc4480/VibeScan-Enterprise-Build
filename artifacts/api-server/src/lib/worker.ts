@@ -12,6 +12,7 @@ import { db, scansTable, reportsTable, monitorSubscriptionsTable } from "@worksp
 import { eq, and } from "drizzle-orm";
 import { getBoss, SCAN_QUEUE, type ScanJobData } from "./queue";
 import { runScan, computeRiskScore, computeGrade, type ScanVulnerability } from "./scanner";
+import { corroborateMerge } from "./scoring";
 import { runRecon } from "./recon";
 import { warnIfLocalDataStale, OSV_CACHE_MAX_SIZE } from "./cveCheck";
 import { refreshEolData, loadEolCacheFromDb, EOL_REFRESH_QUEUE } from "./eolFetcher";
@@ -23,6 +24,102 @@ import { randomUUID } from "node:crypto";
 import type { Job } from "pg-boss";
 
 type ScanJob = Job<ScanJobData>;
+
+// ─── Differential re-probe ────────────────────────────────────────────────────
+
+const REPROBE_MIN = 50;
+const REPROBE_MAX = 70;
+const REPROBE_TIMEOUT_MS = 15_000;
+
+/**
+ * For borderline findings (50 ≤ confidence < 70), makes a second HTTP request
+ * to the target URL and re-verifies header-based conditions.
+ * Confirmed findings get +10 confidence; contradicted ones get -20.
+ */
+interface ReprobeLog {
+  info: (obj: Record<string, unknown>, msg: string) => void;
+  warn: (obj: unknown, msg: string) => void;
+}
+
+async function reprobe(
+  targetUrl: string,
+  vulns: ScanVulnerability[],
+  log: ReprobeLog,
+): Promise<ScanVulnerability[]> {
+  const borderline = vulns.filter((v) => {
+    const c = v.confidence ?? 100;
+    return c >= REPROBE_MIN && c < REPROBE_MAX;
+  });
+  if (borderline.length === 0) return vulns;
+
+  log.info({ borderlineCount: borderline.length }, "[reprobe] Re-probing borderline findings");
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REPROBE_TIMEOUT_MS);
+  let freshHeaders: Record<string, string> | null = null;
+
+  try {
+    const res = await fetch(targetUrl, { method: "GET", signal: controller.signal, redirect: "follow" });
+    const raw: Record<string, string> = {};
+    res.headers.forEach((value, key) => { raw[key.toLowerCase()] = value; });
+    freshHeaders = raw;
+  } catch (err) {
+    log.warn({ err }, "[reprobe] Re-probe request failed — keeping original confidences");
+    return vulns;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  let boosted = 0;
+  let lowered = 0;
+
+  const updated = vulns.map((v) => {
+    const c = v.confidence ?? 100;
+    if (c < REPROBE_MIN || c >= REPROBE_MAX || !freshHeaders) return v;
+    const confirmed = checkHeaderFinding(v, freshHeaders);
+    if (confirmed === null) return v;
+    if (confirmed) { boosted++; return { ...v, confidence: Math.min(95, c + 10) }; }
+    lowered++;
+    return { ...v, confidence: Math.max(10, c - 20) };
+  });
+
+  log.info({ boosted, lowered }, "[reprobe] Re-probe adjustments applied");
+  return updated;
+}
+
+function checkHeaderFinding(
+  vuln: ScanVulnerability,
+  headers: Record<string, string>,
+): boolean | null {
+  const name = vuln.name.toLowerCase();
+  const cat = vuln.category.toLowerCase();
+
+  if (/hsts|strict-transport/.test(name))
+    return !("strict-transport-security" in headers);
+  if (/content.security.policy|(?<!\w)csp(?!\w)/.test(name) && /missing|absent/.test(name))
+    return !("content-security-policy" in headers);
+  if (/x-frame|clickjack/.test(name)) {
+    if (/missing|absent/.test(name)) return !("x-frame-options" in headers);
+    const val = headers["x-frame-options"] ?? "";
+    return !val || !/^(deny|sameorigin)$/i.test(val.trim());
+  }
+  if (/x-content-type|content.type.sniff/.test(name)) {
+    const val = (headers["x-content-type-options"] ?? "").toLowerCase().trim();
+    return val !== "nosniff";
+  }
+  if (/referrer-policy/.test(name) && /missing|absent/.test(name))
+    return !("referrer-policy" in headers);
+  if (cat.includes("cors") || /\bcors\b/.test(name))
+    return headers["access-control-allow-origin"] === "*";
+  if (/server version|server disclosure/.test(name)) {
+    const srv = headers["server"] ?? "";
+    return /[0-9]+\.[0-9]+/.test(srv);
+  }
+  if (/x-powered-by/.test(name))
+    return "x-powered-by" in headers;
+
+  return null;
+}
 
 async function processScanJob(job: ScanJob): Promise<void> {
   const { scanId, userId, targetUrl, tier, monitorSubscriptionId } = job.data;
@@ -113,6 +210,17 @@ async function processScanJob(job: ScanJob): Promise<void> {
     log.warn("Recon results unavailable — continuing without reconnaissance data");
   }
 
+  // ── 2c. Corroboration merge — deduplicate duplicate-root-cause findings ──
+  const preCorrobCount = scanResult.vulnerabilities.length;
+  scanResult.vulnerabilities = corroborateMerge(scanResult.vulnerabilities);
+  log.info(
+    { before: preCorrobCount, after: scanResult.vulnerabilities.length },
+    "Corroboration merge complete",
+  );
+
+  // ── 2d. Differential re-probe — re-verify borderline findings ────────
+  scanResult.vulnerabilities = await reprobe(targetUrl, scanResult.vulnerabilities, log);
+
   // ── 3. Mark as analyzing (AI phase) ──────────────────────────────────
   await db
     .update(scansTable)
@@ -125,9 +233,18 @@ async function processScanJob(job: ScanJob): Promise<void> {
   let aiAnalysis = null;
   if (tier === "deep") {
     log.info("Calling DeepSeek AI analysis");
+    // Confidence gate: only pass high-confidence findings to the AI to reduce noise
+    const AI_CONFIDENCE_GATE = 65;
+    const vulnsForAi = scanResult.vulnerabilities.filter(
+      (v) => (v.confidence ?? 100) >= AI_CONFIDENCE_GATE,
+    );
+    log.info(
+      { total: scanResult.vulnerabilities.length, gated: vulnsForAi.length },
+      "Confidence-gated findings passed to AI",
+    );
     aiAnalysis = await callDeepSeek(
       targetUrl,
-      scanResult.vulnerabilities,
+      vulnsForAi,
       scanResult.technologies,
       tier,
     );

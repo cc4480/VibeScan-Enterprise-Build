@@ -95,6 +95,59 @@ export function computeConfidence(
   return Math.min(100, Math.max(10, Math.round(score)));
 }
 
+// ─── Corroboration merge pass ─────────────────────────────────────────────────
+
+/**
+ * Groups findings that share the same category + normalised name.
+ * When multiple independent detection methods fire for the same root cause,
+ * they are merged into a single finding with boosted confidence (+5 per
+ * additional signal, capped at 95) and the richest evidence text.
+ *
+ * Findings that are unique (no duplicate) pass through unchanged.
+ */
+export function corroborateMerge(vulns: ScanVulnerability[]): ScanVulnerability[] {
+  const key = (v: ScanVulnerability) =>
+    `${v.category}::${v.name.toLowerCase().replace(/\s+/g, " ").trim()}`;
+
+  const groups = new Map<string, ScanVulnerability[]>();
+  for (const v of vulns) {
+    const k = key(v);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k)!.push(v);
+  }
+
+  const result: ScanVulnerability[] = [];
+  for (const [, group] of groups) {
+    if (group.length === 1) {
+      result.push(group[0]);
+      continue;
+    }
+
+    // Pick the member with the highest confidence as the canonical finding
+    const canonical = group.reduce((best, v) =>
+      (v.confidence ?? 0) >= (best.confidence ?? 0) ? v : best,
+    );
+
+    const baseConf = canonical.confidence ?? 50;
+    const boost = Math.min(15, (group.length - 1) * 5);
+    const merged: ScanVulnerability = {
+      ...canonical,
+      confidence: Math.min(95, baseConf + boost),
+      // Concatenate unique evidence snippets from all signals
+      evidence: [
+        ...new Set(
+          group
+            .map((v) => v.evidence)
+            .filter((e): e is string => !!e && e.length > 0),
+        ),
+      ].join("\n---\n") || canonical.evidence,
+    };
+    result.push(merged);
+  }
+
+  return result;
+}
+
 // ─── Auto-enrichment pass ─────────────────────────────────────────────────────
 
 /**

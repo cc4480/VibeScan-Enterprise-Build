@@ -116,6 +116,21 @@ export const insertCveAlertSchema = createInsertSchema(cveAlertsTable).omit({
 export type InsertCveAlert = typeof cveAlertsTable.$inferInsert;
 export type CveAlert = typeof cveAlertsTable.$inferSelect;
 
+export const dismissedFindingsTable = pgTable("dismissed_findings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: text("user_id").notNull(),
+  targetUrl: text("target_url").notNull(),
+  findingFingerprint: text("finding_fingerprint").notNull(),
+  findingName: text("finding_name").notNull(),
+  findingCategory: text("finding_category").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("idx_dismissed_user_target").on(table.userId, table.targetUrl),
+  index("idx_dismissed_fingerprint").on(table.userId, table.findingFingerprint),
+]);
+
+export type DismissedFinding = typeof dismissedFindingsTable.$inferSelect;
+
 /**
  * Single-row key-value store for persisting EOL data fetched from endoflife.date.
  * Used by eolFetcher.ts to survive server restarts between daily pg-boss schedule runs.

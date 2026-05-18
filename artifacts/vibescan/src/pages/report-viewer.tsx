@@ -5,12 +5,34 @@ import {
   Lock, Activity, Share2, Plus, Mail, GitBranch, KeyRound, Database,
   Terminal, ExternalLink, Package, RefreshCw, Eye, Code2, Wifi,
   AlertTriangle, Monitor, Info, Settings, Network, EyeOff, Filter, X,
-  ArrowUpDown, HelpCircle, Download, Copy, Check, Bell, ChevronDown, Search, Minus,
+  ArrowUpDown, HelpCircle, Download, Copy, Check, Bell, ChevronDown, Search, Minus, Flag, RotateCcw,
 } from "lucide-react";
 import { cn, formatSeverity, getSeverityColors, getGradeColor } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, createContext, useContext } from "react";
 import type { Vulnerability } from "@workspace/api-client-react";
+
+// ─── Dismissals context ───────────────────────────────────────────────────────
+
+interface DismissalEntry {
+  fingerprint: string;
+  findingName: string;
+  findingCategory: string;
+}
+
+interface DismissalsCtx {
+  dismissedKeys: Set<string>;
+  dismiss: (vuln: Vulnerability, targetUrl: string) => Promise<void>;
+  undismiss: (vuln: Vulnerability) => Promise<void>;
+  fingerprints: Map<string, string>;
+}
+
+const DismissalsContext = createContext<DismissalsCtx>({
+  dismissedKeys: new Set(),
+  dismiss: async () => {},
+  undismiss: async () => {},
+  fingerprints: new Map(),
+});
 
 // ─── Category metadata ────────────────────────────────────────────────────────
 
@@ -232,6 +254,10 @@ function VulnCard({
   rootUrl?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const { dismiss, undismiss, dismissedKeys, fingerprints } = useContext(DismissalsContext);
+  const dismissKey = `${vuln.category}:${vuln.name.toLowerCase().trim()}`;
+  const isDismissed = dismissedKeys.has(dismissKey);
+  const [dismissPending, setDismissPending] = useState(false);
   const meta = getCategoryMeta(vuln.category);
 
   // Extract the affected component for CVE / outdated-software findings.
@@ -397,6 +423,41 @@ function VulnCard({
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* False positive dismissal */}
+            <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">Not applicable to your setup?</p>
+              {isDismissed ? (
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    setDismissPending(true);
+                    await undismiss(vuln);
+                    setDismissPending(false);
+                  }}
+                  disabled={dismissPending}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Undo dismissal
+                </button>
+              ) : (
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (!rootUrl) return;
+                    setDismissPending(true);
+                    await dismiss(vuln, rootUrl);
+                    setDismissPending(false);
+                  }}
+                  disabled={dismissPending || !rootUrl}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-secondary border border-white/10 text-muted-foreground hover:text-foreground hover:border-white/20 transition-colors disabled:opacity-50"
+                >
+                  <Flag className="w-3 h-3" />
+                  Mark as false positive
+                </button>
+              )}
             </div>
           </motion.div>
         )}
@@ -1397,6 +1458,59 @@ export default function ReportViewer() {
   const [sortBy, setSortBy] = useState<"severity" | "category">("severity");
   const [viewMode, setViewMode] = useState<"grouped" | "flat">("grouped");
 
+  const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set());
+  const [fpFingerprints, setFpFingerprints] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    if (!report?.targetUrl) return;
+    fetch(`/api/dismissals?targetUrl=${encodeURIComponent(report.targetUrl)}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((items: DismissalEntry[]) => {
+        const keys = new Set<string>();
+        const fps = new Map<string, string>();
+        for (const item of items) {
+          const k = `${item.findingCategory}:${item.findingName.toLowerCase().trim()}`;
+          keys.add(k);
+          fps.set(k, item.fingerprint);
+        }
+        setDismissedKeys(keys);
+        setFpFingerprints(fps);
+      })
+      .catch(() => {});
+  }, [report?.targetUrl]);
+
+  const dismissFinding = useCallback(async (vuln: Vulnerability, targetUrl: string) => {
+    const k = `${vuln.category}:${vuln.name.toLowerCase().trim()}`;
+    setDismissedKeys((prev) => new Set([...prev, k]));
+    try {
+      const res = await fetch("/api/dismissals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetUrl, findingName: vuln.name, findingCategory: vuln.category }),
+      });
+      if (res.ok) {
+        const { fingerprint } = (await res.json()) as { fingerprint: string };
+        setFpFingerprints((prev) => new Map([...prev, [k, fingerprint]]));
+      }
+    } catch {
+      setDismissedKeys((prev) => { const n = new Set(prev); n.delete(k); return n; });
+    }
+  }, []);
+
+  const undismissFinding = useCallback(async (vuln: Vulnerability) => {
+    const k = `${vuln.category}:${vuln.name.toLowerCase().trim()}`;
+    const fp = fpFingerprints.get(k);
+    setDismissedKeys((prev) => { const n = new Set(prev); n.delete(k); return n; });
+    if (fp) {
+      try {
+        await fetch(`/api/dismissals/${fp}`, { method: "DELETE" });
+        setFpFingerprints((prev) => { const n = new Map(prev); n.delete(k); return n; });
+      } catch {
+        setDismissedKeys((prev) => new Set([...prev, k]));
+      }
+    }
+  }, [fpFingerprints]);
+
   const vulnerabilities = report?.data?.vulnerabilities ?? [];
   const summary = report?.data?.summary;
 
@@ -1427,9 +1541,18 @@ export default function ReportViewer() {
     [categoryCounts],
   );
 
+  const visibleVulns = useMemo(
+    () => sortedVulns.filter(
+      (v) => !dismissedKeys.has(`${v.category}:${v.name.toLowerCase().trim()}`),
+    ),
+    [sortedVulns, dismissedKeys],
+  );
+
+  const dismissedCount = sortedVulns.length - visibleVulns.length;
+
   const filteredVulns = useMemo(
-    () => activeCategory ? sortedVulns.filter((v) => v.category === activeCategory) : sortedVulns,
-    [sortedVulns, activeCategory],
+    () => activeCategory ? visibleVulns.filter((v) => v.category === activeCategory) : visibleVulns,
+    [visibleVulns, activeCategory],
   );
 
   // Split into confirmed (confidence ≥ threshold) vs. needs verification
@@ -1463,12 +1586,12 @@ export default function ReportViewer() {
 
   // Unfiltered splits — used for PDF/copy so nothing is omitted when a category filter is active
   const allConfirmedVulns = useMemo(
-    () => sortedVulns.filter((v) => (v.confidence ?? 100) >= VERIFICATION_THRESHOLD),
-    [sortedVulns],
+    () => visibleVulns.filter((v) => (v.confidence ?? 100) >= VERIFICATION_THRESHOLD),
+    [visibleVulns],
   );
   const allUnverifiedVulns = useMemo(
-    () => sortedVulns.filter((v) => (v.confidence ?? 100) < VERIFICATION_THRESHOLD),
-    [sortedVulns],
+    () => visibleVulns.filter((v) => (v.confidence ?? 100) < VERIFICATION_THRESHOLD),
+    [visibleVulns],
   );
 
   // Per-severity counts split by confidence — used for the header badges
@@ -1527,6 +1650,14 @@ export default function ReportViewer() {
   };
 
   return (
+    <DismissalsContext.Provider
+      value={{
+        dismissedKeys,
+        dismiss: dismissFinding,
+        undismiss: undismissFinding,
+        fingerprints: fpFingerprints,
+      }}
+    >
     <>
       {/* Print-only view — hidden on screen, shown only when printing */}
       <div className="hidden print:block">
@@ -1598,8 +1729,13 @@ export default function ReportViewer() {
               <ShieldAlert className="w-6 h-6 text-primary" />
               Identified Vulnerabilities
               <span className="bg-secondary text-foreground text-sm py-1 px-3 rounded-full ml-2">
-                {activeCategory ? `${filteredVulns.length} / ${summary.totalVulnerabilities}` : summary.totalVulnerabilities}
+                {activeCategory ? `${filteredVulns.length} / ${visibleVulns.length}` : visibleVulns.length}
               </span>
+              {dismissedCount > 0 && (
+                <span className="text-xs font-normal text-muted-foreground">
+                  ({dismissedCount} dismissed)
+                </span>
+              )}
             </h2>
           </div>
 
@@ -2004,5 +2140,6 @@ export default function ReportViewer() {
       </div>
       </div>
     </>
+    </DismissalsContext.Provider>
   );
 }
