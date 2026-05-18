@@ -1828,12 +1828,12 @@ export default function ReportViewer() {
               </span>
               {dismissedCount > 0 && (
                 <span className="text-xs font-normal text-muted-foreground">
-                  ({dismissedCount} dismissed)
+                  ({dismissedCount} dismissed as false positive{dismissedCount !== 1 ? "s" : ""})
                 </span>
               )}
               {(report?.data as { autoSuppressedCount?: number } | undefined)?.autoSuppressedCount && (
                 <span className="text-xs font-normal text-muted-foreground">
-                  ({(report.data as { autoSuppressedCount?: number }).autoSuppressedCount} auto-suppressed from prior scans)
+                  ({(report.data as { autoSuppressedCount?: number }).autoSuppressedCount} previously dismissed, hidden)
                 </span>
               )}
             </h2>
