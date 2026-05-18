@@ -11,6 +11,7 @@ const DismissBody = z.object({
   findingName: z.string().min(1),
   findingCategory: z.string().min(1),
   findingEvidence: z.string().optional(),
+  reason: z.string().optional(),
 });
 
 router.get("/dismissals", async (req, res): Promise<void> => {
@@ -61,7 +62,7 @@ router.post("/dismissals", async (req, res): Promise<void> => {
     return;
   }
 
-  const { targetUrl, findingName, findingCategory, findingEvidence } = parsed.data;
+  const { targetUrl, findingName, findingCategory, findingEvidence, reason } = parsed.data;
   const fingerprint = findingFingerprint(findingCategory, findingName, findingEvidence);
 
   try {
@@ -73,6 +74,7 @@ router.post("/dismissals", async (req, res): Promise<void> => {
         findingFingerprint: fingerprint,
         findingName,
         findingCategory,
+        reason: reason ?? "false_positive",
       })
       .onConflictDoNothing();
 

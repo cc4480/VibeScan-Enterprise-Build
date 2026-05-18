@@ -123,6 +123,7 @@ export const dismissedFindingsTable = pgTable("dismissed_findings", {
   findingFingerprint: text("finding_fingerprint").notNull(),
   findingName: text("finding_name").notNull(),
   findingCategory: text("finding_category").notNull(),
+  reason: text("reason").default("false_positive"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index("idx_dismissed_user_target").on(table.userId, table.targetUrl),

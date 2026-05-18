@@ -21,14 +21,16 @@ interface DismissalEntry {
 }
 
 interface DismissalsCtx {
-  dismissedKeys: Set<string>;
+  dismissedFps: Set<string>;
+  optimisticDismissKeys: Set<string>;
   dismiss: (vuln: Vulnerability, targetUrl: string) => Promise<void>;
   undismiss: (vuln: Vulnerability) => Promise<void>;
   fingerprints: Map<string, string>;
 }
 
 const DismissalsContext = createContext<DismissalsCtx>({
-  dismissedKeys: new Set(),
+  dismissedFps: new Set(),
+  optimisticDismissKeys: new Set(),
   dismiss: async () => {},
   undismiss: async () => {},
   fingerprints: new Map(),
@@ -254,9 +256,10 @@ function VulnCard({
   rootUrl?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const { dismiss, undismiss, dismissedKeys, fingerprints } = useContext(DismissalsContext);
+  const { dismiss, undismiss, dismissedFps, optimisticDismissKeys, fingerprints } = useContext(DismissalsContext);
   const dismissKey = `${vuln.category}:${vuln.name.toLowerCase().trim()}`;
-  const isDismissed = dismissedKeys.has(dismissKey);
+  const fp = fingerprints.get(dismissKey);
+  const isDismissed = optimisticDismissKeys.has(dismissKey) || (fp !== undefined && dismissedFps.has(fp));
   const [dismissPending, setDismissPending] = useState(false);
   const meta = getCategoryMeta(vuln.category);
 
@@ -1458,7 +1461,8 @@ export default function ReportViewer() {
   const [sortBy, setSortBy] = useState<"severity" | "category">("severity");
   const [viewMode, setViewMode] = useState<"grouped" | "flat">("grouped");
 
-  const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set());
+  const [dismissedFps, setDismissedFps] = useState<Set<string>>(new Set());
+  const [optimisticDismissKeys, setOptimisticDismissKeys] = useState<Set<string>>(new Set());
   const [fpFingerprints, setFpFingerprints] = useState<Map<string, string>>(new Map());
   const [undoToast, setUndoToast] = useState<{ key: string; vuln: Vulnerability } | null>(null);
   const undoToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1468,15 +1472,15 @@ export default function ReportViewer() {
     fetch(`/api/dismissals?targetUrl=${encodeURIComponent(report.targetUrl)}`)
       .then((r) => (r.ok ? r.json() : []))
       .then((items: DismissalEntry[]) => {
-        const keys = new Set<string>();
-        const fps = new Map<string, string>();
+        const fpSet = new Set<string>();
+        const fpMap = new Map<string, string>();
         for (const item of items) {
           const k = `${item.findingCategory}:${item.findingName.toLowerCase().trim()}`;
-          keys.add(k);
-          fps.set(k, item.fingerprint);
+          fpSet.add(item.fingerprint);
+          fpMap.set(k, item.fingerprint);
         }
-        setDismissedKeys(keys);
-        setFpFingerprints(fps);
+        setDismissedFps(fpSet);
+        setFpFingerprints(fpMap);
       })
       .catch(() => {});
   }, [report?.targetUrl]);
@@ -1484,10 +1488,10 @@ export default function ReportViewer() {
   const dismissFinding = useCallback(async (vuln: Vulnerability, targetUrl: string) => {
     const k = `${vuln.category}:${vuln.name.toLowerCase().trim()}`;
 
-    // Optimistically hide the finding immediately
-    setDismissedKeys((prev) => new Set([...prev, k]));
+    // Optimistic hide via category:name key (stays until server fingerprint arrives)
+    setOptimisticDismissKeys((prev) => new Set([...prev, k]));
 
-    // Show external undo toast (the per-card undo button disappears when the card is hidden)
+    // Show external undo toast (per-card button is gone once the card is hidden)
     if (undoToastTimerRef.current) clearTimeout(undoToastTimerRef.current);
     setUndoToast({ key: k, vuln });
     undoToastTimerRef.current = setTimeout(() => setUndoToast(null), 5000);
@@ -1501,18 +1505,22 @@ export default function ReportViewer() {
           findingName: vuln.name,
           findingCategory: vuln.category,
           findingEvidence: vuln.evidence ?? undefined,
+          reason: "false_positive",
         }),
       });
       if (!res.ok) {
-        setDismissedKeys((prev) => { const n = new Set(prev); n.delete(k); return n; });
+        setOptimisticDismissKeys((prev) => { const n = new Set(prev); n.delete(k); return n; });
         if (undoToastTimerRef.current) clearTimeout(undoToastTimerRef.current);
         setUndoToast(null);
         return;
       }
       const { fingerprint } = (await res.json()) as { fingerprint: string };
+      // Promote from optimistic key to confirmed fingerprint
       setFpFingerprints((prev) => new Map([...prev, [k, fingerprint]]));
+      setDismissedFps((prev) => new Set([...prev, fingerprint]));
+      setOptimisticDismissKeys((prev) => { const n = new Set(prev); n.delete(k); return n; });
     } catch {
-      setDismissedKeys((prev) => { const n = new Set(prev); n.delete(k); return n; });
+      setOptimisticDismissKeys((prev) => { const n = new Set(prev); n.delete(k); return n; });
       if (undoToastTimerRef.current) clearTimeout(undoToastTimerRef.current);
       setUndoToast(null);
     }
@@ -1522,7 +1530,9 @@ export default function ReportViewer() {
     const k = `${vuln.category}:${vuln.name.toLowerCase().trim()}`;
     const fp = fpFingerprints.get(k);
     const tUrl = report?.targetUrl;
-    setDismissedKeys((prev) => { const n = new Set(prev); n.delete(k); return n; });
+    // Optimistically show the finding again
+    setDismissedFps((prev) => { const n = new Set(prev); if (fp) n.delete(fp); return n; });
+    setOptimisticDismissKeys((prev) => { const n = new Set(prev); n.delete(k); return n; });
     if (fp && tUrl) {
       try {
         const res = await fetch(
@@ -1530,12 +1540,12 @@ export default function ReportViewer() {
           { method: "DELETE" },
         );
         if (!res.ok) {
-          setDismissedKeys((prev) => new Set([...prev, k]));
+          setDismissedFps((prev) => new Set([...prev, fp]));
           return;
         }
         setFpFingerprints((prev) => { const n = new Map(prev); n.delete(k); return n; });
       } catch {
-        setDismissedKeys((prev) => new Set([...prev, k]));
+        setDismissedFps((prev) => new Set([...prev, fp]));
       }
     }
   }, [fpFingerprints, report?.targetUrl]);
@@ -1571,10 +1581,13 @@ export default function ReportViewer() {
   );
 
   const visibleVulns = useMemo(
-    () => sortedVulns.filter(
-      (v) => !dismissedKeys.has(`${v.category}:${v.name.toLowerCase().trim()}`),
-    ),
-    [sortedVulns, dismissedKeys],
+    () => sortedVulns.filter((v) => {
+      const k = `${v.category}:${v.name.toLowerCase().trim()}`;
+      if (optimisticDismissKeys.has(k)) return false;
+      const fp = fpFingerprints.get(k);
+      return !fp || !dismissedFps.has(fp);
+    }),
+    [sortedVulns, dismissedFps, fpFingerprints, optimisticDismissKeys],
   );
 
   const dismissedCount = sortedVulns.length - visibleVulns.length;
@@ -1681,7 +1694,8 @@ export default function ReportViewer() {
   return (
     <DismissalsContext.Provider
       value={{
-        dismissedKeys,
+        dismissedFps,
+        optimisticDismissKeys,
         dismiss: dismissFinding,
         undismiss: undismissFinding,
         fingerprints: fpFingerprints,
