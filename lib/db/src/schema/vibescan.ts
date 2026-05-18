@@ -132,10 +132,6 @@ export const dismissedFindingsTable = pgTable("dismissed_findings", {
 
 export type DismissedFinding = typeof dismissedFindingsTable.$inferSelect;
 
-/**
- * Single-row key-value store for persisting EOL data fetched from endoflife.date.
- * Used by eolFetcher.ts to survive server restarts between daily pg-boss schedule runs.
- */
 export const reportSharesTable = pgTable("report_shares", {
   id: uuid("id").primaryKey().defaultRandom(),
   reportId: uuid("report_id").notNull().references(() => reportsTable.id, { onDelete: "cascade" }),
