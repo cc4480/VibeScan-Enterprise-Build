@@ -1500,16 +1500,20 @@ export default function ReportViewer() {
   const undismissFinding = useCallback(async (vuln: Vulnerability) => {
     const k = `${vuln.category}:${vuln.name.toLowerCase().trim()}`;
     const fp = fpFingerprints.get(k);
+    const tUrl = report?.targetUrl;
     setDismissedKeys((prev) => { const n = new Set(prev); n.delete(k); return n; });
-    if (fp) {
+    if (fp && tUrl) {
       try {
-        await fetch(`/api/dismissals/${fp}`, { method: "DELETE" });
+        await fetch(
+          `/api/dismissals/${fp}?targetUrl=${encodeURIComponent(tUrl)}`,
+          { method: "DELETE" },
+        );
         setFpFingerprints((prev) => { const n = new Map(prev); n.delete(k); return n; });
       } catch {
         setDismissedKeys((prev) => new Set([...prev, k]));
       }
     }
-  }, [fpFingerprints]);
+  }, [fpFingerprints, report?.targetUrl]);
 
   const vulnerabilities = report?.data?.vulnerabilities ?? [];
   const summary = report?.data?.summary;

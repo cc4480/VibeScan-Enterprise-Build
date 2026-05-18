@@ -96,6 +96,11 @@ router.delete("/dismissals/:fingerprint", async (req, res): Promise<void> => {
   }
 
   const { fingerprint } = req.params;
+  const targetUrl = typeof req.query.targetUrl === "string" ? req.query.targetUrl : null;
+  if (!targetUrl) {
+    res.status(400).json({ error: "targetUrl query parameter is required" });
+    return;
+  }
 
   try {
     await db
@@ -103,6 +108,7 @@ router.delete("/dismissals/:fingerprint", async (req, res): Promise<void> => {
       .where(
         and(
           eq(dismissedFindingsTable.userId, req.user.id),
+          eq(dismissedFindingsTable.targetUrl, targetUrl),
           eq(dismissedFindingsTable.findingFingerprint, fingerprint),
         ),
       );

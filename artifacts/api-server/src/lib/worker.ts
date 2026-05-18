@@ -8,7 +8,7 @@
  *            failed
  */
 
-import { db, scansTable, reportsTable, monitorSubscriptionsTable } from "@workspace/db";
+import { db, scansTable, reportsTable, monitorSubscriptionsTable, dismissedFindingsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { getBoss, SCAN_QUEUE, type ScanJobData } from "./queue";
 import { runScan, computeRiskScore, computeGrade, type ScanVulnerability } from "./scanner";
@@ -71,19 +71,19 @@ async function reprobe(
   }
 
   let boosted = 0;
-  let lowered = 0;
+  let dropped = 0;
 
-  const updated = vulns.map((v) => {
+  const updated = vulns.flatMap((v) => {
     const c = v.confidence ?? 100;
-    if (c < REPROBE_MIN || c >= REPROBE_MAX || !freshHeaders) return v;
+    if (c < REPROBE_MIN || c >= REPROBE_MAX || !freshHeaders) return [v];
     const confirmed = checkHeaderFinding(v, freshHeaders);
-    if (confirmed === null) return v;
-    if (confirmed) { boosted++; return { ...v, confidence: Math.min(95, c + 10) }; }
-    lowered++;
-    return { ...v, confidence: Math.max(10, c - 20) };
+    if (confirmed === null) return [v]; // can't verify — keep as-is
+    if (confirmed) { boosted++; return [{ ...v, confidence: Math.min(95, c + 10) }]; }
+    dropped++; // disconfirmed on second probe — remove from report
+    return [];
   });
 
-  log.info({ boosted, lowered }, "[reprobe] Re-probe adjustments applied");
+  log.info({ boosted, dropped }, "[reprobe] Re-probe adjustments applied");
   return updated;
 }
 
@@ -221,6 +221,35 @@ async function processScanJob(job: ScanJob): Promise<void> {
   // ── 2d. Differential re-probe — re-verify borderline findings ────────
   scanResult.vulnerabilities = await reprobe(targetUrl, scanResult.vulnerabilities, log);
 
+  // ── 2e. Filter previously dismissed false positives ───────────────────
+  const dismissals = await db
+    .select({
+      findingName: dismissedFindingsTable.findingName,
+      findingCategory: dismissedFindingsTable.findingCategory,
+    })
+    .from(dismissedFindingsTable)
+    .where(
+      and(
+        eq(dismissedFindingsTable.userId, userId),
+        eq(dismissedFindingsTable.targetUrl, targetUrl),
+      ),
+    );
+
+  let autoSuppressedCount = 0;
+  if (dismissals.length > 0) {
+    const dismissedKeys = new Set(
+      dismissals.map((d) => `${d.findingCategory}::${d.findingName.toLowerCase().trim()}`),
+    );
+    const beforeDismiss = scanResult.vulnerabilities.length;
+    scanResult.vulnerabilities = scanResult.vulnerabilities.filter(
+      (v) => !dismissedKeys.has(`${v.category}::${v.name.toLowerCase().trim()}`),
+    );
+    autoSuppressedCount = beforeDismiss - scanResult.vulnerabilities.length;
+    if (autoSuppressedCount > 0) {
+      log.info({ autoSuppressedCount }, "Auto-suppressed previously dismissed findings");
+    }
+  }
+
   // ── 3. Mark as analyzing (AI phase) ──────────────────────────────────
   await db
     .update(scansTable)
@@ -296,6 +325,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
     },
     recon: reconRunResult?.recon ?? undefined,
     aiAnalysis: aiAnalysis ?? undefined,
+    autoSuppressedCount: autoSuppressedCount > 0 ? autoSuppressedCount : undefined,
   };
 
   // ── 6. Persist report ─────────────────────────────────────────────────

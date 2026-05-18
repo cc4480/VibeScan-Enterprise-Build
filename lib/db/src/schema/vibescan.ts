@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, integer, timestamp, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, integer, timestamp, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -126,7 +126,7 @@ export const dismissedFindingsTable = pgTable("dismissed_findings", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index("idx_dismissed_user_target").on(table.userId, table.targetUrl),
-  index("idx_dismissed_fingerprint").on(table.userId, table.findingFingerprint),
+  uniqueIndex("uq_dismissed_user_target_fp").on(table.userId, table.targetUrl, table.findingFingerprint),
 ]);
 
 export type DismissedFinding = typeof dismissedFindingsTable.$inferSelect;
