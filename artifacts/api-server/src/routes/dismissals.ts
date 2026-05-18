@@ -1,17 +1,10 @@
 import { Router, type IRouter } from "express";
 import { db, dismissedFindingsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
-import { createHash } from "node:crypto";
 import { z } from "zod";
+import { findingFingerprint } from "../lib/fingerprint";
 
 const router: IRouter = Router();
-
-function fingerprintFinding(category: string, name: string): string {
-  return createHash("sha256")
-    .update(`${category}::${name.toLowerCase().trim()}`)
-    .digest("hex")
-    .slice(0, 20);
-}
 
 const DismissBody = z.object({
   targetUrl: z.string().min(1),
@@ -68,7 +61,7 @@ router.post("/dismissals", async (req, res): Promise<void> => {
   }
 
   const { targetUrl, findingName, findingCategory } = parsed.data;
-  const fingerprint = fingerprintFinding(findingCategory, findingName);
+  const fingerprint = findingFingerprint(findingCategory, findingName);
 
   try {
     await db

@@ -13,6 +13,7 @@ import { eq, and } from "drizzle-orm";
 import { getBoss, SCAN_QUEUE, type ScanJobData } from "./queue";
 import { runScan, computeRiskScore, computeGrade, type ScanVulnerability } from "./scanner";
 import { corroborateMerge } from "./scoring";
+import { findingFingerprint } from "./fingerprint";
 import { runRecon } from "./recon";
 import { warnIfLocalDataStale, OSV_CACHE_MAX_SIZE } from "./cveCheck";
 import { refreshEolData, loadEolCacheFromDb, EOL_REFRESH_QUEUE } from "./eolFetcher";
@@ -54,20 +55,51 @@ async function reprobe(
 
   log.info({ borderlineCount: borderline.length }, "[reprobe] Re-probing borderline findings");
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REPROBE_TIMEOUT_MS);
+  // ── Passive GET probe: re-check all header-based findings ───────────────────
+  const getCtrl = new AbortController();
+  const getTimer = setTimeout(() => getCtrl.abort(), REPROBE_TIMEOUT_MS);
   let freshHeaders: Record<string, string> | null = null;
 
   try {
-    const res = await fetch(targetUrl, { method: "GET", signal: controller.signal, redirect: "follow" });
+    const res = await fetch(targetUrl, { method: "GET", signal: getCtrl.signal, redirect: "follow" });
     const raw: Record<string, string> = {};
     res.headers.forEach((value, key) => { raw[key.toLowerCase()] = value; });
     freshHeaders = raw;
   } catch (err) {
-    log.warn({ err }, "[reprobe] Re-probe request failed — keeping original confidences");
+    log.warn({ err }, "[reprobe] GET re-probe failed — keeping original confidences");
     return vulns;
   } finally {
-    clearTimeout(timer);
+    clearTimeout(getTimer);
+  }
+
+  // ── Active OPTIONS probe: corroborate CORS wildcard findings ────────────────
+  // Sends a preflight-style request with a foreign Origin to accurately test
+  // whether the server reflects wildcard CORS headers under real conditions.
+  const hasBorderlineCors = borderline.some(
+    (v) => /cors/i.test(v.category) || /cors.*wildcard|access.control.allow.origin/i.test(v.name),
+  );
+  let corsProbeHeaders: Record<string, string> | null = null;
+  if (hasBorderlineCors) {
+    const corsCtrl = new AbortController();
+    const corsTimer = setTimeout(() => corsCtrl.abort(), REPROBE_TIMEOUT_MS);
+    try {
+      const res = await fetch(targetUrl, {
+        method: "OPTIONS",
+        headers: {
+          "Origin": "https://cors-probe.vibescan.io",
+          "Access-Control-Request-Method": "GET",
+        },
+        signal: corsCtrl.signal,
+        redirect: "follow",
+      });
+      const raw: Record<string, string> = {};
+      res.headers.forEach((value, key) => { raw[key.toLowerCase()] = value; });
+      corsProbeHeaders = raw;
+    } catch {
+      // CORS options probe is best-effort — fall back to GET headers
+    } finally {
+      clearTimeout(corsTimer);
+    }
   }
 
   let boosted = 0;
@@ -75,9 +107,15 @@ async function reprobe(
 
   const updated = vulns.flatMap((v) => {
     const c = v.confidence ?? 100;
-    if (c < REPROBE_MIN || c >= REPROBE_MAX || !freshHeaders) return [v];
-    const confirmed = checkHeaderFinding(v, freshHeaders);
-    if (confirmed === null) return [v]; // can't verify — keep as-is
+    if (c < REPROBE_MIN || c >= REPROBE_MAX) return [v];
+
+    // For CORS findings, prefer the active OPTIONS probe result
+    const isCors = /cors/i.test(v.category) || /cors.*wildcard|access.control.allow.origin/i.test(v.name);
+    const headersToCheck = (isCors && corsProbeHeaders) ? corsProbeHeaders : freshHeaders;
+    if (!headersToCheck) return [v];
+
+    const confirmed = checkHeaderFinding(v, headersToCheck);
+    if (confirmed === null) return [v]; // finding class not verifiable via headers — keep as-is
     if (confirmed) { boosted++; return [{ ...v, confidence: Math.min(95, c + 10) }]; }
     dropped++; // disconfirmed on second probe — remove from report
     return [];
@@ -237,25 +275,25 @@ async function processScanJob(job: ScanJob): Promise<void> {
   scanResult.vulnerabilities = await reprobe(targetUrl, scanResult.vulnerabilities, log);
 
   // ── 2e. Filter previously dismissed false positives ───────────────────
+  // Use the canonicalized final URL (after redirects) so dismissals match
+  // across re-scans regardless of whether the user typed http:// or https://.
+  const canonicalUrl = scanResult.finalUrl ?? targetUrl;
   const dismissals = await db
     .select({ fingerprint: dismissedFindingsTable.findingFingerprint })
     .from(dismissedFindingsTable)
     .where(
       and(
         eq(dismissedFindingsTable.userId, userId),
-        eq(dismissedFindingsTable.targetUrl, targetUrl),
+        eq(dismissedFindingsTable.targetUrl, canonicalUrl),
       ),
     );
 
   let autoSuppressedCount = 0;
   if (dismissals.length > 0) {
-    const { createHash } = await import("node:crypto");
     const dismissedFps = new Set(dismissals.map((d) => d.fingerprint));
-    const fpOf = (v: { category: string; name: string }) =>
-      createHash("sha256").update(`${v.category}::${v.name}`).digest("hex").slice(0, 20);
     const beforeDismiss = scanResult.vulnerabilities.length;
     scanResult.vulnerabilities = scanResult.vulnerabilities.filter(
-      (v) => !dismissedFps.has(fpOf(v)),
+      (v) => !dismissedFps.has(findingFingerprint(v.category, v.name)),
     );
     autoSuppressedCount = beforeDismiss - scanResult.vulnerabilities.length;
     if (autoSuppressedCount > 0) {
