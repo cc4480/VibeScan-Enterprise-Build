@@ -1,7 +1,7 @@
 import { useRoute, Link } from "wouter";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
-  Shield, Globe, Lock, Loader2, ArrowLeft, AlertCircle, Clock,
+  Shield, Globe, Lock, Loader2, AlertCircle, Clock,
   Download, Share2,
 } from "lucide-react";
 import { cn, getGradeColor } from "@/lib/utils";
@@ -259,16 +259,63 @@ export default function SharedReport() {
     year: "numeric", month: "long", day: "numeric",
   });
 
-  const handlePrint = () => {
-    const prev = document.title;
+  const pdfContainerRef = useRef<HTMLDivElement>(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [showPdfContainer, setShowPdfContainer] = useState(false);
+
+  const handleDownloadPDF = async () => {
+    if (generatingPdf) return;
+    setGeneratingPdf(true);
+    setShowPdfContainer(true);
+    await new Promise<void>((r) => setTimeout(r, 300));
     try {
-      const host = new URL(report.targetUrl).hostname.replace(/^www\./, "");
-      document.title = `VibeScan Security Report — ${host}`;
-    } catch {
-      document.title = "VibeScan Security Report";
+      const container = pdfContainerRef.current;
+      if (!container) return;
+
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
+
+      const canvas = await html2canvas(container, {
+        scale: 1.5,
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#ffffff",
+        windowWidth: container.scrollWidth,
+        windowHeight: container.scrollHeight,
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const imgHeightMm = (canvas.height / canvas.width) * pageW;
+
+      let heightLeft = imgHeightMm;
+      let yOffset = 0;
+      pdf.addImage(imgData, "PNG", 0, yOffset, pageW, imgHeightMm);
+      heightLeft -= pageH;
+
+      while (heightLeft > 0) {
+        yOffset -= pageH;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, yOffset, pageW, imgHeightMm);
+        heightLeft -= pageH;
+      }
+
+      let filename = "vibescan-report.pdf";
+      try {
+        const host = new URL(report.targetUrl).hostname.replace(/^www\./, "");
+        filename = `vibescan-${host}.pdf`;
+      } catch {
+        // keep default
+      }
+      pdf.save(filename);
+    } finally {
+      setShowPdfContainer(false);
+      setGeneratingPdf(false);
     }
-    window.print();
-    document.title = prev;
   };
 
   return (
@@ -280,10 +327,12 @@ export default function SharedReport() {
           Shared report — read only
         </div>
         <button
-          onClick={handlePrint}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary border border-white/10 text-sm font-medium hover:bg-white/10 transition-colors"
+          onClick={() => void handleDownloadPDF()}
+          disabled={generatingPdf}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary border border-white/10 text-sm font-medium hover:bg-white/10 transition-colors disabled:opacity-60"
         >
-          <Download className="w-4 h-4" /> Download PDF
+          {generatingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+          {generatingPdf ? "Generating…" : "Download PDF"}
         </button>
       </div>
 
@@ -445,6 +494,122 @@ export default function SharedReport() {
           <Shield className="w-4 h-4" /> Scan your own site
         </Link>
       </div>
+
+      {/* Off-screen container captured by html2canvas for PDF generation */}
+      {showPdfContainer && (
+        <div
+          ref={pdfContainerRef}
+          style={{
+            position: "fixed",
+            left: "-9999px",
+            top: 0,
+            width: "794px",
+            backgroundColor: "#ffffff",
+            color: "#111827",
+            zIndex: -1,
+            pointerEvents: "none",
+            fontFamily: "system-ui, sans-serif",
+            fontSize: "13px",
+            lineHeight: "1.6",
+            padding: "32px",
+          }}
+        >
+          {/* PDF Cover */}
+          <div style={{ marginBottom: "24px", paddingBottom: "20px", borderBottom: "2px solid #e5e7eb" }}>
+            <h1 style={{ fontSize: "24px", fontWeight: "bold", marginBottom: "4px" }}>Security Report</h1>
+            <p style={{ color: "#6b7280", marginBottom: "12px" }}>{report.targetUrl}</p>
+            <div style={{ display: "flex", gap: "24px", flexWrap: "wrap" }}>
+              <span><strong>Grade:</strong> {summary.grade} (Risk {summary.riskScore}/100)</span>
+              <span><strong>Findings:</strong> {summary.totalVulnerabilities}</span>
+              <span><strong>Scanned:</strong> {dateStr}</span>
+              {tlsGrade && <span><strong>TLS:</strong> {tlsGrade}</span>}
+            </div>
+          </div>
+
+          {/* Executive Summary */}
+          <div style={{ marginBottom: "20px" }}>
+            <h2 style={{ fontSize: "16px", fontWeight: "bold", marginBottom: "8px" }}>Executive Summary</h2>
+            <p style={{ color: "#374151" }}>{summary.executiveSummary}</p>
+          </div>
+
+          {/* Severity counts */}
+          <div style={{ display: "flex", gap: "8px", marginBottom: "24px", flexWrap: "wrap" }}>
+            {summary.critical > 0 && <span style={{ padding: "4px 10px", background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca", borderRadius: "4px" }}>🔴 Critical: {summary.critical}</span>}
+            {summary.high > 0 && <span style={{ padding: "4px 10px", background: "#fff7ed", color: "#9a3412", border: "1px solid #fed7aa", borderRadius: "4px" }}>🟠 High: {summary.high}</span>}
+            {summary.medium > 0 && <span style={{ padding: "4px 10px", background: "#fefce8", color: "#854d0e", border: "1px solid #fde68a", borderRadius: "4px" }}>🟡 Medium: {summary.medium}</span>}
+            {summary.low > 0 && <span style={{ padding: "4px 10px", background: "#eff6ff", color: "#1e40af", border: "1px solid #bfdbfe", borderRadius: "4px" }}>🔵 Low: {summary.low}</span>}
+            {summary.info > 0 && <span style={{ padding: "4px 10px", background: "#f9fafb", color: "#374151", border: "1px solid #e5e7eb", borderRadius: "4px" }}>⚪ Info: {summary.info}</span>}
+          </div>
+
+          {/* Confirmed Findings */}
+          {confirmed.length > 0 && (
+            <div style={{ marginBottom: "24px" }}>
+              <h2 style={{ fontSize: "16px", fontWeight: "bold", marginBottom: "12px", color: "#065f46" }}>✅ Confirmed Findings ({confirmed.length})</h2>
+              {confirmed.map((v, i) => (
+                <div key={v.id} style={{ marginBottom: "12px", padding: "12px", border: "1px solid #e5e7eb", borderRadius: "8px", pageBreakInside: "avoid" }}>
+                  <div style={{ fontWeight: "bold", marginBottom: "6px" }}>{i + 1}. [{v.severity.toUpperCase()}] {v.name}</div>
+                  <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "6px" }}>{v.category}</div>
+                  <div style={{ marginBottom: "6px" }}>{v.description}</div>
+                  {v.evidence && <div style={{ background: "#f9fafb", padding: "8px", borderRadius: "4px", fontFamily: "monospace", fontSize: "11px", marginBottom: "6px", whiteSpace: "pre-wrap" }}>{v.evidence}</div>}
+                  <div style={{ background: "#f0fdf4", padding: "8px", borderRadius: "4px", color: "#166534" }}><strong>Fix:</strong> {v.solution}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Unverified Findings */}
+          {unverified.length > 0 && (
+            <div style={{ marginBottom: "24px" }}>
+              <h2 style={{ fontSize: "16px", fontWeight: "bold", marginBottom: "12px", color: "#92400e" }}>⚠️ Needs Verification ({unverified.length})</h2>
+              {unverified.map((v, i) => (
+                <div key={v.id} style={{ marginBottom: "12px", padding: "12px", border: "1px solid #fde68a", borderRadius: "8px", pageBreakInside: "avoid" }}>
+                  <div style={{ fontWeight: "bold", marginBottom: "6px" }}>{i + 1}. [{v.severity.toUpperCase()}] {v.name}</div>
+                  <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "6px" }}>{v.category}</div>
+                  <div style={{ marginBottom: "6px" }}>{v.description}</div>
+                  <div style={{ background: "#fffbeb", padding: "8px", borderRadius: "4px", color: "#78350f" }}><strong>Fix:</strong> {v.solution}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* AI Analysis */}
+          {aiAnalysis && (
+            <div style={{ marginBottom: "24px", paddingTop: "16px", borderTop: "1px solid #e5e7eb" }}>
+              <h2 style={{ fontSize: "16px", fontWeight: "bold", marginBottom: "12px" }}>🤖 AI Analysis</h2>
+              <div style={{ marginBottom: "8px" }}><strong>Overall Risk:</strong> {aiAnalysis.overallRisk}</div>
+              {aiAnalysis.topPriorities.length > 0 && (
+                <div style={{ marginBottom: "8px" }}>
+                  <strong>Top Priorities:</strong>
+                  <ol style={{ marginTop: "4px", paddingLeft: "20px" }}>
+                    {aiAnalysis.topPriorities.map((p, i) => <li key={i}>{p}</li>)}
+                  </ol>
+                </div>
+              )}
+              {aiAnalysis.quickWins.length > 0 && (
+                <div>
+                  <strong>Quick Wins:</strong>
+                  <ul style={{ marginTop: "4px", paddingLeft: "20px" }}>
+                    {aiAnalysis.quickWins.map((w, i) => <li key={i}>✓ {w}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tech Profile */}
+          <div style={{ paddingTop: "16px", borderTop: "1px solid #e5e7eb" }}>
+            <h2 style={{ fontSize: "16px", fontWeight: "bold", marginBottom: "8px" }}>🖥️ Tech Profile</h2>
+            {tlsGrade && <p><strong>TLS Grade:</strong> {tlsGrade}</p>}
+            {server && <p><strong>Server:</strong> {server}</p>}
+            {technologies.length > 0 && <p><strong>Technologies:</strong> {technologies.join(", ")}</p>}
+          </div>
+
+          {/* Footer */}
+          <div style={{ marginTop: "32px", paddingTop: "12px", borderTop: "1px solid #e5e7eb", textAlign: "center", color: "#9ca3af", fontSize: "11px" }}>
+            Generated by VibeScan — https://vibescan.app | {dateStr}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

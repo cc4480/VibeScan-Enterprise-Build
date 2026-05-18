@@ -1321,31 +1321,124 @@ function PrintableReport({
   );
 }
 
-// ─── Download PDF button ──────────────────────────────────────────────────────
+// ─── Download PDF button (jspdf + html2canvas) ───────────────────────────────
 
-function DownloadPDFButton({ targetUrl }: { targetUrl?: string }) {
-  const handlePrint = () => {
-    const prev = document.title;
-    if (targetUrl) {
-      try {
-        const host = new URL(targetUrl).hostname.replace(/^www\./, "");
-        document.title = `VibeScan Security Report — ${host}`;
-      } catch {
-        document.title = "VibeScan Security Report";
+export interface PrintableReportData {
+  targetUrl: string;
+  scannedAt: string | Date;
+  summary: {
+    grade: string;
+    riskScore: number;
+    executiveSummary: string;
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+    info: number;
+    totalVulnerabilities: number;
+  };
+  confirmedVulns: Vulnerability[];
+  unverifiedVulns: Vulnerability[];
+  technologies: string[];
+  server?: string | null;
+  tlsGrade?: string | null;
+  aiAnalysis?: { overallRisk: string; topPriorities: string[]; quickWins: string[]; complianceNotes?: string | null } | null;
+  categoryCounts: Record<string, number>;
+  pagesScanned?: string[];
+}
+
+function DownloadPDFButton({ data }: { data: PrintableReportData }) {
+  const [generating, setGenerating] = useState(false);
+  const [showOffscreen, setShowOffscreen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleDownload = async () => {
+    if (generating) return;
+    setGenerating(true);
+    setShowOffscreen(true);
+    // Wait for React to render the off-screen PrintableReport
+    await new Promise<void>((r) => setTimeout(r, 300));
+
+    try {
+      const container = containerRef.current;
+      if (!container) return;
+
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
+
+      const canvas = await html2canvas(container, {
+        scale: 1.5,
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#ffffff",
+        windowWidth: container.scrollWidth,
+        windowHeight: container.scrollHeight,
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const imgHeightMm = (canvas.height / canvas.width) * pageW;
+
+      let heightLeft = imgHeightMm;
+      let yOffset = 0;
+
+      pdf.addImage(imgData, "PNG", 0, yOffset, pageW, imgHeightMm);
+      heightLeft -= pageH;
+
+      while (heightLeft > 0) {
+        yOffset -= pageH;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, yOffset, pageW, imgHeightMm);
+        heightLeft -= pageH;
       }
+
+      let filename = "vibescan-report.pdf";
+      try {
+        const host = new URL(data.targetUrl).hostname.replace(/^www\./, "");
+        filename = `vibescan-${host}.pdf`;
+      } catch {
+        // keep default
+      }
+      pdf.save(filename);
+    } finally {
+      setShowOffscreen(false);
+      setGenerating(false);
     }
-    window.print();
-    document.title = prev;
   };
 
   return (
-    <button
-      onClick={handlePrint}
-      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary border border-white/10 text-sm font-medium hover:bg-white/10 transition-colors"
-    >
-      <Download className="w-4 h-4" />
-      Download PDF
-    </button>
+    <>
+      {/* Off-screen container for PDF capture — visible to html2canvas but off-viewport */}
+      {showOffscreen && (
+        <div
+          ref={containerRef}
+          style={{
+            position: "fixed",
+            left: "-9999px",
+            top: 0,
+            width: "794px",
+            backgroundColor: "#ffffff",
+            zIndex: -1,
+            pointerEvents: "none",
+          }}
+        >
+          <PrintableReport {...data} />
+        </div>
+      )}
+
+      <button
+        onClick={() => void handleDownload()}
+        disabled={generating}
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary border border-white/10 text-sm font-medium hover:bg-white/10 transition-colors disabled:opacity-60"
+      >
+        {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+        {generating ? "Generating…" : "Download PDF"}
+      </button>
+    </>
   );
 }
 
@@ -1959,7 +2052,19 @@ export default function ReportViewer() {
         </Link>
         <div className="flex items-center gap-2">
           <CopyReportButton data={copyData} />
-          <DownloadPDFButton targetUrl={report.targetUrl} />
+          <DownloadPDFButton data={{
+            targetUrl: report.targetUrl,
+            scannedAt: report.scannedAt,
+            summary: copyData.summary,
+            confirmedVulns: allConfirmedVulns,
+            unverifiedVulns: allUnverifiedVulns,
+            technologies: technologies ?? [],
+            server: server ?? null,
+            tlsGrade: tlsGrade ?? null,
+            aiAnalysis: aiAnalysis ?? null,
+            categoryCounts,
+            pagesScanned: pagesScanned ?? [],
+          }} />
           <ShareButton reportId={reportId} />
         </div>
       </div>
@@ -2414,7 +2519,19 @@ export default function ReportViewer() {
             <Plus className="w-5 h-5" /> New Scan
           </Link>
           <CopyReportButton data={copyData} />
-          <DownloadPDFButton targetUrl={report.targetUrl} />
+          <DownloadPDFButton data={{
+            targetUrl: report.targetUrl,
+            scannedAt: report.scannedAt,
+            summary: copyData.summary,
+            confirmedVulns: allConfirmedVulns,
+            unverifiedVulns: allUnverifiedVulns,
+            technologies: technologies ?? [],
+            server: server ?? null,
+            tlsGrade: tlsGrade ?? null,
+            aiAnalysis: aiAnalysis ?? null,
+            categoryCounts,
+            pagesScanned: pagesScanned ?? [],
+          }} />
           <ShareButton reportId={reportId} />
         </div>
       </div>

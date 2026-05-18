@@ -462,10 +462,9 @@ export const getSharedReportResponseDataVulnerabilitiesItemConfidenceMax = 100;
 
 export const GetSharedReportResponse = zod.object({
   id: zod.string(),
-  scanId: zod.string(),
-  userId: zod.string(),
+  scanId: zod.string().nullish(),
   targetUrl: zod.string(),
-  tier: zod.enum(["basic", "deep", "pack_5", "pack_20"]),
+  tier: zod.string(),
   scannedAt: zod.date(),
   duration: zod.number().nullish(),
   createdAt: zod.date(),

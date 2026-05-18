@@ -499,7 +499,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Report'
+                $ref: '#/components/schemas/SharedReport'
         '404':
           description: Share link not found or revoked
           content:
@@ -945,6 +945,29 @@ components:
         fingerprint:
           type: string
           description: Stable SHA-256 fingerprint (20 hex chars) computed for this dismissal.
+
+    SharedReport:
+      type: object
+      required: [id, targetUrl, tier, scannedAt, createdAt, data]
+      properties:
+        id:
+          type: string
+        scanId:
+          type: [string, 'null']
+        targetUrl:
+          type: string
+        tier:
+          type: string
+        scannedAt:
+          type: string
+          format: date-time
+        duration:
+          type: [number, 'null']
+        createdAt:
+          type: string
+          format: date-time
+        data:
+          $ref: '#/components/schemas/ReportData'
 
     ReportShare:
       type: object

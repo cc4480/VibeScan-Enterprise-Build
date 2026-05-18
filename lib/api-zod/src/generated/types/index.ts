@@ -39,5 +39,6 @@ export * from "./scanStatus";
 export * from "./scanStatusEnum";
 export * from "./scanSummary";
 export * from "./scanTier";
+export * from "./sharedReport";
 export * from "./vulnerability";
 export * from "./vulnerabilitySeverity";

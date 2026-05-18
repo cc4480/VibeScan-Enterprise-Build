@@ -38,6 +38,7 @@ import type {
   ReportShare,
   Scan,
   ScanStatus,
+  SharedReport,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -1521,8 +1522,8 @@ export const getGetSharedReportUrl = (token: string) => {
 export const getSharedReport = async (
   token: string,
   options?: RequestInit,
-): Promise<Report> => {
-  return customFetch<Report>(getGetSharedReportUrl(token), {
+): Promise<SharedReport> => {
+  return customFetch<SharedReport>(getGetSharedReportUrl(token), {
     ...options,
     method: "GET",
   });

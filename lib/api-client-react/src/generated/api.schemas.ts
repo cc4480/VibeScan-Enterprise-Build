@@ -277,6 +277,19 @@ export interface CreateDismissalResponse {
   fingerprint: string;
 }
 
+export interface SharedReport {
+  id: string;
+  /** @nullable */
+  scanId?: string | null;
+  targetUrl: string;
+  tier: string;
+  scannedAt: string;
+  /** @nullable */
+  duration?: number | null;
+  createdAt: string;
+  data: ReportData;
+}
+
 export interface ReportShare {
   id: string;
   token: string;
