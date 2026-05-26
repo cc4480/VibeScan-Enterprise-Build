@@ -2,17 +2,8 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
-import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 // Security headers applied to both the dev server and preview server.
-// These eliminate the most common scanner findings on the frontend:
-// missing CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy,
-// Permissions-Policy, and Cross-Origin-Opener-Policy.
-//
-// CSP notes:
-//  - 'unsafe-inline' for scripts is required by Vite's HMR runtime in dev mode.
-//  - fonts.googleapis.com / fonts.gstatic.com cover the Inter font loaded in index.html.
-//  - connect-src includes wss:/ws: for Vite HMR WebSocket and https: for the API server.
 const securityHeaders: Record<string, string> = {
   "X-Frame-Options": "DENY",
   "X-Content-Type-Options": "nosniff",
@@ -22,8 +13,6 @@ const securityHeaders: Record<string, string> = {
   "Cross-Origin-Resource-Policy": "same-origin",
   "Content-Security-Policy": [
     "default-src 'self'",
-    // 'unsafe-inline' is required by Vite's dev-server HMR runtime.
-    // Fonts are now self-hosted so no external font origins are needed.
     "script-src 'self' 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
@@ -63,20 +52,6 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    runtimeErrorOverlay(),
-    ...(process.env.NODE_ENV !== "production" &&
-    process.env.REPL_ID !== undefined
-      ? [
-          await import("@replit/vite-plugin-cartographer").then((m) =>
-            m.cartographer({
-              root: path.resolve(import.meta.dirname, ".."),
-            }),
-          ),
-          await import("@replit/vite-plugin-dev-banner").then((m) =>
-            m.devBanner(),
-          ),
-        ]
-      : []),
   ],
   resolve: {
     alias: {

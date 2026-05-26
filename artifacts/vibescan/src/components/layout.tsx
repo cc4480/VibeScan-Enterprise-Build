@@ -1,12 +1,14 @@
 import { Link, useLocation } from "wouter";
-import { Shield, LayoutDashboard, Menu, X, Plus } from "lucide-react";
+import { Shield, LayoutDashboard, Menu, X, Plus, LogIn, LogOut } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@workspace/auth-web";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user, isAuthenticated, logout } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -69,6 +71,24 @@ export function Layout({ children }: { children: React.ReactNode }) {
             >
               <Plus className="w-4 h-4" /> New Scan
             </Link>
+
+            {isAuthenticated ? (
+              <button
+                onClick={() => { void logout(); }}
+                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                title={user?.email ?? ""}
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden lg:inline max-w-[120px] truncate">{user?.email ?? "Account"}</span>
+              </button>
+            ) : (
+              <Link
+                href="/login"
+                className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <LogIn className="w-4 h-4" /> Sign in
+              </Link>
+            )}
           </nav>
 
           {/* Mobile toggle */}
