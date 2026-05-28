@@ -69,6 +69,14 @@ export default defineConfig({
     port,
     host: "0.0.0.0",
     allowedHosts: true,
+    // Proxy API calls to the backend in dev so the frontend can reach it
+    // without CORS. API_PORT defaults to 8080 (see root `pnpm dev`).
+    proxy: {
+      "/api": {
+        target: `http://localhost:${process.env.API_PORT ?? "8080"}`,
+        changeOrigin: true,
+      },
+    },
     fs: {
       strict: true,
       deny: ["**/.*"],
