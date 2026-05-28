@@ -6,10 +6,14 @@
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "setup": "pnpm --filter @workspace/api-server run build && pnpm --filter @workspace/db exec drizzle-kit push",
+    "dev": "concurrently --names \"API,WEB\" --prefix-colors \"cyan,magenta\" \"cross-env PORT=8080 NODE_ENV=development node --env-file=.env --enable-source-maps artifacts/api-server/dist/index.mjs\" \"cross-env PORT=3000 BASE_PATH=/ pnpm --filter @workspace/vibescan dev\""
   },
   "private": true,
   "devDependencies": {
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
     "typescript": "~5.9.2",
     "prettier": "^3.8.1"
   }
