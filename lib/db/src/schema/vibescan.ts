@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, integer, timestamp, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, integer, timestamp, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -115,6 +115,38 @@ export const insertCveAlertSchema = createInsertSchema(cveAlertsTable).omit({
 });
 export type InsertCveAlert = typeof cveAlertsTable.$inferInsert;
 export type CveAlert = typeof cveAlertsTable.$inferSelect;
+
+export const dismissedFindingsTable = pgTable("dismissed_findings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: text("user_id").notNull(),
+  targetUrl: text("target_url").notNull(),
+  findingFingerprint: text("finding_fingerprint").notNull(),
+  findingName: text("finding_name").notNull(),
+  findingCategory: text("finding_category").notNull(),
+  reason: text("reason").default("false_positive"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("idx_dismissed_user_target").on(table.userId, table.targetUrl),
+  uniqueIndex("uq_dismissed_user_target_fp").on(table.userId, table.targetUrl, table.findingFingerprint),
+]);
+
+export type DismissedFinding = typeof dismissedFindingsTable.$inferSelect;
+
+export const reportSharesTable = pgTable("report_shares", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  reportId: uuid("report_id").notNull().references(() => reportsTable.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  token: text("token").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+}, (table) => [
+  uniqueIndex("uq_report_shares_token").on(table.token),
+  index("idx_report_shares_report_id").on(table.reportId),
+  index("idx_report_shares_user_id").on(table.userId),
+]);
+
+export type ReportShare = typeof reportSharesTable.$inferSelect;
 
 /**
  * Single-row key-value store for persisting EOL data fetched from endoflife.date.

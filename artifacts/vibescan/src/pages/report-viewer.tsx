@@ -1,16 +1,82 @@
-import { useGetReport, getGetReportQueryKey } from "@workspace/api-client-react";
+import {
+  useGetReport, getGetReportQueryKey,
+  useCreateReportShare, useListReportShares, useRevokeReportShare,
+  getListReportSharesQueryKey,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
 import {
   Shield, ShieldAlert, CheckCircle2, ArrowLeft, Loader2, Globe, Server,
   Lock, Activity, Share2, Plus, Mail, GitBranch, KeyRound, Database,
   Terminal, ExternalLink, Package, RefreshCw, Eye, Code2, Wifi,
   AlertTriangle, Monitor, Info, Settings, Network, EyeOff, Filter, X,
-  ArrowUpDown, HelpCircle, Download, Copy, Check, Bell, ChevronDown, Search, Minus,
+  ArrowUpDown, HelpCircle, Download, Copy, Check, Bell, ChevronDown, Search, Minus, Flag, RotateCcw,
 } from "lucide-react";
 import { cn, formatSeverity, getSeverityColors, getGradeColor } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, createContext, useContext, useRef } from "react";
 import type { Vulnerability } from "@workspace/api-client-react";
+
+// ─── Dismissals context ───────────────────────────────────────────────────────
+
+interface DismissalEntry {
+  fingerprint: string;
+  findingName: string;
+  findingCategory: string;
+}
+
+// ─── Client-side fingerprint helpers (mirror server lib/fingerprint.ts) ────────
+
+function normalizeEvidenceKeyClient(evidence?: string | null): string {
+  if (!evidence) return "";
+  return evidence
+    .toLowerCase()
+    .replace(/https?:\/\/[^\s]+/g, "url")
+    .replace(/\b[0-9a-f]{8,}\b/gi, "hash")
+    .replace(/\b\d[\d.]+\d\b/g, "N")
+    .replace(/['"`;,]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 50);
+}
+
+async function computeVulnFp(
+  category: string,
+  name: string,
+  evidence?: string | null,
+): Promise<string> {
+  const evidenceKey = normalizeEvidenceKeyClient(evidence);
+  const input = evidenceKey
+    ? `${category.toLowerCase().trim()}::${name.toLowerCase().trim()}::${evidenceKey}`
+    : `${category.toLowerCase().trim()}::${name.toLowerCase().trim()}`;
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 20);
+}
+
+function vulnUniqueKey(v: { category: string; name: string; evidence?: string | null }): string {
+  return `${v.category}:${v.name}:${v.evidence ?? ""}`;
+}
+
+// ─── Dismissals context ──────────────────────────────────────────────────────
+
+interface DismissalsCtx {
+  dismissedFps: Set<string>;
+  vulnFpMap: Map<string, string>;
+  optimisticDismissKeys: Set<string>;
+  dismiss: (vuln: Vulnerability, targetUrl: string) => Promise<void>;
+  undismiss: (vuln: Vulnerability) => Promise<void>;
+}
+
+const DismissalsContext = createContext<DismissalsCtx>({
+  dismissedFps: new Set(),
+  vulnFpMap: new Map(),
+  optimisticDismissKeys: new Set(),
+  dismiss: async () => {},
+  undismiss: async () => {},
+});
 
 // ─── Category metadata ────────────────────────────────────────────────────────
 
@@ -232,6 +298,11 @@ function VulnCard({
   rootUrl?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const { dismiss, undismiss, dismissedFps, vulnFpMap, optimisticDismissKeys } = useContext(DismissalsContext);
+  const vKey = vulnUniqueKey(vuln);
+  const fp = vulnFpMap.get(vKey);
+  const isDismissed = optimisticDismissKeys.has(vKey) || (fp !== undefined && dismissedFps.has(fp));
+  const [dismissPending, setDismissPending] = useState(false);
   const meta = getCategoryMeta(vuln.category);
 
   // Extract the affected component for CVE / outdated-software findings.
@@ -398,6 +469,41 @@ function VulnCard({
                 </div>
               </div>
             </div>
+
+            {/* False positive dismissal */}
+            <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">Not applicable to your setup?</p>
+              {isDismissed ? (
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    setDismissPending(true);
+                    await undismiss(vuln);
+                    setDismissPending(false);
+                  }}
+                  disabled={dismissPending}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Undo dismissal
+                </button>
+              ) : (
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (!rootUrl) return;
+                    setDismissPending(true);
+                    await dismiss(vuln, rootUrl);
+                    setDismissPending(false);
+                  }}
+                  disabled={dismissPending || !rootUrl}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-secondary border border-white/10 text-muted-foreground hover:text-foreground hover:border-white/20 transition-colors disabled:opacity-50"
+                >
+                  <Flag className="w-3 h-3" />
+                  Mark as false positive
+                </button>
+              )}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -411,8 +517,8 @@ const DANGEROUS_RECON_PORTS = new Set([23, 445, 2375, 6379, 27017, 9200, 1433, 3
 const MEDIUM_RECON_PORTS = new Set([2376, 8888, 9000]);
 
 interface ReconData {
-  subdomains?: Array<{ subdomain: string; ip: string | null; cname: string | null; source: string }>;
-  openPorts?: Array<{ port: number; service: string; banner: string | null }>;
+  subdomains?: Array<{ subdomain: string; ip?: string | null; cname?: string | null; source: string }>;
+  openPorts?: Array<{ port: number; service: string; banner?: string | null }>;
   dnsRecords?: Array<{ type: string; value: string; ttl?: number }>;
   reconDurationMs?: number;
 }
@@ -1215,31 +1321,124 @@ function PrintableReport({
   );
 }
 
-// ─── Download PDF button ──────────────────────────────────────────────────────
+// ─── Download PDF button (jspdf + html2canvas) ───────────────────────────────
 
-function DownloadPDFButton({ targetUrl }: { targetUrl?: string }) {
-  const handlePrint = () => {
-    const prev = document.title;
-    if (targetUrl) {
-      try {
-        const host = new URL(targetUrl).hostname.replace(/^www\./, "");
-        document.title = `VibeScan Security Report — ${host}`;
-      } catch {
-        document.title = "VibeScan Security Report";
+export interface PrintableReportData {
+  targetUrl: string;
+  scannedAt: string | Date;
+  summary: {
+    grade: string;
+    riskScore: number;
+    executiveSummary: string;
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+    info: number;
+    totalVulnerabilities: number;
+  };
+  confirmedVulns: Vulnerability[];
+  unverifiedVulns: Vulnerability[];
+  technologies: string[];
+  server?: string | null;
+  tlsGrade?: string | null;
+  aiAnalysis?: { overallRisk: string; topPriorities: string[]; quickWins: string[]; complianceNotes?: string | null } | null;
+  categoryCounts: Record<string, number>;
+  pagesScanned?: string[];
+}
+
+function DownloadPDFButton({ data }: { data: PrintableReportData }) {
+  const [generating, setGenerating] = useState(false);
+  const [showOffscreen, setShowOffscreen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleDownload = async () => {
+    if (generating) return;
+    setGenerating(true);
+    setShowOffscreen(true);
+    // Wait for React to render the off-screen PrintableReport
+    await new Promise<void>((r) => setTimeout(r, 300));
+
+    try {
+      const container = containerRef.current;
+      if (!container) return;
+
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
+
+      const canvas = await html2canvas(container, {
+        scale: 1.5,
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#ffffff",
+        windowWidth: container.scrollWidth,
+        windowHeight: container.scrollHeight,
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const imgHeightMm = (canvas.height / canvas.width) * pageW;
+
+      let heightLeft = imgHeightMm;
+      let yOffset = 0;
+
+      pdf.addImage(imgData, "PNG", 0, yOffset, pageW, imgHeightMm);
+      heightLeft -= pageH;
+
+      while (heightLeft > 0) {
+        yOffset -= pageH;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, yOffset, pageW, imgHeightMm);
+        heightLeft -= pageH;
       }
+
+      let filename = "vibescan-report.pdf";
+      try {
+        const host = new URL(data.targetUrl).hostname.replace(/^www\./, "");
+        filename = `vibescan-${host}.pdf`;
+      } catch {
+        // keep default
+      }
+      pdf.save(filename);
+    } finally {
+      setShowOffscreen(false);
+      setGenerating(false);
     }
-    window.print();
-    document.title = prev;
   };
 
   return (
-    <button
-      onClick={handlePrint}
-      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary border border-white/10 text-sm font-medium hover:bg-white/10 transition-colors"
-    >
-      <Download className="w-4 h-4" />
-      Download PDF
-    </button>
+    <>
+      {/* Off-screen container for PDF capture — visible to html2canvas but off-viewport */}
+      {showOffscreen && (
+        <div
+          ref={containerRef}
+          style={{
+            position: "fixed",
+            left: "-9999px",
+            top: 0,
+            width: "794px",
+            backgroundColor: "#ffffff",
+            zIndex: -1,
+            pointerEvents: "none",
+          }}
+        >
+          <PrintableReport {...data} />
+        </div>
+      )}
+
+      <button
+        onClick={() => void handleDownload()}
+        disabled={generating}
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary border border-white/10 text-sm font-medium hover:bg-white/10 transition-colors disabled:opacity-60"
+      >
+        {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+        {generating ? "Generating…" : "Download PDF"}
+      </button>
+    </>
   );
 }
 
@@ -1354,30 +1553,205 @@ function CopyReportButton({ data }: { data: ReportCopyData }) {
   );
 }
 
-// ─── Share button ─────────────────────────────────────────────────────────────
+// ─── Share dialog ─────────────────────────────────────────────────────────────
+
+interface ShareLink {
+  id: string;
+  token: string;
+  expiresAt: string | null;
+  createdAt: string;
+  revokedAt: string | null;
+}
 
 function ShareButton({ reportId }: { reportId: string }) {
-  const [copied, setCopied] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  const [expiresIn, setExpiresIn] = useState<"7d" | "30d" | "never">("never");
+  const queryClient = useQueryClient();
 
-  const handleShare = async () => {
-    const url = `${window.location.origin}${window.location.pathname.split("/report/")[0]}/report/${reportId}`;
+  const { data: shares = [], isLoading: loadingShares } = useListReportShares(reportId, {
+    query: {
+      queryKey: getListReportSharesQueryKey(reportId),
+      enabled: open,
+    },
+  });
+
+  const { mutate: createShare, isPending: creating } = useCreateReportShare({
+    mutation: {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: getListReportSharesQueryKey(reportId) });
+      },
+    },
+  });
+
+  const { mutate: revokeShare, isPending: revoking } = useRevokeReportShare({
+    mutation: {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: getListReportSharesQueryKey(reportId) });
+      },
+    },
+  });
+
+  const copyLink = async (token: string) => {
+    const url = `${window.location.origin}/share/${token}`;
     try {
       await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
     } catch {
       prompt("Copy this link:", url);
     }
+    setCopiedToken(token);
+    setTimeout(() => setCopiedToken(null), 2000);
   };
 
+  const handleCreate = () => {
+    createShare({ id: reportId, data: { expiresIn } });
+  };
+
+  const handleRevoke = (token: string) => {
+    revokeShare({ id: reportId, token });
+  };
+
+  const activeShares = (shares as ShareLink[]).filter((s) => !s.revokedAt);
+
   return (
-    <button
-      onClick={handleShare}
-      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary border border-white/10 text-sm font-medium hover:bg-white/10 transition-colors"
-    >
-      <Share2 className="w-4 h-4" />
-      {copied ? "Link Copied!" : "Share Report"}
-    </button>
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary border border-white/10 text-sm font-medium hover:bg-white/10 transition-colors"
+      >
+        <Share2 className="w-4 h-4" />
+        Share Report
+      </button>
+
+      {/* Dialog overlay */}
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
+        >
+          <div
+            className="relative w-full max-w-md bg-background border border-white/10 rounded-2xl shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-5 border-b border-white/5">
+              <div className="flex items-center gap-2">
+                <Share2 className="w-4 h-4 text-primary" />
+                <h2 className="font-bold text-base">Share Report</h2>
+              </div>
+              <button
+                onClick={() => setOpen(false)}
+                className="p-1.5 hover:bg-white/5 rounded-lg transition-colors"
+              >
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 space-y-5">
+              <p className="text-sm text-muted-foreground">
+                Share links let anyone view this report without logging in. You can revoke them at any time.
+              </p>
+
+              {/* Create new link */}
+              <div className="space-y-3">
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                  Create New Link
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    value={expiresIn}
+                    onChange={(e) => setExpiresIn(e.target.value as "7d" | "30d" | "never")}
+                    className="flex-1 px-3 py-2 rounded-lg bg-secondary border border-white/10 text-sm text-foreground focus:outline-none focus:border-primary/50"
+                  >
+                    <option value="never">Never expires</option>
+                    <option value="7d">Expires in 7 days</option>
+                    <option value="30d">Expires in 30 days</option>
+                  </select>
+                  <button
+                    onClick={handleCreate}
+                    disabled={creating}
+                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-60 transition-all flex items-center gap-2 shrink-0"
+                  >
+                    {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                    Create
+                  </button>
+                </div>
+              </div>
+
+              {/* Existing links */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                  Active Links {activeShares.length > 0 && `(${activeShares.length})`}
+                </label>
+
+                {loadingShares ? (
+                  <div className="py-4 flex justify-center">
+                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : activeShares.length === 0 ? (
+                  <div className="py-4 text-center text-sm text-muted-foreground border border-dashed border-white/10 rounded-xl">
+                    No active share links yet.
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-52 overflow-y-auto">
+                    {activeShares.map((share) => {
+                      const shortToken = share.token.slice(0, 12) + "…";
+                      const expires = share.expiresAt
+                        ? new Date(share.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                        : "Never";
+                      const isExpired = share.expiresAt ? new Date(share.expiresAt) < new Date() : false;
+
+                      return (
+                        <div
+                          key={share.id}
+                          className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-secondary/50 border border-white/5"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-mono text-foreground/70 truncate">{shortToken}</p>
+                            <p className={cn(
+                              "text-[10px] mt-0.5",
+                              isExpired ? "text-red-400" : "text-muted-foreground/60",
+                            )}>
+                              {isExpired ? "Expired" : `Expires: ${expires}`}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => void copyLink(share.token)}
+                            title="Copy link"
+                            className={cn(
+                              "shrink-0 p-1.5 rounded-lg transition-all",
+                              copiedToken === share.token
+                                ? "bg-emerald-500/20 text-emerald-400"
+                                : "hover:bg-white/10 text-muted-foreground hover:text-foreground",
+                            )}
+                          >
+                            {copiedToken === share.token ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                          <button
+                            onClick={() => handleRevoke(share.token)}
+                            disabled={revoking}
+                            title="Revoke link"
+                            className="shrink-0 p-1.5 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-all"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer note */}
+            <div className="px-5 pb-4 text-xs text-muted-foreground/50">
+              Recipients can view the report and download a PDF — they cannot modify findings or access your account.
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1397,8 +1771,112 @@ export default function ReportViewer() {
   const [sortBy, setSortBy] = useState<"severity" | "category">("severity");
   const [viewMode, setViewMode] = useState<"grouped" | "flat">("grouped");
 
+  const [dismissedFps, setDismissedFps] = useState<Set<string>>(new Set());
+  const [vulnFpMap, setVulnFpMap] = useState<Map<string, string>>(new Map());
+  const [optimisticDismissKeys, setOptimisticDismissKeys] = useState<Set<string>>(new Set());
+  const [undoToast, setUndoToast] = useState<{ key: string; vuln: Vulnerability } | null>(null);
+  const undoToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!report?.targetUrl) return;
+    fetch(`/api/dismissals?targetUrl=${encodeURIComponent(report.targetUrl)}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((items: DismissalEntry[]) => {
+        const fpSet = new Set<string>();
+        for (const item of items) fpSet.add(item.fingerprint);
+        setDismissedFps(fpSet);
+      })
+      .catch(() => {});
+  }, [report?.targetUrl]);
+
+  const dismissFinding = useCallback(async (vuln: Vulnerability, targetUrl: string) => {
+    const vKey = vulnUniqueKey(vuln);
+
+    // Optimistic hide via per-vuln unique key (stays until server fingerprint arrives)
+    setOptimisticDismissKeys((prev) => new Set([...prev, vKey]));
+
+    // Show external undo toast (per-card button is gone once the card is hidden)
+    if (undoToastTimerRef.current) clearTimeout(undoToastTimerRef.current);
+    setUndoToast({ key: vKey, vuln });
+    undoToastTimerRef.current = setTimeout(() => setUndoToast(null), 5000);
+
+    try {
+      const res = await fetch("/api/dismissals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetUrl,
+          findingName: vuln.name,
+          findingCategory: vuln.category,
+          findingEvidence: vuln.evidence ?? undefined,
+          reason: "false_positive",
+        }),
+      });
+      if (!res.ok) {
+        setOptimisticDismissKeys((prev) => { const n = new Set(prev); n.delete(vKey); return n; });
+        if (undoToastTimerRef.current) clearTimeout(undoToastTimerRef.current);
+        setUndoToast(null);
+        return;
+      }
+      const { fingerprint } = (await res.json()) as { fingerprint: string };
+      // Promote from optimistic key to confirmed fingerprint
+      setVulnFpMap((prev) => new Map([...prev, [vKey, fingerprint]]));
+      setDismissedFps((prev) => new Set([...prev, fingerprint]));
+      setOptimisticDismissKeys((prev) => { const n = new Set(prev); n.delete(vKey); return n; });
+    } catch {
+      setOptimisticDismissKeys((prev) => { const n = new Set(prev); n.delete(vKey); return n; });
+      if (undoToastTimerRef.current) clearTimeout(undoToastTimerRef.current);
+      setUndoToast(null);
+    }
+  }, []);
+
+  const undismissFinding = useCallback(async (vuln: Vulnerability) => {
+    const vKey = vulnUniqueKey(vuln);
+    const fp = vulnFpMap.get(vKey);
+    const tUrl = report?.targetUrl;
+    // Optimistically show the finding again
+    setDismissedFps((prev) => { const n = new Set(prev); if (fp) n.delete(fp); return n; });
+    setOptimisticDismissKeys((prev) => { const n = new Set(prev); n.delete(vKey); return n; });
+    if (fp && tUrl) {
+      try {
+        const res = await fetch(
+          `/api/dismissals/${fp}?targetUrl=${encodeURIComponent(tUrl)}`,
+          { method: "DELETE" },
+        );
+        if (!res.ok) {
+          setDismissedFps((prev) => new Set([...prev, fp]));
+          return;
+        }
+        setVulnFpMap((prev) => { const n = new Map(prev); n.delete(vKey); return n; });
+      } catch {
+        setDismissedFps((prev) => new Set([...prev, fp]));
+      }
+    }
+  }, [vulnFpMap, report?.targetUrl]);
+
   const vulnerabilities = report?.data?.vulnerabilities ?? [];
   const summary = report?.data?.summary;
+
+  // Pre-compute per-vuln fingerprints using the same SHA-256 algorithm as the server.
+  // Runs as a fast async batch whenever the vulnerability list changes.
+  useEffect(() => {
+    if (!vulnerabilities.length) return;
+    let cancelled = false;
+    Promise.all(
+      vulnerabilities.map((v) =>
+        computeVulnFp(v.category, v.name, v.evidence).then(
+          (fp) => [vulnUniqueKey(v), fp] as [string, string],
+        ),
+      ),
+    ).then((pairs) => {
+      if (!cancelled) setVulnFpMap((prev) => {
+        const next = new Map(prev);
+        for (const [k, fp] of pairs) next.set(k, fp);
+        return next;
+      });
+    });
+    return () => { cancelled = true; };
+  }, [vulnerabilities]);
 
   // All hooks must come before any early returns
   const sortedVulns = useMemo(() => {
@@ -1427,9 +1905,21 @@ export default function ReportViewer() {
     [categoryCounts],
   );
 
+  const visibleVulns = useMemo(
+    () => sortedVulns.filter((v) => {
+      const vKey = vulnUniqueKey(v);
+      if (optimisticDismissKeys.has(vKey)) return false;
+      const fp = vulnFpMap.get(vKey);
+      return !fp || !dismissedFps.has(fp);
+    }),
+    [sortedVulns, dismissedFps, vulnFpMap, optimisticDismissKeys],
+  );
+
+  const dismissedCount = sortedVulns.length - visibleVulns.length;
+
   const filteredVulns = useMemo(
-    () => activeCategory ? sortedVulns.filter((v) => v.category === activeCategory) : sortedVulns,
-    [sortedVulns, activeCategory],
+    () => activeCategory ? visibleVulns.filter((v) => v.category === activeCategory) : visibleVulns,
+    [visibleVulns, activeCategory],
   );
 
   // Split into confirmed (confidence ≥ threshold) vs. needs verification
@@ -1463,12 +1953,12 @@ export default function ReportViewer() {
 
   // Unfiltered splits — used for PDF/copy so nothing is omitted when a category filter is active
   const allConfirmedVulns = useMemo(
-    () => sortedVulns.filter((v) => (v.confidence ?? 100) >= VERIFICATION_THRESHOLD),
-    [sortedVulns],
+    () => visibleVulns.filter((v) => (v.confidence ?? 100) >= VERIFICATION_THRESHOLD),
+    [visibleVulns],
   );
   const allUnverifiedVulns = useMemo(
-    () => sortedVulns.filter((v) => (v.confidence ?? 100) < VERIFICATION_THRESHOLD),
-    [sortedVulns],
+    () => visibleVulns.filter((v) => (v.confidence ?? 100) < VERIFICATION_THRESHOLD),
+    [visibleVulns],
   );
 
   // Per-severity counts split by confidence — used for the header badges
@@ -1527,6 +2017,15 @@ export default function ReportViewer() {
   };
 
   return (
+    <DismissalsContext.Provider
+      value={{
+        dismissedFps,
+        vulnFpMap,
+        optimisticDismissKeys,
+        dismiss: dismissFinding,
+        undismiss: undismissFinding,
+      }}
+    >
     <>
       {/* Print-only view — hidden on screen, shown only when printing */}
       <div className="hidden print:block">
@@ -1553,7 +2052,19 @@ export default function ReportViewer() {
         </Link>
         <div className="flex items-center gap-2">
           <CopyReportButton data={copyData} />
-          <DownloadPDFButton targetUrl={report.targetUrl} />
+          <DownloadPDFButton data={{
+            targetUrl: report.targetUrl,
+            scannedAt: report.scannedAt,
+            summary: copyData.summary,
+            confirmedVulns: allConfirmedVulns,
+            unverifiedVulns: allUnverifiedVulns,
+            technologies: technologies ?? [],
+            server: server ?? null,
+            tlsGrade: tlsGrade ?? null,
+            aiAnalysis: aiAnalysis ?? null,
+            categoryCounts,
+            pagesScanned: pagesScanned ?? [],
+          }} />
           <ShareButton reportId={reportId} />
         </div>
       </div>
@@ -1598,8 +2109,18 @@ export default function ReportViewer() {
               <ShieldAlert className="w-6 h-6 text-primary" />
               Identified Vulnerabilities
               <span className="bg-secondary text-foreground text-sm py-1 px-3 rounded-full ml-2">
-                {activeCategory ? `${filteredVulns.length} / ${summary.totalVulnerabilities}` : summary.totalVulnerabilities}
+                {activeCategory ? `${filteredVulns.length} / ${visibleVulns.length}` : visibleVulns.length}
               </span>
+              {dismissedCount > 0 && (
+                <span className="text-xs font-normal text-muted-foreground">
+                  ({dismissedCount} dismissed as false positive{dismissedCount !== 1 ? "s" : ""})
+                </span>
+              )}
+              {(report?.data as { autoSuppressedCount?: number } | undefined)?.autoSuppressedCount && (
+                <span className="text-xs font-normal text-muted-foreground">
+                  ({(report.data as { autoSuppressedCount?: number }).autoSuppressedCount} previously dismissed, hidden)
+                </span>
+              )}
             </h2>
           </div>
 
@@ -1998,11 +2519,45 @@ export default function ReportViewer() {
             <Plus className="w-5 h-5" /> New Scan
           </Link>
           <CopyReportButton data={copyData} />
-          <DownloadPDFButton targetUrl={report.targetUrl} />
+          <DownloadPDFButton data={{
+            targetUrl: report.targetUrl,
+            scannedAt: report.scannedAt,
+            summary: copyData.summary,
+            confirmedVulns: allConfirmedVulns,
+            unverifiedVulns: allUnverifiedVulns,
+            technologies: technologies ?? [],
+            server: server ?? null,
+            tlsGrade: tlsGrade ?? null,
+            aiAnalysis: aiAnalysis ?? null,
+            categoryCounts,
+            pagesScanned: pagesScanned ?? [],
+          }} />
           <ShareButton reportId={reportId} />
         </div>
       </div>
       </div>
+
+      {/* ── Timed undo toast ── shown for 5s after a finding is dismissed ── */}
+      {undoToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-background border border-border rounded-xl px-4 py-3 shadow-2xl text-sm animate-in slide-in-from-bottom-2 duration-200">
+          <span className="text-muted-foreground">
+            <span className="font-semibold text-foreground truncate max-w-[200px] inline-block align-bottom">{undoToast.vuln.name}</span>
+            {" "}dismissed as false positive
+          </span>
+          <button
+            onClick={async () => {
+              if (undoToastTimerRef.current) clearTimeout(undoToastTimerRef.current);
+              const toastVuln = undoToast.vuln;
+              setUndoToast(null);
+              await undismissFinding(toastVuln);
+            }}
+            className="text-primary hover:text-primary/80 font-bold underline underline-offset-2 shrink-0"
+          >
+            Undo
+          </button>
+        </div>
+      )}
     </>
+    </DismissalsContext.Provider>
   );
 }

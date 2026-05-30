@@ -17,6 +17,8 @@ tags:
     description: Report retrieval
   - name: credits
     description: Credit balance management
+  - name: dismissals
+    description: Per-user false-positive dismissals scoped to a target URL
 paths:
   /healthz:
     get:
@@ -266,6 +268,246 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '404':
           description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /dismissals:
+    get:
+      tags: [dismissals]
+      operationId: listDismissals
+      summary: List dismissed findings for a target URL
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+        - name: targetUrl
+          in: query
+          required: true
+          description: The canonicalized target URL to fetch dismissals for.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of dismissed findings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DismissalEntry'
+        '400':
+          description: Missing targetUrl
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    post:
+      tags: [dismissals]
+      operationId: createDismissal
+      summary: Dismiss a finding as a false positive
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDismissalRequest'
+      responses:
+        '201':
+          description: Dismissal created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateDismissalResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /dismissals/{fingerprint}:
+    delete:
+      tags: [dismissals]
+      operationId: deleteDismissal
+      summary: Remove a dismissed finding (undo false-positive mark)
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+        - name: fingerprint
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: targetUrl
+          in: query
+          required: true
+          description: The target URL the dismissal belongs to.
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Dismissal removed
+        '400':
+          description: Missing targetUrl
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /reports/{id}/shares:
+    post:
+      tags: [reports]
+      operationId: createReportShare
+      summary: Create a public share link for a report
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateShareRequest'
+      responses:
+        '201':
+          description: Share link created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportShare'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    get:
+      tags: [reports]
+      operationId: listReportShares
+      summary: List active share links for a report
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of share links
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReportShare'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /reports/{id}/shares/{token}:
+    delete:
+      tags: [reports]
+      operationId: revokeReportShare
+      summary: Revoke a share link
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Share link revoked
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Share link not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /share/{token}:
+    get:
+      tags: [reports]
+      operationId: getSharedReport
+      summary: Fetch a shared report by token (public, no auth required)
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Shared report data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SharedReport'
+        '404':
+          description: Share link not found or revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '410':
+          description: Share link has expired
           content:
             application/json:
               schema:
@@ -589,6 +831,55 @@ components:
           description: High-value probe paths that returned HTTP 404. Only explicitly probed paths (HIGH_VALUE_PROBE_PATHS) are included — crawled links that 404'd are excluded.
         aiAnalysis:
           $ref: '#/components/schemas/AiAnalysis'
+        recon:
+          $ref: '#/components/schemas/ReconResult'
+        autoSuppressedCount:
+          type: integer
+          description: Number of findings automatically suppressed on this scan because the user previously dismissed them as false positives on the same target URL.
+
+    ReconResult:
+      type: object
+      properties:
+        subdomains:
+          type: array
+          items:
+            type: object
+            required: [subdomain, source]
+            properties:
+              subdomain:
+                type: string
+              ip:
+                type: [string, 'null']
+              cname:
+                type: [string, 'null']
+              source:
+                type: string
+        openPorts:
+          type: array
+          items:
+            type: object
+            required: [port, service]
+            properties:
+              port:
+                type: integer
+              service:
+                type: string
+              banner:
+                type: [string, 'null']
+        dnsRecords:
+          type: array
+          items:
+            type: object
+            required: [type, value]
+            properties:
+              type:
+                type: string
+              value:
+                type: string
+              ttl:
+                type: integer
+        reconDurationMs:
+          type: integer
 
     Report:
       type: object
@@ -614,6 +905,95 @@ components:
           format: date-time
         data:
           $ref: '#/components/schemas/ReportData'
+
+    DismissalEntry:
+      type: object
+      required: [fingerprint, findingName, findingCategory]
+      properties:
+        fingerprint:
+          type: string
+          description: Stable SHA-256 fingerprint (20 hex chars) identifying this finding instance.
+        findingName:
+          type: string
+        findingCategory:
+          type: string
+
+    CreateDismissalRequest:
+      type: object
+      required: [targetUrl, findingName, findingCategory]
+      properties:
+        targetUrl:
+          type: string
+          minLength: 1
+        findingName:
+          type: string
+          minLength: 1
+        findingCategory:
+          type: string
+          minLength: 1
+        findingEvidence:
+          type: string
+          description: Raw evidence text — normalized server-side before hashing.
+        reason:
+          type: string
+          description: Dismissal reason (default "false_positive").
+
+    CreateDismissalResponse:
+      type: object
+      required: [fingerprint]
+      properties:
+        fingerprint:
+          type: string
+          description: Stable SHA-256 fingerprint (20 hex chars) computed for this dismissal.
+
+    SharedReport:
+      type: object
+      required: [id, targetUrl, tier, scannedAt, createdAt, data]
+      properties:
+        id:
+          type: string
+        scanId:
+          type: [string, 'null']
+        targetUrl:
+          type: string
+        tier:
+          type: string
+        scannedAt:
+          type: string
+          format: date-time
+        duration:
+          type: [number, 'null']
+        createdAt:
+          type: string
+          format: date-time
+        data:
+          $ref: '#/components/schemas/ReportData'
+
+    ReportShare:
+      type: object
+      required: [id, token, createdAt]
+      properties:
+        id:
+          type: string
+        token:
+          type: string
+        expiresAt:
+          type: [string, 'null']
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: [string, 'null']
+          format: date-time
+
+    CreateShareRequest:
+      type: object
+      properties:
+        expiresIn:
+          type: string
+          enum: ['7d', '30d', 'never']
+          default: 'never'
 
     Credits:
       type: object

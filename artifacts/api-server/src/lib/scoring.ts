@@ -95,6 +95,101 @@ export function computeConfidence(
   return Math.min(100, Math.max(10, Math.round(score)));
 }
 
+// ─── Corroboration merge pass ─────────────────────────────────────────────────
+
+// ─── Root-cause synonym catalog ───────────────────────────────────────────────
+// Maps known finding name patterns to a canonical root-cause key so that
+// independent scanner checks that detect the same underlying vulnerability
+// (e.g. SSL Labs TLS grade + our basic TLS check) get merged together.
+
+const ROOT_CAUSE_PATTERNS: Array<{ pattern: RegExp; key: string }> = [
+  // Transport Security — TLS quality (SSL Labs grade and basic TLS check)
+  { pattern: /weak tls|ssl labs.*grade|tls.*grade|tls configuration/i, key: "transport::tls-quality" },
+  // Transport Security — HSTS missing
+  { pattern: /hsts|strict.transport.security/i,                         key: "transport::hsts" },
+  // Injection Defense — CSP missing
+  { pattern: /(content.security.policy|(?<!\w)csp(?!\w)).*(missing|absent|not set)/i, key: "injection::csp-missing" },
+  // Injection Defense — CSP unsafe directives
+  { pattern: /unsafe.inline|unsafe.eval/i,                              key: "injection::csp-unsafe" },
+  // UI Security — Clickjacking / X-Frame-Options
+  { pattern: /x-frame.options|clickjack|frame.ancestors/i,              key: "ui::clickjacking" },
+  // Content Sniffing — X-Content-Type-Options
+  { pattern: /x-content-type.options|content.type.sniff|nosniff/i,      key: "content::nosniff" },
+  // Information Disclosure — Server version
+  { pattern: /server.*version|version.*disclosure|server.*header/i,     key: "disclosure::server-version" },
+  // Information Disclosure — X-Powered-By
+  { pattern: /x-powered-by/i,                                           key: "disclosure::x-powered-by" },
+  // CORS — wildcard origin
+  { pattern: /cors.*wildcard|wildcard.*cors|access.control.allow.origin.*\*/i, key: "cors::wildcard" },
+  // Browser Feature Control — Referrer-Policy
+  { pattern: /referrer.policy/i,                                        key: "browser::referrer-policy" },
+  // Browser Feature Control — Permissions-Policy
+  { pattern: /permissions.policy|feature.policy/i,                      key: "browser::permissions-policy" },
+  // NOTE: cookie flag findings (Secure / HttpOnly / SameSite) are intentionally
+  // NOT merged — each controls a distinct security property and must remain
+  // independently reportable and dismissible.
+];
+
+function getRootCauseKey(category: string, name: string): string {
+  for (const { pattern, key } of ROOT_CAUSE_PATTERNS) {
+    if (pattern.test(name)) return key;
+  }
+  // Default: category + normalized name
+  return `${category.toLowerCase()}::${name.toLowerCase().replace(/\s+/g, " ").trim()}`;
+}
+
+/**
+ * Groups findings that share the same root cause (by synonym catalog or exact match).
+ * When multiple independent detection methods fire for the same underlying vulnerability,
+ * they are merged into a single finding with a confidence floor of 90 and the richest
+ * evidence text.
+ *
+ * Findings that are unique (no duplicate root cause) pass through unchanged.
+ */
+export function corroborateMerge(vulns: ScanVulnerability[]): ScanVulnerability[] {
+  const groups = new Map<string, ScanVulnerability[]>();
+  for (const v of vulns) {
+    const k = getRootCauseKey(v.category, v.name);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k)!.push(v);
+  }
+
+  const result: ScanVulnerability[] = [];
+  for (const [, group] of groups) {
+    if (group.length === 1) {
+      result.push(group[0]);
+      continue;
+    }
+
+    // Pick the canonical finding — highest severity first, then confidence as tiebreaker
+    const SEVERITY_ORDER: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
+    const canonical = group.reduce((best, v) => {
+      const bSev = SEVERITY_ORDER[best.severity?.toLowerCase() ?? ""] ?? 0;
+      const vSev = SEVERITY_ORDER[v.severity?.toLowerCase() ?? ""] ?? 0;
+      if (vSev !== bSev) return vSev > bSev ? v : best;
+      return (v.confidence ?? 0) >= (best.confidence ?? 0) ? v : best;
+    });
+
+    const highestConf = canonical.confidence ?? 50;
+    const merged: ScanVulnerability = {
+      ...canonical,
+      // Floor at 90 when corroborated — multiple signals remove most doubt
+      confidence: Math.max(90, highestConf),
+      // Concatenate unique evidence snippets from all detection signals
+      evidence: [
+        ...new Set(
+          group
+            .map((v) => v.evidence)
+            .filter((e): e is string => !!e && e.length > 0),
+        ),
+      ].join("\n---\n") || canonical.evidence,
+    };
+    result.push(merged);
+  }
+
+  return result;
+}
+
 // ─── Auto-enrichment pass ─────────────────────────────────────────────────────
 
 /**

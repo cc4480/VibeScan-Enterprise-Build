@@ -19,18 +19,26 @@ import type {
 import type {
   AuthUserEnvelope,
   BeginBrowserLoginParams,
+  CreateDismissalRequest,
+  CreateDismissalResponse,
   CreateScanRequest,
   CreateScanResponse,
+  CreateShareRequest,
   Credits,
+  DeleteDismissalParams,
+  DismissalEntry,
   ErrorEnvelope,
   HandleBrowserLoginCallbackParams,
   HealthStatus,
+  ListDismissalsParams,
   LogoutSuccess,
   MobileTokenExchangeRequest,
   MobileTokenExchangeSuccess,
   Report,
+  ReportShare,
   Scan,
   ScanStatus,
+  SharedReport,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -957,6 +965,632 @@ export function useGetReport<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetReportQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List dismissed findings for a target URL
+ */
+export const getListDismissalsUrl = (params: ListDismissalsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/dismissals?${stringifiedParams}`
+    : `/api/dismissals`;
+};
+
+export const listDismissals = async (
+  params: ListDismissalsParams,
+  options?: RequestInit,
+): Promise<DismissalEntry[]> => {
+  return customFetch<DismissalEntry[]>(getListDismissalsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListDismissalsQueryKey = (params?: ListDismissalsParams) => {
+  return [`/api/dismissals`, ...(params ? [params] : [])] as const;
+};
+
+export const getListDismissalsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listDismissals>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params: ListDismissalsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listDismissals>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListDismissalsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listDismissals>>> = ({
+    signal,
+  }) => listDismissals(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listDismissals>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListDismissalsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listDismissals>>
+>;
+export type ListDismissalsQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary List dismissed findings for a target URL
+ */
+
+export function useListDismissals<
+  TData = Awaited<ReturnType<typeof listDismissals>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params: ListDismissalsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listDismissals>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListDismissalsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Dismiss a finding as a false positive
+ */
+export const getCreateDismissalUrl = () => {
+  return `/api/dismissals`;
+};
+
+export const createDismissal = async (
+  createDismissalRequest: CreateDismissalRequest,
+  options?: RequestInit,
+): Promise<CreateDismissalResponse> => {
+  return customFetch<CreateDismissalResponse>(getCreateDismissalUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createDismissalRequest),
+  });
+};
+
+export const getCreateDismissalMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createDismissal>>,
+    TError,
+    { data: BodyType<CreateDismissalRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createDismissal>>,
+  TError,
+  { data: BodyType<CreateDismissalRequest> },
+  TContext
+> => {
+  const mutationKey = ["createDismissal"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createDismissal>>,
+    { data: BodyType<CreateDismissalRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createDismissal(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateDismissalMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createDismissal>>
+>;
+export type CreateDismissalMutationBody = BodyType<CreateDismissalRequest>;
+export type CreateDismissalMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Dismiss a finding as a false positive
+ */
+export const useCreateDismissal = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createDismissal>>,
+    TError,
+    { data: BodyType<CreateDismissalRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createDismissal>>,
+  TError,
+  { data: BodyType<CreateDismissalRequest> },
+  TContext
+> => {
+  return useMutation(getCreateDismissalMutationOptions(options));
+};
+
+/**
+ * @summary Remove a dismissed finding (undo false-positive mark)
+ */
+export const getDeleteDismissalUrl = (
+  fingerprint: string,
+  params: DeleteDismissalParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/dismissals/${fingerprint}?${stringifiedParams}`
+    : `/api/dismissals/${fingerprint}`;
+};
+
+export const deleteDismissal = async (
+  fingerprint: string,
+  params: DeleteDismissalParams,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteDismissalUrl(fingerprint, params), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteDismissalMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteDismissal>>,
+    TError,
+    { fingerprint: string; params: DeleteDismissalParams },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteDismissal>>,
+  TError,
+  { fingerprint: string; params: DeleteDismissalParams },
+  TContext
+> => {
+  const mutationKey = ["deleteDismissal"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteDismissal>>,
+    { fingerprint: string; params: DeleteDismissalParams }
+  > = (props) => {
+    const { fingerprint, params } = props ?? {};
+
+    return deleteDismissal(fingerprint, params, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteDismissalMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteDismissal>>
+>;
+
+export type DeleteDismissalMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Remove a dismissed finding (undo false-positive mark)
+ */
+export const useDeleteDismissal = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteDismissal>>,
+    TError,
+    { fingerprint: string; params: DeleteDismissalParams },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteDismissal>>,
+  TError,
+  { fingerprint: string; params: DeleteDismissalParams },
+  TContext
+> => {
+  return useMutation(getDeleteDismissalMutationOptions(options));
+};
+
+/**
+ * @summary Create a public share link for a report
+ */
+export const getCreateReportShareUrl = (id: string) => {
+  return `/api/reports/${id}/shares`;
+};
+
+export const createReportShare = async (
+  id: string,
+  createShareRequest: CreateShareRequest,
+  options?: RequestInit,
+): Promise<ReportShare> => {
+  return customFetch<ReportShare>(getCreateReportShareUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createShareRequest),
+  });
+};
+
+export const getCreateReportShareMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createReportShare>>,
+    TError,
+    { id: string; data: BodyType<CreateShareRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createReportShare>>,
+  TError,
+  { id: string; data: BodyType<CreateShareRequest> },
+  TContext
+> => {
+  const mutationKey = ["createReportShare"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createReportShare>>,
+    { id: string; data: BodyType<CreateShareRequest> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createReportShare(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateReportShareMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createReportShare>>
+>;
+export type CreateReportShareMutationBody = BodyType<CreateShareRequest>;
+export type CreateReportShareMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Create a public share link for a report
+ */
+export const useCreateReportShare = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createReportShare>>,
+    TError,
+    { id: string; data: BodyType<CreateShareRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createReportShare>>,
+  TError,
+  { id: string; data: BodyType<CreateShareRequest> },
+  TContext
+> => {
+  return useMutation(getCreateReportShareMutationOptions(options));
+};
+
+/**
+ * @summary List active share links for a report
+ */
+export const getListReportSharesUrl = (id: string) => {
+  return `/api/reports/${id}/shares`;
+};
+
+export const listReportShares = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ReportShare[]> => {
+  return customFetch<ReportShare[]>(getListReportSharesUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListReportSharesQueryKey = (id: string) => {
+  return [`/api/reports/${id}/shares`] as const;
+};
+
+export const getListReportSharesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listReportShares>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listReportShares>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListReportSharesQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listReportShares>>
+  > = ({ signal }) => listReportShares(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listReportShares>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListReportSharesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listReportShares>>
+>;
+export type ListReportSharesQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary List active share links for a report
+ */
+
+export function useListReportShares<
+  TData = Awaited<ReturnType<typeof listReportShares>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listReportShares>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListReportSharesQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Revoke a share link
+ */
+export const getRevokeReportShareUrl = (id: string, token: string) => {
+  return `/api/reports/${id}/shares/${token}`;
+};
+
+export const revokeReportShare = async (
+  id: string,
+  token: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getRevokeReportShareUrl(id, token), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getRevokeReportShareMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revokeReportShare>>,
+    TError,
+    { id: string; token: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof revokeReportShare>>,
+  TError,
+  { id: string; token: string },
+  TContext
+> => {
+  const mutationKey = ["revokeReportShare"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof revokeReportShare>>,
+    { id: string; token: string }
+  > = (props) => {
+    const { id, token } = props ?? {};
+
+    return revokeReportShare(id, token, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RevokeReportShareMutationResult = NonNullable<
+  Awaited<ReturnType<typeof revokeReportShare>>
+>;
+
+export type RevokeReportShareMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Revoke a share link
+ */
+export const useRevokeReportShare = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revokeReportShare>>,
+    TError,
+    { id: string; token: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof revokeReportShare>>,
+  TError,
+  { id: string; token: string },
+  TContext
+> => {
+  return useMutation(getRevokeReportShareMutationOptions(options));
+};
+
+/**
+ * @summary Fetch a shared report by token (public, no auth required)
+ */
+export const getGetSharedReportUrl = (token: string) => {
+  return `/api/share/${token}`;
+};
+
+export const getSharedReport = async (
+  token: string,
+  options?: RequestInit,
+): Promise<SharedReport> => {
+  return customFetch<SharedReport>(getGetSharedReportUrl(token), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSharedReportQueryKey = (token: string) => {
+  return [`/api/share/${token}`] as const;
+};
+
+export const getGetSharedReportQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSharedReport>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  token: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSharedReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSharedReportQueryKey(token);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSharedReport>>> = ({
+    signal,
+  }) => getSharedReport(token, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!token,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSharedReport>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSharedReportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSharedReport>>
+>;
+export type GetSharedReportQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Fetch a shared report by token (public, no auth required)
+ */
+
+export function useGetSharedReport<
+  TData = Awaited<ReturnType<typeof getSharedReport>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  token: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSharedReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSharedReportQueryOptions(token, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

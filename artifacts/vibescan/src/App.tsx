@@ -10,6 +10,7 @@ import DashboardPage from "@/pages/dashboard";
 import ScanFormPage from "@/pages/scan-form";
 import ReportViewer from "@/pages/report-viewer";
 import MonitorPage from "@/pages/monitor";
+import SharedReport from "@/pages/shared-report";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,16 +23,24 @@ const queryClient = new QueryClient({
 
 function Router() {
   return (
-    <Layout>
-      <Switch>
-        <Route path="/" component={LandingPage} />
-        <Route path="/dashboard" component={DashboardPage} />
-        <Route path="/scan" component={ScanFormPage} />
-        <Route path="/report/:id" component={ReportViewer} />
-        <Route path="/monitor" component={MonitorPage} />
-        <Route component={NotFound} />
-      </Switch>
-    </Layout>
+    <Switch>
+      {/* Public share page — rendered without the app Layout (no nav/auth required) */}
+      <Route path="/share/:token" component={SharedReport} />
+
+      {/* All other routes wrapped in the authenticated Layout */}
+      <Route>
+        <Layout>
+          <Switch>
+            <Route path="/" component={LandingPage} />
+            <Route path="/dashboard" component={DashboardPage} />
+            <Route path="/scan" component={ScanFormPage} />
+            <Route path="/report/:id" component={ReportViewer} />
+            <Route path="/monitor" component={MonitorPage} />
+            <Route component={NotFound} />
+          </Switch>
+        </Layout>
+      </Route>
+    </Switch>
   );
 }
 

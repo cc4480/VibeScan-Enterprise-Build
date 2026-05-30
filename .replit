@@ -1,20 +1,20 @@
 modules = ["nodejs-24", "postgresql-16", "python-3.11"]
 
-  [[artifacts]]
-  id = "artifacts/api-server"
+[[artifacts]]
+id = "artifacts/api-server"
 
-  [[artifacts]]
-  id = "artifacts/mockup-sandbox"
+[[artifacts]]
+id = "artifacts/mockup-sandbox"
 
-  [deployment]
-  router = "application"
-  deploymentTarget = "autoscale"
+[deployment]
+router = "application"
+deploymentTarget = "autoscale"
 
-  [deployment.postBuild]
-  args = ["pnpm", "store", "prune"]
-  env = { "CI" = "true" }
+[deployment.postBuild]
+args = ["pnpm", "store", "prune"]
+env = { "CI" = "true" }
 
-  [workflows]
+[workflows]
 runButton = "Project"
 
 [[workflows.workflow]]
@@ -24,41 +24,35 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Start application"
+args = "typecheck"
 
 [[workflows.workflow]]
-name = "Start application"
+name = "typecheck"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "PORT=5000 pnpm --filter @workspace/vibescan run dev"
-waitForPort = 5000
+args = "pnpm --filter @workspace/api-server run typecheck && pnpm --filter @workspace/vibescan run typecheck"
 
 [workflows.workflow.metadata]
-outputType = "webview"
+isValidation = true
 
-  [agent]
-  stack = "BEST_EFFORT_FALLBACK"
+[agent]
+stack = "PNPM_WORKSPACE"
 expertMode = true
 
-  [postMerge]
-  path = "scripts/post-merge.sh"
-  timeoutMs = 20000
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 20000
 
-  [userenv]
+[userenv]
 
-  [userenv.development]
-  DISABLE_PAYMENTS = "true"
-  NODE_TLS_REJECT_UNAUTHORIZED = "0"
+[userenv.development]
+DISABLE_PAYMENTS = "true"
+NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
-  [userenv.production]
-  DISABLE_PAYMENTS = "true"
+[userenv.production]
+DISABLE_PAYMENTS = "true"
 
-  [nix]
-  channel = "stable-25_05"
-
-[[ports]]
-localPort = 3000
-externalPort = 3000
-  
+[nix]
+channel = "stable-25_05"
