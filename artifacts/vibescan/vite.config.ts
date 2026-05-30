@@ -4,24 +4,19 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
-// Security headers applied to both the dev server and preview server.
-// In development (Replit preview), X-Frame-Options and frame-ancestors are
-// omitted so the app renders correctly inside Replit's preview iframe.
-// In production these restrictive headers are applied via the API server.
 const isProduction = process.env.NODE_ENV === "production";
 
-const securityHeaders: Record<string, string> = {
-  ...(isProduction ? {} : { "Cache-Control": "no-store" }),
+// Security headers are only applied in production.
+// In development the Replit proxy environment requires no CSP/COEP/framing
+// restrictions — applying them causes a blank white screen in the preview pane.
+const productionHeaders: Record<string, string> = {
+  "Cache-Control": "no-store",
   "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()",
-  ...(isProduction
-    ? {
-        "X-Frame-Options": "DENY",
-        "Cross-Origin-Opener-Policy": "same-origin",
-        "Cross-Origin-Resource-Policy": "same-origin",
-      }
-    : {}),
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Resource-Policy": "same-origin",
   "Content-Security-Policy": [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline'",
@@ -30,11 +25,17 @@ const securityHeaders: Record<string, string> = {
     "img-src 'self' data: https: blob:",
     "connect-src 'self' https: wss: ws:",
     "worker-src 'self' blob:",
-    ...(isProduction ? ["frame-ancestors 'none'"] : []),
+    "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'self'",
   ].join("; "),
 };
+
+const devHeaders: Record<string, string> = {
+  "Cache-Control": "no-store",
+};
+
+const securityHeaders = isProduction ? productionHeaders : devHeaders;
 
 const rawPort = process.env.PORT;
 
