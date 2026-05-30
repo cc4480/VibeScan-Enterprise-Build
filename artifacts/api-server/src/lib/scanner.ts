@@ -58,6 +58,11 @@ import { checkSubdomainTakeover } from "./subdomainTakeover";
 import { checkPathTraversal } from "./pathTraversal";
 import { checkSourceMaps } from "./sourceMaps";
 import { autoEnrichConfidence } from "./scoring";
+import { runBaasProbes } from "./baasProbes";
+import { runGraphqlProbe } from "./graphqlProbe";
+import { runApiDocsProbe } from "./apiDocsProbe";
+import { runNextjsProbe } from "./nextjsProbe";
+import { runStorageProbe } from "./storageProbe";
 
 export interface ScanVulnerability {
   id: string;
@@ -757,6 +762,16 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
     checkSubdomainTakeover(finalUrl).catch(() => []),
     // Source map exposure — checks JS bundles for .map files
     checkSourceMaps(html, finalUrl).catch(() => []),
+    // BaaS open-data checks: Supabase RLS, PocketBase, Appwrite, Firebase Firestore
+    runBaasProbes(finalUrl, html).catch(() => []),
+    // GraphQL introspection + field suggestions
+    runGraphqlProbe(finalUrl, html).catch(() => []),
+    // Exposed API docs: Swagger/OpenAPI/ReDoc
+    runApiDocsProbe(finalUrl).catch(() => []),
+    // Next.js __NEXT_DATA__ prop leaks
+    runNextjsProbe(finalUrl, html).catch(() => []),
+    // Public cloud storage listing: S3, GCS, Azure Blob
+    runStorageProbe(finalUrl, html).catch(() => []),
   ];
 
   if (tier === "deep") {
