@@ -11,6 +11,7 @@ import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 const isProduction = process.env.NODE_ENV === "production";
 
 const securityHeaders: Record<string, string> = {
+  ...(isProduction ? {} : { "Cache-Control": "no-store" }),
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()",
