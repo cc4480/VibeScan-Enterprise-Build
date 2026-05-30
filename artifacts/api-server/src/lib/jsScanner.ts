@@ -164,13 +164,22 @@ const SECRET_PATTERNS: SecretPattern[] = [
     solution: "EMERGENCY: Immediately revoke and replace this key pair everywhere it is used. Audit all systems that accepted this key for unauthorized access. Private keys must NEVER exist in frontend code under any circumstances.",
   },
 
+  // ── Supabase ──────────────────────────────────────────────────────────────
+  {
+    name: "Supabase Service Role Key Exposed in JavaScript",
+    pattern: /(?:serviceRoleKey|service_role_key|SERVICE_ROLE_KEY|SUPABASE_SERVICE_ROLE_KEY)\s*[:=]\s*["'](eyJ[A-Za-z0-9._-]{40,})["']/i,
+    severity: "critical", cvssScore: 10.0, cweId: "CWE-522",
+    description: "The Supabase service_role key was found in an external JavaScript file. Unlike the anon key — which is public by design — the service_role key bypasses ALL Row Level Security policies on every table, giving any visitor full admin read/write/delete access to your entire database. This is the most dangerous Supabase misconfiguration possible.",
+    solution: "Immediately rotate this key in the Supabase dashboard (Project Settings → API → Reset service_role key). Remove it from all frontend code. The service_role key belongs exclusively in server-side code (Edge Functions, your own backend). For client-side use, the anon key is correct and safe to expose.",
+  },
+
   // ── Firebase ─────────────────────────────────────────────────────────────
   {
     name: "Firebase API Key with Open Security Rules",
     pattern: /firebaseConfig\s*=\s*\{[^}]*apiKey:\s*["'][^"']+["'][^}]*\}/,
     severity: "info", cvssScore: 3.1, cweId: "CWE-798",
-    description: "A Firebase configuration block was found in client-side JavaScript. Firebase API keys are semi-public (they identify your project), but if your Firestore/Realtime Database security rules are too permissive, attackers can read or write data using these credentials.",
-    solution: "Review your Firestore and Realtime Database security rules to ensure they enforce proper authentication and authorization. Enable App Check to prevent abuse. The API key itself is not a secret but permissive rules are the real risk.",
+    description: "A Firebase configuration block was found in client-side JavaScript. Firebase API keys are public by design — they identify your project, not a secret credential. The real risk is permissive Firestore or Realtime Database security rules. See the Firebase security findings elsewhere in this report for live rule test results.",
+    solution: "Review your Firestore and Realtime Database security rules to require authentication. Enable App Check to restrict API access to your own app clients. The API key itself is not a vulnerability — open rules are.",
   },
 
   // ── JSON Web Tokens ───────────────────────────────────────────────────────

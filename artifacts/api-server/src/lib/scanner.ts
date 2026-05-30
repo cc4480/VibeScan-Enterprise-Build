@@ -57,6 +57,7 @@ import { analyzeJwts } from "./jwtAnalysis";
 import { checkSubdomainTakeover } from "./subdomainTakeover";
 import { checkPathTraversal } from "./pathTraversal";
 import { checkSourceMaps } from "./sourceMaps";
+import { checkVibeStackSecurity } from "./vibeStackProbes";
 import { autoEnrichConfidence } from "./scoring";
 
 export interface ScanVulnerability {
@@ -757,6 +758,8 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
     checkSubdomainTakeover(finalUrl).catch(() => []),
     // Source map exposure — checks JS bundles for .map files
     checkSourceMaps(html, finalUrl).catch(() => []),
+    // Vibe-stack database security — Supabase RLS + Firebase rules (both tiers)
+    checkVibeStackSecurity(html, finalUrl, tier).catch(() => []),
   ];
 
   if (tier === "deep") {

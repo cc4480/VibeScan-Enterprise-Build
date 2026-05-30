@@ -146,7 +146,37 @@ Probes ~75 paths for publicly accessible files.
 
 ---
 
-## Module 8 — Source Map Exposure
+## Module 8 — Vibe-Stack Database Security *(NEW — both tiers)*
+*Detects Supabase and Firebase backends from the JS bundle, then actively tests their live API.*
+
+### 8a. Supabase
+
+| # | Check | Severity |
+|---|---|---|
+| 73 | Supabase **service_role key** in client-side JS (bypasses all RLS) | Critical |
+| 74 | Tables returning rows to unauthenticated anon-key requests — **CVE-2025-48757** | Critical |
+| 75 | Tables accessible unauthenticated but currently empty (RLS still missing) | High |
+| 76 | Tables accepting unauthenticated INSERT writes *(Deep only)* | Critical |
+| 77 | Storage bucket list exposed to anon key | Medium |
+| 78 | Supabase detected, RLS appears configured (informational) | Info |
+
+*Detection: extracts `supabaseUrl` + anon key from JS bundle, hits PostgREST OpenAPI spec to enumerate up to 12 tables, tests each with real API calls. Anon key is NOT flagged — it is public by design.*
+
+*Write probe safety: INSERT uses `{"__vibescan_probe__": true}` — a field that cannot exist in any real schema. A 400/422 response proves auth was bypassed without creating a row. A 201 (row created) triggers immediate cleanup by returned ID. No PATCH or DELETE is ever sent against existing rows.*
+
+### 8b. Firebase
+
+| # | Check | Severity |
+|---|---|---|
+| 79 | Firestore returns documents to unauthenticated requests | Critical |
+| 80 | Firebase Realtime Database returns data to unauthenticated requests | Critical |
+| 81 | Firebase detected, rules appear restrictive (informational) | Info |
+
+*Tests 20 common collection names against the Firestore REST API. Firebase API key is NOT flagged as a secret — it identifies the project and is public by design.*
+
+---
+
+## Module 9 — Source Map Exposure
 *Checks each JS bundle (up to 8 files) for accessible `.map` files.*
 
 | # | Check | Severity |
