@@ -18,7 +18,6 @@ export * from "./createScanResponse";
 export * from "./createShareRequest";
 export * from "./createShareRequestExpiresIn";
 export * from "./credits";
-export * from "./deleteDismissalParams";
 export * from "./dismissalEntry";
 export * from "./errorEnvelope";
 export * from "./handleBrowserLoginCallbackParams";

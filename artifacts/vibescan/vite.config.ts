@@ -10,7 +10,7 @@ import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 // In development (Replit preview), X-Frame-Options and frame-ancestors are
 // omitted so the app renders correctly inside Replit's preview iframe.
 // In production these restrictive headers are applied via the API server.
-const isProduction = process.env.NODE_ENV === 
+const isProduction = process.env.NODE_ENV === "production";
 const securityHeaders: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",

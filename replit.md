@@ -9,7 +9,8 @@ A website and vulnerability scanning SaaS that runs black-box security scans and
 | `pnpm --filter @workspace/api-server run dev` | Start API server (port 8080) |
 | `pnpm --filter @workspace/vibescan run dev` | Start frontend (port 18425 via artifact router, 5000 for webview) |
 | `pnpm --filter @workspace/db run db:push` | Push Drizzle schema to DB |
-| `pnpm --filter @workspace/api-server run typecheck` | TypeScript check (API) |
+| `pnpm --filter @workspace/api-server run typecheck` | TypeScript check (API only) |
+| `pnpm --filter @workspace/db run build && pnpm --filter @workspace/api-zod run build && pnpm --filter @workspace/api-client-react run build && pnpm --filter @workspace/replit-auth-web run build` | Build shared lib `.d.ts` files (required before full typecheck on fresh clone) |
 
 Required env vars (secrets):
 - `DATABASE_URL` — auto-provisioned by Replit PostgreSQL
@@ -60,6 +61,7 @@ lib/
 
 ## Gotchas
 
+- **Shared libs must be built before typecheck on a fresh clone** — `lib/db`, `lib/api-zod`, `lib/api-client-react`, and `lib/replit-auth-web` all use TypeScript project references and must have their `dist/` emitted first. Each has a `build` script (`tsc -p tsconfig.json`). The `typecheck` workflow does this automatically.
 - API server build step is part of `pnpm run dev` (builds then starts) — cold starts take ~5s
 - `NODE_TLS_REJECT_UNAUTHORIZED=0` is set in dev userenv (Replit internal TLS) — never set this in production
 - Vite runs on port 18425 (artifact router) AND port 5000 (webview) simultaneously — both are separate workflow instances
