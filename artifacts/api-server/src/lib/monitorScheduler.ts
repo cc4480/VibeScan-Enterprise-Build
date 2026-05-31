@@ -76,7 +76,7 @@ async function runWeeklyScans(): Promise<void> {
       log.info({ subscriptionId: sub.id, scanId: scan.id, targetUrl: sub.targetUrl }, "Weekly rescan queued");
 
       if (sub.userEmail) {
-        const appOrigin = process.env.APP_ORIGIN ?? "https://vibescan.app";
+        const appOrigin = process.env.APP_ORIGIN ?? "https://seclayer.app";
         await sendMonitorScanQueuedEmail({
           toEmail: sub.userEmail,
           targetUrl: sub.targetUrl,
@@ -113,7 +113,7 @@ async function runCveCheck(): Promise<void> {
   const validSubs = activeSubscriptions.filter((s) => s.expiresAt > now);
   log.info({ subscriptions: validSubs.length }, "Checking active subscriptions against CVEs");
 
-  const appOrigin = process.env.APP_ORIGIN ?? "https://vibescan.app";
+  const appOrigin = process.env.APP_ORIGIN ?? "https://seclayer.app";
 
   for (const sub of validSubs) {
     try {

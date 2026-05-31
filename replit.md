@@ -1,4 +1,4 @@
-# VibeScan
+# Seclayer
 
 Pay-per-scan black-box penetration testing SaaS for vibe coders. Users paste a URL, choose a tier, pay, and receive a plain-English security report powered by DeepSeek AI.
 

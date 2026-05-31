@@ -106,7 +106,7 @@ async function fetchPage(url: string, timeoutMs: number): Promise<PageResult | n
       signal: controller.signal,
       redirect: "follow",
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; VibeScan-Security-Bot/1.0; +https://vibescan.app/bot)",
+        "User-Agent": "Mozilla/5.0 (compatible; Seclayer-Security-Bot/1.0; +https://seclayer.app/bot)",
         "Accept": "text/html,application/xhtml+xml,*/*",
         "Cache-Control": "no-cache, no-store",
         "Pragma": "no-cache",
@@ -144,7 +144,7 @@ async function probeUrl(
       signal: controller.signal,
       redirect: "follow",
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; VibeScan-Security-Bot/1.0)",
+        "User-Agent": "Mozilla/5.0 (compatible; Seclayer-Security-Bot/1.0)",
         "Cache-Control": "no-cache, no-store",
         "Pragma": "no-cache",
       },

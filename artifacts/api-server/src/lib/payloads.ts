@@ -6,7 +6,7 @@
  *   - Reference the payload by stable ID in evidence strings (reproducible reports)
  *   - Gate aggressive payloads behind explicit consent
  *
- * Design principles (from the VibeScan safety policy):
+ * Design principles (from the Seclayer safety policy):
  *   - All payloads shipped in this file are NON-DESTRUCTIVE by default.
  *   - Payloads that write data, execute code, or trigger external callbacks are
  *     marked requires_consent=true and will not run in default scans.

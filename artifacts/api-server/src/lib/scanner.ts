@@ -369,7 +369,7 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       redirect: "follow",
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (compatible; VibeScan-Security-Bot/1.0; +https://vibescan.app/bot)",
+          "Mozilla/5.0 (compatible; Seclayer-Security-Bot/1.0; +https://seclayer.app/bot)",
         "Accept": "text/html,application/xhtml+xml,*/*",
         "Accept-Language": "en-US,en;q=0.9",
         "Cache-Control": "no-cache, no-store",

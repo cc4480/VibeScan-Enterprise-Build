@@ -36,7 +36,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Shield className="w-5 h-5 text-primary-foreground" />
             </div>
             <span className="font-display font-bold text-xl tracking-tight text-foreground">
-              VibeScan
+              Seclayer
             </span>
           </Link>
 
@@ -117,10 +117,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-2 opacity-50">
             <Shield className="w-5 h-5 text-foreground" />
-            <span className="font-display font-bold tracking-tight text-foreground">VibeScan</span>
+            <span className="font-display font-bold tracking-tight text-foreground">Seclayer</span>
           </div>
           <p className="text-sm text-muted-foreground">
-            Your app is live. Is it safe? © {new Date().getFullYear()} VibeScan
+            Your app is live. Is it safe? © {new Date().getFullYear()} Seclayer
           </p>
         </div>
       </footer>

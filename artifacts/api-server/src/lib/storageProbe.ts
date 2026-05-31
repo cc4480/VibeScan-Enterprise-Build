@@ -27,7 +27,7 @@ async function safeGet(url: string): Promise<{ status: number; body: string; ct:
     const res = await fetch(url, {
       signal: controller.signal,
       redirect: "follow",
-      headers: { "User-Agent": "Mozilla/5.0 VibeScan Security Scanner" },
+      headers: { "User-Agent": "Mozilla/5.0 Seclayer Security Scanner" },
     });
     const body = await res.text().catch(() => "");
     const ct = res.headers.get("content-type") ?? "";

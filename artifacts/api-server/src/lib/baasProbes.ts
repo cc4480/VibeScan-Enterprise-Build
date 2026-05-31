@@ -27,7 +27,7 @@ async function safeGet(
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 VibeScan Security Scanner", ...headers },
+      headers: { "User-Agent": "Mozilla/5.0 Seclayer Security Scanner", ...headers },
       signal: controller.signal,
       redirect: "follow",
     });

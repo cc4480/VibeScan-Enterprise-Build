@@ -6,7 +6,7 @@
  */
 
 const RESEND_API = "https://api.resend.com/emails";
-const FROM_EMAIL = "VibeScan <reports@vibescan.app>";
+const FROM_EMAIL = "Seclayer <reports@seclayer.app>";
 
 interface SendReportEmailOptions {
   toEmail: string;
@@ -39,7 +39,7 @@ function buildHtml(opts: SendReportEmailOptions): string {
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <!-- Header -->
         <tr><td style="padding-bottom:32px;text-align:center;">
-          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Vibe<span style="color:#6366f1;">Scan</span></span>
+          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Sec<span style="color:#6366f1;">layer</span></span>
         </td></tr>
 
         <!-- Grade Card -->
@@ -59,8 +59,8 @@ function buildHtml(opts: SendReportEmailOptions): string {
 
         <!-- Footer -->
         <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
-          <p style="margin:0;">You received this because you ran a VibeScan deep scan.</p>
-          <p style="margin:4px 0 0;">© 2026 VibeScan</p>
+          <p style="margin:0;">You received this because you ran a Seclayer deep scan.</p>
+          <p style="margin:4px 0 0;">© 2026 Seclayer</p>
         </td></tr>
       </table>
     </td></tr>
@@ -86,7 +86,7 @@ export async function sendReportReadyEmail(opts: SendReportEmailOptions): Promis
       body: JSON.stringify({
         from: FROM_EMAIL,
         to: [opts.toEmail],
-        subject: `Your VibeScan report is ready — Grade ${opts.grade} for ${opts.targetUrl}`,
+        subject: `Your Seclayer report is ready — Grade ${opts.grade} for ${opts.targetUrl}`,
         html: buildHtml(opts),
       }),
     });
@@ -165,7 +165,7 @@ export async function sendMonitorCveAlertEmail(opts: SendMonitorCveAlertOptions)
     <tr><td align="center" style="padding:40px 16px;">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <tr><td style="padding-bottom:32px;text-align:center;">
-          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Vibe<span style="color:#6366f1;">Scan</span></span>
+          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Sec<span style="color:#6366f1;">layer</span></span>
         </td></tr>
 
         <tr><td style="background:#1a1d27;border-radius:16px;border:1px solid rgba(255,255,255,0.08);padding:40px;">
@@ -189,8 +189,8 @@ export async function sendMonitorCveAlertEmail(opts: SendMonitorCveAlertOptions)
         </td></tr>
 
         <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
-          <p style="margin:0;">You received this because you have a VibeScan continuous monitor active for ${targetUrl}.</p>
-          <p style="margin:4px 0 0;">© 2026 VibeScan · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
+          <p style="margin:0;">You received this because you have a Seclayer continuous monitor active for ${targetUrl}.</p>
+          <p style="margin:4px 0 0;">© 2026 Seclayer · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
         </td></tr>
       </table>
     </td></tr>
@@ -244,7 +244,7 @@ export async function sendMonitorScanQueuedEmail(opts: SendMonitorScanQueuedOpti
     <tr><td align="center" style="padding:40px 16px;">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <tr><td style="padding-bottom:32px;text-align:center;">
-          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Vibe<span style="color:#6366f1;">Scan</span></span>
+          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Sec<span style="color:#6366f1;">layer</span></span>
         </td></tr>
         <tr><td style="background:#1a1d27;border-radius:16px;border:1px solid rgba(255,255,255,0.08);padding:40px;text-align:center;">
           <p style="margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:0.1em;color:#94a3b8;">${label}</p>
@@ -253,7 +253,7 @@ export async function sendMonitorScanQueuedEmail(opts: SendMonitorScanQueuedOpti
           <a href="${dashboardUrl}" style="display:inline-block;background:#6366f1;color:#fff;font-weight:700;font-size:15px;padding:14px 32px;border-radius:10px;text-decoration:none;">View Monitor Dashboard →</a>
         </td></tr>
         <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
-          <p style="margin:0;">© 2026 VibeScan · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
+          <p style="margin:0;">© 2026 Seclayer · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
         </td></tr>
       </table>
     </td></tr>

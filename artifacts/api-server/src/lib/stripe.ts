@@ -11,22 +11,22 @@ export const stripe = process.env.STRIPE_SECRET_KEY
 export const PRICE_MAP: Record<string, { amount: number; name: string; description: string }> = {
   basic: {
     amount: 900,
-    name: "VibeScan Basic",
+    name: "Seclayer Basic",
     description: "Black-box security scan — headers, SSL/TLS, tech fingerprint, and Supabase RLS check",
   },
   deep: {
     amount: 1900,
-    name: "VibeScan Deep",
+    name: "Seclayer Deep",
     description: "Full black-box penetration test with DeepSeek AI report + per-agent fix prompt",
   },
   pack_5: {
     amount: 7900,
-    name: "VibeScan 5-Scan Pack",
+    name: "Seclayer 5-Scan Pack",
     description: "5 Deep Scan credits — use any time, never expire (save $16 vs 5 singles)",
   },
   pack_20: {
     amount: 19900,
-    name: "VibeScan 20-Scan Pack",
+    name: "Seclayer 20-Scan Pack",
     description: "20 Deep Scan credits — for agencies and dev shops (save $181 vs singles)",
   },
 };
