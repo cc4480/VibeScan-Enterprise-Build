@@ -108,6 +108,8 @@ async function fetchPage(url: string, timeoutMs: number): Promise<PageResult | n
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; VibeScan-Security-Bot/1.0; +https://vibescan.app/bot)",
         "Accept": "text/html,application/xhtml+xml,*/*",
+        "Cache-Control": "no-cache, no-store",
+        "Pragma": "no-cache",
       },
     });
     const headers: Record<string, string> = {};
@@ -141,7 +143,11 @@ async function probeUrl(
     const res = await fetch(url, {
       signal: controller.signal,
       redirect: "follow",
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; VibeScan-Security-Bot/1.0)" },
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; VibeScan-Security-Bot/1.0)",
+        "Cache-Control": "no-cache, no-store",
+        "Pragma": "no-cache",
+      },
     });
     const headers: Record<string, string> = {};
     res.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });

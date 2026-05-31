@@ -25,7 +25,15 @@ async function safeGet(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { ...options, signal: controller.signal });
+    const res = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        "Cache-Control": "no-cache, no-store",
+        "Pragma": "no-cache",
+        ...(options.headers as Record<string, string> | undefined),
+      },
+    });
     const body = await res.text().catch(() => "");
     const headers: Record<string, string> = {};
     res.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });

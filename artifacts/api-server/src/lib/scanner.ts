@@ -354,6 +354,8 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
           "Mozilla/5.0 (compatible; VibeScan-Security-Bot/1.0; +https://vibescan.app/bot)",
         "Accept": "text/html,application/xhtml+xml,*/*",
         "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache, no-store",
+        "Pragma": "no-cache",
       },
     });
     finalUrl = response.url || targetUrl;

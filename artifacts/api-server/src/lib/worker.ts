@@ -78,6 +78,7 @@ async function reprobe(
     method: "GET",
     signal: globalCtrl.signal,
     redirect: "follow",
+    headers: { "Cache-Control": "no-cache, no-store", "Pragma": "no-cache" },
   }).then((res) => {
     const raw: Record<string, string> = {};
     res.headers.forEach((value, key) => { raw[key.toLowerCase()] = value; });
