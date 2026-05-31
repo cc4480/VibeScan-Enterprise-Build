@@ -12,6 +12,7 @@ import ScanProgressPage from "@/pages/scan-progress";
 import ReportViewer from "@/pages/report-viewer";
 import MonitorPage from "@/pages/monitor";
 import SharedReport from "@/pages/shared-report";
+import LearnPage from "@/pages/learn";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -40,6 +41,7 @@ function Router() {
             <Route path="/scan/:id" component={ScanProgressPage} />
             <Route path="/report/:id" component={ReportViewer} />
             <Route path="/monitor" component={MonitorPage} />
+            <Route path="/learn" component={LearnPage} />
             <Route component={NotFound} />
           </Switch>
         </Layout>
