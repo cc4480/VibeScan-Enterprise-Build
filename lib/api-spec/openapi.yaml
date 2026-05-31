@@ -1202,33 +1202,58 @@ components:
 
     MonitorSubscription:
       type: object
-      required: [id, userId, targetUrl, active, createdAt]
+      required: [id, userId, userEmail, targetUrl, status, subscribedAt, expiresAt, createdAt, alertCount, regressionCount]
       properties:
         id:
           type: string
         userId:
           type: string
+        userEmail:
+          type: string
         targetUrl:
           type: string
-        active:
-          type: boolean
-        webhookUrl:
-          type: [string, 'null']
-        lastScannedAt:
+        status:
+          type: string
+          enum: [active, cancelled, expired]
+        subscribedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        lastScanAt:
           type: [string, 'null']
           format: date-time
+        lastReportId:
+          type: [string, 'null']
         nextScanAt:
           type: [string, 'null']
           format: date-time
+        webhookUrl:
+          type: [string, 'null']
+        stripeSubscriptionId:
+          type: [string, 'null']
         createdAt:
           type: string
           format: date-time
+        lastReport:
+          type: ['object', 'null']
+          properties:
+            id:
+              type: string
+            grade:
+              type: [string, 'null']
+            riskScore:
+              type: [integer, 'null']
+        alertCount:
+          type: integer
+          description: Total number of CVE alerts for this subscription
         regressionCount:
           type: integer
           description: Number of regressions detected in the most recent scan
-        latestGrade:
-          type: [string, 'null']
-          description: Grade letter from the most recent scan
+        certExpiryDays:
+          type: [integer, 'null']
+          description: Days until TLS certificate expires, or null if no cert expiry alert exists
 
     CreateMonitorSubscriptionRequest:
       type: object

@@ -5,24 +5,37 @@
  * VibeScan API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { MonitorSubscriptionLastReport } from "./monitorSubscriptionLastReport";
+import type { MonitorSubscriptionStatus } from "./monitorSubscriptionStatus";
 
 export interface MonitorSubscription {
   id: string;
   userId: string;
+  userEmail: string;
   targetUrl: string;
-  active: boolean;
+  status: MonitorSubscriptionStatus;
+  subscribedAt: Date;
+  expiresAt: Date;
+  /** @nullable */
+  lastScanAt?: Date | null;
+  /** @nullable */
+  lastReportId?: string | null;
+  /** @nullable */
+  nextScanAt?: Date | null;
   /** @nullable */
   webhookUrl?: string | null;
   /** @nullable */
-  lastScannedAt?: Date | null;
-  /** @nullable */
-  nextScanAt?: Date | null;
+  stripeSubscriptionId?: string | null;
   createdAt: Date;
+  /** @nullable */
+  lastReport?: MonitorSubscriptionLastReport;
+  /** Total number of CVE alerts for this subscription */
+  alertCount: number;
   /** Number of regressions detected in the most recent scan */
-  regressionCount?: number;
+  regressionCount: number;
   /**
-   * Grade letter from the most recent scan
+   * Days until TLS certificate expires, or null if no cert expiry alert exists
    * @nullable
    */
-  latestGrade?: string | null;
+  certExpiryDays?: number | null;
 }

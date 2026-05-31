@@ -497,14 +497,23 @@ async function processScanJob(job: ScanJob): Promise<void> {
     // ── 8. Update monitor subscription + write score history + detect regressions ──
     if (monitorSubscriptionId) {
       try {
-        const nextScanAt = computeNextScanAt(grade, completedAt);
-
         // Fetch current subscription for webhook URL and email
         const [sub] = await db
           .select()
           .from(monitorSubscriptionsTable)
           .where(eq(monitorSubscriptionsTable.id, monitorSubscriptionId))
           .limit(1);
+
+        const gradeCadenceAt = computeNextScanAt(grade, completedAt);
+        // Preserve a CVE follow-up nextScanAt if it was set sooner than the grade cadence.
+        // The CVE job sets nextScanAt = now+24h BEFORE the scan runs; the worker must not
+        // overwrite it with the longer grade cadence, or the 24h re-check is silently lost.
+        const nextScanAt =
+          sub?.nextScanAt &&
+          sub.nextScanAt > completedAt &&
+          sub.nextScanAt < gradeCadenceAt
+            ? sub.nextScanAt
+            : gradeCadenceAt;
 
         await db
           .update(monitorSubscriptionsTable)

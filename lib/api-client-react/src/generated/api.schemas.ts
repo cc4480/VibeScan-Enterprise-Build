@@ -317,25 +317,56 @@ export interface Credits {
   balance: number;
 }
 
+export type MonitorSubscriptionStatus =
+  (typeof MonitorSubscriptionStatus)[keyof typeof MonitorSubscriptionStatus];
+
+export const MonitorSubscriptionStatus = {
+  active: "active",
+  cancelled: "cancelled",
+  expired: "expired",
+} as const;
+
+/**
+ * @nullable
+ */
+export type MonitorSubscriptionLastReport = {
+  id?: string;
+  /** @nullable */
+  grade?: string | null;
+  /** @nullable */
+  riskScore?: number | null;
+} | null;
+
 export interface MonitorSubscription {
   id: string;
   userId: string;
+  userEmail: string;
   targetUrl: string;
-  active: boolean;
+  status: MonitorSubscriptionStatus;
+  subscribedAt: string;
+  expiresAt: string;
+  /** @nullable */
+  lastScanAt?: string | null;
+  /** @nullable */
+  lastReportId?: string | null;
+  /** @nullable */
+  nextScanAt?: string | null;
   /** @nullable */
   webhookUrl?: string | null;
   /** @nullable */
-  lastScannedAt?: string | null;
-  /** @nullable */
-  nextScanAt?: string | null;
+  stripeSubscriptionId?: string | null;
   createdAt: string;
+  /** @nullable */
+  lastReport?: MonitorSubscriptionLastReport;
+  /** Total number of CVE alerts for this subscription */
+  alertCount: number;
   /** Number of regressions detected in the most recent scan */
-  regressionCount?: number;
+  regressionCount: number;
   /**
-   * Grade letter from the most recent scan
+   * Days until TLS certificate expires, or null if no cert expiry alert exists
    * @nullable
    */
-  latestGrade?: string | null;
+  certExpiryDays?: number | null;
 }
 
 export interface CreateMonitorSubscriptionRequest {

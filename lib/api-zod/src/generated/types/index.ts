@@ -34,6 +34,8 @@ export * from "./mobileTokenExchangeSuccess";
 export * from "./monitorRegression";
 export * from "./monitorScoreHistoryPoint";
 export * from "./monitorSubscription";
+export * from "./monitorSubscriptionLastReport";
+export * from "./monitorSubscriptionStatus";
 export * from "./reconResult";
 export * from "./reconResultDnsRecordsItem";
 export * from "./reconResultOpenPortsItem";

@@ -7,6 +7,7 @@
 
 import { logger } from "./logger";
 import * as net from "node:net";
+import * as dns from "node:dns/promises";
 
 // ── SSRF guard ────────────────────────────────────────────────────────────────
 
@@ -32,21 +33,47 @@ const BLOCKED_HOSTNAMES = new Set([
 ]);
 
 /**
- * Returns false if the URL looks like it targets a private/internal address.
- * Performs hostname-level checks only (no DNS resolution) for speed and reliability.
+ * Synchronous pre-check: rejects obviously blocked hostnames and literal private IPs
+ * before we spend a DNS round-trip.
  */
-function isWebhookUrlSafe(rawUrl: string): boolean {
+function isHostnameSafeSync(hostname: string): boolean {
+  if (BLOCKED_HOSTNAMES.has(hostname)) return false;
+  if (hostname.endsWith(".local") || hostname.endsWith(".internal")) return false;
+  // Reject literal private IPs immediately
+  if (net.isIP(hostname)) {
+    return !PRIVATE_IP_PATTERNS.some((r) => r.test(hostname));
+  }
+  return true;
+}
+
+/**
+ * Full SSRF guard: rejects private/internal addresses including public hostnames
+ * that resolve via DNS to a private or loopback IP (DNS-rebinding / SSRF bypass).
+ * Requires https protocol only.
+ */
+async function isWebhookUrlSafe(rawUrl: string): Promise<boolean> {
   try {
     const url = new URL(rawUrl);
-    if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+    // Only allow HTTPS to prevent cleartext token leakage
+    if (url.protocol !== "https:") return false;
     const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
-    if (BLOCKED_HOSTNAMES.has(hostname)) return false;
-    // Reject literal IP addresses in private ranges
-    if (net.isIP(hostname)) {
-      return !PRIVATE_IP_PATTERNS.some((r) => r.test(hostname));
+    if (!isHostnameSafeSync(hostname)) return false;
+    // For non-IP hostnames, resolve DNS and validate the resulting addresses
+    if (!net.isIP(hostname)) {
+      let addresses: string[];
+      try {
+        // Resolve all A/AAAA records; any single private result blocks the request
+        const results = await dns.resolve(hostname);
+        addresses = results;
+      } catch {
+        // DNS resolution failure → block (fail closed)
+        return false;
+      }
+      for (const addr of addresses) {
+        if (PRIVATE_IP_PATTERNS.some((r) => r.test(addr))) return false;
+        if (BLOCKED_HOSTNAMES.has(addr)) return false;
+      }
     }
-    // Reject hostnames that resolve to .local or .internal TLDs
-    if (hostname.endsWith(".local") || hostname.endsWith(".internal")) return false;
     return true;
   } catch {
     return false;
@@ -166,9 +193,11 @@ export async function fireWebhook(
   subscriptionId: string,
   data: Record<string, unknown>,
 ): Promise<void> {
-  const log = logger.child({ webhookUrl: webhookUrl.slice(0, 40) + "…", event, subscriptionId });
+  // Do NOT log the webhook URL — it may contain secret tokens in the path/query.
+  const log = logger.child({ event, subscriptionId });
 
-  if (!isWebhookUrlSafe(webhookUrl)) {
+  const safe = await isWebhookUrlSafe(webhookUrl);
+  if (!safe) {
     log.warn("Webhook URL blocked by SSRF guard — skipping delivery");
     return;
   }

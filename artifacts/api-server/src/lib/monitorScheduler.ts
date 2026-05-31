@@ -156,6 +156,14 @@ async function runSweep(): Promise<void> {
   const appOrigin = process.env.APP_ORIGIN ?? "https://seclayer.io";
 
   for (const sub of due) {
+    // Advance nextScanAt to a sentinel (minimum cadence = 3 days) before enqueueing
+    // so that the next 6h sweep does not double-pick this subscription while the
+    // job is still in-flight. Worker will overwrite with the accurate grade-based value.
+    await db
+      .update(monitorSubscriptionsTable)
+      .set({ nextScanAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) })
+      .where(eq(monitorSubscriptionsTable.id, sub.id));
+
     const scanId = await enqueueMonitorScan(sub, "adaptive");
     if (!scanId) continue;
 

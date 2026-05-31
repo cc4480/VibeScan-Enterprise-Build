@@ -597,20 +597,36 @@ export const ListMonitorSubscriptionsHeader = zod.object({
 export const ListMonitorSubscriptionsResponseItem = zod.object({
   id: zod.string(),
   userId: zod.string(),
+  userEmail: zod.string(),
   targetUrl: zod.string(),
-  active: zod.boolean(),
-  webhookUrl: zod.string().nullish(),
-  lastScannedAt: zod.date().nullish(),
+  status: zod.enum(["active", "cancelled", "expired"]),
+  subscribedAt: zod.date(),
+  expiresAt: zod.date(),
+  lastScanAt: zod.date().nullish(),
+  lastReportId: zod.string().nullish(),
   nextScanAt: zod.date().nullish(),
+  webhookUrl: zod.string().nullish(),
+  stripeSubscriptionId: zod.string().nullish(),
   createdAt: zod.date(),
+  lastReport: zod
+    .object({
+      id: zod.string().optional(),
+      grade: zod.string().nullish(),
+      riskScore: zod.number().nullish(),
+    })
+    .nullish(),
+  alertCount: zod
+    .number()
+    .describe("Total number of CVE alerts for this subscription"),
   regressionCount: zod
     .number()
-    .optional()
     .describe("Number of regressions detected in the most recent scan"),
-  latestGrade: zod
-    .string()
+  certExpiryDays: zod
+    .number()
     .nullish()
-    .describe("Grade letter from the most recent scan"),
+    .describe(
+      "Days until TLS certificate expires, or null if no cert expiry alert exists",
+    ),
 });
 export const ListMonitorSubscriptionsResponse = zod.array(
   ListMonitorSubscriptionsResponseItem,
