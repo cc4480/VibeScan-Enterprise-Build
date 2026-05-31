@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { useSeo } from "@/lib/seo";
 import { useCreateScan, useGetCredits } from "@workspace/api-client-react";
 import { Shield, Zap, Globe, Lock, CheckCircle2, Loader2, CreditCard, ShoppingCart } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -62,6 +63,7 @@ const TIERS: TierConfig[] = [
 ];
 
 export default function ScanFormPage() {
+  useSeo({ title: "New Scan — Seclayer", noindex: true });
   const [url, setUrl] = useState("");
   const [tier, setTier] = useState<ScanTier>("deep");
   const [, setLocation] = useLocation();

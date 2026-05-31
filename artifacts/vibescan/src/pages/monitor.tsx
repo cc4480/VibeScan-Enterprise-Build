@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { useSeo } from "@/lib/seo";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell, Shield, Globe, CheckCircle2, XCircle, Clock, AlertTriangle,
@@ -291,6 +292,7 @@ function AddSubscriptionForm({ onSuccess }: { onSuccess: () => void }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function MonitorPage() {
+  useSeo({ title: "Monitor — Seclayer", noindex: true });
   const queryClient = useQueryClient();
 
   const { data: subscriptions, isLoading, error } = useQuery({

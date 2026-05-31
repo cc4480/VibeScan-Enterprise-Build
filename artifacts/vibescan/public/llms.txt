@@ -1,0 +1,62 @@
+# Seclayer
+
+> Black-box penetration testing for web applications — built for vibe coders who ship fast.
+
+Seclayer is a pay-per-scan security scanning SaaS that performs automated black-box penetration tests on any public URL. Users paste a URL, choose a scan tier, pay, and receive a plain-English security report powered by DeepSeek AI — in under 10 minutes, with no installs or agents required.
+
+## What Seclayer does
+
+- Performs automated black-box security scans on any publicly accessible web application
+- Covers OWASP Top 10 categories: broken access control, cryptographic failures, injection risks, security misconfiguration, vulnerable components, and authentication flaws
+- Detects 15+ security issues including missing security headers (CSP, HSTS, X-Frame-Options), weak TLS configuration, cookie flag violations, CORS misconfigurations, server version disclosure, and Supabase RLS exposure
+- Assigns a letter-grade security score (A through F) with a numeric risk score (0–100)
+- Generates AI-powered plain-English reports via DeepSeek that explain findings and prioritize fixes
+- Provides per-agent fix prompts tailored to Cursor, Claude Code, Lovable, Bolt, and Replit AI users
+- Offers continuous monitoring with weekly rescans and daily CVE feed matching
+
+## Who Seclayer is for
+
+Vibe coders, solo founders, indie developers, and dev agencies who build with AI code generation tools (Cursor, Lovable, Bolt, Replit) and need to verify security before launching — or after every coding session.
+
+## Pricing
+
+- Basic Scan: $9 — headers, SSL/TLS grading, tech fingerprint, Supabase RLS check
+- Deep Scan: $19 — full pentest with DeepSeek AI analysis and per-agent fix prompts
+- 5-Scan Pack: $79 — 5 Deep Scan credits, never expire (saves $16 vs singles)
+- 20-Scan Pack: $199 — 20 Deep Scan credits for agencies (saves $181 vs singles)
+- Monitor: $49/month — weekly deep rescans + daily CVE feed monitoring with instant alerts
+
+## Security checks performed
+
+Headers: Content-Security-Policy (including unsafe-inline/unsafe-eval detection), Strict-Transport-Security, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, X-XSS-Protection
+
+Transport: HTTPS enforcement, TLS version and cipher strength, certificate validity
+
+Cookies: Secure flag, HttpOnly flag, SameSite attribute
+
+CORS: Wildcard origin detection (Access-Control-Allow-Origin: *)
+
+Disclosure: Server header, X-Powered-By, technology fingerprinting
+
+Supabase: Row Level Security (RLS) probe — detects exposed tables, missing policies
+
+## How it works
+
+1. Paste any public URL into the scan form
+2. Choose Basic ($9) or Deep ($19) scan tier
+3. Pay once — no subscription required
+4. The scanner fetches the target, analyzes all HTTP responses, runs probes, and calls DeepSeek AI
+5. Receive a plain-English report with grade, risk score, findings, and fix prompts within 10 minutes
+
+## Technical details
+
+- Built on: Node.js / Express, React / Vite, PostgreSQL, pg-boss queue
+- AI: DeepSeek (deepseek-chat model)
+- Auth: Replit OIDC
+- All scans are passive and non-destructive by default
+- No agents, browser extensions, or code changes required
+
+## Contact
+
+Website: https://seclayer.io
+Reports email: reports@seclayer.io

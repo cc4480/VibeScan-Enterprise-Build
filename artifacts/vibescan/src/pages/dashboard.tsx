@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
+import { useSeo } from "@/lib/seo";
 import { useListScans, useGetCredits, useGetScanStatus, getGetScanStatusQueryKey } from "@workspace/api-client-react";
 import { Shield, Plus, Clock, CheckCircle2, AlertCircle, RefreshCw, FileText, Loader2, ArrowRight, Info, Zap as ZapIcon } from "lucide-react";
 import { format } from "date-fns";
@@ -205,6 +206,7 @@ function GlobeIcon(props: React.SVGProps<SVGSVGElement>) {
 }
 
 export default function DashboardPage() {
+  useSeo({ title: "Dashboard — Seclayer", noindex: true });
   const params = new URLSearchParams(
     typeof window !== "undefined" ? window.location.search : "",
   );

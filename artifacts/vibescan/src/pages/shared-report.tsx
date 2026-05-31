@@ -1,5 +1,6 @@
 import { useRoute, Link } from "wouter";
 import { useState, useEffect, useRef } from "react";
+import { useSeo } from "@/lib/seo";
 import {
   Shield, Globe, Lock, Loader2, AlertCircle, Clock,
   Download, Share2,
@@ -189,6 +190,14 @@ export default function SharedReport() {
   const [report, setReport] = useState<SharedReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ status: number; message: string } | null>(null);
+
+  const seoTitle = report
+    ? `Grade ${report.data.summary.grade} — ${(() => { try { return new URL(report.targetUrl).hostname; } catch { return report.targetUrl; } })()} | Seclayer Security Report`
+    : "Security Report — Seclayer";
+  const seoDescription = report
+    ? `Security scan of ${report.targetUrl}: Grade ${report.data.summary.grade}, risk score ${report.data.summary.riskScore}/100, ${report.data.summary.totalVulnerabilities} finding${report.data.summary.totalVulnerabilities !== 1 ? "s" : ""}. Powered by Seclayer.`
+    : "View this security scan report powered by Seclayer — black-box penetration testing for web applications.";
+  useSeo({ title: seoTitle, description: seoDescription, canonical: `https://seclayer.io/s/${token}` });
 
   // PDF generation state — must be declared before any conditional returns (Rules of Hooks)
   const pdfContainerRef = useRef<HTMLDivElement>(null);

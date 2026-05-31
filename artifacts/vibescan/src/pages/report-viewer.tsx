@@ -16,6 +16,7 @@ import { cn, formatSeverity, getSeverityColors, getGradeColor } from "@/lib/util
 import { getAuthHeaders } from "@/lib/auth-token";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useMemo, useCallback, useEffect, createContext, useContext, useRef } from "react";
+import { useSeo } from "@/lib/seo";
 import type { Vulnerability } from "@workspace/api-client-react";
 
 // ─── Dismissals context ───────────────────────────────────────────────────────
@@ -1841,6 +1842,7 @@ function ShareButton({ reportId }: { reportId: string }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ReportViewer() {
+  useSeo({ title: "Security Report — Seclayer", noindex: true });
   const [, params] = useRoute("/report/:id");
   const reportId = params?.id || "";
   const { data: report, isLoading, error } = useGetReport(reportId, {

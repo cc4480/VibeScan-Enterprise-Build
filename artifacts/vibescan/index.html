@@ -3,31 +3,251 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-    <title>Seclayer — Black-Box Penetration Testing for Vibe Coders</title>
-    <meta name="description" content="Paste a URL, pay once, and get a plain-English security report in under 10 minutes. OWASP Top 10 coverage, AI-powered analysis, no subscriptions." />
-    <meta name="keywords" content="penetration testing, security scan, web security, OWASP, vibe coding, DeepSeek AI, black-box testing" />
+    <title>Seclayer — Black-Box Security Scanning for Vibe Coders</title>
+    <meta name="description" content="Paste a URL, pay once, get a plain-English security report in under 10 minutes. OWASP Top 10 coverage, AI-powered analysis, per-agent fix prompts. No subscriptions." />
+    <meta name="keywords" content="penetration testing, security scan, web security, OWASP, vibe coding, AI security, black-box testing, Supabase RLS, security headers" />
     <meta name="robots" content="index, follow" />
+    <meta name="author" content="Seclayer" />
+
+    <!-- Canonical -->
+    <link rel="canonical" href="https://seclayer.io/" />
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://seclayer.io/" />
-    <meta property="og:title" content="Seclayer — Black-Box Penetration Testing for Vibe Coders" />
-    <meta property="og:description" content="Paste a URL, pay once, and get a plain-English security report in under 10 minutes. OWASP Top 10 coverage, AI-powered analysis, no subscriptions." />
+    <meta property="og:site_name" content="Seclayer" />
+    <meta property="og:title" content="Seclayer — Black-Box Security Scanning for Vibe Coders" />
+    <meta property="og:description" content="Paste a URL, pay once, get a plain-English security report in under 10 minutes. OWASP Top 10 coverage, AI-powered analysis, per-agent fix prompts." />
     <meta property="og:image" content="https://seclayer.io/opengraph.jpg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Seclayer security scan dashboard showing grade and vulnerability findings" />
+    <meta property="og:locale" content="en_US" />
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:url" content="https://seclayer.io/" />
     <meta name="twitter:title" content="Seclayer — Security Scans for Vibe Coders" />
-    <meta name="twitter:description" content="Paste a URL, pay once, and get a plain-English security report in under 10 minutes." />
+    <meta name="twitter:description" content="Paste a URL, pay once, get a plain-English security report in under 10 minutes. No installs." />
     <meta name="twitter:image" content="https://seclayer.io/opengraph.jpg" />
+    <meta name="twitter:image:alt" content="Seclayer security scan report" />
 
     <!-- Theme color -->
     <meta name="theme-color" content="#14b87a" />
 
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://seclayer.io/#organization",
+          "name": "Seclayer",
+          "url": "https://seclayer.io",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://seclayer.io/favicon.svg",
+            "width": 512,
+            "height": 512
+          },
+          "description": "Black-box penetration testing SaaS for vibe coders. Automated security scanning for web applications.",
+          "contactPoint": {
+            "@type": "ContactPoint",
+            "email": "reports@seclayer.io",
+            "contactType": "customer support"
+          },
+          "sameAs": []
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://seclayer.io/#website",
+          "url": "https://seclayer.io",
+          "name": "Seclayer",
+          "description": "Black-box penetration testing for vibe coders",
+          "publisher": { "@id": "https://seclayer.io/#organization" }
+        },
+        {
+          "@type": "WebPage",
+          "@id": "https://seclayer.io/#webpage",
+          "url": "https://seclayer.io/",
+          "name": "Seclayer — Black-Box Security Scanning for Vibe Coders",
+          "description": "Paste a URL, pay once, get a plain-English security report in under 10 minutes. OWASP Top 10 coverage, AI-powered analysis, per-agent fix prompts.",
+          "isPartOf": { "@id": "https://seclayer.io/#website" },
+          "about": { "@id": "https://seclayer.io/#organization" },
+          "breadcrumb": {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "Home",
+                "item": "https://seclayer.io/"
+              }
+            ]
+          }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://seclayer.io/#app",
+          "name": "Seclayer",
+          "url": "https://seclayer.io",
+          "applicationCategory": "SecurityApplication",
+          "applicationSubCategory": "Penetration Testing",
+          "operatingSystem": "Any (web-based)",
+          "description": "Automated black-box penetration testing for web applications. Scans for OWASP Top 10 vulnerabilities, security headers, TLS configuration, cookie flags, CORS misconfigurations, and more. Powered by DeepSeek AI.",
+          "featureList": [
+            "OWASP Top 10 coverage",
+            "Security headers analysis (CSP, HSTS, X-Frame-Options)",
+            "SSL/TLS grading",
+            "Cookie flags (HttpOnly, Secure, SameSite)",
+            "CORS misconfiguration detection",
+            "Supabase RLS exposure check",
+            "Technology fingerprinting",
+            "DeepSeek AI plain-English reports",
+            "Per-agent fix prompts (Cursor, Claude Code, Lovable, Bolt, Replit AI)",
+            "Letter-grade security score (A–F)",
+            "Continuous monitoring with CVE feed"
+          ],
+          "screenshot": "https://seclayer.io/opengraph.jpg",
+          "offers": [
+            {
+              "@type": "Offer",
+              "name": "Basic Scan",
+              "price": "9.00",
+              "priceCurrency": "USD",
+              "description": "Headers, SSL/TLS grading, tech fingerprint, Supabase RLS check"
+            },
+            {
+              "@type": "Offer",
+              "name": "Deep Scan",
+              "price": "19.00",
+              "priceCurrency": "USD",
+              "description": "Full pentest with DeepSeek AI analysis and per-agent fix prompts"
+            },
+            {
+              "@type": "Offer",
+              "name": "5-Scan Pack",
+              "price": "79.00",
+              "priceCurrency": "USD",
+              "description": "5 Deep Scan credits, never expire"
+            },
+            {
+              "@type": "Offer",
+              "name": "20-Scan Pack",
+              "price": "199.00",
+              "priceCurrency": "USD",
+              "description": "20 Deep Scan credits for agencies"
+            }
+          ],
+          "publisher": { "@id": "https://seclayer.io/#organization" }
+        },
+        {
+          "@type": "HowTo",
+          "name": "How to scan your web app with Seclayer",
+          "description": "Run a black-box penetration test on any public web application in under 10 minutes.",
+          "totalTime": "PT10M",
+          "step": [
+            {
+              "@type": "HowToStep",
+              "position": 1,
+              "name": "Paste your URL",
+              "text": "Navigate to the Seclayer scan form and paste any publicly accessible URL — your app, a client's site, or a competitor's."
+            },
+            {
+              "@type": "HowToStep",
+              "position": 2,
+              "name": "Choose a scan tier",
+              "text": "Select Basic ($9) for header and SSL checks, or Deep ($19) for a full pentest with DeepSeek AI analysis and per-agent fix prompts."
+            },
+            {
+              "@type": "HowToStep",
+              "position": 3,
+              "name": "Pay once",
+              "text": "Complete a one-time payment via Stripe. No subscription required. Credits never expire if you buy a pack."
+            },
+            {
+              "@type": "HowToStep",
+              "position": 4,
+              "name": "Get your report",
+              "text": "Within 10 minutes, receive a plain-English security report with a letter grade (A–F), risk score, vulnerability list, and actionable fix steps tailored to your AI coding tool."
+            }
+          ]
+        },
+        {
+          "@type": "FAQPage",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "What is Seclayer?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Seclayer is a pay-per-scan black-box penetration testing tool for web applications. You paste a URL, pay once, and receive a plain-English security report in under 10 minutes. No installs, agents, or code changes required."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What security checks does Seclayer perform?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Seclayer checks security headers (CSP, HSTS, X-Frame-Options, Referrer-Policy, Permissions-Policy), SSL/TLS configuration and grade, cookie flags (HttpOnly, Secure, SameSite), CORS misconfigurations, server version disclosure, technology fingerprinting, Supabase Row Level Security (RLS) exposure, and more — covering the OWASP Top 10."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How long does a Seclayer scan take?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Most scans complete in under 10 minutes. Basic scans typically finish in 1–2 minutes. Deep scans with AI analysis usually complete in 3–10 minutes depending on the target site."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Is Seclayer safe? Will it harm my app?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. Seclayer performs passive, non-destructive black-box scans. It sends normal HTTP requests to analyze your app's responses — it does not write data, exploit vulnerabilities, or interfere with your app's normal operation."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What is a Deep Scan?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "A Deep Scan ($19) includes everything in the Basic scan plus JavaScript secret scanning, DeepSeek AI-powered analysis that generates a plain-English report, and per-agent fix prompts customized for Cursor, Claude Code, Lovable, Bolt, and Replit AI."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What does the per-agent fix prompt do?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "After a Deep Scan, Seclayer generates a ready-to-paste prompt for your specific AI coding tool. Each prompt is pre-formatted with the vulnerability context and the exact fix instructions so you can paste it directly into Cursor, Claude Code, Lovable, Bolt, or Replit AI and get working code."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Does Seclayer work on sites not built by AI?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. Seclayer scans any publicly accessible web application — whether it was built by AI tools, hand-coded, or made with no-code platforms. The scan targets the live HTTP responses, not the source code."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What is a Monitor subscription?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "The Monitor plan ($49/month) runs automated deep rescans of your site every week and checks a daily CVE (Common Vulnerabilities and Exposures) feed to alert you when newly disclosed vulnerabilities match technologies detected in your stack."
+              }
+            }
+          ]
+        }
+      ]
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>
