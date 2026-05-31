@@ -1,6 +1,9 @@
 import { Router, type IRouter } from "express";
-import { db, monitorSubscriptionsTable, cveAlertsTable, reportsTable } from "@workspace/db";
-import { eq, and, desc, count } from "drizzle-orm";
+import {
+  db, monitorSubscriptionsTable, cveAlertsTable, reportsTable,
+  monitorScoreHistoryTable, monitorRegressionsTable, certExpiryAlertsTable,
+} from "@workspace/db";
+import { eq, and, desc, count, gte } from "drizzle-orm";
 import { z } from "zod";
 import { enqueueScan } from "../lib/queue";
 import { scansTable } from "@workspace/db";
@@ -27,6 +30,7 @@ const router: IRouter = Router();
 
 const CreateMonitorBody = z.object({
   targetUrl: z.string().url("Must be a valid URL"),
+  webhookUrl: z.string().url().optional(),
 });
 
 // ── POST /api/monitor/subscriptions ──────────────────────────────────────────
@@ -45,7 +49,7 @@ router.post("/monitor/subscriptions", async (req, res): Promise<void> => {
     return;
   }
 
-  const { targetUrl } = parsed.data;
+  const { targetUrl, webhookUrl } = parsed.data;
   const paymentsDisabled = process.env.DISABLE_PAYMENTS === "true";
 
   if (!paymentsDisabled) {
@@ -90,6 +94,7 @@ router.post("/monitor/subscriptions", async (req, res): Promise<void> => {
       expiresAt,
       lastReportId: seedReportId,
       lastScanAt: seedScanAt,
+      webhookUrl: webhookUrl ?? null,
     })
     .returning();
 
@@ -207,6 +212,28 @@ router.get("/monitor/subscriptions", async (req, res): Promise<void> => {
         .from(cveAlertsTable)
         .where(eq(cveAlertsTable.subscriptionId, sub.id));
 
+      // Count recent regressions (last 30 days)
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const [{ value: regressionCount }] = await db
+        .select({ value: count() })
+        .from(monitorRegressionsTable)
+        .where(
+          and(
+            eq(monitorRegressionsTable.subscriptionId, sub.id),
+            gte(monitorRegressionsTable.detectedAt, thirtyDaysAgo),
+          ),
+        );
+
+      // Check for cert expiry from most recent cert_expiry_alerts
+      const [latestCertAlert] = await db
+        .select({ daysRemaining: certExpiryAlertsTable.daysRemaining })
+        .from(certExpiryAlertsTable)
+        .where(eq(certExpiryAlertsTable.subscriptionId, sub.id))
+        .orderBy(desc(certExpiryAlertsTable.sentAt))
+        .limit(1);
+
+      const certExpiryDays = latestCertAlert?.daysRemaining ?? null;
+
       // Use the resolved scanAt so the card shows the correct date even before
       // the subscription row was backfilled.
       const lastScanAt = sub.lastScanAt ?? resolvedReport?.scannedAt ?? null;
@@ -216,6 +243,8 @@ router.get("/monitor/subscriptions", async (req, res): Promise<void> => {
         lastScanAt,
         lastReport,
         alertCount,
+        regressionCount: Number(regressionCount),
+        certExpiryDays,
       };
     }),
   );
@@ -290,6 +319,84 @@ router.get("/monitor/subscriptions/:id/alerts", async (req, res): Promise<void> 
     .orderBy(desc(cveAlertsTable.detectedAt));
 
   res.json(alerts);
+});
+
+// ── GET /api/monitor/subscriptions/:id/history ────────────────────────────────
+// Return the last 30 score history points for a subscription.
+
+router.get("/monitor/subscriptions/:id/history", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const subId = req.params.id;
+
+  const [sub] = await db
+    .select({ id: monitorSubscriptionsTable.id })
+    .from(monitorSubscriptionsTable)
+    .where(
+      and(
+        eq(monitorSubscriptionsTable.id, subId),
+        eq(monitorSubscriptionsTable.userId, req.user.id),
+      ),
+    );
+
+  if (!sub) {
+    res.status(404).json({ error: "Subscription not found" });
+    return;
+  }
+
+  const history = await db
+    .select()
+    .from(monitorScoreHistoryTable)
+    .where(eq(monitorScoreHistoryTable.subscriptionId, subId))
+    .orderBy(desc(monitorScoreHistoryTable.scannedAt))
+    .limit(30);
+
+  res.json(history.reverse()); // oldest first for charting
+});
+
+// ── GET /api/monitor/subscriptions/:id/regressions ───────────────────────────
+// Return recent regressions (last 30 days) for a subscription.
+
+router.get("/monitor/subscriptions/:id/regressions", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const subId = req.params.id;
+
+  const [sub] = await db
+    .select({ id: monitorSubscriptionsTable.id })
+    .from(monitorSubscriptionsTable)
+    .where(
+      and(
+        eq(monitorSubscriptionsTable.id, subId),
+        eq(monitorSubscriptionsTable.userId, req.user.id),
+      ),
+    );
+
+  if (!sub) {
+    res.status(404).json({ error: "Subscription not found" });
+    return;
+  }
+
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  const regressions = await db
+    .select()
+    .from(monitorRegressionsTable)
+    .where(
+      and(
+        eq(monitorRegressionsTable.subscriptionId, subId),
+        gte(monitorRegressionsTable.detectedAt, thirtyDaysAgo),
+      ),
+    )
+    .orderBy(desc(monitorRegressionsTable.detectedAt));
+
+  res.json(regressions);
 });
 
 export default router;

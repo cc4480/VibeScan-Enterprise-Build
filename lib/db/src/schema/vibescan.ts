@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, integer, timestamp, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, integer, timestamp, jsonb, real, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -55,12 +55,15 @@ export const monitorSubscriptionsTable = pgTable("monitor_subscriptions", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   lastScanAt: timestamp("last_scan_at", { withTimezone: true }),
   lastReportId: uuid("last_report_id"),
+  nextScanAt: timestamp("next_scan_at", { withTimezone: true }),
+  webhookUrl: text("webhook_url"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index("idx_monitor_user_id").on(table.userId),
   index("idx_monitor_status").on(table.status),
   index("idx_monitor_target").on(table.targetUrl),
+  index("idx_monitor_next_scan").on(table.nextScanAt),
 ]);
 
 export const cveAlertsTable = pgTable("cve_alerts", {
@@ -70,12 +73,68 @@ export const cveAlertsTable = pgTable("cve_alerts", {
   cveSummary: text("cve_summary").notNull(),
   affectedTech: text("affected_tech").notNull(),
   severity: text("severity").notNull(),
+  epssScore: real("epss_score"),
+  epssPercentile: real("epss_percentile"),
   triggerScanId: uuid("trigger_scan_id"),
   detectedAt: timestamp("detected_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index("idx_cve_alerts_subscription_id").on(table.subscriptionId),
   index("idx_cve_alerts_cve_id").on(table.cveId),
 ]);
+
+// ── Monitor score history ──────────────────────────────────────────────────────
+
+export const monitorScoreHistoryTable = pgTable("monitor_score_history", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  subscriptionId: uuid("subscription_id").notNull().references(() => monitorSubscriptionsTable.id, { onDelete: "cascade" }),
+  scanId: uuid("scan_id").references(() => scansTable.id, { onDelete: "set null" }),
+  grade: text("grade").notNull(),
+  riskScore: integer("risk_score").notNull(),
+  criticalCount: integer("critical_count").notNull().default(0),
+  highCount: integer("high_count").notNull().default(0),
+  scannedAt: timestamp("scanned_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("idx_score_history_sub_id").on(table.subscriptionId),
+  index("idx_score_history_scanned_at").on(table.scannedAt),
+]);
+
+export type MonitorScoreHistory = typeof monitorScoreHistoryTable.$inferSelect;
+export type InsertMonitorScoreHistory = typeof monitorScoreHistoryTable.$inferInsert;
+
+// ── Monitor regressions ────────────────────────────────────────────────────────
+
+export const monitorRegressionsTable = pgTable("monitor_regressions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  subscriptionId: uuid("subscription_id").notNull().references(() => monitorSubscriptionsTable.id, { onDelete: "cascade" }),
+  scanId: uuid("scan_id").references(() => scansTable.id, { onDelete: "set null" }),
+  checkId: text("check_id").notNull(),
+  checkTitle: text("check_title").notNull(),
+  severity: text("severity").notNull(),
+  detectedAt: timestamp("detected_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("idx_regressions_sub_id").on(table.subscriptionId),
+  index("idx_regressions_scan_id").on(table.scanId),
+]);
+
+export type MonitorRegression = typeof monitorRegressionsTable.$inferSelect;
+export type InsertMonitorRegression = typeof monitorRegressionsTable.$inferInsert;
+
+// ── Certificate expiry alerts ──────────────────────────────────────────────────
+
+export const certExpiryAlertsTable = pgTable("cert_expiry_alerts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  subscriptionId: uuid("subscription_id").notNull().references(() => monitorSubscriptionsTable.id, { onDelete: "cascade" }),
+  expiryDate: timestamp("expiry_date", { withTimezone: true }).notNull(),
+  daysRemaining: integer("days_remaining").notNull(),
+  alertThreshold: integer("alert_threshold").notNull(),
+  sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("idx_cert_expiry_sub_id").on(table.subscriptionId),
+  uniqueIndex("uq_cert_expiry_sub_threshold").on(table.subscriptionId, table.alertThreshold, table.expiryDate),
+]);
+
+export type CertExpiryAlert = typeof certExpiryAlertsTable.$inferSelect;
+export type InsertCertExpiryAlert = typeof certExpiryAlertsTable.$inferInsert;
 
 export const insertScanSchema = createInsertSchema(scansTable).omit({
   id: true,
@@ -148,10 +207,6 @@ export const reportSharesTable = pgTable("report_shares", {
 
 export type ReportShare = typeof reportSharesTable.$inferSelect;
 
-/**
- * Single-row key-value store for persisting EOL data fetched from endoflife.date.
- * Used by eolFetcher.ts to survive server restarts between daily pg-boss schedule runs.
- */
 export const eolCacheTable = pgTable("eol_cache", {
   key: text("key").primaryKey(),
   payload: jsonb("payload").notNull(),

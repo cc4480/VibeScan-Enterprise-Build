@@ -8,8 +8,14 @@
  *            failed
  */
 
-import { db, scansTable, reportsTable, monitorSubscriptionsTable, dismissedFindingsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import {
+  db, scansTable, reportsTable, monitorSubscriptionsTable, dismissedFindingsTable,
+  monitorScoreHistoryTable, monitorRegressionsTable,
+} from "@workspace/db";
+import { eq, and, desc } from "drizzle-orm";
+import { computeNextScanAt } from "./monitorScheduler";
+import { sendRegressionAlertEmail } from "./mailer";
+import { fireWebhook } from "./webhook";
 import { getBoss, SCAN_QUEUE, type ScanJobData } from "./queue";
 import { runScan, computeRiskScore, computeGrade, type ScanVulnerability } from "./scanner";
 import { corroborateMerge } from "./scoring";
@@ -458,14 +464,24 @@ async function processScanJob(job: ScanJob): Promise<void> {
 
     log.info({ reportId: report.id, grade, riskScore }, "Scan complete");
 
-    // ── 8. Update monitor subscription if this was a monitored scan ───
+    // ── 8. Update monitor subscription + write score history + detect regressions ──
     if (monitorSubscriptionId) {
       try {
+        const nextScanAt = computeNextScanAt(grade, completedAt);
+
+        // Fetch current subscription for webhook URL and email
+        const [sub] = await db
+          .select()
+          .from(monitorSubscriptionsTable)
+          .where(eq(monitorSubscriptionsTable.id, monitorSubscriptionId))
+          .limit(1);
+
         await db
           .update(monitorSubscriptionsTable)
           .set({
             lastScanAt: completedAt,
             lastReportId: report.id,
+            nextScanAt,
           })
           .where(
             and(
@@ -473,7 +489,130 @@ async function processScanJob(job: ScanJob): Promise<void> {
               eq(monitorSubscriptionsTable.userId, userId),
             ),
           );
-        log.info({ monitorSubscriptionId, reportId: report.id }, "Monitor subscription updated");
+
+        log.info(
+          { monitorSubscriptionId, reportId: report.id, grade, nextScanAt },
+          "Monitor subscription updated",
+        );
+
+        // ── Score snapshot ──────────────────────────────────────────────
+        const criticalCount = severityCounts["critical"] ?? 0;
+        const highCount = severityCounts["high"] ?? 0;
+
+        await db.insert(monitorScoreHistoryTable).values({
+          subscriptionId: monitorSubscriptionId,
+          scanId,
+          grade,
+          riskScore,
+          criticalCount,
+          highCount,
+          scannedAt: completedAt,
+        });
+
+        log.info({ monitorSubscriptionId, grade, riskScore }, "Score history snapshot saved");
+
+        // ── Regression detection ────────────────────────────────────────
+        // Compare current vuln check IDs against the *previous* snapshot
+        const [prevHistory] = await db
+          .select()
+          .from(monitorScoreHistoryTable)
+          .where(eq(monitorScoreHistoryTable.subscriptionId, monitorSubscriptionId))
+          .orderBy(desc(monitorScoreHistoryTable.scannedAt))
+          .offset(1)
+          .limit(1);
+
+        if (prevHistory) {
+          // Get previous scan's vulnerabilities from that scan's report
+          const [prevReport] = await db
+            .select({ data: reportsTable.data })
+            .from(reportsTable)
+            .where(eq(reportsTable.scanId, prevHistory.scanId!))
+            .limit(1);
+
+          if (prevReport) {
+            const prevData = prevReport.data as { vulnerabilities?: Array<{ id: string; title: string; severity: string }> };
+            const prevVulnIds = new Set(
+              (prevData.vulnerabilities ?? []).map((v) => v.id),
+            );
+
+            const currentVulns = scanResult.vulnerabilities as Array<{ id: string; title: string; severity: string }>;
+            const newRegressions = currentVulns.filter(
+              (v) => !prevVulnIds.has(v.id),
+            );
+
+            if (newRegressions.length > 0) {
+              log.info(
+                { subscriptionId: monitorSubscriptionId, regressions: newRegressions.length },
+                "Regressions detected",
+              );
+
+              await db.insert(monitorRegressionsTable).values(
+                newRegressions.map((v) => ({
+                  subscriptionId: monitorSubscriptionId,
+                  scanId,
+                  checkId: v.id,
+                  checkTitle: v.title,
+                  severity: v.severity,
+                })),
+              );
+
+              const appOrigin = process.env.APP_ORIGIN ?? "https://seclayer.io";
+
+              if (sub?.userEmail) {
+                await sendRegressionAlertEmail({
+                  toEmail: sub.userEmail,
+                  targetUrl,
+                  regressions: newRegressions.map((v) => ({
+                    checkTitle: v.title,
+                    severity: v.severity,
+                  })),
+                  scanId,
+                  dashboardUrl: `${appOrigin}/monitor`,
+                }).catch((err) =>
+                  log.warn({ err }, "Failed to send regression email (non-fatal)"),
+                );
+              }
+
+              if (sub?.webhookUrl) {
+                await fireWebhook(
+                  sub.webhookUrl,
+                  "regression_detected",
+                  targetUrl,
+                  monitorSubscriptionId,
+                  {
+                    regressions: newRegressions.map((v) => ({
+                      checkTitle: v.title,
+                      severity: v.severity,
+                    })),
+                    scanId,
+                    grade,
+                    riskScore,
+                  },
+                ).catch((err) =>
+                  log.warn({ err }, "Failed to fire regression webhook (non-fatal)"),
+                );
+              }
+            }
+          }
+        }
+
+        // ── Fire scan_complete webhook ──────────────────────────────────
+        if (sub?.webhookUrl) {
+          const appOrigin = process.env.APP_ORIGIN ?? "https://seclayer.io";
+          await fireWebhook(
+            sub.webhookUrl,
+            "scan_complete",
+            targetUrl,
+            monitorSubscriptionId,
+            {
+              scanId,
+              reportId: report.id,
+              grade,
+              riskScore,
+              reportUrl: `${appOrigin}/report/${report.id}`,
+            },
+          ).catch((err) => log.warn({ err }, "Failed to fire scan_complete webhook (non-fatal)"));
+        }
       } catch (monitorErr) {
         log.warn({ err: monitorErr }, "Failed to update monitor subscription (non-fatal)");
       }
