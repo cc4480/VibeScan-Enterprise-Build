@@ -14,6 +14,7 @@ import {
   listMonitorSubscriptions,
   createMonitorSubscription,
   cancelMonitorSubscription,
+  triggerManualScan,
   listCveAlerts,
   getScoreHistory,
   getRecentRegressions,
@@ -170,6 +171,9 @@ type DrawerTab = "cve" | "regressions" | "history" | null;
 function SubscriptionCard({ sub, onCancel }: { sub: MonitorSubscription; onCancel: (id: string) => void }) {
   const [drawer, setDrawer] = useState<DrawerTab>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const alertsQuery = useQuery({
     queryKey: ["monitor-alerts", sub.id],
@@ -192,6 +196,19 @@ function SubscriptionCard({ sub, onCancel }: { sub: MonitorSubscription; onCance
   const days = daysRemaining(sub.expiresAt);
   const isActive = sub.status === "active";
   const historyPoints: ScoreHistoryPoint[] = historyQuery.data ?? [];
+
+  async function handleScanNow() {
+    setScanning(true);
+    try {
+      await triggerManualScan(sub.id);
+      toast({ title: "Scan queued", description: "A fresh deep scan has started — this usually takes 1–2 minutes." });
+      queryClient.invalidateQueries({ queryKey: ["monitor-subscriptions"] });
+    } catch {
+      toast({ title: "Failed to start scan", description: "Please try again in a moment.", variant: "destructive" });
+    } finally {
+      setScanning(false);
+    }
+  }
 
   async function handleCancel() {
     if (!confirm(`Stop monitoring ${sub.targetUrl}? This cannot be undone.`)) return;
@@ -280,6 +297,17 @@ function SubscriptionCard({ sub, onCancel }: { sub: MonitorSubscription; onCance
               >
                 <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
                 <span className="text-xs font-bold text-red-400">{sub.alertCount} CVE{sub.alertCount > 1 ? "s" : ""}</span>
+              </button>
+            )}
+            {isActive && (
+              <button
+                onClick={handleScanNow}
+                disabled={scanning}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 hover:bg-primary/20 text-primary text-xs font-semibold transition-colors disabled:opacity-50"
+                title="Run a scan right now"
+              >
+                {scanning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                {scanning ? "Scanning…" : "Scan Now"}
               </button>
             )}
             {isActive && (

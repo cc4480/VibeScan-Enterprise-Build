@@ -45,6 +45,7 @@ import type {
   Scan,
   ScanStatus,
   SharedReport,
+  TriggerMonitorScan200,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -1926,6 +1927,90 @@ export const useCancelMonitorSubscription = <
   TContext
 > => {
   return useMutation(getCancelMonitorSubscriptionMutationOptions(options));
+};
+
+/**
+ * @summary Immediately enqueue a manual deep scan for a subscription
+ */
+export const getTriggerMonitorScanUrl = (id: string) => {
+  return `/api/monitor/subscriptions/${id}/scan`;
+};
+
+export const triggerMonitorScan = async (
+  id: string,
+  options?: RequestInit,
+): Promise<TriggerMonitorScan200> => {
+  return customFetch<TriggerMonitorScan200>(getTriggerMonitorScanUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getTriggerMonitorScanMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof triggerMonitorScan>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof triggerMonitorScan>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["triggerMonitorScan"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof triggerMonitorScan>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return triggerMonitorScan(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TriggerMonitorScanMutationResult = NonNullable<
+  Awaited<ReturnType<typeof triggerMonitorScan>>
+>;
+
+export type TriggerMonitorScanMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Immediately enqueue a manual deep scan for a subscription
+ */
+export const useTriggerMonitorScan = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof triggerMonitorScan>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof triggerMonitorScan>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getTriggerMonitorScanMutationOptions(options));
 };
 
 /**

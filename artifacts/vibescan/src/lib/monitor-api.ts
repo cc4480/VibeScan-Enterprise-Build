@@ -83,3 +83,7 @@ export async function getScoreHistory(subscriptionId: string): Promise<ScoreHist
 export async function getRecentRegressions(subscriptionId: string): Promise<MonitorRegression[]> {
   return customFetch<MonitorRegression[]>(`/api/monitor/subscriptions/${subscriptionId}/regressions`);
 }
+
+export async function triggerManualScan(subscriptionId: string): Promise<{ scanId: string }> {
+  return customFetch(`/api/monitor/subscriptions/${subscriptionId}/scan`, { method: "POST" });
+}

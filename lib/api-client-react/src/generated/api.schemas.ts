@@ -480,3 +480,7 @@ export type DeleteDismissalParams = {
    */
   targetUrl: string;
 };
+
+export type TriggerMonitorScan200 = {
+  scanId: string;
+};

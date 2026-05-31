@@ -628,6 +628,49 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
+  /monitor/subscriptions/{id}/scan:
+    post:
+      tags: [monitor]
+      operationId: triggerMonitorScan
+      summary: Immediately enqueue a manual deep scan for a subscription
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Scan queued successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [scanId]
+                properties:
+                  scanId:
+                    type: string
+        '400':
+          description: Subscription is not active
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Subscription not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
   /monitor/subscriptions/{id}/alerts:
     get:
       tags: [monitor]

@@ -49,5 +49,6 @@ export * from "./scanStatusEnum";
 export * from "./scanSummary";
 export * from "./scanTier";
 export * from "./sharedReport";
+export * from "./triggerMonitorScan200";
 export * from "./vulnerability";
 export * from "./vulnerabilitySeverity";

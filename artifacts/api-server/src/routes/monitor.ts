@@ -429,4 +429,69 @@ router.get("/monitor/subscriptions/:id/regressions", async (req, res): Promise<v
   res.json(regressions);
 });
 
+// ── POST /api/monitor/subscriptions/:id/scan ─────────────────────────────────
+// Immediately enqueue a manual deep scan for a subscription.
+
+router.post("/monitor/subscriptions/:id/scan", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const subId = req.params.id;
+
+  const [sub] = await db
+    .select()
+    .from(monitorSubscriptionsTable)
+    .where(
+      and(
+        eq(monitorSubscriptionsTable.id, subId),
+        eq(monitorSubscriptionsTable.userId, req.user.id),
+      ),
+    );
+
+  if (!sub) {
+    res.status(404).json({ error: "Subscription not found" });
+    return;
+  }
+
+  if (sub.status !== "active") {
+    res.status(400).json({ error: "Subscription is not active" });
+    return;
+  }
+
+  try {
+    const [scan] = await db
+      .insert(scansTable)
+      .values({
+        userId: req.user.id,
+        userEmail: req.user.email ?? "",
+        targetUrl: sub.targetUrl,
+        tier: "deep",
+        status: "paid",
+      })
+      .returning();
+
+    await enqueueScan({
+      scanId: scan.id,
+      userId: req.user.id,
+      targetUrl: sub.targetUrl,
+      tier: "deep",
+      monitorSubscriptionId: sub.id,
+    });
+
+    await db
+      .update(scansTable)
+      .set({ status: "queued", startedAt: new Date() })
+      .where(eq(scansTable.id, scan.id));
+
+    logger.info({ subscriptionId: sub.id, scanId: scan.id }, "Manual monitor scan queued");
+
+    res.json({ scanId: scan.id });
+  } catch (err) {
+    logger.error({ err }, "Failed to enqueue manual monitor scan");
+    res.status(500).json({ error: "Failed to enqueue scan" });
+  }
+});
+
 export default router;

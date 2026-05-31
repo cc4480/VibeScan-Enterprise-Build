@@ -667,6 +667,24 @@ export const CancelMonitorSubscriptionHeader = zod.object({
 });
 
 /**
+ * @summary Immediately enqueue a manual deep scan for a subscription
+ */
+export const TriggerMonitorScanParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const TriggerMonitorScanHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — `Bearer <sid>`."),
+});
+
+export const TriggerMonitorScanResponse = zod.object({
+  scanId: zod.string(),
+});
+
+/**
  * @summary List CVE alerts for a subscription, ordered by EPSS × severity descending
  */
 export const ListCveAlertsParams = zod.object({
