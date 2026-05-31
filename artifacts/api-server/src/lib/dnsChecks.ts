@@ -273,6 +273,25 @@ export async function checkDnssec(hostname: string): Promise<ScanVulnerability[]
 // ORCHESTRATOR
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Derives the apex / registrable domain to use for email security DNS checks.
+ * SPF and DMARC records always live on the apex domain, never on subdomains.
+ * e.g.  www.google.com  → google.com
+ *       blog.example.com → example.com
+ *       app.mysite.co.uk → mysite.co.uk  (2-char ccTLD + short SLD)
+ */
+function toEmailDomain(hostname: string): string {
+  const labels = hostname.split(".");
+  if (labels.length <= 2) return hostname;
+  const tld = labels[labels.length - 1] ?? "";
+  const sld = labels[labels.length - 2] ?? "";
+  // 2-part ccTLDs like .co.uk, .com.au, .org.uk — keep 3 labels
+  if (tld.length === 2 && sld.length <= 3) {
+    return labels.length <= 3 ? hostname : labels.slice(-3).join(".");
+  }
+  return labels.slice(-2).join(".");
+}
+
 export async function checkDnsSecurity(targetUrl: string): Promise<ScanVulnerability[]> {
   let hostname: string;
   try {
@@ -286,10 +305,14 @@ export async function checkDnsSecurity(targetUrl: string): Promise<ScanVulnerabi
     return [];
   }
 
+  // Email security records (SPF, DMARC) live on the apex/registrable domain,
+  // not on subdomains like www.example.com. Derive it once and pass it down.
+  const emailDomain = toEmailDomain(hostname);
+
   // Run SPF and DMARC first so we can decide whether to suppress DKIM brute-force.
   const [spf, dmarc] = await Promise.allSettled([
-    checkSpf(hostname),
-    checkDmarc(hostname),
+    checkSpf(emailDomain),
+    checkDmarc(emailDomain),
   ]);
 
   const dmarcVulns = dmarc.status === "fulfilled" ? dmarc.value : [];
@@ -310,7 +333,7 @@ export async function checkDnsSecurity(targetUrl: string): Promise<ScanVulnerabi
   const [dkim, dnssec] = await Promise.allSettled([
     // Skip DKIM selector probing when DMARC is enforcing — the domain has DKIM
     // configured; we just can't discover the selector by brute-force.
-    dmarcIsEnforcing ? Promise.resolve([]) : checkDkim(hostname),
+    dmarcIsEnforcing ? Promise.resolve([]) : checkDkim(emailDomain),
     checkDnssec(hostname),
   ]);
 

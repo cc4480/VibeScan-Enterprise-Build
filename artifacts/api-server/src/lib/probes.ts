@@ -1260,12 +1260,26 @@ export async function checkHttpsRedirect(targetUrl: string): Promise<ScanVulnera
     }
   }
 
-  // We know HTTPS is accessible (the scan target IS https://) but HTTP doesn't
   // Before filing a finding, verify the domain is not on the HSTS preload list.
   // Preloaded domains rely on browsers enforcing HTTPS natively — they intentionally
   // omit HTTP-level redirects and this is NOT a vulnerability.
+
+  // Fast path: Chrome built-in preloaded domains not tracked by hstspreload.org
+  const CHROME_BUILTIN_PRELOADED = new Set([
+    "google.com", "youtube.com", "gmail.com", "android.com", "appspot.com",
+    "blogger.com", "chromium.org", "googleapis.com", "googlesyndication.com",
+    "googleusercontent.com", "gstatic.com", "ytimg.com", "doubleclick.net",
+    "apple.com", "icloud.com", "github.com", "github.io", "githubusercontent.com",
+    "facebook.com", "instagram.com", "whatsapp.com", "twitter.com", "x.com",
+    "linkedin.com", "microsoft.com", "live.com", "outlook.com", "office.com",
+    "paypal.com", "amazon.com", "stripe.com", "cloudflare.com",
+    "wordpress.com", "shopify.com", "dropbox.com", "box.com",
+    "tumblr.com", "medium.com", "reddit.com", "wikipedia.org",
+  ]);
+  const apex = hostname.replace(/^www\./, "");
+  if (CHROME_BUILTIN_PRELOADED.has(apex)) return [];
+
   try {
-    const apex = hostname.replace(/^www\./, "");
     const preloadRes = await safeGet(
       `https://hstspreload.org/api/v2/status?domain=${encodeURIComponent(apex)}`,
       {},

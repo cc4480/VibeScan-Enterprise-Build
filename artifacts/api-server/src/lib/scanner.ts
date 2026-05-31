@@ -26,8 +26,26 @@ import { randomUUID } from "node:crypto";
  * Returns true to SUPPRESS the HSTS finding; false to allow it (at MEDIUM).
  * Always fails-safe: any network error returns false so the check still runs.
  */
+// Domains hardcoded in Chrome's built-in HSTS preload list that are NOT
+// tracked by hstspreload.org's submission API (which only knows about
+// user-submitted entries, not Chrome's built-in set).
+const CHROME_BUILTIN_PRELOADED = new Set([
+  "google.com", "youtube.com", "gmail.com", "android.com", "appspot.com",
+  "blogger.com", "chromium.org", "googleapis.com", "googlesyndication.com",
+  "googleusercontent.com", "gstatic.com", "ytimg.com", "doubleclick.net",
+  "apple.com", "icloud.com", "github.com", "github.io", "githubusercontent.com",
+  "facebook.com", "instagram.com", "whatsapp.com", "twitter.com", "x.com",
+  "linkedin.com", "microsoft.com", "live.com", "outlook.com", "office.com",
+  "paypal.com", "amazon.com", "stripe.com", "cloudflare.com",
+  "wordpress.com", "shopify.com", "dropbox.com", "box.com",
+  "tumblr.com", "medium.com", "reddit.com", "wikipedia.org",
+]);
+
 async function isHstsPreloaded(hostname: string): Promise<boolean> {
   const apex = hostname.replace(/^www\./, "");
+
+  // Fast path: known Chrome built-in preloaded domains not tracked by hstspreload.org
+  if (CHROME_BUILTIN_PRELOADED.has(apex)) return true;
 
   // ── hstspreload.org tracking API ─────────────────────────────────────────
   try {
@@ -715,19 +733,10 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
     }));
   }
 
-  // ── X-XSS-Protection (deprecated but flag if disabled) ────────────────
-  const xxss = headerVal(rawHeaders, "x-xss-protection");
-  if (xxss && xxss.trim() === "0") {
-    vulnerabilities.push(vuln({
-      name: "XSS Auditor Disabled (X-XSS-Protection: 0)",
-      severity: "info",
-      category: "Injection Defense",
-      description: "X-XSS-Protection is explicitly set to 0, which disables the browser's built-in XSS auditor (in older browsers). While modern browsers have deprecated this header, setting it to 0 provides no benefit and may confuse automated scanners.",
-      evidence: `GET ${finalUrl}\nX-XSS-Protection: 0`,
-      solution: "Either remove the header entirely (recommended for modern browsers) or set X-XSS-Protection: 1; mode=block. Rely on CSP for actual XSS protection.",
-      wstgId: "WSTG-CLNT-01",
-    }));
-  }
+  // X-XSS-Protection: 0 is intentionally NOT flagged.
+  // Disabling the browser's legacy XSS auditor is the current OWASP/Google/Mozilla
+  // recommendation — the auditor was deprecated, causes false positives, and has
+  // introduced its own XSS vulnerabilities in some browsers. Setting it to 0 is correct.
 
   // ── Cache-Control on sensitive-looking pages ───────────────────────────
   const cacheControl = headerVal(rawHeaders, "cache-control");
