@@ -2,13 +2,39 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
 import { useGetScanStatus } from "@workspace/api-client-react";
 import {
-  Globe, Lock, ShieldCheck, Shield, ArrowRight, Cpu, Mail, Network,
-  Code2, Layers, Database, FileText, Cloud, RefreshCw, Sparkles,
-  BarChart2, CheckCircle2, Circle, Loader2, XCircle, Clock, AlertTriangle,
+  Globe, Lock, FileSearch, Shield, Zap, Cpu, ShieldAlert, Mail, Network,
+  MapPin, Code2, Layers, Database, FileText, Cloud, GitBranch, RefreshCw,
+  Sparkles, BarChart2, CheckCircle2, Circle, Loader2, XCircle, Clock, AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
+//
+// Every step here maps 1-to-1 with a real probe in the API scanner:
+//
+//   fetch         → runScan() initial fetch + redirect follow
+//   crawl         → crawlAndCheck() — basic: root only, deep: up to 20 pages
+//   tls           → checkSslLabs() (worker.ts, parallel) + inline TLS detection
+//   headers       → inline header analysis in runScan() (CSP, HSTS, X-Frame-Options…)
+//   probes        → runAllProbes() — 12 active HTTP probes (open redirect, rate limiting,
+//                   HTTP methods, sensitive files, directory listing, SRI, error disclosure,
+//                   clickjacking, HTTPS redirect, security.txt, robots.txt, CORS)
+//   cors          → analyzeCookies() + checkActiveCors() inside runAllProbes
+//   tech          → detectTechnologies() in runScan()
+//   cve           → checkForKnownVulnerabilities() via cveCheck.ts
+//   dns           → checkDnsSecurity() via dnsChecks.ts (SPF/DMARC/DKIM/DNSSEC)
+//   recon         → runRecon() (worker.ts, parallel) + checkSubdomainTakeover()
+//   sourcemaps    → checkSourceMaps() + analyzeJwts()
+//   nextjs        → runNextjsProbe() (__NEXT_DATA__ prop leaks)
+//   graphql       → runGraphqlProbe()
+//   baas          → runBaasProbes() (Supabase, Firebase, PocketBase, Appwrite)
+//   docs          → runApiDocsProbe()
+//   storage       → runStorageProbe()
+//   js            → scanJavaScriptForSecrets() — DEEP ONLY
+//   pathtraversal → checkPathTraversal()       — DEEP ONLY
+//   reprobe       → reprobe() + corroborateMerge() in worker.ts
+//   ai            → callDeepSeek()             — DEEP ONLY
+//   score         → computeRiskScore() / computeGrade()
 
 interface ScanStep {
   id: string;
@@ -21,22 +47,179 @@ interface ScanStep {
 }
 
 const ALL_STEPS: ScanStep[] = [
-  { id: "fetch",    label: "Connecting to target",          sublabel: "Fetching the page and following redirects",               icon: Globe,       phase: "scanning",  ms: 3000 },
-  { id: "tls",      label: "HTTPS & TLS certificate",       sublabel: "Protocols, ciphers, and certificate expiry via SSL Labs", icon: Lock,        phase: "scanning",  ms: 8000 },
-  { id: "headers",  label: "Security headers review",       sublabel: "CSP, HSTS, X-Frame-Options, Referrer-Policy…",           icon: ShieldCheck, phase: "scanning",  ms: 3000 },
-  { id: "cors",     label: "CORS & cookie security",        sublabel: "Cross-origin policy and cookie flag audit",              icon: Shield,      phase: "scanning",  ms: 3000 },
-  { id: "redirect", label: "Open redirect testing",         sublabel: "Injecting probe values into redirect parameters",        icon: ArrowRight,  phase: "scanning",  ms: 4000 },
-  { id: "tech",     label: "Technology fingerprinting",     sublabel: "Identifying frameworks, servers, and libraries",         icon: Cpu,         phase: "scanning",  ms: 2000 },
-  { id: "dns",      label: "DNS & email security",          sublabel: "SPF, DMARC, DKIM, and DNSSEC record validation",         icon: Mail,        phase: "scanning",  ms: 4000 },
-  { id: "recon",    label: "Subdomain & port recon",        sublabel: "Enumerating subdomains and scanning exposed ports",      icon: Network,     phase: "scanning",  ms: 6000 },
-  { id: "js",       label: "JavaScript secret scanning",    sublabel: "Inline scripts and bundles scanned for exposed keys",    icon: Code2,       phase: "scanning",  ms: 6000, deepOnly: true },
-  { id: "graphql",  label: "GraphQL endpoint discovery",    sublabel: "Introspection and field-suggestion leak testing",        icon: Layers,      phase: "scanning",  ms: 5000 },
-  { id: "baas",     label: "BaaS security analysis",        sublabel: "Supabase, Firebase, PocketBase, and Appwrite checks",   icon: Database,    phase: "scanning",  ms: 5000 },
-  { id: "docs",     label: "API documentation exposure",    sublabel: "Swagger, OpenAPI, and ReDoc endpoint discovery",        icon: FileText,    phase: "scanning",  ms: 4000 },
-  { id: "storage",  label: "Cloud storage listing",         sublabel: "Publicly listable S3, GCS, and Azure buckets",          icon: Cloud,       phase: "scanning",  ms: 4000 },
-  { id: "reprobe",  label: "Cross-verifying findings",      sublabel: "Re-probing borderline results to eliminate false positives", icon: RefreshCw, phase: "scanning", ms: 5000 },
-  { id: "ai",       label: "AI-powered analysis",           sublabel: "DeepSeek generating your remediation guide",            icon: Sparkles,    phase: "analyzing", ms: 20000, deepOnly: true },
-  { id: "score",    label: "Computing risk score & grade",  sublabel: "Prioritizing findings and building executive summary",  icon: BarChart2,   phase: "analyzing", ms: 3000 },
+  // ── Scanning phase ────────────────────────────────────────────────────────
+  {
+    id: "fetch",
+    label: "Connecting to target",
+    sublabel: "Fetching the page and following redirects",
+    icon: Globe,
+    phase: "scanning",
+    ms: 2000,
+  },
+  {
+    id: "crawl",
+    label: "Page crawl & content scan",
+    sublabel: "Deep scan crawls up to 20 inner pages; basic scans the root",
+    icon: FileSearch,
+    phase: "scanning",
+    ms: 4000,
+  },
+  {
+    id: "tls",
+    label: "HTTPS & TLS certificate",
+    sublabel: "Full TLS assessment via SSL Labs — protocols, ciphers, certificate expiry",
+    icon: Lock,
+    phase: "scanning",
+    ms: 8000,
+  },
+  {
+    id: "headers",
+    label: "Security headers review",
+    sublabel: "CSP, HSTS, X-Frame-Options, Referrer-Policy, Permissions-Policy, mixed content",
+    icon: Shield,
+    phase: "scanning",
+    ms: 3000,
+  },
+  {
+    id: "probes",
+    label: "Active HTTP security probes",
+    sublabel: "Open redirects, rate limiting, HTTP methods, sensitive file exposure, SRI, directory listing, error disclosure",
+    icon: Zap,
+    phase: "scanning",
+    ms: 5000,
+  },
+  {
+    id: "cors",
+    label: "CORS & cookie security",
+    sublabel: "Cross-origin policy audit and cookie flag review (Secure, HttpOnly, SameSite)",
+    icon: ShieldAlert,
+    phase: "scanning",
+    ms: 3000,
+  },
+  {
+    id: "tech",
+    label: "Technology fingerprinting",
+    sublabel: "Identifying 50+ frameworks, servers, CDNs, analytics tools, and JS libraries",
+    icon: Cpu,
+    phase: "scanning",
+    ms: 2000,
+  },
+  {
+    id: "cve",
+    label: "Known CVE & version audit",
+    sublabel: "Detected framework versions matched against the NVD vulnerability database",
+    icon: ShieldAlert,
+    phase: "scanning",
+    ms: 4000,
+  },
+  {
+    id: "dns",
+    label: "DNS & email security",
+    sublabel: "SPF, DMARC, DKIM, and DNSSEC record validation",
+    icon: Mail,
+    phase: "scanning",
+    ms: 4000,
+  },
+  {
+    id: "recon",
+    label: "Subdomain & port recon",
+    sublabel: "crt.sh subdomain enumeration, CNAME takeover check, dangerous port scan",
+    icon: Network,
+    phase: "scanning",
+    ms: 6000,
+  },
+  {
+    id: "sourcemaps",
+    label: "Source map & JWT exposure",
+    sublabel: "Discovering exposed .map files and analysing JWT role claims in headers and HTML",
+    icon: MapPin,
+    phase: "scanning",
+    ms: 3000,
+  },
+  {
+    id: "nextjs",
+    label: "Framework-specific probes",
+    sublabel: "Next.js __NEXT_DATA__ prop leaks, build manifest and route exposure",
+    icon: GitBranch,
+    phase: "scanning",
+    ms: 4000,
+  },
+  {
+    id: "graphql",
+    label: "GraphQL endpoint discovery",
+    sublabel: "Introspection and field-suggestion leak testing",
+    icon: Layers,
+    phase: "scanning",
+    ms: 5000,
+  },
+  {
+    id: "baas",
+    label: "BaaS security analysis",
+    sublabel: "Supabase RLS, Firebase rules, PocketBase, and Appwrite open-data checks",
+    icon: Database,
+    phase: "scanning",
+    ms: 5000,
+  },
+  {
+    id: "docs",
+    label: "API documentation exposure",
+    sublabel: "Swagger, OpenAPI, and ReDoc endpoint discovery",
+    icon: FileText,
+    phase: "scanning",
+    ms: 4000,
+  },
+  {
+    id: "storage",
+    label: "Cloud storage listing",
+    sublabel: "Publicly listable S3, GCS, and Azure Blob containers",
+    icon: Cloud,
+    phase: "scanning",
+    ms: 4000,
+  },
+  {
+    id: "js",
+    label: "JavaScript secret scanning",
+    sublabel: "Scanning inline scripts and JS bundles for exposed API keys, tokens, and credentials",
+    icon: Code2,
+    phase: "scanning",
+    ms: 6000,
+    deepOnly: true,
+  },
+  {
+    id: "pathtraversal",
+    label: "Path traversal testing",
+    sublabel: "Active directory and path traversal probing across URL parameters",
+    icon: FileSearch,
+    phase: "scanning",
+    ms: 5000,
+    deepOnly: true,
+  },
+  {
+    id: "reprobe",
+    label: "Cross-verifying findings",
+    sublabel: "Re-probing borderline results and merging duplicate root-cause findings",
+    icon: RefreshCw,
+    phase: "scanning",
+    ms: 5000,
+  },
+  // ── Analyzing phase ───────────────────────────────────────────────────────
+  {
+    id: "ai",
+    label: "AI-powered security analysis",
+    sublabel: "DeepSeek generating prioritised findings, attack chains, and your remediation guide",
+    icon: Sparkles,
+    phase: "analyzing",
+    ms: 20000,
+    deepOnly: true,
+  },
+  {
+    id: "score",
+    label: "Computing risk score & grade",
+    sublabel: "Scoring all findings and writing your executive summary",
+    icon: BarChart2,
+    phase: "analyzing",
+    ms: 3000,
+  },
 ];
 
 type StepStatus = "pending" | "running" | "done";
@@ -68,8 +251,8 @@ function computeStepStatuses(
 
   if (scanStatus === "scanning") {
     // Advance through scanning steps based on elapsed time.
-    // The last scanning step stays "running" until status transitions — we never
-    // mark it "done" while the backend still reports "scanning".
+    // The last step is always "running" while the backend still reports "scanning" —
+    // we never mark it done until the status actually transitions.
     let accumulated = 0;
     let activeIdx = scanningSteps.length - 1;
     for (let i = 0; i < scanningSteps.length; i++) {
@@ -144,18 +327,17 @@ export default function ScanProgressPage() {
 
   const tier = new URLSearchParams(search).get("tier") ?? "deep";
 
-  // Track when the analyzing phase started so we can time AI-step animation
   const analyzingStartRef = useRef<number | null>(null);
   const redirectedRef = useRef(false);
 
-  // Tick every 500ms to re-evaluate elapsed time and animate steps
+  // Tick every 500ms to advance step animations based on elapsed time
   const [, setTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTick((n) => n + 1), 500);
     return () => clearInterval(id);
   }, []);
 
-  // ── Polling ───────────────────────────────────────────────────────────────
+  // ── Status polling ────────────────────────────────────────────────────────
   const { data, isLoading, isError } = useGetScanStatus(scanId, {
     refetchInterval: (query: { state: { data?: { status?: string } } }) => {
       const s = query.state.data?.status;
@@ -171,7 +353,7 @@ export default function ScanProgressPage() {
     }
   }, [data?.status]);
 
-  // ── Redirect on complete ──────────────────────────────────────────────────
+  // ── Redirect to report on complete ───────────────────────────────────────
   useEffect(() => {
     if (data?.status === "complete" && data.reportId && !redirectedRef.current) {
       redirectedRef.current = true;
@@ -181,7 +363,7 @@ export default function ScanProgressPage() {
     return undefined;
   }, [data?.status, data?.reportId, setLocation]);
 
-  // ── Elapsed time calculations ─────────────────────────────────────────────
+  // ── Elapsed time ──────────────────────────────────────────────────────────
   const startedAt = data?.startedAt ? new Date(data.startedAt).getTime() : null;
   const scanningElapsedMs = startedAt ? Math.max(0, Date.now() - startedAt) : 0;
   const analyzingElapsedMs = analyzingStartRef.current
@@ -208,7 +390,7 @@ export default function ScanProgressPage() {
     data.status === "paid" ||
     data.status === "pending";
 
-  // ── Loading / error states ────────────────────────────────────────────────
+  // ── Loading / error guards ─────────────────────────────────────────────────
   if (isLoading && !data) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -302,13 +484,15 @@ export default function ScanProgressPage() {
                 {/* Status dot */}
                 <div className="shrink-0 w-5 flex justify-center">
                   {isDone && <CheckCircle2 className="w-4 h-4 text-green-500" />}
-                  {isRunning && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
+                  {isRunning && (
+                    <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                  )}
                   {!isDone && !isRunning && (
                     <Circle className="w-3.5 h-3.5 text-muted-foreground/30" />
                   )}
                 </div>
 
-                {/* Step icon pill */}
+                {/* Step icon */}
                 <div
                   className={cn(
                     "shrink-0 w-7 h-7 rounded-lg flex items-center justify-center",
@@ -328,7 +512,9 @@ export default function ScanProgressPage() {
                   <span
                     className={cn(
                       "text-sm",
-                      isRunning ? "font-semibold text-foreground" : "text-muted-foreground",
+                      isRunning
+                        ? "font-semibold text-foreground"
+                        : "text-muted-foreground",
                     )}
                   >
                     {step.label}
@@ -362,7 +548,11 @@ export default function ScanProgressPage() {
             <div
               className={cn(
                 "h-full rounded-full transition-all duration-700 ease-out",
-                isComplete ? "bg-green-500" : isFailed ? "bg-red-500" : "bg-primary",
+                isComplete
+                  ? "bg-green-500"
+                  : isFailed
+                    ? "bg-red-500"
+                    : "bg-primary",
               )}
               style={{ width: `${progress}%` }}
             />
@@ -381,7 +571,9 @@ export default function ScanProgressPage() {
           )}
           {isFailed && (
             <p className="text-xs text-red-400/70 text-center mt-3">
-              Something went wrong during the scan.{" "}
+              {(data as { error?: string | null })?.error
+                ? `Error: ${(data as { error?: string | null }).error}`
+                : "Something went wrong during the scan."}{" "}
               <button
                 onClick={() => setLocation("/dashboard")}
                 className="underline hover:text-red-400"
