@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Shield, LayoutDashboard, Menu, X, Plus, BookOpen } from "lucide-react";
+import { Shield, LayoutDashboard, Menu, X, Plus, BookOpen, Bell } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
@@ -61,6 +61,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <LayoutDashboard className="w-3.5 h-3.5" /> Dashboard
             </Link>
             <Link
+              href="/monitor"
+              className={cn(
+                "text-sm font-medium transition-colors hover:text-foreground flex items-center gap-1.5",
+                location === "/monitor" ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              <Bell className="w-3.5 h-3.5" /> Monitor
+            </Link>
+            <Link
               href="/learn"
               className={cn(
                 "text-sm font-medium transition-colors hover:text-foreground flex items-center gap-1.5",
@@ -105,6 +114,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
               className="px-4 py-2 text-foreground font-medium rounded-lg hover:bg-secondary flex items-center gap-2"
             >
               <LayoutDashboard className="w-4 h-4" /> Dashboard
+            </Link>
+            <Link
+              href="/monitor"
+              onClick={() => setMobileMenuOpen(false)}
+              className="px-4 py-2 text-foreground font-medium rounded-lg hover:bg-secondary flex items-center gap-2"
+            >
+              <Bell className="w-4 h-4" /> Monitor
             </Link>
             <Link
               href="/learn"
