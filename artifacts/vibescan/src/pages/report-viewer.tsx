@@ -13,6 +13,7 @@ import {
   ArrowUpDown, HelpCircle, Download, Copy, Check, Bell, ChevronDown, Search, Minus, Flag, RotateCcw,
 } from "lucide-react";
 import { cn, formatSeverity, getSeverityColors, getGradeColor } from "@/lib/utils";
+import { getAuthHeaders } from "@/lib/auth-token";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useMemo, useCallback, useEffect, createContext, useContext, useRef } from "react";
 import type { Vulnerability } from "@workspace/api-client-react";
@@ -1779,7 +1780,7 @@ export default function ReportViewer() {
 
   useEffect(() => {
     if (!report?.targetUrl) return;
-    fetch(`/api/dismissals?targetUrl=${encodeURIComponent(report.targetUrl)}`)
+    fetch(`/api/dismissals?targetUrl=${encodeURIComponent(report.targetUrl)}`, { headers: getAuthHeaders() })
       .then((r) => (r.ok ? r.json() : []))
       .then((items: DismissalEntry[]) => {
         const fpSet = new Set<string>();
@@ -1803,7 +1804,7 @@ export default function ReportViewer() {
     try {
       const res = await fetch("/api/dismissals", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({
           targetUrl,
           findingName: vuln.name,
@@ -1841,7 +1842,7 @@ export default function ReportViewer() {
       try {
         const res = await fetch(
           `/api/dismissals/${fp}?targetUrl=${encodeURIComponent(tUrl)}`,
-          { method: "DELETE" },
+          { method: "DELETE", headers: getAuthHeaders() },
         );
         if (!res.ok) {
           setDismissedFps((prev) => new Set([...prev, fp]));
