@@ -57,26 +57,66 @@ function extractInlineJs(html: string): string {
 interface SupabaseConfig {
   url: string;
   anonKey: string;
+  /** Decoded JWT role claim: "anon" (public-by-design) or "service_role" (Critical). */
+  jwtRole?: string;
+  /** Key format: legacy JWT, or new June 2025 prefixed format. */
+  keyFormat?: "legacy-jwt" | "sb-secret" | "sb-publishable";
+}
+
+/**
+ * Decodes the role claim from a Supabase JWT (base64url payload).
+ * Supabase JWTs include a `role` claim: "anon" or "service_role".
+ * service_role carries BYPASSRLS and is a de-facto admin credential.
+ */
+function decodeJwtRole(token: string): string | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const padded = parts[1]!.replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(Buffer.from(padded, "base64").toString("utf-8")) as Record<string, unknown>;
+    return typeof payload["role"] === "string" ? payload["role"] : null;
+  } catch {
+    return null;
+  }
 }
 
 function detectSupabase(content: string): SupabaseConfig | null {
+  // ── New key formats (Supabase June 2025+) ────────────────────────────────
+  // sb_secret_* = service-role equivalent, Critical if in frontend
+  const secretKeyMatch = /\b(sb_secret_[a-zA-Z0-9_-]{20,})\b/.exec(content);
+  if (secretKeyMatch) {
+    const urlMatch = /(https:\/\/[a-z0-9]+\.supabase\.co)/.exec(content);
+    return { url: urlMatch?.[1] ?? "", anonKey: secretKeyMatch[1], keyFormat: "sb-secret" };
+  }
+
+  // sb_publishable_* = anon-key equivalent, public-by-design → Info only
+  const publishableMatch = /\b(sb_publishable_[a-zA-Z0-9_-]{20,})\b/.exec(content);
+  if (publishableMatch) {
+    const urlMatch = /(https:\/\/[a-z0-9]+\.supabase\.co)/.exec(content);
+    return { url: urlMatch?.[1] ?? "", anonKey: publishableMatch[1], keyFormat: "sb-publishable" };
+  }
+
+  // ── Legacy JWT key format ─────────────────────────────────────────────────
   const urlMatch = /(https:\/\/[a-z0-9]+\.supabase\.co)/.exec(content);
   if (!urlMatch) return null;
 
-  // Anon key: must be labeled with a Supabase-specific variable name to avoid
-  // matching session/auth JWTs that are present on any authenticated page.
+  // Key must be labeled with a Supabase-specific variable name — no generic JWTs
   const keyPatterns = [
     /(?:anon|anonKey|SUPABASE_ANON_KEY|supabaseKey|SUPABASE_KEY|supabase[_-]?anon)\s*[:=,]\s*["'`]?(eyJ[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,})["'`]?/i,
     /createClient\s*\([^)]*["'`](https:\/\/[a-z0-9]+\.supabase\.co)["'`]\s*,\s*["'`](eyJ[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,})["'`]/i,
   ];
   for (const rx of keyPatterns) {
     const m = rx.exec(content);
-    // createClient pattern captures url as group 1 and key as group 2
+    let key: string | undefined;
+    let url = urlMatch[1];
     if (rx.source.includes("createClient")) {
-      if (m?.[2]) return { url: m[1] ?? urlMatch[1], anonKey: m[2] };
+      if (m?.[2]) { key = m[2]; url = m[1] ?? url; }
     } else {
-      if (m?.[1]) return { url: urlMatch[1], anonKey: m[1] };
+      if (m?.[1]) key = m[1];
     }
+    if (!key) continue;
+    const jwtRole = decodeJwtRole(key) ?? undefined;
+    return { url, anonKey: key, jwtRole, keyFormat: "legacy-jwt" };
   }
   return null;
 }
@@ -87,14 +127,78 @@ const SUPABASE_TABLES = [
 ];
 
 async function probeSupabase(cfg: SupabaseConfig): Promise<ScanVulnerability[]> {
+  const found: ScanVulnerability[] = [];
+
+  // ── New key format: sb_publishable_* ─────────────────────────────────────
+  // Public-by-design (equivalent to anon key). Flag as Info so the user knows
+  // it was detected and is working as intended — security comes from RLS, not key secrecy.
+  if (cfg.keyFormat === "sb-publishable") {
+    found.push(vuln({
+      name: "Supabase Publishable Key Detected (by-design)",
+      severity: "info",
+      category: "BaaS Configuration",
+      description:
+        "A Supabase publishable key (sb_publishable_…) was found in client-side JavaScript. " +
+        "This is the expected format introduced in June 2025 — publishable keys are intentionally " +
+        "public and identify your project. Security is enforced entirely by Row Level Security (RLS) " +
+        "policies on your tables, not by keeping this key secret.",
+      evidence: `Key format: sb_publishable_… detected in page JavaScript\nSupabase URL: ${cfg.url || "detected"}`,
+      solution:
+        "No action required for the key itself. Verify that RLS is enabled on every table in your " +
+        "Supabase project (Dashboard → Table Editor → toggle 'Enable RLS') and that your policies " +
+        "restrict access appropriately. Run this scan's full deep tier to check for open tables.",
+      cweId: "CWE-200",
+      cvssScore: 0,
+      confidence: 99,
+    }));
+    // Still probe tables even with publishable key — RLS misconfiguration is the real risk
+  }
+
+  // ── New key format: sb_secret_* or legacy service_role JWT ────────────────
+  // These bypass RLS (BYPASSRLS privilege) and are de-facto admin credentials.
+  // They must NEVER appear in frontend JavaScript.
+  const isServiceRole =
+    cfg.keyFormat === "sb-secret" ||
+    cfg.jwtRole === "service_role";
+
+  if (isServiceRole) {
+    const keyLabel = cfg.keyFormat === "sb-secret" ? "sb_secret_…" : "service_role JWT";
+    found.push(vuln({
+      name: "Supabase Service Role / Admin Key Exposed in Frontend",
+      severity: "critical",
+      category: "BaaS Misconfiguration",
+      description:
+        `A Supabase ${keyLabel} was found in client-side JavaScript. ` +
+        "This key carries the BYPASSRLS privilege — it ignores all Row Level Security policies " +
+        "and grants unrestricted read/write/delete access to every table in your database. " +
+        "Anyone who visits your site has full admin access to your Supabase project.",
+      evidence:
+        `Key type: ${keyLabel} detected in page JavaScript\n` +
+        (cfg.url ? `Supabase project: ${cfg.url}\n` : "") +
+        (cfg.jwtRole === "service_role" ? "JWT role claim decoded: service_role (BYPASSRLS)" : "Key prefix: sb_secret_ (admin-tier key)"),
+      solution:
+        "EMERGENCY: Rotate your Supabase service role key immediately in the Supabase Dashboard → Settings → API. " +
+        "Remove the key from all frontend code. " +
+        "Service role keys must only be used in trusted server environments (server-side API routes, " +
+        "edge functions with proper auth). Use the anon/publishable key for all client-side operations " +
+        "and enforce RLS policies for access control.",
+      cweId: "CWE-798",
+      cvssScore: 10.0,
+      confidence: 97,
+    }));
+  }
+
+  // ── Table probing (behavioral confirmation) ───────────────────────────────
+  // Skip table probing if we have no URL to probe
+  if (!cfg.url) return found;
+
   const headers = {
     apikey: cfg.anonKey,
     Authorization: `Bearer ${cfg.anonKey}`,
   };
-  const found: ScanVulnerability[] = [];
 
   for (const table of SUPABASE_TABLES) {
-    if (found.length >= 3) break;
+    if (found.filter((f) => f.name.startsWith("Supabase RLS")).length >= 3) break;
     const r = await safeGet(`${cfg.url}/rest/v1/${table}?select=*&limit=1`, headers);
     if (!r || r.status !== 200) continue;
 
@@ -106,24 +210,30 @@ async function probeSupabase(cfg: SupabaseConfig): Promise<ScanVulnerability[]> 
       hasRows = r.body.startsWith("[{");
     }
 
+    // For service_role, ALL table reads are critical (BYPASSRLS means no RLS applies at all)
+    const tableBaseSeverity = isServiceRole ? "critical" : (hasRows ? "critical" : "high");
+
     found.push(vuln({
       name: `Supabase RLS Disabled — Unauthenticated Read on '${table}'`,
-      severity: hasRows ? "critical" : "high",
+      severity: tableBaseSeverity,
       category: "BaaS Misconfiguration",
       description:
-        `The Supabase table '${table}' is readable using only the public anon key, ` +
-        `with no authentication required. ` +
+        `The Supabase table '${table}' is readable using only the public ` +
+        (isServiceRole ? "service role key (BYPASSRLS — all RLS policies bypassed)" : "anon key, with no authentication required") + ". " +
         (hasRows
           ? "Records were returned, confirming live data exposure."
           : "HTTP 200 was returned; RLS is disabled or permits anonymous reads.") +
         " Any visitor to your site can query this table.",
-      evidence: `GET ${cfg.url}/rest/v1/${table}?select=*&limit=1\napikey: <anon_key>\nHTTP ${r.status}` +
+      evidence: `GET ${cfg.url}/rest/v1/${table}?select=*&limit=1\napikey: <${isServiceRole ? "service_role" : "anon"}_key>\nHTTP ${r.status}` +
         (hasRows ? `\n${r.body.slice(0, 300)}` : ""),
       solution:
-        "Enable Row Level Security (RLS) on every Supabase table: Dashboard → Table Editor → toggle " +
-        "'Enable RLS'. Create policies restricting reads to authenticated users: " +
-        "`CREATE POLICY reads_own ON public." + table + " FOR SELECT USING (auth.uid() = user_id);`. " +
-        "Without RLS, the public anon key grants full table access.",
+        isServiceRole
+          ? "Remove the service role key from frontend code immediately (see finding above). Once fixed, " +
+            "enable RLS on this table as defense-in-depth."
+          : "Enable Row Level Security (RLS) on every Supabase table: Dashboard → Table Editor → toggle " +
+            "'Enable RLS'. Create policies restricting reads to authenticated users: " +
+            "`CREATE POLICY reads_own ON public." + table + " FOR SELECT USING (auth.uid() = user_id);`. " +
+            "Without RLS, the public anon key grants full table access.",
       cweId: "CWE-284",
       cvssScore: hasRows ? 9.1 : 7.5,
       confidence: hasRows ? 95 : 72,

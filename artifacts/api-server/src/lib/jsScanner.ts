@@ -155,6 +155,60 @@ const SECRET_PATTERNS: SecretPattern[] = [
     validate: (m) => !/SKXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX/.test(m),
   },
 
+  // ── Supabase (new June 2025 key formats) ─────────────────────────────────
+  {
+    name: "Supabase Service Role Key Exposed (sb_secret_)",
+    // sb_secret_* = admin-tier key with BYPASSRLS — never belongs in frontend code
+    pattern: /\bsb_secret_[a-zA-Z0-9_-]{20,}\b/,
+    severity: "critical", cvssScore: 10.0, cweId: "CWE-798",
+    description:
+      "A Supabase secret key (sb_secret_…) was found in client-side JavaScript. " +
+      "This is an admin-tier credential introduced in the June 2025 key format update — it carries " +
+      "BYPASSRLS privilege, ignoring all Row Level Security policies and granting unrestricted " +
+      "read/write/delete access to your entire database.",
+    solution:
+      "EMERGENCY: Rotate this key immediately in Supabase Dashboard → Settings → API. " +
+      "Remove it from all frontend code. Use the publishable key (sb_publishable_…) for " +
+      "client-side operations and enforce access via RLS policies.",
+  },
+  // Note: sb_publishable_* keys are NOT flagged — they are public-by-design (anon-tier).
+  // Security comes from RLS policies, not key secrecy. The BaaS probe handles table checks.
+
+  // ── Sentry ────────────────────────────────────────────────────────────────
+  // Sentry DSNs (https://xxx@sentry.io/project) are INTENTIONALLY public — they are
+  // ingest-only identifiers. We deliberately do NOT flag them as findings.
+  // Only Sentry auth tokens (sntrys_* or the legacy hex format) grant API access.
+  {
+    name: "Sentry Auth Token Exposed",
+    // New format: sntrys_eyJ… (JWT-style, issued since ~2024)
+    pattern: /\bsntrys_eyJ[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{10,}\b/,
+    severity: "critical", cvssScore: 8.5, cweId: "CWE-798",
+    description:
+      "A Sentry authentication token was found in client-side JavaScript. Unlike a Sentry DSN " +
+      "(which is public/ingest-only), an auth token grants full API access — reading all events, " +
+      "issues, releases, and project settings. It can also be used to exfiltrate error messages " +
+      "that may contain sensitive user data.",
+    solution:
+      "Revoke this token immediately in Sentry Settings → Auth Tokens. " +
+      "Auth tokens are server-side only — they must never appear in frontend bundles. " +
+      "If you need to use Sentry from the frontend, use only the DSN (project identifier), " +
+      "which is safe to expose.",
+  },
+  {
+    name: "Sentry Auth Token Exposed (legacy format)",
+    // Legacy format: 64-char hex string in auth token context
+    pattern: /(?:SENTRY_AUTH_TOKEN|sentry[_-]?token|sentry[_-]?auth)\s*[:=]\s*["']([a-f0-9]{64})["']/i,
+    severity: "critical", cvssScore: 8.5, cweId: "CWE-798",
+    description:
+      "A Sentry authentication token (legacy 64-char hex format) was found in client-side JavaScript. " +
+      "This grants full API access to your Sentry organization — reading errors, issues, user data, " +
+      "and project configurations.",
+    solution:
+      "Revoke this token in Sentry Settings → Auth Tokens and remove it from frontend code. " +
+      "Auth tokens must be server-side only.",
+    validate: (m) => !/EXAMPLE|PLACEHOLDER|YOUR_TOKEN|x{16,}/i.test(m),
+  },
+
   // ── SendGrid / Email ──────────────────────────────────────────────────────
   {
     name: "SendGrid API Key Exposed",

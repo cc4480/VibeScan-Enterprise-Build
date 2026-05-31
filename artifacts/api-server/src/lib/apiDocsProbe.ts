@@ -219,6 +219,56 @@ const API_DOC_PATHS: ApiDocPath[] = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SPA CATCH-ALL ROUTING DETECTION
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Detects SPA catch-all routing (React/Vite/Next.js apps that return HTTP 200
+ * for every path). Fingerprints the response to a guaranteed-nonexistent path
+ * so we can suppress false positives from path-based probing.
+ *
+ * If the app is a SPA catch-all, every probed path like /swagger or /openapi.json
+ * gets the same HTML shell with HTTP 200 — body length and <title> will match.
+ */
+interface CatchAllFingerprint {
+  bodyLength: number;
+  title: string;
+}
+
+async function detectCatchAll(origin: string): Promise<CatchAllFingerprint | null> {
+  const nonce = `vibescan-spacheck-${Math.random().toString(36).slice(2, 10)}-notfound`;
+  const r = await safeGet(`${origin}/${nonce}`);
+  if (!r || r.status !== 200) return null;
+  const titleMatch = /<title[^>]*>([^<]{1,200})<\/title>/i.exec(r.body);
+  return {
+    bodyLength: r.body.length,
+    title: titleMatch?.[1]?.trim() ?? "",
+  };
+}
+
+/**
+ * Returns true when a probe response looks like the SPA catch-all shell.
+ * Two signals — body size within 3% of baseline, or exact title match.
+ * Either signal alone is sufficient since SPAs are very consistent.
+ */
+function matchesCatchAll(body: string, catchAll: CatchAllFingerprint | null): boolean {
+  if (!catchAll || catchAll.bodyLength === 0) return false;
+
+  // Signal 1: body length within 3% — the HTML shell is always the same size
+  const diff = Math.abs(body.length - catchAll.bodyLength) / catchAll.bodyLength;
+  if (diff < 0.03) return true;
+
+  // Signal 2: same <title> element — SPAs have one static title for all routes
+  if (catchAll.title.length > 3) {
+    const titleMatch = /<title[^>]*>([^<]{1,200})<\/title>/i.exec(body);
+    const title = titleMatch?.[1]?.trim() ?? "";
+    if (title.length > 0 && title === catchAll.title) return true;
+  }
+
+  return false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MAIN EXPORT
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -226,11 +276,20 @@ export async function runApiDocsProbe(targetUrl: string): Promise<ScanVulnerabil
   let origin: string;
   try { origin = new URL(targetUrl).origin; } catch { return []; }
 
+  // Baseline probe: detect SPA catch-all routing BEFORE probing real paths.
+  // If the app returns 200 + its HTML shell for a random nonexistent path, every
+  // subsequent 200 response must be checked against this baseline.
+  const catchAll = await detectCatchAll(origin).catch(() => null);
+
   const results = await Promise.allSettled(
     API_DOC_PATHS.map(async ({ path, label, validate }) => {
       const url = origin + path;
       const r = await safeGet(url);
       if (!r || r.status !== 200) return null;
+
+      // Suppress if response is the SPA catch-all shell — not a real doc endpoint
+      if (matchesCatchAll(r.body, catchAll)) return null;
+
       if (!validate(r.body, r.ct)) return null;
 
       const isSpec =
