@@ -192,15 +192,67 @@ export function corroborateMerge(vulns: ScanVulnerability[]): ScanVulnerability[
 
 // ─── Auto-enrichment pass ─────────────────────────────────────────────────────
 
+// Frameworks that indicate a vibe-coded / AI-generated stack.
+// When detected, confidence is boosted on findings that AI tools commonly miss.
+const VIBE_FRAMEWORKS = new Set([
+  "react", "vue", "next.js", "nuxt", "vite", "svelte", "sveltekit",
+  "remix", "angular", "astro", "gatsby", "vercel", "netlify",
+]);
+
+/**
+ * Returns true when the detected tech stack looks like a vibe-coded /
+ * AI-generated application (React, Vue, Next.js, Vite, etc.).
+ */
+function isVibeCodedStack(technologies: string[]): boolean {
+  const joined = technologies.join(" ").toLowerCase();
+  return [...VIBE_FRAMEWORKS].some((f) => joined.includes(f));
+}
+
+/**
+ * For vibe-coded stacks, boost confidence on findings that AI tools
+ * most commonly introduce. Values from the report: 91.5% of AI-generated apps
+ * have at least one critical vulnerability; the #1 patterns are exposed secrets,
+ * missing CSP, client-side-only auth, and unauthenticated API endpoints.
+ */
+function vibeStackConfidenceBoost(v: ScanVulnerability): number {
+  const name = v.name.toLowerCase();
+  const cat  = v.category.toLowerCase();
+
+  // Exposed secrets — AI tools often put API keys in VITE_ env vars or inline them
+  if (cat.includes("secret") || cat.includes("credential")) return 15;
+
+  // Missing / weak CSP — AI-generated frontends almost never set CSP
+  if (/content.security.policy|(?<!\w)csp(?!\w)/i.test(name)) return 12;
+
+  // CORS wildcard — common in vibe-coded backends that expose APIs
+  if (name.includes("cors") || name.includes("wildcard origin")) return 10;
+
+  // Authentication / session findings — client-side-only auth is ubiquitous
+  if (/auth|session|login|jwt|token/i.test(name) && !name.includes("samesite")) return 8;
+
+  // Missing security headers — vibe-coded servers usually ship with no security headers
+  if (cat.includes("security header") || name.includes("header")) return 5;
+
+  return 0;
+}
+
 /**
  * Post-processing pass run by the scanner orchestrator.
  * Assigns confidence to every vulnerability that doesn't already have one,
  * inferring the detection class from available finding metadata.
+ * If `technologies` is supplied and the stack is vibe-coded, findings that
+ * AI tools commonly introduce receive an additional confidence boost.
  */
-export function autoEnrichConfidence(vulns: ScanVulnerability[]): ScanVulnerability[] {
+export function autoEnrichConfidence(
+  vulns: ScanVulnerability[],
+  technologies: string[] = [],
+): ScanVulnerability[] {
+  const vibeCoded = isVibeCodedStack(technologies);
+
   return vulns.map((v) => {
-    if (v.confidence != null) return v;
-    return { ...v, confidence: inferConfidence(v) };
+    const base = v.confidence ?? inferConfidence(v);
+    const boost = vibeCoded ? vibeStackConfidenceBoost(v) : 0;
+    return { ...v, confidence: Math.min(100, base + boost) };
   });
 }
 

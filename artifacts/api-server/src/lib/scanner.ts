@@ -813,7 +813,7 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
     server,
     tlsGrade,
     technologies,
-    vulnerabilities: autoEnrichConfidence(vulnerabilities),
+    vulnerabilities: autoEnrichConfidence(vulnerabilities, technologies),
     requestDurationMs,
     rawHeaders,
     pagesScanned: crawlResult.pagesVisited,

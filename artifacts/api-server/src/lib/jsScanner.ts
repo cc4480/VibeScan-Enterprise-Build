@@ -315,6 +315,92 @@ const SECRET_PATTERNS: SecretPattern[] = [
     },
   },
 
+  // ── OpenAI ────────────────────────────────────────────────────────────────
+  {
+    name: "OpenAI API Key Exposed",
+    // New project-scoped format: sk-proj-... (55+ chars)
+    // Legacy format: sk-[20 random chars]T3BlbkFJ[48 chars]
+    pattern: /\bsk-(?:proj-[a-zA-Z0-9_-]{50,}|[a-zA-Z0-9]{20}T3BlbkFJ[a-zA-Z0-9_-]{40,})\b/,
+    severity: "critical", cvssScore: 9.8, cweId: "CWE-798",
+    description: "An OpenAI API key was found in client-side JavaScript. This is the #1 secret leaked in AI-generated (vibe-coded) apps. Anyone who visits the page can copy this key and make API calls billed to your account — running up unlimited charges, accessing uploaded files, and completely bypassing your application logic.",
+    solution: "IMMEDIATELY revoke this key at platform.openai.com/api-keys. Never put OpenAI keys in frontend code or prefix them with VITE_/REACT_APP_. Move all AI API calls to a backend server route (e.g. /api/chat) where the key stays in a server-side environment variable, unreachable by browsers.",
+    validate: (m) => !/(EXAMPLE|YOUR.KEY|sk-xxxx|placeholder)/i.test(m),
+  },
+
+  // ── Anthropic ─────────────────────────────────────────────────────────────
+  {
+    name: "Anthropic (Claude) API Key Exposed",
+    pattern: /\bsk-ant-(?:api03|admin|[a-zA-Z0-9]{4})-[a-zA-Z0-9_-]{90,}\b/,
+    severity: "critical", cvssScore: 9.8, cweId: "CWE-798",
+    description: "An Anthropic (Claude) API key was found in client-side JavaScript. This grants full API access — any visitor to your site can make Claude requests billed to your account, access your usage data, and potentially reach organization-level settings.",
+    solution: "Immediately revoke this key at console.anthropic.com/settings/keys. Move all Claude API calls to a backend function. Never expose Anthropic keys in frontend code or VITE_/REACT_APP_ environment variables.",
+  },
+
+  // ── Resend ────────────────────────────────────────────────────────────────
+  {
+    name: "Resend API Key Exposed",
+    pattern: /\bre_[a-zA-Z0-9]{32,}\b/,
+    severity: "high", cvssScore: 8.1, cweId: "CWE-798",
+    description: "A Resend API key was found in client-side JavaScript. This allows anyone to send emails from your verified domain — enabling phishing campaigns, spam, and permanent damage to your sending reputation.",
+    solution: "Revoke this key at resend.com/api-keys. Move all email sending to a backend API route. Resend keys must never appear in frontend bundles.",
+    validate: (m) => !/(EXAMPLE|YOUR.KEY|re_xxxx|test)/i.test(m) && m.length > 10,
+  },
+
+  // ── Replicate ─────────────────────────────────────────────────────────────
+  {
+    name: "Replicate API Token Exposed",
+    pattern: /\br8_[a-zA-Z0-9]{40}\b/,
+    severity: "high", cvssScore: 8.1, cweId: "CWE-798",
+    description: "A Replicate API token was found in client-side JavaScript. Anyone can run AI models billed to your account — enabling cost exhaustion attacks and unauthorized use of any model you have access to.",
+    solution: "Revoke this token at replicate.com/account/api-tokens. Move Replicate calls to a backend proxy endpoint. Never include API tokens in frontend JavaScript.",
+  },
+
+  // ── ElevenLabs ───────────────────────────────────────────────────────────
+  {
+    name: "ElevenLabs API Key Exposed",
+    pattern: /(?:ELEVENLABS(?:_API)?_KEY|xi[_-]api[_-]key)\s*[:=]\s*["'`]?([a-f0-9]{32})["'`]?/i,
+    severity: "high", cvssScore: 8.1, cweId: "CWE-798",
+    description: "An ElevenLabs API key was found in client-side JavaScript. This grants access to voice synthesis billed per character — attackers can exhaust your credit and use cloned voices associated with your account.",
+    solution: "Revoke this key in ElevenLabs profile settings. Move all TTS/voice synthesis calls to a backend proxy. API keys must never appear in frontend code.",
+  },
+
+  // ── Vite / Create React App / Next.js env var leaks ──────────────────────
+  {
+    // Vite inlines VITE_* vars, CRA inlines REACT_APP_*, Next.js inlines NEXT_PUBLIC_*
+    // into the production bundle — making them publicly visible in page source.
+    // This is the #1 security mistake in vibe-coded apps.
+    name: "Secret Environment Variable Leaked in Frontend Bundle",
+    pattern: /["'`]((?:VITE|REACT_APP|NEXT_PUBLIC)_[A-Z][A-Z0-9_]*(?:KEY|SECRET|TOKEN|PASS(?:WORD)?|API|AUTH|PRIVATE|CREDENTIAL)[A-Z0-9_]*)["'`]\s*:\s*["'`]([^"'`\s]{10,})["'`]/,
+    severity: "critical", cvssScore: 9.5, cweId: "CWE-312",
+    description: "A secret-sounding environment variable was found baked into the frontend JavaScript bundle. Build tools (Vite, Create React App, Next.js) automatically inline env vars prefixed with VITE_/REACT_APP_/NEXT_PUBLIC_ into the production bundle — making them publicly readable by anyone who inspects the page source. This is the #1 security mistake in vibe-coded apps.",
+    solution: "IMMEDIATELY: Remove this variable from your .env file and revoke/rotate any exposed secrets. GOING FORWARD: Only prefix env vars with VITE_/REACT_APP_/NEXT_PUBLIC_ if they are safe to be fully public (like a Stripe publishable key or Firebase project ID). Move ALL secret keys to a backend API route — the key lives in a server-side .env file, the frontend calls /api/your-endpoint, and the actual secret never reaches the browser.",
+    validate: (m) => {
+      const valMatch = /:\s*["'`]([^"'`\s]+)["'`]/.exec(m);
+      if (!valMatch) return false;
+      const val = valMatch[1] ?? "";
+      if (/PLACEHOLDER|YOUR_|EXAMPLE|xxx|yyy|zzz|<|>|\*{3}/i.test(val)) return false;
+      return shannonEntropy(val) >= 3.0;
+    },
+  },
+
+  // ── Database connection URL with credentials ──────────────────────────────
+  {
+    name: "Database Connection URL with Credentials Exposed",
+    pattern: /(?:["'`]|[:=]\s*)(?:postgresql|postgres|mysql|mongodb(?:\+srv)?):\/\/[^:/"'`\s]+:[^@/"'`\s]+@[a-z0-9][^"'`\s]{8,}/i,
+    severity: "critical", cvssScore: 10.0, cweId: "CWE-312",
+    description: "A database connection URL containing credentials was found in client-side JavaScript. This gives anyone who views your page direct read/write access to your database. In AI-generated apps, database URLs are frequently leaked by accidentally using VITE_DATABASE_URL or similar env var names.",
+    solution: "EMERGENCY: Immediately rotate your database credentials. Remove the connection URL from all frontend code. Database connections must only be made from server-side code. If using Supabase/Neon/PlanetScale, use their client libraries on the frontend with proper Row Level Security — never pass the full connection URL to the browser.",
+    validate: (m) => {
+      if (/example|sample|localhost:5432\/test|127\.0\.0\.1/i.test(m)) return false;
+      // Require an actual password (non-empty, non-placeholder after the colon)
+      const passMatch = /:\/\/[^:]+:([^@]+)@/.exec(m);
+      if (!passMatch) return false;
+      const pass = passMatch[1] ?? "";
+      if (pass === "" || /password|passwd|pass|secret|changeme|yourpass/i.test(pass)) return false;
+      return pass.length >= 8;
+    },
+  },
+
   // ── Mapbox ────────────────────────────────────────────────────────────────
   {
     name: "Mapbox Public Token — Restrict to Your Domain",
