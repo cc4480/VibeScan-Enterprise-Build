@@ -339,10 +339,13 @@ export default function ScanProgressPage() {
 
   // ── Status polling ────────────────────────────────────────────────────────
   const { data, isLoading, isError } = useGetScanStatus(scanId, {
-    refetchInterval: (query: { state: { data?: { status?: string } } }) => {
-      const s = query.state.data?.status;
-      if (!s || s === "complete" || s === "failed") return false;
-      return 2000;
+    query: {
+      refetchInterval: (query) => {
+        const s = (query.state.data as { status?: string } | undefined)
+          ?.status;
+        if (s === "complete" || s === "failed") return false;
+        return 2000;
+      },
     },
   });
 
@@ -571,8 +574,8 @@ export default function ScanProgressPage() {
           )}
           {isFailed && (
             <p className="text-xs text-red-400/70 text-center mt-3">
-              {(data as { error?: string | null })?.error
-                ? `Error: ${(data as { error?: string | null }).error}`
+              {data?.error
+                ? `Error: ${data.error}`
                 : "Something went wrong during the scan."}{" "}
               <button
                 onClick={() => setLocation("/dashboard")}
