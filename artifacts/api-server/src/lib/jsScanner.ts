@@ -11,6 +11,22 @@
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 
+/**
+ * Shannon entropy of a string — bits per character.
+ * Real secret keys score > 3.5; placeholders / repeating patterns score < 3.0.
+ * Used to filter low-entropy false positives in generic secret patterns.
+ */
+function shannonEntropy(s: string): number {
+  if (s.length === 0) return 0;
+  const freq: Record<string, number> = {};
+  for (const c of s) freq[c] = (freq[c] ?? 0) + 1;
+  const len = s.length;
+  return -Object.values(freq).reduce((sum, f) => {
+    const p = f / len;
+    return sum + p * Math.log2(p);
+  }, 0);
+}
+
 const JS_FETCH_TIMEOUT_MS = 10_000;
 const MAX_EXTERNAL_SCRIPTS = 8;
 const MAX_SCRIPT_SIZE_BYTES = 512_000; // 512 KB per file
@@ -149,10 +165,13 @@ const SECRET_PATTERNS: SecretPattern[] = [
   },
   {
     name: "Mailchimp API Key Exposed",
-    pattern: /[0-9a-f]{32}-us[0-9]{1,2}/,
+    // Require an explicit key-assignment context — the bare hex-us pattern is too broad
+    // (any 32-hex string followed by -us[1-2] could match unrelated identifiers).
+    pattern: /(?:apiKey|api_key|mc_api|mailchimp(?:_key|Key|_api)?|MAILCHIMP_KEY)\s*[:=,\s]+["'`]?([0-9a-f]{32}-us[0-9]{1,2})["'`]?/i,
     severity: "high", cvssScore: 7.5, cweId: "CWE-798",
-    description: "A Mailchimp API key was found in client-side JavaScript. This provides full access to your email lists, campaigns, and subscriber data.",
-    solution: "Rotate this API key in the Mailchimp account settings. Move all Mailchimp API calls to a backend service.",
+    description: "A Mailchimp API key was found in client-side JavaScript. This provides full access to your email lists, campaigns, and subscriber data — including the ability to export all subscriber emails.",
+    solution: "Rotate this API key in the Mailchimp account settings (Account → Extras → API Keys). Move all Mailchimp API calls to a backend service. Never expose email marketing credentials in frontend code.",
+    validate: (m) => /[0-9a-f]{32}-us[0-9]{1,2}/.test(m),
   },
 
   // ── Cryptographic Keys ────────────────────────────────────────────────────
@@ -189,44 +208,68 @@ const SECRET_PATTERNS: SecretPattern[] = [
   // ── Generic Secrets ───────────────────────────────────────────────────────
   {
     name: "Hardcoded Password in Source Code",
-    pattern: /(?:password|passwd|pwd)\s*[:=]\s*["'](?!.*(?:EXAMPLE|PLACEHOLDER|YOUR_|<|>|\*{3}|\.{3}|password))[^"']{8,}["']/i,
+    // Excludes HTML attribute contexts (placeholder="", type="password") and
+    // JSON schema / documentation patterns (description, label, hint).
+    pattern: /(?:^|[,{;\n])\s*(?:password|passwd|pwd)\s*[:=]\s*["'][^"']{8,}["']/im,
     severity: "high", cvssScore: 7.5, cweId: "CWE-259",
     description: "A hardcoded password was found in client-side JavaScript source code. Hardcoded credentials are accessible to anyone who views the source, persist forever unless code is redeployed, and cannot be rotated without a new deployment.",
     solution: "Remove all hardcoded credentials. Use environment variables on the server side. For client-side authentication, let users provide their own credentials — never hardcode service accounts in frontend code.",
     validate: (m) => {
-      const bad = /password\s*[:=]\s*["'](password|admin|test|123|secret|changeme|letmein|abc123)["']/i.test(m);
-      return !bad;
+      // Exclude obvious HTML attributes and placeholder/example strings
+      if (/placeholder|type\s*=\s*["']password|label|description|hint/i.test(m)) return false;
+      if (/["'](password|passwd|admin|test|secret|changeme|letmein|abc123|hunter2|qwerty|pass|1234|0000|blank|empty|null|undefined)["']/i.test(m)) return false;
+      // Extract the value and check it's not a placeholder
+      const valMatch = /[:=]\s*["']([^"']+)["']/.exec(m);
+      if (!valMatch) return false;
+      const val = valMatch[1];
+      if (/EXAMPLE|PLACEHOLDER|YOUR_|<|>|\*{3,}|\.{3,}|xxx|yyy|zzz/i.test(val)) return false;
+      // Require reasonable entropy — real passwords aren't all-same-char repeating strings
+      return shannonEntropy(val) >= 2.5;
     },
   },
   {
     name: "Hardcoded Secret Key or Token in Source",
-    pattern: /(?:secret|api_key|apikey|auth_token|access_token)\s*[:=]\s*["'](?!.*(?:EXAMPLE|PLACEHOLDER|YOUR_|<|>|\*{3}|\.{3}))[a-zA-Z0-9\-_+/]{16,}["']/i,
+    pattern: /(?:secret|api_key|apikey|auth_token|access_token)\s*[:=]\s*["']([a-zA-Z0-9\-_+/]{16,})["']/i,
     severity: "medium", cvssScore: 6.5, cweId: "CWE-798",
     description: "A hardcoded secret key or token was found in client-side JavaScript. Keys and tokens embedded in frontend code are accessible to anyone who visits the site.",
     solution: "Move API keys and tokens to the backend. Use short-lived, scoped tokens issued by your backend for any client-side API calls.",
     validate: (m) => {
-      // Filter obvious placeholders
-      return !/your[_-]?(api[_-]?)?key|insert[_-]?key|replace[_-]?me|XXXXXXXX|1234567890/i.test(m);
+      if (/your[_-]?(api[_-]?)?key|insert[_-]?key|replace[_-]?me|XXXXXXXX/i.test(m)) return false;
+      if (/EXAMPLE|PLACEHOLDER|YOUR_|<|>|\*{3,}|\.{3,}/i.test(m)) return false;
+      // Extract the value portion and validate entropy
+      const valMatch = /[:=]\s*["']([^"']+)["']/.exec(m);
+      if (!valMatch) return false;
+      // Low-entropy strings (all same chars, simple sequences) are likely placeholders
+      return shannonEntropy(valMatch[1]) >= 3.0;
     },
   },
 
   // ── Internal infrastructure ───────────────────────────────────────────────
   {
     name: "Internal IP Address Exposed",
-    pattern: /\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b/,
+    // Require code-like context — IP must appear after an assignment/string delimiter,
+    // not as a lone number that happens to look like an RFC-1918 address.
+    pattern: /(?:["'`]|host\s*[:=]\s*["'`]?|url\s*[:=]\s*["'`]?|endpoint\s*[:=]\s*["'`]?|server\s*[:=]\s*["'`]?)\s*((?:10|172\.(?:1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}\.\d{1,3})/,
     severity: "low", cvssScore: 3.1, cweId: "CWE-200",
-    description: "Internal/private IP addresses were found in JavaScript source code. This reveals internal network topology, making it easier for attackers who gain any foothold to map and attack internal systems.",
-    solution: "Remove internal IP references from client-side code. Use environment-based configuration to keep internal infrastructure details server-side. Review your build process to ensure internal config doesn't leak into production bundles.",
-    validate: (m) => !/(localhost|127\.0\.0\.1|0\.0\.0\.0)/.test(m),
+    description: "An internal/private IP address was found referenced in JavaScript source code in a configuration context. This reveals internal network topology, making lateral movement easier if an attacker gains any foothold.",
+    solution: "Remove internal IP references from client-side code. Replace hardcoded IPs with environment-variable-driven configuration on the server side. Review your build process to ensure internal infrastructure details don't leak into production bundles.",
+    validate: (m) => {
+      // Skip clearly benign/example contexts
+      if (/example|sample|demo|placeholder|comment|doc|test/i.test(m)) return false;
+      if (/192\.168\.1\.(1|0|255)\b/.test(m) && /(?:gateway|router|default)/i.test(m)) return false;
+      return true;
+    },
   },
 
   // ── Mapbox ────────────────────────────────────────────────────────────────
   {
-    name: "Mapbox Access Token Exposed",
-    pattern: /pk\.ey[0-9A-Za-z._-]{50,}/,
-    severity: "medium", cvssScore: 5.3, cweId: "CWE-798",
-    description: "A Mapbox public access token was found in client-side JavaScript. While Mapbox tokens in frontend code are somewhat expected, an unrestricted token can be stolen and abused for mapping API usage billed to your account.",
-    solution: "Restrict your Mapbox token to only the URLs of your production domains in the Mapbox access token settings. This prevents the token from being used from other domains even if stolen.",
+    name: "Mapbox Public Token — Restrict to Your Domain",
+    // pk.ey… is a PUBLIC token by design (Mapbox secret tokens start with sk.ey…).
+    // Flagged as info — the real risk is an unrestricted token used on other domains.
+    pattern: /\bpk\.ey[0-9A-Za-z._-]{50,}/,
+    severity: "info", cvssScore: 2.6, cweId: "CWE-200",
+    description: "A Mapbox public access token (pk.ey…) was found in client-side JavaScript. Mapbox public tokens are intentionally designed to be embedded in frontend code — this is not a secret. However, an unrestricted token can be copied and used on any domain, incurring API charges on your account.",
+    solution: "In the Mapbox account dashboard → Access Tokens, add an 'Allowed URL' restriction for your production domain. This prevents the token from being used on other domains even if extracted from your bundle. Note: sk.ey… (secret) tokens must NEVER appear in frontend code.",
   },
 ];
 

@@ -63,14 +63,20 @@ function detectSupabase(content: string): SupabaseConfig | null {
   const urlMatch = /(https:\/\/[a-z0-9]+\.supabase\.co)/.exec(content);
   if (!urlMatch) return null;
 
-  // Anon key: looks like a JWT (eyJ…)
+  // Anon key: must be labeled with a Supabase-specific variable name to avoid
+  // matching session/auth JWTs that are present on any authenticated page.
   const keyPatterns = [
-    /(?:anon|anonKey|SUPABASE_ANON_KEY|supabaseKey)\s*[:=,]\s*["'`]?(eyJ[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,})["'`]?/i,
-    /"(eyJ[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,})"/,
+    /(?:anon|anonKey|SUPABASE_ANON_KEY|supabaseKey|SUPABASE_KEY|supabase[_-]?anon)\s*[:=,]\s*["'`]?(eyJ[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,})["'`]?/i,
+    /createClient\s*\([^)]*["'`](https:\/\/[a-z0-9]+\.supabase\.co)["'`]\s*,\s*["'`](eyJ[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,})["'`]/i,
   ];
   for (const rx of keyPatterns) {
     const m = rx.exec(content);
-    if (m?.[1]) return { url: urlMatch[1], anonKey: m[1] };
+    // createClient pattern captures url as group 1 and key as group 2
+    if (rx.source.includes("createClient")) {
+      if (m?.[2]) return { url: m[1] ?? urlMatch[1], anonKey: m[2] };
+    } else {
+      if (m?.[1]) return { url: urlMatch[1], anonKey: m[1] };
+    }
   }
   return null;
 }
@@ -210,14 +216,18 @@ interface AppwriteConfig {
 }
 
 function detectAppwrite(content: string): AppwriteConfig | null {
+  // Only detect via Appwrite-specific SDK markers — not generic versioned API URLs.
+  // The APPWRITE_ENDPOINT env var or the SDK's .setEndpoint() call are reliable signals.
   const endpointMatch =
-    /(?:APPWRITE_ENDPOINT|setEndpoint)\s*[(:=,]\s*["'`]([^"'`]+)["'`]/i.exec(content) ??
-    /(https:\/\/[^"'\s]+\/v\d)/.exec(content);
+    /(?:APPWRITE_ENDPOINT|setEndpoint)\s*[(:=,]\s*["'`]([^"'`\s]{8,})["'`]/i.exec(content);
   const projectMatch =
-    /(?:APPWRITE_PROJECT(?:_ID)?|setProject)\s*[(:=,]\s*["'`]([a-z0-9]{20})["'`]/i.exec(content) ??
-    /setProject\s*\(\s*["'`]([^"'`]+)["'`]\s*\)/i.exec(content);
+    /(?:APPWRITE_PROJECT(?:_ID)?)\s*[(:=,]\s*["'`]([a-z0-9]{15,24})["'`]/i.exec(content) ??
+    /\.setProject\s*\(\s*["'`]([a-z0-9]{15,24})["'`]\s*\)/i.exec(content);
 
+  // Require BOTH endpoint AND project to be detected via Appwrite-specific patterns
   if (!endpointMatch || !projectMatch) return null;
+  // Also require the content to contain the Appwrite client import as a sanity check
+  if (!/appwrite|Appwrite/i.test(content)) return null;
   return { endpoint: endpointMatch[1].replace(/\/$/, ""), projectId: projectMatch[1] };
 }
 
@@ -278,10 +288,24 @@ interface FirebaseConfig {
 }
 
 function detectFirebase(content: string): FirebaseConfig | null {
-  // Match projectId and apiKey in any order within a config block
-  const projectMatch = /projectId\s*:\s*["'`]([^"'`]+)["'`]/i.exec(content);
-  const apiKeyMatch = /apiKey\s*:\s*["'`](AIza[^"'`]+)["'`]/i.exec(content);
-  if (!projectMatch || !apiKeyMatch) return null;
+  // Require Firebase-specific config markers beyond just projectId/apiKey —
+  // many non-Firebase services use those field names.
+  // Firebase configs always include authDomain (<id>.firebaseapp.com) or storageBucket.
+  const apiKeyMatch = /apiKey\s*:\s*["'`](AIza[A-Za-z0-9_-]{35})["'`]/i.exec(content);
+  if (!apiKeyMatch) return null; // Firebase API keys always start with AIza
+
+  const projectMatch = /projectId\s*:\s*["'`]([a-z0-9][a-z0-9-]{3,28}[a-z0-9])["'`]/i.exec(content);
+  if (!projectMatch) return null;
+
+  // Require at least one additional Firebase-specific field to confirm it's Firebase
+  const hasFirebaseMarker =
+    /authDomain\s*:\s*["'`][^"'`]+\.firebaseapp\.com["'`]/i.test(content) ||
+    /storageBucket\s*:\s*["'`][^"'`]+\.appspot\.com["'`]/i.test(content) ||
+    /messagingSenderId\s*:\s*["'`]\d{10,}["'`]/i.test(content) ||
+    /firebaseio\.com/i.test(content);
+
+  if (!hasFirebaseMarker) return null;
+
   return { projectId: projectMatch[1], apiKey: apiKeyMatch[1] };
 }
 

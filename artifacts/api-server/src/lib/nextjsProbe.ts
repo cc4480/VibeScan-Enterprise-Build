@@ -131,7 +131,8 @@ const NEXT_DATA_SECRET_PATTERNS: NextDataSecretPattern[] = [
   },
   {
     name: "Hardcoded Database Connection String in __NEXT_DATA__",
-    pattern: /(?:postgres|mysql|mongodb|redis):\/\/[^:]+:[^@]+@[^\s"']+/i,
+    // Require password segment to have ≥6 non-placeholder chars before @
+    pattern: /(?:postgres|mysql|mongodb|redis):\/\/[^:@\s"']{1,64}:[^@\s"']{6,}@[^@\s"']{4,}/i,
     severity: "critical", cvssScore: 9.8, cweId: "CWE-312",
     description:
       "A database connection string (including credentials) was found in the __NEXT_DATA__ " +
@@ -206,29 +207,6 @@ export async function runNextjsProbe(
       cweId,
       cvssScore,
       confidence: 90,
-    }));
-  }
-
-  // Also flag large __NEXT_DATA__ blobs as they often contain over-fetched server data
-  if (found.length === 0 && nextDataRaw.length > 50_000) {
-    found.push(vuln({
-      name: "Excessive Data in __NEXT_DATA__ Props (Potential Over-fetch)",
-      severity: "low",
-      category: "Information Disclosure",
-      description:
-        `The __NEXT_DATA__ JSON blob is ${Math.round(nextDataRaw.length / 1024)} KB. ` +
-        `Large props blobs often indicate that getServerSideProps or getStaticProps is ` +
-        `returning entire database rows rather than only the fields the page needs. ` +
-        `This can expose internal fields (IDs, timestamps, internal flags) that should ` +
-        `stay server-side.`,
-      evidence: `__NEXT_DATA__ size: ${Math.round(nextDataRaw.length / 1024)} KB`,
-      solution:
-        "Audit what getServerSideProps/getStaticProps returns and trim it to only the fields " +
-        "the component actually renders. Use select statements / field projection in your " +
-        "database queries rather than returning full ORM objects as props.",
-      cweId: "CWE-200",
-      cvssScore: 3.1,
-      confidence: 60,
     }));
   }
 
