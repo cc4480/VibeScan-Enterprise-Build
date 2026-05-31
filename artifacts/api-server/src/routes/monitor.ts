@@ -3,7 +3,7 @@ import {
   db, monitorSubscriptionsTable, cveAlertsTable, reportsTable,
   monitorScoreHistoryTable, monitorRegressionsTable, certExpiryAlertsTable,
 } from "@workspace/db";
-import { eq, and, desc, count, gte, sql } from "drizzle-orm";
+import { eq, and, desc, count, sql } from "drizzle-orm";
 import { z } from "zod";
 import { enqueueScan } from "../lib/queue";
 import { scansTable } from "@workspace/db";
@@ -212,17 +212,27 @@ router.get("/monitor/subscriptions", async (req, res): Promise<void> => {
         .from(cveAlertsTable)
         .where(eq(cveAlertsTable.subscriptionId, sub.id));
 
-      // Count recent regressions (last 30 days)
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      const [{ value: regressionCount }] = await db
-        .select({ value: count() })
-        .from(monitorRegressionsTable)
-        .where(
-          and(
-            eq(monitorRegressionsTable.subscriptionId, sub.id),
-            gte(monitorRegressionsTable.detectedAt, thirtyDaysAgo),
-          ),
-        );
+      // Count regressions from the most recent scan only
+      const [latestHistory] = await db
+        .select({ scanId: monitorScoreHistoryTable.scanId })
+        .from(monitorScoreHistoryTable)
+        .where(eq(monitorScoreHistoryTable.subscriptionId, sub.id))
+        .orderBy(desc(monitorScoreHistoryTable.scannedAt))
+        .limit(1);
+
+      let regressionCount = 0;
+      if (latestHistory?.scanId) {
+        const [{ value }] = await db
+          .select({ value: count() })
+          .from(monitorRegressionsTable)
+          .where(
+            and(
+              eq(monitorRegressionsTable.subscriptionId, sub.id),
+              eq(monitorRegressionsTable.scanId, latestHistory.scanId),
+            ),
+          );
+        regressionCount = Number(value);
+      }
 
       // Check for cert expiry from most recent cert_expiry_alerts
       const [latestCertAlert] = await db
@@ -361,7 +371,7 @@ router.get("/monitor/subscriptions/:id/history", async (req, res): Promise<void>
 });
 
 // ── GET /api/monitor/subscriptions/:id/regressions ───────────────────────────
-// Return recent regressions (last 30 days) for a subscription.
+// Return regressions from the most recent completed monitor scan.
 
 router.get("/monitor/subscriptions/:id/regressions", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) {
@@ -386,7 +396,18 @@ router.get("/monitor/subscriptions/:id/regressions", async (req, res): Promise<v
     return;
   }
 
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  // Find the most recent scan tracked in score history
+  const [latestHistory] = await db
+    .select({ scanId: monitorScoreHistoryTable.scanId })
+    .from(monitorScoreHistoryTable)
+    .where(eq(monitorScoreHistoryTable.subscriptionId, subId))
+    .orderBy(desc(monitorScoreHistoryTable.scannedAt))
+    .limit(1);
+
+  if (!latestHistory?.scanId) {
+    res.json([]);
+    return;
+  }
 
   const regressions = await db
     .select()
@@ -394,7 +415,7 @@ router.get("/monitor/subscriptions/:id/regressions", async (req, res): Promise<v
     .where(
       and(
         eq(monitorRegressionsTable.subscriptionId, subId),
-        gte(monitorRegressionsTable.detectedAt, thirtyDaysAgo),
+        eq(monitorRegressionsTable.scanId, latestHistory.scanId),
       ),
     )
     .orderBy(desc(monitorRegressionsTable.detectedAt));

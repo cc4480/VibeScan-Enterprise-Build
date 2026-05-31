@@ -28,7 +28,33 @@ import { checkSslLabs } from "./ssllabs";
 import { sendReportReadyEmail } from "./mailer";
 import { logger } from "./logger";
 import { randomUUID } from "node:crypto";
+import * as tls from "node:tls";
 import type { Job } from "pg-boss";
+
+/** Probe the TLS certificate expiry date for an https:// URL. Returns null for HTTP or on error. */
+async function getCertExpiry(url: string): Promise<Date | null> {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return null;
+    const host = parsed.hostname;
+    const port = parseInt(parsed.port || "443", 10);
+    return await new Promise<Date | null>((resolve) => {
+      const socket = tls.connect(
+        { host, port, servername: host, rejectUnauthorized: false },
+        () => {
+          const cert = socket.getPeerCertificate();
+          socket.destroy();
+          if (!cert || !cert.valid_to) { resolve(null); return; }
+          resolve(new Date(cert.valid_to));
+        },
+      );
+      socket.on("error", () => resolve(null));
+      socket.setTimeout(8_000, () => { socket.destroy(); resolve(null); });
+    });
+  } catch {
+    return null;
+  }
+}
 
 type ScanJob = Job<ScanJobData>;
 
@@ -414,12 +440,16 @@ async function processScanJob(job: ScanJob): Promise<void> {
     severityCounts,
   );
 
+  // Probe TLS cert expiry for https:// targets (non-blocking, failures are soft)
+  const certExpiry = await getCertExpiry(scanResult.finalUrl || targetUrl).catch(() => null);
+
   const reportData = {
     targetUrl: scanResult.finalUrl || targetUrl,
     vulnerabilities: scanResult.vulnerabilities,
     technologies: scanResult.technologies,
     server: scanResult.server,
     tlsGrade: scanResult.tlsGrade,
+    certExpiry: certExpiry ? certExpiry.toISOString() : null,
     pagesScanned: scanResult.pagesScanned,
     probedNotFound: scanResult.probedNotFound,
     summary: {
@@ -556,7 +586,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
                   checkTitle: v.name,
                   severity: v.severity,
                 })),
-              );
+              ).onConflictDoNothing();
 
               const appOrigin = process.env.APP_ORIGIN ?? "https://seclayer.io";
 

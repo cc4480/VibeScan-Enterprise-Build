@@ -6,6 +6,52 @@
  */
 
 import { logger } from "./logger";
+import * as net from "node:net";
+
+// ── SSRF guard ────────────────────────────────────────────────────────────────
+
+const PRIVATE_IP_PATTERNS = [
+  /^127\./,           // loopback
+  /^0\.0\.0\.0$/,
+  /^10\./,            // RFC 1918
+  /^172\.(1[6-9]|2\d|3[01])\./,  // RFC 1918
+  /^192\.168\./,      // RFC 1918
+  /^169\.254\./,      // link-local / AWS metadata
+  /^100\.6[4-9]\.|^100\.[7-9]\d\.|^100\.1[01]\d\.|^100\.12[0-7]\./,  // CGNAT
+  /^::1$/,
+  /^fc[0-9a-f]{2}:/i,
+  /^fd[0-9a-f]{2}:/i,
+];
+
+const BLOCKED_HOSTNAMES = new Set([
+  "localhost",
+  "metadata.google.internal",
+  "169.254.169.254",
+  "metadata.internal",
+  "metadata",
+]);
+
+/**
+ * Returns false if the URL looks like it targets a private/internal address.
+ * Performs hostname-level checks only (no DNS resolution) for speed and reliability.
+ */
+function isWebhookUrlSafe(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+    const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
+    if (BLOCKED_HOSTNAMES.has(hostname)) return false;
+    // Reject literal IP addresses in private ranges
+    if (net.isIP(hostname)) {
+      return !PRIVATE_IP_PATTERNS.some((r) => r.test(hostname));
+    }
+    // Reject hostnames that resolve to .local or .internal TLDs
+    if (hostname.endsWith(".local") || hostname.endsWith(".internal")) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export type WebhookEventType =
   | "cve_alert"
@@ -118,6 +164,11 @@ export async function fireWebhook(
   data: Record<string, unknown>,
 ): Promise<void> {
   const log = logger.child({ webhookUrl: webhookUrl.slice(0, 40) + "…", event, subscriptionId });
+
+  if (!isWebhookUrlSafe(webhookUrl)) {
+    log.warn("Webhook URL blocked by SSRF guard — skipping delivery");
+    return;
+  }
 
   const payload: WebhookPayload = {
     event,

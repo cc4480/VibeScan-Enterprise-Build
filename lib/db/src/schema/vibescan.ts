@@ -114,6 +114,7 @@ export const monitorRegressionsTable = pgTable("monitor_regressions", {
 }, (table) => [
   index("idx_regressions_sub_id").on(table.subscriptionId),
   index("idx_regressions_scan_id").on(table.scanId),
+  uniqueIndex("uq_regression_sub_scan_check").on(table.subscriptionId, table.scanId, table.checkId),
 ]);
 
 export type MonitorRegression = typeof monitorRegressionsTable.$inferSelect;

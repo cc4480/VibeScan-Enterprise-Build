@@ -64,20 +64,25 @@ function nextScanLabel(sub: MonitorSubscription): string {
 
 // ── SVG Sparkline ─────────────────────────────────────────────────────────────
 
+// Map letter grade to a 0–100 numeric score for trend charting.
+// Higher = better security (A is best, F is worst).
+const GRADE_NUMERIC: Record<string, number> = {
+  A: 100, B: 80, C: 60, D: 40, F: 20,
+};
+
 function Sparkline({ points, width = 120, height = 36 }: { points: ScoreHistoryPoint[]; width?: number; height?: number }) {
-  if (points.length < 2) {
+  // Take the most recent 8 grade snapshots, oldest-first
+  const recent = points.slice(-8);
+  if (recent.length < 2) {
     return <span className="text-xs text-muted-foreground italic">—</span>;
   }
 
-  const scores = points.map((p) => p.riskScore);
-  const min = Math.min(...scores);
-  const max = Math.max(...scores);
-  const range = max - min || 1;
-
+  const scores = recent.map((p) => GRADE_NUMERIC[p.grade] ?? 50);
   const step = width / (scores.length - 1);
   const coords = scores.map((s, i) => ({
     x: i * step,
-    y: height - ((s - min) / range) * (height - 4) - 2,
+    // Map 0–100 → height: 100 (best) → y=2, 0 (worst) → y=height-2
+    y: height - 2 - (s / 100) * (height - 4),
   }));
 
   const pathD = coords
@@ -86,20 +91,21 @@ function Sparkline({ points, width = 120, height = 36 }: { points: ScoreHistoryP
 
   const last = coords[coords.length - 1];
   const prev = coords[coords.length - 2];
-  const trendUp = last && prev ? last.y < prev.y : false; // lower y = higher risk score
+  // Higher grade score = better; if score went up (y decreased) = improving = green
+  const improving = last && prev ? last.y < prev.y : false;
 
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="overflow-visible">
       <path
         d={pathD}
         fill="none"
-        stroke={trendUp ? "#f87171" : "#34d399"}
+        stroke={improving ? "#34d399" : "#f87171"}
         strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       {last && (
-        <circle cx={last.x} cy={last.y} r="2.5" fill={trendUp ? "#f87171" : "#34d399"} />
+        <circle cx={last.x} cy={last.y} r="2.5" fill={improving ? "#34d399" : "#f87171"} />
       )}
     </svg>
   );
