@@ -322,12 +322,18 @@ router.get("/monitor/subscriptions/:id/alerts", async (req, res): Promise<void> 
     return;
   }
 
+  // Order by EPSS × severity_weight descending (highest exploit probability × impact first)
   const alerts = await db
     .select()
     .from(cveAlertsTable)
     .where(eq(cveAlertsTable.subscriptionId, subId))
     .orderBy(
-      sql`${cveAlertsTable.epssPercentile} DESC NULLS LAST`,
+      sql`COALESCE(${cveAlertsTable.epssScore}, 0) * CASE ${cveAlertsTable.severity}
+        WHEN 'CRITICAL' THEN 4
+        WHEN 'HIGH' THEN 3
+        WHEN 'MEDIUM' THEN 2
+        WHEN 'LOW' THEN 1
+        ELSE 1 END DESC`,
       desc(cveAlertsTable.detectedAt),
     );
 

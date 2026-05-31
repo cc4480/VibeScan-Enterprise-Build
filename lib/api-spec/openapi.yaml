@@ -19,6 +19,8 @@ tags:
     description: Credit balance management
   - name: dismissals
     description: Per-user false-positive dismissals scoped to a target URL
+  - name: monitor
+    description: Continuous monitoring subscriptions, alerts, score history and regressions
 paths:
   /healthz:
     get:
@@ -535,6 +537,202 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
+  /monitor/subscriptions:
+    get:
+      tags: [monitor]
+      operationId: listMonitorSubscriptions
+      summary: List the current user's monitoring subscriptions
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        '200':
+          description: List of subscriptions with enriched fields
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MonitorSubscription'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    post:
+      tags: [monitor]
+      operationId: createMonitorSubscription
+      summary: Create a new monitoring subscription for a URL
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMonitorSubscriptionRequest'
+      responses:
+        '201':
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSubscription'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Already subscribed to this URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /monitor/subscriptions/{id}:
+    delete:
+      tags: [monitor]
+      operationId: cancelMonitorSubscription
+      summary: Cancel a monitoring subscription
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Subscription cancelled
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Subscription not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /monitor/subscriptions/{id}/alerts:
+    get:
+      tags: [monitor]
+      operationId: listCveAlerts
+      summary: List CVE alerts for a subscription, ordered by EPSS × severity descending
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: CVE alerts sorted by exploit priority
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CveAlert'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Subscription not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /monitor/subscriptions/{id}/history:
+    get:
+      tags: [monitor]
+      operationId: getMonitorScoreHistory
+      summary: Get grade/score history for a subscription (oldest-first, up to 30 points)
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Score history array
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MonitorScoreHistoryPoint'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Subscription not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /monitor/subscriptions/{id}/regressions:
+    get:
+      tags: [monitor]
+      operationId: getMonitorRegressions
+      summary: Get regressions detected in the most recent monitor scan
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Regressions from the latest scan
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MonitorRegression'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Subscription not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
 components:
   parameters:
     AuthorizationSessionHeader:
@@ -1001,3 +1199,120 @@ components:
       properties:
         balance:
           type: integer
+
+    MonitorSubscription:
+      type: object
+      required: [id, userId, targetUrl, active, createdAt]
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        targetUrl:
+          type: string
+        active:
+          type: boolean
+        webhookUrl:
+          type: [string, 'null']
+        lastScannedAt:
+          type: [string, 'null']
+          format: date-time
+        nextScanAt:
+          type: [string, 'null']
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        regressionCount:
+          type: integer
+          description: Number of regressions detected in the most recent scan
+        latestGrade:
+          type: [string, 'null']
+          description: Grade letter from the most recent scan
+
+    CreateMonitorSubscriptionRequest:
+      type: object
+      required: [targetUrl]
+      properties:
+        targetUrl:
+          type: string
+          minLength: 1
+        webhookUrl:
+          type: string
+          description: Optional HTTPS URL to receive webhook notifications (not RFC1918/localhost)
+
+    CveAlert:
+      type: object
+      required: [id, subscriptionId, cveId, severity, detectedAt]
+      properties:
+        id:
+          type: string
+        subscriptionId:
+          type: string
+        cveId:
+          type: string
+        cveSummary:
+          type: [string, 'null']
+        affectedTech:
+          type: [string, 'null']
+        severity:
+          type: string
+          enum: [CRITICAL, HIGH, MEDIUM, LOW, UNKNOWN]
+        epssScore:
+          type: [number, 'null']
+          description: EPSS probability score 0–1
+        epssPercentile:
+          type: [number, 'null']
+          description: EPSS percentile 0–100
+        epssTimeWeighted:
+          type: [number, 'null']
+          description: EPSS × severity_weight combined exploit priority score
+        dismissed:
+          type: boolean
+        detectedAt:
+          type: string
+          format: date-time
+        triggerScanId:
+          type: [string, 'null']
+
+    MonitorScoreHistoryPoint:
+      type: object
+      required: [id, subscriptionId, scanId, grade, riskScore, recordedAt]
+      properties:
+        id:
+          type: string
+        subscriptionId:
+          type: string
+        scanId:
+          type: string
+        grade:
+          type: string
+        riskScore:
+          type: integer
+        recordedAt:
+          type: string
+          format: date-time
+
+    MonitorRegression:
+      type: object
+      required: [id, subscriptionId, scanId, checkId, checkName, category, detectedAt]
+      properties:
+        id:
+          type: string
+        subscriptionId:
+          type: string
+        scanId:
+          type: string
+        checkId:
+          type: string
+        checkName:
+          type: string
+        category:
+          type: string
+        severity:
+          type: [string, 'null']
+        evidence:
+          type: [string, 'null']
+        detectedAt:
+          type: string
+          format: date-time

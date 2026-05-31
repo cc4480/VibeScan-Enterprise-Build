@@ -21,10 +21,12 @@ import type {
   BeginBrowserLoginParams,
   CreateDismissalRequest,
   CreateDismissalResponse,
+  CreateMonitorSubscriptionRequest,
   CreateScanRequest,
   CreateScanResponse,
   CreateShareRequest,
   Credits,
+  CveAlert,
   DeleteDismissalParams,
   DismissalEntry,
   ErrorEnvelope,
@@ -34,6 +36,9 @@ import type {
   LogoutSuccess,
   MobileTokenExchangeRequest,
   MobileTokenExchangeSuccess,
+  MonitorRegression,
+  MonitorScoreHistoryPoint,
+  MonitorSubscription,
   Report,
   ReportShare,
   Scan,
@@ -1664,6 +1669,519 @@ export function useGetCredits<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetCreditsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List the current user's monitoring subscriptions
+ */
+export const getListMonitorSubscriptionsUrl = () => {
+  return `/api/monitor/subscriptions`;
+};
+
+export const listMonitorSubscriptions = async (
+  options?: RequestInit,
+): Promise<MonitorSubscription[]> => {
+  return customFetch<MonitorSubscription[]>(getListMonitorSubscriptionsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListMonitorSubscriptionsQueryKey = () => {
+  return [`/api/monitor/subscriptions`] as const;
+};
+
+export const getListMonitorSubscriptionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listMonitorSubscriptions>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listMonitorSubscriptions>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListMonitorSubscriptionsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listMonitorSubscriptions>>
+  > = ({ signal }) => listMonitorSubscriptions({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listMonitorSubscriptions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListMonitorSubscriptionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listMonitorSubscriptions>>
+>;
+export type ListMonitorSubscriptionsQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary List the current user's monitoring subscriptions
+ */
+
+export function useListMonitorSubscriptions<
+  TData = Awaited<ReturnType<typeof listMonitorSubscriptions>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listMonitorSubscriptions>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListMonitorSubscriptionsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a new monitoring subscription for a URL
+ */
+export const getCreateMonitorSubscriptionUrl = () => {
+  return `/api/monitor/subscriptions`;
+};
+
+export const createMonitorSubscription = async (
+  createMonitorSubscriptionRequest: CreateMonitorSubscriptionRequest,
+  options?: RequestInit,
+): Promise<MonitorSubscription> => {
+  return customFetch<MonitorSubscription>(getCreateMonitorSubscriptionUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createMonitorSubscriptionRequest),
+  });
+};
+
+export const getCreateMonitorSubscriptionMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createMonitorSubscription>>,
+    TError,
+    { data: BodyType<CreateMonitorSubscriptionRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createMonitorSubscription>>,
+  TError,
+  { data: BodyType<CreateMonitorSubscriptionRequest> },
+  TContext
+> => {
+  const mutationKey = ["createMonitorSubscription"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createMonitorSubscription>>,
+    { data: BodyType<CreateMonitorSubscriptionRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createMonitorSubscription(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateMonitorSubscriptionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createMonitorSubscription>>
+>;
+export type CreateMonitorSubscriptionMutationBody =
+  BodyType<CreateMonitorSubscriptionRequest>;
+export type CreateMonitorSubscriptionMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Create a new monitoring subscription for a URL
+ */
+export const useCreateMonitorSubscription = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createMonitorSubscription>>,
+    TError,
+    { data: BodyType<CreateMonitorSubscriptionRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createMonitorSubscription>>,
+  TError,
+  { data: BodyType<CreateMonitorSubscriptionRequest> },
+  TContext
+> => {
+  return useMutation(getCreateMonitorSubscriptionMutationOptions(options));
+};
+
+/**
+ * @summary Cancel a monitoring subscription
+ */
+export const getCancelMonitorSubscriptionUrl = (id: string) => {
+  return `/api/monitor/subscriptions/${id}`;
+};
+
+export const cancelMonitorSubscription = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getCancelMonitorSubscriptionUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getCancelMonitorSubscriptionMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof cancelMonitorSubscription>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof cancelMonitorSubscription>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["cancelMonitorSubscription"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof cancelMonitorSubscription>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return cancelMonitorSubscription(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CancelMonitorSubscriptionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof cancelMonitorSubscription>>
+>;
+
+export type CancelMonitorSubscriptionMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Cancel a monitoring subscription
+ */
+export const useCancelMonitorSubscription = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof cancelMonitorSubscription>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof cancelMonitorSubscription>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getCancelMonitorSubscriptionMutationOptions(options));
+};
+
+/**
+ * @summary List CVE alerts for a subscription, ordered by EPSS × severity descending
+ */
+export const getListCveAlertsUrl = (id: string) => {
+  return `/api/monitor/subscriptions/${id}/alerts`;
+};
+
+export const listCveAlerts = async (
+  id: string,
+  options?: RequestInit,
+): Promise<CveAlert[]> => {
+  return customFetch<CveAlert[]>(getListCveAlertsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListCveAlertsQueryKey = (id: string) => {
+  return [`/api/monitor/subscriptions/${id}/alerts`] as const;
+};
+
+export const getListCveAlertsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listCveAlerts>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listCveAlerts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListCveAlertsQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listCveAlerts>>> = ({
+    signal,
+  }) => listCveAlerts(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listCveAlerts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListCveAlertsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listCveAlerts>>
+>;
+export type ListCveAlertsQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary List CVE alerts for a subscription, ordered by EPSS × severity descending
+ */
+
+export function useListCveAlerts<
+  TData = Awaited<ReturnType<typeof listCveAlerts>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listCveAlerts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListCveAlertsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get grade/score history for a subscription (oldest-first, up to 30 points)
+ */
+export const getGetMonitorScoreHistoryUrl = (id: string) => {
+  return `/api/monitor/subscriptions/${id}/history`;
+};
+
+export const getMonitorScoreHistory = async (
+  id: string,
+  options?: RequestInit,
+): Promise<MonitorScoreHistoryPoint[]> => {
+  return customFetch<MonitorScoreHistoryPoint[]>(
+    getGetMonitorScoreHistoryUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetMonitorScoreHistoryQueryKey = (id: string) => {
+  return [`/api/monitor/subscriptions/${id}/history`] as const;
+};
+
+export const getGetMonitorScoreHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMonitorScoreHistory>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getMonitorScoreHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetMonitorScoreHistoryQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getMonitorScoreHistory>>
+  > = ({ signal }) => getMonitorScoreHistory(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMonitorScoreHistory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMonitorScoreHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMonitorScoreHistory>>
+>;
+export type GetMonitorScoreHistoryQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Get grade/score history for a subscription (oldest-first, up to 30 points)
+ */
+
+export function useGetMonitorScoreHistory<
+  TData = Awaited<ReturnType<typeof getMonitorScoreHistory>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getMonitorScoreHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMonitorScoreHistoryQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get regressions detected in the most recent monitor scan
+ */
+export const getGetMonitorRegressionsUrl = (id: string) => {
+  return `/api/monitor/subscriptions/${id}/regressions`;
+};
+
+export const getMonitorRegressions = async (
+  id: string,
+  options?: RequestInit,
+): Promise<MonitorRegression[]> => {
+  return customFetch<MonitorRegression[]>(getGetMonitorRegressionsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMonitorRegressionsQueryKey = (id: string) => {
+  return [`/api/monitor/subscriptions/${id}/regressions`] as const;
+};
+
+export const getGetMonitorRegressionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMonitorRegressions>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getMonitorRegressions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetMonitorRegressionsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getMonitorRegressions>>
+  > = ({ signal }) => getMonitorRegressions(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMonitorRegressions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMonitorRegressionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMonitorRegressions>>
+>;
+export type GetMonitorRegressionsQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Get regressions detected in the most recent monitor scan
+ */
+
+export function useGetMonitorRegressions<
+  TData = Awaited<ReturnType<typeof getMonitorRegressions>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getMonitorRegressions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMonitorRegressionsQueryOptions(id, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

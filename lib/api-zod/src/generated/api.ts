@@ -583,3 +583,157 @@ export const GetCreditsHeader = zod.object({
 export const GetCreditsResponse = zod.object({
   balance: zod.number(),
 });
+
+/**
+ * @summary List the current user's monitoring subscriptions
+ */
+export const ListMonitorSubscriptionsHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — `Bearer <sid>`."),
+});
+
+export const ListMonitorSubscriptionsResponseItem = zod.object({
+  id: zod.string(),
+  userId: zod.string(),
+  targetUrl: zod.string(),
+  active: zod.boolean(),
+  webhookUrl: zod.string().nullish(),
+  lastScannedAt: zod.date().nullish(),
+  nextScanAt: zod.date().nullish(),
+  createdAt: zod.date(),
+  regressionCount: zod
+    .number()
+    .optional()
+    .describe("Number of regressions detected in the most recent scan"),
+  latestGrade: zod
+    .string()
+    .nullish()
+    .describe("Grade letter from the most recent scan"),
+});
+export const ListMonitorSubscriptionsResponse = zod.array(
+  ListMonitorSubscriptionsResponseItem,
+);
+
+/**
+ * @summary Create a new monitoring subscription for a URL
+ */
+export const CreateMonitorSubscriptionHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — `Bearer <sid>`."),
+});
+
+export const CreateMonitorSubscriptionBody = zod.object({
+  targetUrl: zod.string().min(1),
+  webhookUrl: zod
+    .string()
+    .optional()
+    .describe(
+      "Optional HTTPS URL to receive webhook notifications (not RFC1918\/localhost)",
+    ),
+});
+
+/**
+ * @summary Cancel a monitoring subscription
+ */
+export const CancelMonitorSubscriptionParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const CancelMonitorSubscriptionHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — `Bearer <sid>`."),
+});
+
+/**
+ * @summary List CVE alerts for a subscription, ordered by EPSS × severity descending
+ */
+export const ListCveAlertsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListCveAlertsHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — `Bearer <sid>`."),
+});
+
+export const ListCveAlertsResponseItem = zod.object({
+  id: zod.string(),
+  subscriptionId: zod.string(),
+  cveId: zod.string(),
+  cveSummary: zod.string().nullish(),
+  affectedTech: zod.string().nullish(),
+  severity: zod.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]),
+  epssScore: zod.number().nullish().describe("EPSS probability score 0–1"),
+  epssPercentile: zod.number().nullish().describe("EPSS percentile 0–100"),
+  epssTimeWeighted: zod
+    .number()
+    .nullish()
+    .describe("EPSS × severity_weight combined exploit priority score"),
+  dismissed: zod.boolean().optional(),
+  detectedAt: zod.date(),
+  triggerScanId: zod.string().nullish(),
+});
+export const ListCveAlertsResponse = zod.array(ListCveAlertsResponseItem);
+
+/**
+ * @summary Get grade/score history for a subscription (oldest-first, up to 30 points)
+ */
+export const GetMonitorScoreHistoryParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetMonitorScoreHistoryHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — `Bearer <sid>`."),
+});
+
+export const GetMonitorScoreHistoryResponseItem = zod.object({
+  id: zod.string(),
+  subscriptionId: zod.string(),
+  scanId: zod.string(),
+  grade: zod.string(),
+  riskScore: zod.number(),
+  recordedAt: zod.date(),
+});
+export const GetMonitorScoreHistoryResponse = zod.array(
+  GetMonitorScoreHistoryResponseItem,
+);
+
+/**
+ * @summary Get regressions detected in the most recent monitor scan
+ */
+export const GetMonitorRegressionsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetMonitorRegressionsHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — `Bearer <sid>`."),
+});
+
+export const GetMonitorRegressionsResponseItem = zod.object({
+  id: zod.string(),
+  subscriptionId: zod.string(),
+  scanId: zod.string(),
+  checkId: zod.string(),
+  checkName: zod.string(),
+  category: zod.string(),
+  severity: zod.string().nullish(),
+  evidence: zod.string().nullish(),
+  detectedAt: zod.date(),
+});
+export const GetMonitorRegressionsResponse = zod.array(
+  GetMonitorRegressionsResponseItem,
+);

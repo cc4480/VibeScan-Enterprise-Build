@@ -245,12 +245,16 @@ async function runCveCheck(): Promise<void> {
         .set({ nextScanAt: new Date(Date.now() + 24 * 60 * 60 * 1000) })
         .where(eq(monitorSubscriptionsTable.id, sub.id));
 
-      // Insert CVE alerts sorted by EPSS score descending
-      const sortedMatches = [...matches].sort((a, b) => {
-        const epssA = epssMap.get(a.cve.id)?.score ?? 0;
-        const epssB = epssMap.get(b.cve.id)?.score ?? 0;
-        return epssB - epssA;
-      });
+      // Insert CVE alerts sorted by EPSS × severity_weight descending
+      const SEVERITY_WEIGHT: Record<string, number> = {
+        CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1,
+      };
+      const combinedScore = (cveId: string, severity: string) =>
+        (epssMap.get(cveId)?.score ?? 0) * (SEVERITY_WEIGHT[severity?.toUpperCase()] ?? 1);
+
+      const sortedMatches = [...matches].sort((a, b) =>
+        combinedScore(b.cve.id, b.cve.severity) - combinedScore(a.cve.id, a.cve.severity),
+      );
 
       for (const { cve, matchedTech } of sortedMatches) {
         const epss = epssMap.get(cve.id);

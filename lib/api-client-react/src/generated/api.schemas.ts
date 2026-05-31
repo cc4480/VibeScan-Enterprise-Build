@@ -317,6 +317,98 @@ export interface Credits {
   balance: number;
 }
 
+export interface MonitorSubscription {
+  id: string;
+  userId: string;
+  targetUrl: string;
+  active: boolean;
+  /** @nullable */
+  webhookUrl?: string | null;
+  /** @nullable */
+  lastScannedAt?: string | null;
+  /** @nullable */
+  nextScanAt?: string | null;
+  createdAt: string;
+  /** Number of regressions detected in the most recent scan */
+  regressionCount?: number;
+  /**
+   * Grade letter from the most recent scan
+   * @nullable
+   */
+  latestGrade?: string | null;
+}
+
+export interface CreateMonitorSubscriptionRequest {
+  /** @minLength 1 */
+  targetUrl: string;
+  /** Optional HTTPS URL to receive webhook notifications (not RFC1918/localhost) */
+  webhookUrl?: string;
+}
+
+export type CveAlertSeverity =
+  (typeof CveAlertSeverity)[keyof typeof CveAlertSeverity];
+
+export const CveAlertSeverity = {
+  CRITICAL: "CRITICAL",
+  HIGH: "HIGH",
+  MEDIUM: "MEDIUM",
+  LOW: "LOW",
+  UNKNOWN: "UNKNOWN",
+} as const;
+
+export interface CveAlert {
+  id: string;
+  subscriptionId: string;
+  cveId: string;
+  /** @nullable */
+  cveSummary?: string | null;
+  /** @nullable */
+  affectedTech?: string | null;
+  severity: CveAlertSeverity;
+  /**
+   * EPSS probability score 0–1
+   * @nullable
+   */
+  epssScore?: number | null;
+  /**
+   * EPSS percentile 0–100
+   * @nullable
+   */
+  epssPercentile?: number | null;
+  /**
+   * EPSS × severity_weight combined exploit priority score
+   * @nullable
+   */
+  epssTimeWeighted?: number | null;
+  dismissed?: boolean;
+  detectedAt: string;
+  /** @nullable */
+  triggerScanId?: string | null;
+}
+
+export interface MonitorScoreHistoryPoint {
+  id: string;
+  subscriptionId: string;
+  scanId: string;
+  grade: string;
+  riskScore: number;
+  recordedAt: string;
+}
+
+export interface MonitorRegression {
+  id: string;
+  subscriptionId: string;
+  scanId: string;
+  checkId: string;
+  checkName: string;
+  category: string;
+  /** @nullable */
+  severity?: string | null;
+  /** @nullable */
+  evidence?: string | null;
+  detectedAt: string;
+}
+
 /**
  * Opaque session token — `Bearer <sid>`.
  */
