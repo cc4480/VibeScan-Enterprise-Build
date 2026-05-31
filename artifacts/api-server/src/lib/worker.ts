@@ -90,7 +90,7 @@ async function reprobe(
     ? fetch(targetUrl, {
         method: "OPTIONS",
         headers: {
-          "Origin": "https://cors-probe.seclayer.app",
+          "Origin": "https://cors-probe.seclayer.io",
           "Access-Control-Request-Method": "GET",
         },
         signal: globalCtrl.signal,
@@ -488,7 +488,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
         .where(eq(scansTable.id, scanId));
 
       if (scan?.userEmail) {
-        const appOrigin = process.env.APP_ORIGIN ?? "https://seclayer.app";
+        const appOrigin = process.env.APP_ORIGIN ?? "https://seclayer.io";
         await sendReportReadyEmail({
           toEmail: scan.userEmail,
           targetUrl: scanResult.finalUrl || targetUrl,

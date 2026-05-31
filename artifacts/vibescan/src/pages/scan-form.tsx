@@ -77,7 +77,7 @@ export default function ScanFormPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    let targetUrl = isPack ? "https://placeholder.seclayer.app" : url;
+    let targetUrl = isPack ? "https://placeholder.seclayer.io" : url;
 
     if (!isPack) {
       if (!url.trim()) return;

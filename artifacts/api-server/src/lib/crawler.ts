@@ -106,7 +106,7 @@ async function fetchPage(url: string, timeoutMs: number): Promise<PageResult | n
       signal: controller.signal,
       redirect: "follow",
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; Seclayer-Security-Bot/1.0; +https://seclayer.app/bot)",
+        "User-Agent": "Mozilla/5.0 (compatible; Seclayer-Security-Bot/1.0; +https://seclayer.io/bot)",
         "Accept": "text/html,application/xhtml+xml,*/*",
         "Cache-Control": "no-cache, no-store",
         "Pragma": "no-cache",
