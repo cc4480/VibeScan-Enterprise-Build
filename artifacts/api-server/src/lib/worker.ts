@@ -530,14 +530,16 @@ async function processScanJob(job: ScanJob): Promise<void> {
             .limit(1);
 
           if (prevReport) {
-            const prevData = prevReport.data as { vulnerabilities?: Array<{ id: string; title: string; severity: string }> };
-            const prevVulnIds = new Set(
-              (prevData.vulnerabilities ?? []).map((v) => v.id),
+            type VulnShape = { category: string; name: string; evidence?: string | null; severity: string };
+            const prevData = prevReport.data as { vulnerabilities?: VulnShape[] };
+            const prevFingerprints = new Set(
+              (prevData.vulnerabilities ?? []).map((v) =>
+                findingFingerprint(v.category, v.name, v.evidence),
+              ),
             );
 
-            const currentVulns = scanResult.vulnerabilities as Array<{ id: string; title: string; severity: string }>;
-            const newRegressions = currentVulns.filter(
-              (v) => !prevVulnIds.has(v.id),
+            const newRegressions = scanResult.vulnerabilities.filter(
+              (v) => !prevFingerprints.has(findingFingerprint(v.category, v.name, v.evidence)),
             );
 
             if (newRegressions.length > 0) {
@@ -550,8 +552,8 @@ async function processScanJob(job: ScanJob): Promise<void> {
                 newRegressions.map((v) => ({
                   subscriptionId: monitorSubscriptionId,
                   scanId,
-                  checkId: v.id,
-                  checkTitle: v.title,
+                  checkId: findingFingerprint(v.category, v.name, v.evidence),
+                  checkTitle: v.name,
                   severity: v.severity,
                 })),
               );
@@ -563,7 +565,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
                   toEmail: sub.userEmail,
                   targetUrl,
                   regressions: newRegressions.map((v) => ({
-                    checkTitle: v.title,
+                    checkTitle: v.name,
                     severity: v.severity,
                   })),
                   scanId,
@@ -581,7 +583,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
                   monitorSubscriptionId,
                   {
                     regressions: newRegressions.map((v) => ({
-                      checkTitle: v.title,
+                      checkTitle: v.name,
                       severity: v.severity,
                     })),
                     scanId,

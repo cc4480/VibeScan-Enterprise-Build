@@ -238,6 +238,13 @@ async function runCveCheck(): Promise<void> {
       // Enqueue immediate rescan
       const scanId = await enqueueMonitorScan(sub, "cve");
 
+      // Schedule a 24h follow-up rescan: set nextScanAt = now + 24h so the adaptive
+      // sweep will pick it up again 24 hours after the CVE-triggered scan.
+      await db
+        .update(monitorSubscriptionsTable)
+        .set({ nextScanAt: new Date(Date.now() + 24 * 60 * 60 * 1000) })
+        .where(eq(monitorSubscriptionsTable.id, sub.id));
+
       // Insert CVE alerts sorted by EPSS score descending
       const sortedMatches = [...matches].sort((a, b) => {
         const epssA = epssMap.get(a.cve.id)?.score ?? 0;
@@ -360,6 +367,7 @@ async function runCertExpiryCheck(): Promise<void> {
         if (daysRemaining > threshold) continue;
 
         // Check if we already sent an alert for this threshold + cert cycle
+        // Must include expiryDate so alerts re-fire when the cert is renewed (new cycle = new expiry date)
         const existing = await db
           .select({ id: certExpiryAlertsTable.id })
           .from(certExpiryAlertsTable)
@@ -367,11 +375,12 @@ async function runCertExpiryCheck(): Promise<void> {
             and(
               eq(certExpiryAlertsTable.subscriptionId, sub.id),
               eq(certExpiryAlertsTable.alertThreshold, threshold),
+              eq(certExpiryAlertsTable.expiryDate, expiryDate),
             ),
           )
           .limit(1);
 
-        if (existing.length > 0) continue; // already alerted at this threshold
+        if (existing.length > 0) continue; // already alerted at this threshold for this cert cycle
 
         // Insert alert record
         await db.insert(certExpiryAlertsTable).values({

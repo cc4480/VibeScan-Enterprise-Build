@@ -340,6 +340,7 @@ export default function ScanProgressPage() {
   // ── Status polling ────────────────────────────────────────────────────────
   const { data, isLoading, isError } = useGetScanStatus(scanId, {
     query: {
+      queryKey: ["scan-status", scanId],
       refetchInterval: (query) => {
         const s = (query.state.data as { status?: string } | undefined)
           ?.status;

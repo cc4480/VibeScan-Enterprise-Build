@@ -3,7 +3,7 @@ import {
   db, monitorSubscriptionsTable, cveAlertsTable, reportsTable,
   monitorScoreHistoryTable, monitorRegressionsTable, certExpiryAlertsTable,
 } from "@workspace/db";
-import { eq, and, desc, count, gte } from "drizzle-orm";
+import { eq, and, desc, count, gte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { enqueueScan } from "../lib/queue";
 import { scansTable } from "@workspace/db";
@@ -316,7 +316,10 @@ router.get("/monitor/subscriptions/:id/alerts", async (req, res): Promise<void> 
     .select()
     .from(cveAlertsTable)
     .where(eq(cveAlertsTable.subscriptionId, subId))
-    .orderBy(desc(cveAlertsTable.detectedAt));
+    .orderBy(
+      sql`${cveAlertsTable.epssPercentile} DESC NULLS LAST`,
+      desc(cveAlertsTable.detectedAt),
+    );
 
   res.json(alerts);
 });
