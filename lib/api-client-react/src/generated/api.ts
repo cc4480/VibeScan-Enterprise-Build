@@ -22,6 +22,7 @@ import type {
   CreateDismissalRequest,
   CreateDismissalResponse,
   CreateMonitorSubscriptionRequest,
+  CreateMonitorSubscriptionResponse,
   CreateScanRequest,
   CreateScanResponse,
   CreateShareRequest,
@@ -1763,13 +1764,16 @@ export const getCreateMonitorSubscriptionUrl = () => {
 export const createMonitorSubscription = async (
   createMonitorSubscriptionRequest: CreateMonitorSubscriptionRequest,
   options?: RequestInit,
-): Promise<MonitorSubscription> => {
-  return customFetch<MonitorSubscription>(getCreateMonitorSubscriptionUrl(), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(createMonitorSubscriptionRequest),
-  });
+): Promise<CreateMonitorSubscriptionResponse> => {
+  return customFetch<CreateMonitorSubscriptionResponse>(
+    getCreateMonitorSubscriptionUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(createMonitorSubscriptionRequest),
+    },
+  );
 };
 
 export const getCreateMonitorSubscriptionMutationOptions = <

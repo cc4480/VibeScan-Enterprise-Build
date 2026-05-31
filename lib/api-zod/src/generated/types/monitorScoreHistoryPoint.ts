@@ -9,8 +9,11 @@
 export interface MonitorScoreHistoryPoint {
   id: string;
   subscriptionId: string;
-  scanId: string;
+  /** @nullable */
+  scanId?: string | null;
   grade: string;
   riskScore: number;
-  recordedAt: Date;
+  criticalCount?: number;
+  highCount?: number;
+  scannedAt: Date;
 }

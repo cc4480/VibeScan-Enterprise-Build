@@ -9,13 +9,10 @@
 export interface MonitorRegression {
   id: string;
   subscriptionId: string;
-  scanId: string;
+  /** @nullable */
+  scanId?: string | null;
   checkId: string;
-  checkName: string;
-  category: string;
-  /** @nullable */
-  severity?: string | null;
-  /** @nullable */
-  evidence?: string | null;
+  checkTitle: string;
+  severity: string;
   detectedAt: Date;
 }

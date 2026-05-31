@@ -143,11 +143,14 @@ function buildSlackBody(payload: WebhookPayload): Record<string, unknown> {
 }
 
 async function postWebhook(url: string, body: Record<string, unknown>): Promise<boolean> {
+  // redirect: "error" ensures any redirect response throws rather than silently following
+  // to an attacker-controlled internal target (redirect-based SSRF bypass).
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(10_000),
+    redirect: "error",
   });
   return res.ok;
 }

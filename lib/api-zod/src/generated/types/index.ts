@@ -14,6 +14,7 @@ export * from "./beginBrowserLoginParams";
 export * from "./createDismissalRequest";
 export * from "./createDismissalResponse";
 export * from "./createMonitorSubscriptionRequest";
+export * from "./createMonitorSubscriptionResponse";
 export * from "./createScanRequest";
 export * from "./createScanResponse";
 export * from "./createShareRequest";

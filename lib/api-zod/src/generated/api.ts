@@ -700,10 +700,12 @@ export const GetMonitorScoreHistoryHeader = zod.object({
 export const GetMonitorScoreHistoryResponseItem = zod.object({
   id: zod.string(),
   subscriptionId: zod.string(),
-  scanId: zod.string(),
+  scanId: zod.string().nullish(),
   grade: zod.string(),
   riskScore: zod.number(),
-  recordedAt: zod.date(),
+  criticalCount: zod.number().optional(),
+  highCount: zod.number().optional(),
+  scannedAt: zod.date(),
 });
 export const GetMonitorScoreHistoryResponse = zod.array(
   GetMonitorScoreHistoryResponseItem,
@@ -726,12 +728,10 @@ export const GetMonitorRegressionsHeader = zod.object({
 export const GetMonitorRegressionsResponseItem = zod.object({
   id: zod.string(),
   subscriptionId: zod.string(),
-  scanId: zod.string(),
+  scanId: zod.string().nullish(),
   checkId: zod.string(),
-  checkName: zod.string(),
-  category: zod.string(),
-  severity: zod.string().nullish(),
-  evidence: zod.string().nullish(),
+  checkTitle: zod.string(),
+  severity: zod.string(),
   detectedAt: zod.date(),
 });
 export const GetMonitorRegressionsResponse = zod.array(

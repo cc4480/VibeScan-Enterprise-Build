@@ -386,26 +386,35 @@ export interface CveAlert {
   triggerScanId?: string | null;
 }
 
+export interface CreateMonitorSubscriptionResponse {
+  subscription: MonitorSubscription;
+  /**
+   * ID of the baseline scan that was enqueued, or null if a recent scan already existed.
+   * @nullable
+   */
+  initialScanId?: string | null;
+}
+
 export interface MonitorScoreHistoryPoint {
   id: string;
   subscriptionId: string;
-  scanId: string;
+  /** @nullable */
+  scanId?: string | null;
   grade: string;
   riskScore: number;
-  recordedAt: string;
+  criticalCount?: number;
+  highCount?: number;
+  scannedAt: string;
 }
 
 export interface MonitorRegression {
   id: string;
   subscriptionId: string;
-  scanId: string;
+  /** @nullable */
+  scanId?: string | null;
   checkId: string;
-  checkName: string;
-  category: string;
-  /** @nullable */
-  severity?: string | null;
-  /** @nullable */
-  evidence?: string | null;
+  checkTitle: string;
+  severity: string;
   detectedAt: string;
 }
 

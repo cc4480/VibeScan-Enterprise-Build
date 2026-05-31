@@ -579,7 +579,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MonitorSubscription'
+                $ref: '#/components/schemas/CreateMonitorSubscriptionResponse'
         '400':
           description: Invalid request
           content:
@@ -1275,44 +1275,54 @@ components:
         triggerScanId:
           type: [string, 'null']
 
+    CreateMonitorSubscriptionResponse:
+      type: object
+      required: [subscription]
+      properties:
+        subscription:
+          $ref: '#/components/schemas/MonitorSubscription'
+        initialScanId:
+          type: [string, 'null']
+          description: ID of the baseline scan that was enqueued, or null if a recent scan already existed.
+
     MonitorScoreHistoryPoint:
       type: object
-      required: [id, subscriptionId, scanId, grade, riskScore, recordedAt]
+      required: [id, subscriptionId, grade, riskScore, scannedAt]
       properties:
         id:
           type: string
         subscriptionId:
           type: string
         scanId:
-          type: string
+          type: [string, 'null']
         grade:
           type: string
         riskScore:
           type: integer
-        recordedAt:
+        criticalCount:
+          type: integer
+        highCount:
+          type: integer
+        scannedAt:
           type: string
           format: date-time
 
     MonitorRegression:
       type: object
-      required: [id, subscriptionId, scanId, checkId, checkName, category, detectedAt]
+      required: [id, subscriptionId, checkId, checkTitle, severity, detectedAt]
       properties:
         id:
           type: string
         subscriptionId:
           type: string
         scanId:
-          type: string
+          type: [string, 'null']
         checkId:
           type: string
-        checkName:
-          type: string
-        category:
+        checkTitle:
           type: string
         severity:
-          type: [string, 'null']
-        evidence:
-          type: [string, 'null']
+          type: string
         detectedAt:
           type: string
           format: date-time
