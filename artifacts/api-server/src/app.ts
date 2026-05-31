@@ -17,6 +17,11 @@ app.use((_, res, next) => {
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   // API only — no HTML served, so a restrictive CSP is fine
   res.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
+  // All API responses must not be cached — scan results and report data are
+  // user-specific and time-sensitive; a stale cache would show outdated findings.
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
   if (process.env.NODE_ENV === "production") {
     res.setHeader(
       "Strict-Transport-Security",

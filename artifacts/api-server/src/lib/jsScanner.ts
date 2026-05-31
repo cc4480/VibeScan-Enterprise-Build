@@ -421,7 +421,14 @@ async function fetchScript(url: string): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), JS_FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+      },
+    });
     if (!res.ok) return "";
     const ct = res.headers.get("content-type") ?? "";
     if (!ct.includes("javascript") && !ct.includes("text/plain") && !ct.includes("application/")) return "";
