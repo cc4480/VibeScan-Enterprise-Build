@@ -684,17 +684,77 @@ function ReconCard({ recon }: { recon: ReconData }) {
 
 // ─── Agent Fix Prompt card ────────────────────────────────────────────────────
 
+type AgentId = "cursor" | "claude_code" | "lovable" | "bolt" | "replit" | "generic";
+
+interface AgentConfig {
+  id: AgentId;
+  label: string;
+  emoji: string;
+  howTo: string;
+  prefix?: string;
+  suffix?: string;
+}
+
+const AGENT_CONFIGS: AgentConfig[] = [
+  {
+    id: "cursor",
+    label: "Cursor",
+    emoji: "⚡",
+    howTo: "Switch to Agent mode. Open a new chat, type @workspace to give it full codebase context, then paste the prompt below.",
+    prefix: "You are working in @workspace (full codebase access). Fix ALL of the following security vulnerabilities. Check every relevant file — if the same insecure pattern appears in multiple places, fix all of them, not just the first.\n\n",
+    suffix: "\n\nAfter applying all fixes, briefly confirm which files were changed.",
+  },
+  {
+    id: "claude_code",
+    label: "Claude Code",
+    emoji: "🤖",
+    howTo: "Paste the prompt into your Claude Code terminal session. It will read your codebase and apply edits directly.",
+    suffix: "\n\nFor each fix, apply the change with /edit. Make the minimal secure change. After all fixes are applied, verify the app still builds.",
+  },
+  {
+    id: "lovable",
+    label: "Lovable",
+    emoji: "💜",
+    howTo: "Paste the prompt directly into the Lovable chat box. Lovable will apply each fix to your project files.",
+  },
+  {
+    id: "bolt",
+    label: "Bolt",
+    emoji: "🔩",
+    howTo: "Paste into the bolt.new chat window. Bolt will identify and edit the relevant files.",
+  },
+  {
+    id: "replit",
+    label: "Replit AI",
+    emoji: "🔁",
+    howTo: "Open the Replit AI panel (the AI button in the sidebar). Paste the prompt — it will apply fixes across your project.",
+  },
+  {
+    id: "generic",
+    label: "Other",
+    emoji: "💬",
+    howTo: "Copy and paste into any AI coding assistant — ChatGPT, Gemini, GitHub Copilot, Windsurf, etc.",
+  },
+];
+
 function AgentFixPromptCard({ prompt }: { prompt: string }) {
+  const [selectedAgent, setSelectedAgent] = useState<AgentId>("cursor");
   const [copied, setCopied] = useState(false);
 
+  const agent = AGENT_CONFIGS.find((a) => a.id === selectedAgent) ?? AGENT_CONFIGS[0];
+
+  const formattedPrompt = useMemo(() => {
+    const prefix = agent?.prefix ?? "";
+    const suffix = agent?.suffix ?? "";
+    return `${prefix}${prompt}${suffix}`;
+  }, [prompt, agent]);
+
   const handleCopy = useCallback(() => {
-    void navigator.clipboard.writeText(prompt).then(() => {
+    void navigator.clipboard.writeText(formattedPrompt).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    }).catch(() => {
-      // Clipboard API unavailable (insecure context or permission denied) — fail silently
-    });
-  }, [prompt]);
+    }).catch(() => {});
+  }, [formattedPrompt]);
 
   return (
     <div className="glass-card rounded-2xl p-6 border-t-4 border-t-violet-500">
@@ -719,11 +779,33 @@ function AgentFixPromptCard({ prompt }: { prompt: string }) {
           )}
         </button>
       </div>
-      <p className="text-xs text-muted-foreground mb-3">
-        Paste this prompt into Cursor, Claude, GitHub Copilot, or any coding agent to get all findings fixed at once.
-      </p>
+
+      {/* Agent selector */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        {AGENT_CONFIGS.map((a) => (
+          <button
+            key={a.id}
+            onClick={() => setSelectedAgent(a.id)}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all",
+              selectedAgent === a.id
+                ? "bg-violet-500/20 text-violet-300 border-violet-500/40"
+                : "bg-white/5 text-muted-foreground border-white/10 hover:bg-white/10",
+            )}
+          >
+            <span>{a.emoji}</span> {a.label}
+          </button>
+        ))}
+      </div>
+
+      {/* How-to instruction for selected agent */}
+      <div className="flex items-start gap-2 px-3 py-2 bg-violet-500/5 border border-violet-500/20 rounded-lg mb-3">
+        <Info className="w-3.5 h-3.5 text-violet-400 mt-0.5 shrink-0" />
+        <p className="text-xs text-violet-300/80">{agent?.howTo}</p>
+      </div>
+
       <div className="bg-background border border-white/10 rounded-lg p-4 max-h-64 overflow-y-auto">
-        <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed">{prompt}</pre>
+        <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed">{formattedPrompt}</pre>
       </div>
     </div>
   );

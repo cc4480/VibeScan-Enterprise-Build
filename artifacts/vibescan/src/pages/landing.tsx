@@ -167,11 +167,11 @@ export default function LandingPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
           {[
-            { name: "Basic Scan", price: "$29", period: null, desc: "Core checks for quick health checks.", features: ["Header analysis", "SSL/TLS grading", "Basic tech fingerprint", "Letter grade & score"], cta: "Buy Basic", highlight: false, monitor: false },
-            { name: "Deep Scan", price: "$79", period: null, desc: "Full analysis with AI remediation.", features: ["Everything in Basic", "DeepSeek AI analysis", "Plain-English explanations", "Step-by-step fix guides"], cta: "Buy Deep", highlight: true, monitor: false },
-            { name: "5-Scan Pack", price: "$99", period: null, desc: "Save $296 on Deep Scans.", features: ["5× Deep Scan credits", "Credits never expire", "Use on any project", "Priority queue"], cta: "Get 5 Pack", highlight: false, monitor: false },
-            { name: "20-Scan Pack", price: "$299", period: null, desc: "For agencies and dev shops.", features: ["20× Deep Scan credits", "Highest priority queue", "API access (soon)", "White-label reports (soon)"], cta: "Get 20 Pack", highlight: false, monitor: false },
-            { name: "Monitor", price: "$129", period: "/yr", desc: "Continuous automated security.", features: ["Weekly deep rescans", "Daily CVE feed monitoring", "Instant alerts when new CVEs match your stack", "1 year · per URL"], cta: "Start Monitoring", highlight: false, monitor: true },
+            { name: "Basic Scan", price: "$9", period: null, desc: "Core checks + Supabase RLS test.", features: ["Header analysis", "SSL/TLS grading", "Tech fingerprint", "Supabase RLS check", "Letter grade & score"], cta: "Buy Basic", highlight: false, monitor: false },
+            { name: "Deep Scan", price: "$19", period: null, desc: "Full pentest with per-agent fix prompt.", features: ["Everything in Basic", "JS secret scanning", "DeepSeek AI analysis", "Per-agent fix prompt (Cursor / Claude Code / Lovable)"], cta: "Buy Deep", highlight: true, monitor: false },
+            { name: "5-Scan Pack", price: "$79", period: null, desc: "5 Deep Scans — save $16.", features: ["5× Deep Scan credits", "Credits never expire", "Use on any project", "Priority queue"], cta: "Get 5 Pack", highlight: false, monitor: false },
+            { name: "20-Scan Pack", price: "$199", period: null, desc: "For agencies — save $181.", features: ["20× Deep Scan credits", "Highest priority queue", "API access (soon)", "White-label reports (soon)"], cta: "Get 20 Pack", highlight: false, monitor: false },
+            { name: "Monitor", price: "$49", period: "/mo", desc: "Continuous anti-regression scanning.", features: ["Weekly deep rescans", "Daily CVE feed monitoring", "Instant alerts when new CVEs match your stack", "Re-scan after every vibe-coding session"], cta: "Start Monitoring", highlight: false, monitor: true },
           ].map((tier, i) => (
             <div key={i} className={cn("glass-panel p-8 rounded-2xl flex flex-col", tier.highlight ? "border-primary/50 relative transform md:-translate-y-4 shadow-[0_0_30px_rgba(20,184,120,0.1)]" : "", tier.monitor ? "border-indigo-500/30 bg-indigo-500/5" : "")}>
               {tier.highlight && (
