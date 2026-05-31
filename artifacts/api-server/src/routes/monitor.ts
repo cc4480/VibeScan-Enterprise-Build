@@ -366,9 +366,21 @@ router.get("/monitor/subscriptions/:id/history", async (req, res): Promise<void>
     return;
   }
 
+  // Join with reports to include reportId so the frontend can link to each report
   const history = await db
-    .select()
+    .select({
+      id: monitorScoreHistoryTable.id,
+      subscriptionId: monitorScoreHistoryTable.subscriptionId,
+      scanId: monitorScoreHistoryTable.scanId,
+      grade: monitorScoreHistoryTable.grade,
+      riskScore: monitorScoreHistoryTable.riskScore,
+      criticalCount: monitorScoreHistoryTable.criticalCount,
+      highCount: monitorScoreHistoryTable.highCount,
+      scannedAt: monitorScoreHistoryTable.scannedAt,
+      reportId: reportsTable.id,
+    })
     .from(monitorScoreHistoryTable)
+    .leftJoin(reportsTable, eq(reportsTable.scanId, monitorScoreHistoryTable.scanId))
     .where(eq(monitorScoreHistoryTable.subscriptionId, subId))
     .orderBy(desc(monitorScoreHistoryTable.scannedAt))
     .limit(30);

@@ -414,17 +414,28 @@ function SubscriptionCard({ sub, onCancel }: { sub: MonitorSubscription; onCance
                 </div>
               ) : (
                 <div className="space-y-0">
-                  {historyPoints.map((pt) => (
-                    <div key={pt.id} className="flex items-center gap-3 text-xs py-2 border-b border-white/5 last:border-0">
+                  {[...historyPoints].reverse().map((pt) => (
+                    <div key={pt.id} className="flex items-center gap-3 text-xs py-2.5 border-b border-white/5 last:border-0">
                       <span className={cn("font-black text-base w-6 text-center shrink-0", gradeColor(pt.grade))}>{pt.grade}</span>
-                      <div className="flex-1">
-                        <span className="text-foreground font-medium">Risk {pt.riskScore}</span>
-                        <span className="text-muted-foreground ml-2">
-                          {pt.criticalCount > 0 && <span className="text-red-400">{pt.criticalCount}C </span>}
-                          {pt.highCount > 0 && <span className="text-orange-400">{pt.highCount}H</span>}
-                        </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-foreground font-medium">Risk {pt.riskScore}</div>
+                        <div className="text-muted-foreground mt-0.5">
+                          {pt.criticalCount > 0 && <span className="text-red-400 mr-1">{pt.criticalCount} critical</span>}
+                          {pt.highCount > 0 && <span className="text-orange-400">{pt.highCount} high</span>}
+                          {pt.criticalCount === 0 && pt.highCount === 0 && <span>No critical/high</span>}
+                        </div>
                       </div>
-                      <span className="text-muted-foreground shrink-0">{formatDate(pt.scannedAt)}</span>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className="text-muted-foreground">{formatDate(pt.scannedAt)}</span>
+                        {pt.reportId && (
+                          <a
+                            href={`/report/${pt.reportId}`}
+                            className="text-primary hover:underline font-medium flex items-center gap-0.5"
+                          >
+                            View report <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        )}
+                      </div>
                     </div>
                   ))}
                   {historyPoints.length === 0 && (

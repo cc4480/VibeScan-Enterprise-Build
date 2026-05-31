@@ -41,6 +41,7 @@ export interface ScoreHistoryPoint {
   criticalCount: number;
   highCount: number;
   scannedAt: string;
+  reportId: string | null;
 }
 
 export interface MonitorRegression {
