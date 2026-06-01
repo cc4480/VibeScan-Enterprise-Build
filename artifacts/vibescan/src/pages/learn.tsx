@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
-import { Shield, ChevronRight, ExternalLink, AlertTriangle, Info, ArrowRight } from "lucide-react";
+import {
+  Shield, ChevronRight, ExternalLink, AlertTriangle, Info, ArrowRight,
+  ChevronDown, Lock, Code2, Globe, Cookie, Eye, Database, Wifi,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSeo } from "@/lib/seo";
 
@@ -29,6 +32,8 @@ interface Check {
 interface Category {
   id: string;
   label: string;
+  description: string;
+  icon: React.ElementType;
   checks: Check[];
 }
 
@@ -36,6 +41,8 @@ const CATEGORIES: Category[] = [
   {
     id: "transport",
     label: "Transport Security",
+    description: "Encryption, TLS configuration, and certificate checks that protect data in transit.",
+    icon: Lock,
     checks: [
       {
         id: "https",
@@ -108,6 +115,8 @@ add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; prelo
   {
     id: "injection",
     label: "Injection Defense",
+    description: "Content Security Policy and XSS mitigations that block script injection attacks.",
+    icon: Code2,
     checks: [
       {
         id: "csp-missing",
@@ -168,6 +177,8 @@ Content-Security-Policy: script-src 'self' 'sha256-{BASE64_HASH_OF_SCRIPT}'`,
   {
     id: "headers",
     label: "Security Headers",
+    description: "Response headers that enable browser-level protections against common attacks.",
+    icon: Shield,
     checks: [
       {
         id: "xframe",
@@ -264,6 +275,8 @@ res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), i
   {
     id: "cors",
     label: "CORS & Origin",
+    description: "Cross-origin resource sharing policies that control which sites can access your API.",
+    icon: Globe,
     checks: [
       {
         id: "cors-wildcard",
@@ -300,6 +313,8 @@ app.use(cors({
   {
     id: "cookies",
     label: "Cookies & Sessions",
+    description: "Cookie attribute checks that protect session tokens from theft and CSRF.",
+    icon: Cookie,
     checks: [
       {
         id: "cookie-secure",
@@ -375,6 +390,8 @@ Set-Cookie: embed_token=abc; Secure; SameSite=None`,
   {
     id: "disclosure",
     label: "Information Disclosure",
+    description: "Exposed files, server banners, and debug pages that hand attackers a roadmap.",
+    icon: Eye,
     checks: [
       {
         id: "server-header",
@@ -493,6 +510,8 @@ if (process.env.NODE_ENV !== "production") {
   {
     id: "supabase",
     label: "Supabase & BaaS",
+    description: "Supabase RLS, Firebase rules, PocketBase, and Appwrite access control checks.",
+    icon: Database,
     checks: [
       {
         id: "supabase-rls",
@@ -537,22 +556,82 @@ USING (auth.uid() = author_id);`,
       },
     ],
   },
+  {
+    id: "network",
+    label: "Network & DNS",
+    description: "Email security records, DNS configuration, and exposed network services.",
+    icon: Wifi,
+    checks: [
+      {
+        id: "spf",
+        title: "Missing or Weak SPF Record",
+        shortTitle: "SPF Record",
+        severity: "high",
+        cweId: "CWE-345",
+        cvssScore: 7.5,
+        owasp: "A05",
+        what: "SPF (Sender Policy Framework) is a DNS TXT record that lists which mail servers are authorised to send email on behalf of your domain. Receiving mail servers check SPF to detect forged sender addresses.",
+        why: "Without SPF, anyone can send email that appears to come from your domain — enabling phishing campaigns, business email compromise, and spam. Attackers craft convincing emails with your domain as the sender to trick recipients into revealing credentials or authorising payments.",
+        howTested: "Seclayer queries the DNS TXT record for your apex domain via Cloudflare DoH. Missing SPF is flagged High. Permissive +all (allows all senders) is flagged Critical.",
+        fix: "Publish an SPF record that lists your authorised sending sources and ends with -all to reject unauthorised senders.",
+        fixCode: `# Add a TXT record to your DNS — example for Google Workspace + SendGrid:
+v=spf1 include:_spf.google.com include:sendgrid.net -all
+
+# Breaking it down:
+# v=spf1              — SPF version
+# include:_spf.google.com — authorise Google's mail servers
+# include:sendgrid.net    — authorise SendGrid
+# -all                    — REJECT all other senders (hard fail)
+# ~all                    — SOFT FAIL others (less strict, still common)
+
+# Check your record with:
+dig TXT yourdomain.com | grep spf`,
+        fixCodeLang: "nginx",
+        learnMore: "https://www.cloudflare.com/learning/dns/dns-records/dns-spf-record/",
+      },
+      {
+        id: "dmarc",
+        title: "Missing or Weak DMARC Policy",
+        shortTitle: "DMARC Policy",
+        severity: "high",
+        cweId: "CWE-345",
+        cvssScore: 7.5,
+        owasp: "A05",
+        what: "DMARC (Domain-based Message Authentication, Reporting & Conformance) builds on SPF and DKIM to tell receiving mail servers what to do with messages that fail authentication — reject, quarantine, or do nothing.",
+        why: "SPF and DKIM alone don't prevent spoofing of the human-visible From address. DMARC ties the SPF/DKIM results to the header From domain and specifies enforcement. Without DMARC, authenticated SPF/DKIM emails can still be spoofed at the UI level.",
+        howTested: "Seclayer queries _dmarc.yourdomain.com via DNS. Missing DMARC is High. p=none (monitoring only, no enforcement) is Medium.",
+        fix: "Publish a DMARC record and gradually move to p=reject after monitoring with aggregate reports.",
+        fixCode: `# Add TXT record at _dmarc.yourdomain.com
+
+# Start with monitoring (p=none) to see who's sending on your behalf:
+v=DMARC1; p=none; rua=mailto:dmarc-reports@yourdomain.com
+
+# After reviewing reports, tighten to quarantine:
+v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@yourdomain.com; pct=100
+
+# Full enforcement — reject all failing messages:
+v=DMARC1; p=reject; rua=mailto:dmarc-reports@yourdomain.com; adkim=s; aspf=s`,
+        fixCodeLang: "nginx",
+        learnMore: "https://dmarc.org/overview/",
+      },
+    ],
+  },
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const SEV_CONFIG: Record<Severity, { label: string; bg: string; text: string; border: string; dot: string }> = {
-  critical: { label: "Critical", bg: "bg-red-500/10", text: "text-red-400", border: "border-red-500/30", dot: "bg-red-500" },
-  high:     { label: "High",     bg: "bg-orange-500/10", text: "text-orange-400", border: "border-orange-500/30", dot: "bg-orange-500" },
-  medium:   { label: "Medium",   bg: "bg-yellow-500/10", text: "text-yellow-400", border: "border-yellow-500/30", dot: "bg-yellow-500" },
-  low:      { label: "Low",      bg: "bg-blue-500/10", text: "text-blue-400", border: "border-blue-500/30", dot: "bg-blue-500" },
-  info:     { label: "Info",     bg: "bg-slate-500/10", text: "text-slate-400", border: "border-slate-500/30", dot: "bg-slate-400" },
+const SEV_CONFIG: Record<Severity, { label: string; bg: string; text: string; border: string; dot: string; pill: string }> = {
+  critical: { label: "Critical", bg: "bg-red-500/10",    text: "text-red-400",    border: "border-red-500/30",    dot: "bg-red-500",    pill: "bg-red-500/15 text-red-400 border-red-500/30" },
+  high:     { label: "High",     bg: "bg-orange-500/10", text: "text-orange-400", border: "border-orange-500/30", dot: "bg-orange-500", pill: "bg-orange-500/15 text-orange-400 border-orange-500/30" },
+  medium:   { label: "Medium",   bg: "bg-yellow-500/10", text: "text-yellow-400", border: "border-yellow-500/30", dot: "bg-yellow-500", pill: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30" },
+  low:      { label: "Low",      bg: "bg-blue-500/10",   text: "text-blue-400",   border: "border-blue-500/30",   dot: "bg-blue-500",   pill: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
+  info:     { label: "Info",     bg: "bg-slate-500/10",  text: "text-slate-400",  border: "border-slate-500/30",  dot: "bg-slate-400",  pill: "bg-slate-500/15 text-slate-400 border-slate-500/30" },
 };
 
 function SeverityBadge({ severity }: { severity: Severity }) {
   const cfg = SEV_CONFIG[severity];
   return (
-    <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border", cfg.bg, cfg.text, cfg.border)}>
+    <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border", cfg.pill)}>
       <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
       {cfg.label}
     </span>
@@ -568,7 +647,7 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
     });
   };
   return (
-    <div className="relative group mt-3">
+    <div className="relative mt-3">
       <div className="flex items-center justify-between bg-slate-900 border border-white/10 rounded-t-lg px-4 py-2">
         <span className="text-xs text-slate-500 font-mono">{lang ?? "code"}</span>
         <button onClick={copy} className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
@@ -582,80 +661,106 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
   );
 }
 
-function CheckSection({ check }: { check: Check }) {
+function CheckAccordion({ check }: { check: Check }) {
+  const [open, setOpen] = useState(false);
+  const cfg = SEV_CONFIG[check.severity];
+
   return (
-    <section id={check.id} className="scroll-mt-28">
-      <div className="glass-card rounded-2xl p-8 border border-white/5">
-        {/* Header */}
-        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
-          <div>
-            <h2 className="text-xl font-bold text-foreground mb-2">{check.title}</h2>
-            <div className="flex flex-wrap items-center gap-2">
-              <SeverityBadge severity={check.severity} />
-              {check.cweId && (
-                <a href={`https://cwe.mitre.org/data/definitions/${check.cweId.replace("CWE-", "")}.html`}
-                   target="_blank" rel="noopener noreferrer"
-                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground hover:text-foreground transition-colors font-mono">
-                  {check.cweId} <ExternalLink className="w-2.5 h-2.5" />
-                </a>
-              )}
-              {check.owasp && (
-                <span className="px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-xs text-primary font-semibold font-mono">
-                  OWASP {check.owasp}
-                </span>
-              )}
-              {check.cvssScore !== undefined && (
-                <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground font-mono">
-                  CVSS {check.cvssScore.toFixed(1)}
-                </span>
-              )}
-              {check.wstgId && (
-                <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground font-mono">
-                  {check.wstgId}
-                </span>
-              )}
-            </div>
-          </div>
+    <div className={cn(
+      "rounded-xl border transition-colors duration-200",
+      open ? "border-white/10 bg-white/[0.03]" : "border-white/5 bg-white/[0.01] hover:border-white/10 hover:bg-white/[0.02]"
+    )}>
+      {/* Row header — always visible */}
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center gap-4 px-5 py-4 text-left"
+      >
+        <span className={cn("w-2 h-2 rounded-full shrink-0", cfg.dot)} />
+        <span className="flex-1 font-medium text-foreground text-sm">{check.title}</span>
+        <div className="flex items-center gap-3 shrink-0">
+          <SeverityBadge severity={check.severity} />
+          {check.cweId && (
+            <span className="hidden sm:block text-xs text-muted-foreground font-mono">{check.cweId}</span>
+          )}
+          {check.cvssScore !== undefined && (
+            <span className="hidden md:block text-xs text-muted-foreground font-mono">
+              CVSS {check.cvssScore.toFixed(1)}
+            </span>
+          )}
+          <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform duration-200", open && "rotate-180")} />
         </div>
+      </button>
 
-        {/* Content */}
-        <div className="space-y-6">
-          <div>
-            <h3 className="text-sm font-semibold text-foreground/70 uppercase tracking-wider mb-2">What it is</h3>
-            <p className="text-muted-foreground leading-relaxed">{check.what}</p>
+      {/* Expanded content */}
+      {open && (
+        <div className="px-5 pb-6 border-t border-white/5 mt-0 pt-5 space-y-5">
+          {/* Meta badges */}
+          <div className="flex flex-wrap gap-2">
+            {check.owasp && (
+              <span className="px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-xs text-primary font-semibold font-mono">
+                OWASP {check.owasp}
+              </span>
+            )}
+            {check.cweId && (
+              <a
+                href={`https://cwe.mitre.org/data/definitions/${check.cweId.replace("CWE-", "")}.html`}
+                target="_blank" rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
+              >
+                {check.cweId} <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+            )}
+            {check.wstgId && (
+              <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground font-mono">
+                {check.wstgId}
+              </span>
+            )}
           </div>
 
+          {/* What it is */}
           <div>
-            <h3 className="text-sm font-semibold text-foreground/70 uppercase tracking-wider mb-2">Why it matters</h3>
-            <div className="flex gap-3 p-4 rounded-xl bg-orange-500/5 border border-orange-500/20">
-              <AlertTriangle className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
-              <p className="text-muted-foreground leading-relaxed text-sm">{check.why}</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/60 mb-2">What it is</p>
+            <p className="text-sm text-muted-foreground leading-relaxed">{check.what}</p>
+          </div>
+
+          {/* Why it matters */}
+          <div className="flex gap-3 p-4 rounded-xl bg-orange-500/5 border border-orange-500/20">
+            <AlertTriangle className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-orange-400/70 mb-1">Why it matters</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">{check.why}</p>
             </div>
           </div>
 
-          <div>
-            <h3 className="text-sm font-semibold text-foreground/70 uppercase tracking-wider mb-2">How Seclayer tests this</h3>
-            <div className="flex gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20">
-              <Shield className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-              <p className="text-muted-foreground leading-relaxed text-sm">{check.howTested}</p>
+          {/* How tested */}
+          <div className="flex gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20">
+            <Shield className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary/70 mb-1">How Seclayer tests this</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">{check.howTested}</p>
             </div>
           </div>
 
+          {/* Fix */}
           <div>
-            <h3 className="text-sm font-semibold text-foreground/70 uppercase tracking-wider mb-2">How to fix it</h3>
-            <p className="text-muted-foreground leading-relaxed text-sm mb-1">{check.fix}</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/60 mb-2">How to fix it</p>
+            <p className="text-sm text-muted-foreground leading-relaxed mb-1">{check.fix}</p>
             {check.fixCode && <CodeBlock code={check.fixCode} lang={check.fixCodeLang} />}
           </div>
 
           {check.learnMore && (
-            <a href={check.learnMore} target="_blank" rel="noopener noreferrer"
-               className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
+            <a
+              href={check.learnMore} target="_blank" rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+            >
               <Info className="w-3.5 h-3.5" /> Learn more <ExternalLink className="w-3 h-3" />
             </a>
           )}
         </div>
-      </div>
-    </section>
+      )}
+    </div>
   );
 }
 
@@ -668,40 +773,34 @@ export default function LearnPage() {
     canonical: "https://seclayer.io/learn",
   });
 
-  const [activeId, setActiveId] = useState<string>("");
-  const observerRef = useRef<IntersectionObserver | null>(null);
+  const [activeCategory, setActiveCategory] = useState(CATEGORIES[0].id);
+  const tabsRef = useRef<HTMLDivElement>(null);
+
+  const currentCategory = CATEGORIES.find((c) => c.id === activeCategory) ?? CATEGORIES[0];
+  const CategoryIcon = currentCategory.icon;
 
   const allChecks = CATEGORIES.flatMap((c) => c.checks);
-
-  useEffect(() => {
-    observerRef.current = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.find((e) => e.isIntersecting);
-        if (visible) setActiveId(visible.target.id);
-      },
-      { rootMargin: "-20% 0px -60% 0px", threshold: 0 }
-    );
-    allChecks.forEach((check) => {
-      const el = document.getElementById(check.id);
-      if (el) observerRef.current?.observe(el);
-    });
-    return () => observerRef.current?.disconnect();
-  }, []);
-
   const totalChecks = allChecks.length;
   const criticalCount = allChecks.filter((c) => c.severity === "critical").length;
 
+  // Scroll active tab into view on mobile
+  useEffect(() => {
+    const el = tabsRef.current?.querySelector(`[data-cat="${activeCategory}"]`) as HTMLElement | null;
+    el?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+  }, [activeCategory]);
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pb-24">
+
       {/* Page header */}
-      <div className="pt-4 pb-12 max-w-3xl">
+      <div className="pt-4 pb-10 max-w-2xl">
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold mb-6 uppercase tracking-wider">
           <Shield className="w-3.5 h-3.5" /> Security Reference
         </div>
         <h1 className="text-4xl md:text-5xl font-bold mb-4 tracking-tight">
           Security checks documentation
         </h1>
-        <p className="text-lg text-muted-foreground mb-6">
+        <p className="text-lg text-muted-foreground mb-5">
           Plain-English explanations of every vulnerability Seclayer detects — what it is, why attackers exploit it, how we test for it, and exactly how to fix it.
         </p>
         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
@@ -711,75 +810,120 @@ export default function LearnPage() {
         </div>
       </div>
 
-      <div className="flex gap-10 pb-24">
-        {/* Sidebar */}
-        <aside className="hidden lg:block w-60 shrink-0">
-          <nav className="sticky top-28 space-y-6">
-            {CATEGORIES.map((cat) => (
-              <div key={cat.id}>
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/60 mb-2 px-2">{cat.label}</p>
-                <ul className="space-y-0.5">
-                  {cat.checks.map((check) => {
-                    const cfg = SEV_CONFIG[check.severity];
-                    const isActive = activeId === check.id;
-                    return (
-                      <li key={check.id}>
-                        <a
-                          href={`#${check.id}`}
-                          className={cn(
-                            "flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors",
-                            isActive
-                              ? "bg-primary/10 text-primary font-medium"
-                              : "text-muted-foreground hover:text-foreground hover:bg-white/5"
-                          )}
-                        >
-                          <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", cfg.dot)} />
-                          <span className="truncate">{check.shortTitle}</span>
-                          {isActive && <ChevronRight className="w-3 h-3 ml-auto shrink-0" />}
-                        </a>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
+      {/* Category tabs */}
+      <div
+        ref={tabsRef}
+        className="flex gap-1 overflow-x-auto pb-px mb-8 scrollbar-none border-b border-white/5"
+        style={{ scrollbarWidth: "none" }}
+      >
+        {CATEGORIES.map((cat) => {
+          const Icon = cat.icon;
+          const isActive = cat.id === activeCategory;
+          const critCount = cat.checks.filter((c) => c.severity === "critical").length;
+          return (
+            <button
+              key={cat.id}
+              data-cat={cat.id}
+              onClick={() => setActiveCategory(cat.id)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg whitespace-nowrap transition-all duration-150 border-b-2 -mb-px",
+                isActive
+                  ? "text-primary border-primary bg-primary/5"
+                  : "text-muted-foreground border-transparent hover:text-foreground hover:bg-white/5"
+              )}
+            >
+              <Icon className="w-3.5 h-3.5 shrink-0" />
+              {cat.label}
+              {critCount > 0 && (
+                <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 text-xs font-bold leading-none">
+                  {critCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
 
-            <div className="pt-4 border-t border-white/5">
-              <Link href="/scan"
-                className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:shadow-[0_0_15px_rgba(20,184,120,0.3)] transition-all">
-                Scan your app <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-          </nav>
-        </aside>
-
-        {/* Main content */}
-        <main className="flex-1 min-w-0 space-y-8">
-          {CATEGORIES.map((cat) => (
-            <div key={cat.id} className="space-y-6">
-              <div className="flex items-center gap-3">
-                <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60">{cat.label}</h2>
-                <div className="flex-1 h-px bg-white/5" />
-              </div>
-              {cat.checks.map((check) => (
-                <CheckSection key={check.id} check={check} />
-              ))}
-            </div>
-          ))}
-
-          {/* Footer CTA */}
-          <div className="glass-card rounded-2xl p-8 text-center border border-primary/20 bg-primary/5">
-            <Shield className="w-10 h-10 text-primary mx-auto mb-4" />
-            <h2 className="text-2xl font-bold mb-2">See how your app scores</h2>
-            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-              Seclayer tests all of the above — plus dozens more checks — in a single automated scan. Get your grade in under 10 minutes.
-            </p>
-            <Link href="/scan"
-              className="inline-flex items-center gap-2 px-8 py-3 bg-primary text-primary-foreground font-bold rounded-xl hover:shadow-[0_0_20px_rgba(20,184,120,0.4)] hover:-translate-y-0.5 transition-all duration-200">
-              Scan your app <ArrowRight className="w-4 h-4" />
-            </Link>
+      {/* Active category panel */}
+      <div className="space-y-6">
+        {/* Category header */}
+        <div className="flex items-start gap-4 p-5 rounded-xl bg-white/[0.03] border border-white/8">
+          <div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+            <CategoryIcon className="w-5 h-5 text-primary" />
           </div>
-        </main>
+          <div className="min-w-0">
+            <div className="flex items-center gap-3 mb-1">
+              <h2 className="text-lg font-bold text-foreground">{currentCategory.label}</h2>
+              <span className="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground font-mono">
+                {currentCategory.checks.length} {currentCategory.checks.length === 1 ? "check" : "checks"}
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground">{currentCategory.description}</p>
+          </div>
+        </div>
+
+        {/* Severity legend */}
+        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          <span className="font-medium text-muted-foreground/60 mr-1">Severity:</span>
+          {(["critical", "high", "medium", "low", "info"] as Severity[]).map((s) => {
+            const count = currentCategory.checks.filter((c) => c.severity === s).length;
+            if (count === 0) return null;
+            const cfg = SEV_CONFIG[s];
+            return (
+              <span key={s} className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full border", cfg.pill)}>
+                <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
+                {cfg.label} ({count})
+              </span>
+            );
+          })}
+        </div>
+
+        {/* Accordion list */}
+        <div className="space-y-2">
+          {currentCategory.checks.map((check) => (
+            <CheckAccordion key={check.id} check={check} />
+          ))}
+        </div>
+
+        {/* Category nav footer */}
+        <div className="flex items-center justify-between pt-4 border-t border-white/5">
+          <button
+            onClick={() => {
+              const idx = CATEGORIES.findIndex((c) => c.id === activeCategory);
+              if (idx > 0) setActiveCategory(CATEGORIES[idx - 1].id);
+            }}
+            disabled={activeCategory === CATEGORIES[0].id}
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            ← Previous
+          </button>
+          <span className="text-xs text-muted-foreground">
+            {CATEGORIES.findIndex((c) => c.id === activeCategory) + 1} / {CATEGORIES.length}
+          </span>
+          <button
+            onClick={() => {
+              const idx = CATEGORIES.findIndex((c) => c.id === activeCategory);
+              if (idx < CATEGORIES.length - 1) setActiveCategory(CATEGORIES[idx + 1].id);
+            }}
+            disabled={activeCategory === CATEGORIES[CATEGORIES.length - 1].id}
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            Next →
+          </button>
+        </div>
+      </div>
+
+      {/* Footer CTA */}
+      <div className="mt-12 glass-card rounded-2xl p-8 text-center border border-primary/20 bg-primary/5">
+        <Shield className="w-10 h-10 text-primary mx-auto mb-4" />
+        <h2 className="text-2xl font-bold mb-2">See how your app scores</h2>
+        <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+          Seclayer tests all of the above — plus dozens more checks — in a single automated scan. Get your grade in under 10 minutes.
+        </p>
+        <Link href="/scan"
+          className="inline-flex items-center gap-2 px-8 py-3 bg-primary text-primary-foreground font-bold rounded-xl hover:shadow-[0_0_20px_rgba(20,184,120,0.4)] hover:-translate-y-0.5 transition-all duration-200">
+          Scan your app <ArrowRight className="w-4 h-4" />
+        </Link>
       </div>
     </div>
   );
