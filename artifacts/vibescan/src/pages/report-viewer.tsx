@@ -1149,6 +1149,142 @@ function SummaryNewFindings({ categories }: { categories: Record<string, number>
   );
 }
 
+// ─── OWASP Top 10 breakdown ───────────────────────────────────────────────────
+
+/** Maps each scanner internal category → the OWASP 2021 code(s) it covers */
+const CATEGORY_TO_OWASP: Record<string, string[]> = {
+  "Transport Security":             ["A02"],
+  "Injection Defense":              ["A03"],
+  "UI Security":                    ["A05"],
+  "Content Sniffing":               ["A05"],
+  "Information Disclosure":         ["A05"],
+  "Browser Feature Control":        ["A05"],
+  "CORS Misconfiguration":          ["A05"],
+  "Session Management":             ["A02", "A07"],
+  "CSRF Protection":                ["A07"],
+  "Source Code Exposure":           ["A03", "A05"],
+  "Credential Exposure":            ["A02"],
+  "Data Exposure":                  ["A01"],
+  "HTTP Security":                  ["A05"],
+  "Unvalidated Redirects":          ["A01"],
+  "Supply Chain Security":          ["A06", "A08"],
+  "Brute Force Protection":         ["A07"],
+  "Email Security":                 ["A05"],
+  "DNS Security":                   ["A05"],
+  "Exposed Secrets / Credentials":  ["A02"],
+  "Security Header Inconsistency":  ["A05"],
+  "Outdated Software / Known CVE":  ["A06"],
+  "Outdated Software":              ["A06"],
+  "Network Exposure":               ["A01"],
+};
+
+const OWASP_CATEGORIES: Array<{ code: string; name: string }> = [
+  { code: "A01", name: "Broken Access Control" },
+  { code: "A02", name: "Cryptographic Failures" },
+  { code: "A03", name: "Injection" },
+  { code: "A05", name: "Security Misconfiguration" },
+  { code: "A06", name: "Vulnerable Components" },
+  { code: "A07", name: "Auth & Session Failures" },
+  { code: "A08", name: "Data Integrity Failures" },
+];
+
+function OwaspBreakdown({ vulnerabilities }: { vulnerabilities: Vulnerability[] }) {
+  // Build per-OWASP-code: { count, worstSeverity }
+  const owaspMap = useMemo(() => {
+    const map: Record<string, { count: number; worstSeverity: string }> = {};
+    for (const v of vulnerabilities) {
+      const codes = CATEGORY_TO_OWASP[v.category] ?? [];
+      for (const code of codes) {
+        if (!map[code]) map[code] = { count: 0, worstSeverity: "info" };
+        map[code].count += 1;
+        const order = SEVERITY_ORDER[v.severity] ?? 99;
+        const currentOrder = SEVERITY_ORDER[map[code].worstSeverity] ?? 99;
+        if (order < currentOrder) map[code].worstSeverity = v.severity;
+      }
+    }
+    return map;
+  }, [vulnerabilities]);
+
+  const SEV_DOT: Record<string, string> = {
+    critical: "bg-red-500",
+    high:     "bg-orange-500",
+    medium:   "bg-yellow-500",
+    low:      "bg-blue-500",
+    info:     "bg-slate-400",
+  };
+
+  const SEV_TEXT: Record<string, string> = {
+    critical: "text-red-400",
+    high:     "text-orange-400",
+    medium:   "text-yellow-400",
+    low:      "text-blue-400",
+    info:     "text-slate-400",
+  };
+
+  const passed  = OWASP_CATEGORIES.filter((c) => !owaspMap[c.code] || owaspMap[c.code].count === 0).length;
+  const failing = OWASP_CATEGORIES.length - passed;
+
+  return (
+    <div className="glass-card rounded-2xl p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-bold flex items-center gap-2 text-muted-foreground uppercase tracking-wider">
+          <Activity className="w-4 h-4" /> OWASP Top 10
+        </h3>
+        <div className="flex items-center gap-2 text-xs">
+          {failing > 0 && (
+            <span className="px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 font-medium">
+              {failing} flagged
+            </span>
+          )}
+          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-medium">
+            {passed} passed
+          </span>
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        {OWASP_CATEGORIES.map(({ code, name }) => {
+          const data = owaspMap[code];
+          const hasFinding = data && data.count > 0;
+          return (
+            <div
+              key={code}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2 rounded-lg",
+                hasFinding ? "bg-white/[0.02]" : "",
+              )}
+            >
+              <span className="font-mono text-[11px] font-bold text-muted-foreground/50 w-7 shrink-0">
+                {code}
+              </span>
+              <span className={cn(
+                "flex-1 text-xs truncate",
+                hasFinding ? "text-foreground/80" : "text-muted-foreground/50",
+              )}>
+                {name}
+              </span>
+              {hasFinding ? (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className={cn("w-1.5 h-1.5 rounded-full", SEV_DOT[data.worstSeverity])} />
+                  <span className={cn("text-xs font-bold", SEV_TEXT[data.worstSeverity])}>
+                    {data.count}
+                  </span>
+                </div>
+              ) : (
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500/60 shrink-0" />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="mt-3 text-[10px] text-muted-foreground/40 leading-relaxed">
+        Based on OWASP Top 10 2021. A04, A09, A10 require authenticated or server-side testing — not in scope for black-box scans.
+      </p>
+    </div>
+  );
+}
+
 // ─── Severity emoji for print / markdown ─────────────────────────────────────
 
 const SEVERITY_EMOJI: Record<string, string> = {
@@ -2414,8 +2550,11 @@ export default function ReportViewer() {
           )}
         </div>
 
-        {/* Right Col: Category sidebar + AI + Tech */}
+        {/* Right Col: OWASP + Category sidebar + AI + Tech */}
         <div className="space-y-8">
+          {/* OWASP Top 10 breakdown */}
+          <OwaspBreakdown vulnerabilities={visibleVulns} />
+
           {/* Category breakdown */}
           {sortedCategories.length > 0 && (
             <div className="glass-card rounded-2xl p-6">
