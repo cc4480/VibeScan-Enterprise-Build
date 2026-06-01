@@ -40,6 +40,34 @@ async function safeGet(
   }
 }
 
+async function safePost(
+  url: string,
+  payload: unknown,
+  headers?: Record<string, string>,
+): Promise<{ status: number; body: string } | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "User-Agent": "Mozilla/5.0 Seclayer Security Scanner",
+        "Content-Type": "application/json",
+        ...headers,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+      redirect: "error",
+    });
+    const body = await res.text().catch(() => "");
+    return { status: res.status, body };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function extractInlineJs(html: string): string {
   const rx = /<script(?:[^>]*)>([\s\S]*?)<\/script>/gi;
   const parts: string[] = [];
@@ -121,17 +149,206 @@ function detectSupabase(content: string): SupabaseConfig | null {
   return null;
 }
 
-const SUPABASE_TABLES = [
-  "users", "profiles", "posts", "articles", "products", "orders",
-  "messages", "customers", "content", "settings",
+// Sensitive tables always probed — high-value targets that should never be
+// publicly readable. Ordered roughly by data sensitivity.
+const SUPABASE_SENSITIVE_TABLES = [
+  "users", "profiles", "payments", "customers", "settings",
+  "secrets", "passwords", "admins", "admin_users",
+  "posts", "articles", "products", "orders", "messages", "content",
 ];
+
+// Tables known to be Supabase-internal or public by design — suppress write
+// exposure findings for these to avoid noise.
+const WRITE_SUPPRESSION_LIST = new Set([
+  "schema_migrations", "spatial_ref_sys", "geography_columns",
+  "geometry_columns", "raster_columns", "raster_overviews",
+  "pg_stat_statements", "pg_stat_statements_info",
+  "buckets", "objects", "s3_multipart_uploads", "s3_multipart_uploads_parts",
+  "audit_log_entries", "flow_state", "identities", "instances",
+  "mfa_amr_claims", "mfa_challenges", "mfa_factors", "one_time_tokens",
+  "refresh_tokens", "saml_providers", "saml_relay_states",
+  "schema_migrations", "sessions", "sso_domains", "sso_providers",
+]);
+
+/**
+ * Probes a single sensitive table for unauthenticated reads.
+ * Returns a finding array (0 or 1 entries).
+ */
+async function probeSensitiveRead(
+  table: string,
+  supabaseUrl: string,
+  headers: Record<string, string>,
+  isServiceRole: boolean,
+): Promise<ScanVulnerability[]> {
+  const r = await safeGet(`${supabaseUrl}/rest/v1/${table}?limit=1`, headers);
+  if (!r || r.status !== 200) return [];
+
+  let hasRows = false;
+  try {
+    const parsed = JSON.parse(r.body);
+    hasRows = Array.isArray(parsed) && parsed.length > 0;
+  } catch {
+    hasRows = r.body.startsWith("[{");
+  }
+
+  // Only flag if actual data was returned — avoids false positives on 200s
+  // where RLS returns an empty array but technically allows the query.
+  if (!hasRows) return [];
+
+  const severity = isServiceRole ? "critical" : "critical";
+  return [vuln({
+    name: `Supabase RLS Disabled — Unauthenticated Data Exposure on '${table}'`,
+    severity,
+    category: "BaaS Misconfiguration",
+    description:
+      `The Supabase table '${table}' returned live records using only the public ` +
+      (isServiceRole ? "service role key (BYPASSRLS — all RLS policies bypassed)" : "anon key, with no authentication required") + ". " +
+      "Any visitor to your site can read this data.",
+    evidence:
+      `GET ${supabaseUrl}/rest/v1/${table}?limit=1\n` +
+      `apikey: <${isServiceRole ? "service_role" : "anon"}_key>\n` +
+      `HTTP ${r.status} — records returned:\n${r.body.slice(0, 400)}`,
+    solution: isServiceRole
+      ? "Remove the service role key from frontend code immediately. Once fixed, enable RLS on this table as defense-in-depth."
+      : "Enable Row Level Security (RLS) on this table: Dashboard → Table Editor → toggle 'Enable RLS'. " +
+        `Add a SELECT policy: \`CREATE POLICY reads_own ON public.${table} FOR SELECT USING (auth.uid() = user_id);\``,
+    cweId: "CWE-284",
+    cvssScore: 9.1,
+    confidence: 95,
+  })];
+}
+
+/**
+ * CVE-2025-48757 — Supabase GoTrue privilege escalation regression.
+ * Affected versions allowed the anon key to reach /auth/v1/admin/users
+ * (an admin-only route) when certain middleware was misconfigured.
+ * A 200 or 201 response means the anon key has service_role privileges.
+ */
+async function probePrivilegeEscalation(
+  supabaseUrl: string,
+  headers: Record<string, string>,
+): Promise<ScanVulnerability[]> {
+  const adminUrl = `${supabaseUrl}/auth/v1/admin/users`;
+  const r = await safeGet(adminUrl, headers);
+  if (!r) return [];
+
+  if (r.status !== 200 && r.status !== 201) return [];
+
+  return [vuln({
+    name: "CVE-2025-48757 — Supabase Privilege Escalation: Anon Key Has Admin Access",
+    severity: "critical",
+    category: "BaaS Misconfiguration",
+    description:
+      "The anon key can access /auth/v1/admin/users — an endpoint that should require " +
+      "service_role privileges. This matches CVE-2025-48757, a Supabase GoTrue privilege " +
+      "escalation where misconfigured middleware grants the anonymous key de-facto admin " +
+      "access, exposing all user records including emails, phone numbers, and metadata.",
+    evidence:
+      `GET ${adminUrl}\napikey: <anon_key>\nHTTP ${r.status}\n${r.body.slice(0, 400)}`,
+    solution:
+      "Update your Supabase project immediately via the Supabase Dashboard → Settings → " +
+      "Infrastructure → Upgrade. This is a server-side patch; no application code change " +
+      "is required. After patching, verify the endpoint returns 401/403 with the anon key. " +
+      "Rotate your anon key as a precaution since it may have been used to harvest user data.",
+    cweId: "CWE-269",
+    cvssScore: 10.0,
+    confidence: 97,
+  })];
+}
+
+/**
+ * Discovers tables via the PostgREST OpenAPI spec at /rest/v1/ then
+ * performs dry-run write probes (POST with Prefer: tx=rollback) on any
+ * table that exposes POST or PATCH methods.
+ *
+ * A response that is NOT 401/403/404/405 means RLS allowed the request
+ * through — even a 400 (schema validation failed) is a confirmed write path.
+ */
+async function probeOpenApiWrites(
+  supabaseUrl: string,
+  headers: Record<string, string>,
+): Promise<ScanVulnerability[]> {
+  const spec = await safeGet(`${supabaseUrl}/rest/v1/`, headers);
+  if (!spec || spec.status !== 200) return [];
+
+  let paths: Record<string, Record<string, unknown>> = {};
+  try {
+    const parsed = JSON.parse(spec.body) as { paths?: typeof paths };
+    paths = parsed.paths ?? {};
+  } catch {
+    return [];
+  }
+
+  // Collect tables that advertise POST/PATCH and aren't on the suppression list
+  const writeTargets: string[] = [];
+  for (const [path, methods] of Object.entries(paths)) {
+    const table = path.replace(/^\//, "");
+    if (WRITE_SUPPRESSION_LIST.has(table)) continue;
+    const methodNames = Object.keys(methods).map((m) => m.toUpperCase());
+    if (methodNames.includes("POST") || methodNames.includes("PATCH")) {
+      writeTargets.push(table);
+    }
+  }
+
+  if (writeTargets.length === 0) return [];
+
+  // Dry-run: POST a sentinel payload with Prefer: tx=rollback so the DB
+  // rolls back any successful insert before it commits.
+  const writeHeaders = {
+    ...headers,
+    "Prefer": "tx=rollback,return=minimal",
+  };
+
+  const probeResults = await Promise.allSettled(
+    writeTargets.map(async (table): Promise<ScanVulnerability | null> => {
+      const r = await safePost(
+        `${supabaseUrl}/rest/v1/${table}`,
+        { _vibe_scan_dry_run: true },
+        writeHeaders,
+      );
+      if (!r) return null;
+
+      // 401/403 = blocked by auth or RLS ✓
+      // 404 = table not found (schema drift)
+      // 405 = method not allowed
+      // Anything else means the request reached the DB layer — write path is open
+      if ([401, 403, 404, 405].includes(r.status)) return null;
+
+      return vuln({
+        name: `Supabase Write Exposure — Unauthenticated INSERT on '${table}'`,
+        severity: "critical",
+        category: "BaaS Misconfiguration",
+        description:
+          `A dry-run POST to the Supabase table '${table}' was not blocked by RLS or auth. ` +
+          `HTTP ${r.status} was returned — anything other than 401/403/404/405 confirms the ` +
+          "write path reached the database layer. A 400 (schema validation) means RLS allowed " +
+          "the request and only the payload shape was rejected. Authenticated attackers can insert, " +
+          "corrupt, or spam this table.",
+        evidence:
+          `POST ${supabaseUrl}/rest/v1/${table}\n` +
+          `Prefer: tx=rollback,return=minimal\n` +
+          `Payload: {"_vibe_scan_dry_run": true}\n` +
+          `HTTP ${r.status}\n${r.body.slice(0, 300)}`,
+        solution:
+          "Enable RLS on this table and add an INSERT policy that requires authentication: " +
+          `\`CREATE POLICY insert_auth ON public.${table} FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);\` ` +
+          "Without an explicit INSERT policy, all writes are permitted to anyone with the anon key.",
+        cweId: "CWE-284",
+        cvssScore: 9.1,
+        confidence: 88,
+      });
+    }),
+  );
+
+  return probeResults
+    .flatMap((r) => (r.status === "fulfilled" && r.value ? [r.value] : []))
+    .slice(0, 5); // cap at 5 write findings to avoid report noise
+}
 
 async function probeSupabase(cfg: SupabaseConfig): Promise<ScanVulnerability[]> {
   const found: ScanVulnerability[] = [];
 
   // ── New key format: sb_publishable_* ─────────────────────────────────────
-  // Public-by-design (equivalent to anon key). Flag as Info so the user knows
-  // it was detected and is working as intended — security comes from RLS, not key secrecy.
   if (cfg.keyFormat === "sb-publishable") {
     found.push(vuln({
       name: "Supabase Publishable Key Detected (by-design)",
@@ -151,12 +368,9 @@ async function probeSupabase(cfg: SupabaseConfig): Promise<ScanVulnerability[]> 
       cvssScore: 0,
       confidence: 99,
     }));
-    // Still probe tables even with publishable key — RLS misconfiguration is the real risk
   }
 
   // ── New key format: sb_secret_* or legacy service_role JWT ────────────────
-  // These bypass RLS (BYPASSRLS privilege) and are de-facto admin credentials.
-  // They must NEVER appear in frontend JavaScript.
   const isServiceRole =
     cfg.keyFormat === "sb-secret" ||
     cfg.jwtRole === "service_role";
@@ -188,57 +402,34 @@ async function probeSupabase(cfg: SupabaseConfig): Promise<ScanVulnerability[]> 
     }));
   }
 
-  // ── Table probing (behavioral confirmation) ───────────────────────────────
-  // Skip table probing if we have no URL to probe
+  // Skip all active probes if we have no URL
   if (!cfg.url) return found;
 
-  const headers = {
+  const authHeaders = {
     apikey: cfg.anonKey,
     Authorization: `Bearer ${cfg.anonKey}`,
   };
 
-  for (const table of SUPABASE_TABLES) {
-    if (found.filter((f) => f.name.startsWith("Supabase RLS")).length >= 3) break;
-    const r = await safeGet(`${cfg.url}/rest/v1/${table}?select=*&limit=1`, headers);
-    if (!r || r.status !== 200) continue;
+  // ── Run all three active probe categories concurrently ────────────────────
+  const [readResults, privEscResults, writeResults] = await Promise.all([
+    // 1. Sensitive table read probes — concurrent via Promise.allSettled
+    Promise.allSettled(
+      SUPABASE_SENSITIVE_TABLES.map((table) =>
+        probeSensitiveRead(table, cfg.url, authHeaders, isServiceRole),
+      ),
+    ).then((rs) => rs.flatMap((r) => (r.status === "fulfilled" ? r.value : []))),
 
-    let hasRows = false;
-    try {
-      const parsed = JSON.parse(r.body);
-      hasRows = Array.isArray(parsed) && parsed.length > 0;
-    } catch {
-      hasRows = r.body.startsWith("[{");
-    }
+    // 2. CVE-2025-48757 privilege escalation regression test
+    probePrivilegeEscalation(cfg.url, authHeaders),
 
-    // For service_role, ALL table reads are critical (BYPASSRLS means no RLS applies at all)
-    const tableBaseSeverity = isServiceRole ? "critical" : (hasRows ? "critical" : "high");
+    // 3. OpenAPI-driven write exposure probes
+    probeOpenApiWrites(cfg.url, authHeaders),
+  ]);
 
-    found.push(vuln({
-      name: `Supabase RLS Disabled — Unauthenticated Read on '${table}'`,
-      severity: tableBaseSeverity,
-      category: "BaaS Misconfiguration",
-      description:
-        `The Supabase table '${table}' is readable using only the public ` +
-        (isServiceRole ? "service role key (BYPASSRLS — all RLS policies bypassed)" : "anon key, with no authentication required") + ". " +
-        (hasRows
-          ? "Records were returned, confirming live data exposure."
-          : "HTTP 200 was returned; RLS is disabled or permits anonymous reads.") +
-        " Any visitor to your site can query this table.",
-      evidence: `GET ${cfg.url}/rest/v1/${table}?select=*&limit=1\napikey: <${isServiceRole ? "service_role" : "anon"}_key>\nHTTP ${r.status}` +
-        (hasRows ? `\n${r.body.slice(0, 300)}` : ""),
-      solution:
-        isServiceRole
-          ? "Remove the service role key from frontend code immediately (see finding above). Once fixed, " +
-            "enable RLS on this table as defense-in-depth."
-          : "Enable Row Level Security (RLS) on every Supabase table: Dashboard → Table Editor → toggle " +
-            "'Enable RLS'. Create policies restricting reads to authenticated users: " +
-            "`CREATE POLICY reads_own ON public." + table + " FOR SELECT USING (auth.uid() = user_id);`. " +
-            "Without RLS, the public anon key grants full table access.",
-      cweId: "CWE-284",
-      cvssScore: hasRows ? 9.1 : 7.5,
-      confidence: hasRows ? 95 : 72,
-    }));
-  }
+  // Cap sensitive read findings at 5 to avoid drowning the report
+  found.push(...readResults.slice(0, 5));
+  found.push(...privEscResults);
+  found.push(...writeResults);
 
   return found;
 }
