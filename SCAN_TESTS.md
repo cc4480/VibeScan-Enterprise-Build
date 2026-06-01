@@ -6,26 +6,35 @@ Complete catalogue of every security check performed by the engine. Organised by
 
 ## Stage Architecture
 
+**Tier legend:** ★ = both Basic & Deep  |  ◆ = Deep only
+
 ```
 Target URL
     │
-    ├─ Stage 1: Passive header + HTML analysis (scanner.ts)
+    ├─ Stage 1: Passive header + HTML analysis ★         (scanner.ts)
     │
-    └─ Stage 2: Parallel active probes
-          ├─ probes.ts         — HTTP file/method/redirect/CORS probes
-          ├─ dnsChecks.ts      — DNS-over-HTTPS email security checks
-          ├─ jsScanner.ts      — JavaScript secret scanning (deep tier)
-          ├─ jwtAnalysis.ts    — JWT structural analysis
-          ├─ graphqlProbe.ts   — GraphQL endpoint + introspection
-          ├─ baasProbes.ts     — Supabase / PocketBase / Appwrite / Firebase
-          ├─ subdomainTakeover.ts — CNAME dangling detection
-          ├─ pathTraversal.ts  — LFI active probing (deep tier)
-          ├─ sourceMaps.ts     — .map file exposure
-          ├─ apiDocsProbe.ts   — OpenAPI / Swagger UI exposure
-          ├─ nextjsProbe.ts    — __NEXT_DATA__ secret scanning
-          ├─ storageProbe.ts   — S3 / GCS / Azure public listing
-          ├─ crawler.ts        — Inner page crawl + high-value path probing
-          └─ cveCheck.ts       — OSV.dev CVE + EOL version lookup
+    ├─ Stage 2: Parallel active probes
+    │     ├─ probes.ts            ★  HTTP file/method/redirect/CORS probes
+    │     ├─ dnsChecks.ts         ★  DNS-over-HTTPS email security checks
+    │     ├─ jsScanner.ts         ◆  JavaScript secret scanning (deep only)
+    │     ├─ jwtAnalysis.ts       ★  JWT structural analysis (passive)
+    │     ├─ graphqlProbe.ts      ★  GraphQL endpoint + introspection
+    │     ├─ baasProbes.ts        ★  Supabase / PocketBase / Appwrite / Firebase
+    │     ├─ subdomainTakeover.ts ★  CNAME dangling detection (19 services)
+    │     ├─ pathTraversal.ts     ◆  LFI active probing (deep only)
+    │     ├─ sourceMaps.ts        ★  .map file exposure
+    │     ├─ apiDocsProbe.ts      ★  OpenAPI / Swagger UI exposure
+    │     ├─ nextjsProbe.ts       ★  __NEXT_DATA__ secret scanning (passive)
+    │     ├─ storageProbe.ts      ★  S3 / GCS / Azure public listing
+    │     ├─ crawler.ts           ★  High-value path probing always; inner page
+    │     │                          crawl up to 20 pages on deep tier only
+    │     └─ cveCheck.ts          ★  OSV.dev CVE + EOL version lookup
+    │
+    └─ Stage 3: Worker-level checks (run from worker.ts, not runScan)
+          ├─ ssllabs.ts           ★  SSL Labs API TLS assessment (starts in
+          │                          parallel with Stage 1, waits up to 120s)
+          └─ recon.ts             ★  DNS enumeration, subdomain discovery via
+                                     crt.sh + brute-force, TCP port scan (30 ports)
 ```
 
 False-positive philosophy: every check requires a **positive confirmation signal** — not just a non-200 absence or a keyword match. Findings cite the exact HTTP response, header value, or decoded data that triggered them.
@@ -552,6 +561,64 @@ Extracts versioned software from HTML meta tags, inline JS, and response headers
 |---------|---------|----------|
 | Known CVE | OSV.dev returns ≥1 vulnerability for the detected version | High–Critical (based on CVSS) |
 | End-of-life software | Detected version past EOL date (no patches ever again) | High |
+
+---
+
+## 16. SSL Labs TLS Assessment — `ssllabs.ts`
+
+Started in parallel with the Stage 1 header scan from the worker (not from `runScan`), so it runs concurrently with the entire probe suite. Polls the [SSL Labs API v3](https://api.ssllabs.com/api/v3) until the assessment completes or a 120-second timeout is reached. Only runs on HTTPS targets.
+
+The SSL Labs grade overrides the basic TLS detection grade from `scanner.ts`.
+
+| Finding | Trigger | Severity |
+|---------|---------|----------|
+| Weak TLS — Grade C | SSL Labs returns `C` | Medium |
+| Weak TLS — Grade D | SSL Labs returns `D` (outdated protocols, weak ciphers) | High |
+| Weak TLS — Grade F | SSL Labs returns `F` (broken cipher suites, certificate failure) | Critical |
+| Grade T | Trust issue (self-signed / expired cert) — surfaced as part of TLS grade | — |
+
+If the SSL Labs API is unavailable or times out, the engine falls back to the basic TLS detection (HTTPS present/absent) from `scanner.ts` with no gap in coverage.
+
+---
+
+## 17. Reconnaissance — `recon.ts`
+
+Runs from the worker concurrently with the entire probe suite. SSRF-protected: the target hostname is resolved to an IP before port scanning; if the resolved IP is in an RFC-1918, loopback, or link-local range, the port scan is skipped.
+
+### 17.1 DNS Enumeration
+
+Queries all standard record types via Cloudflare DoH: `A`, `AAAA`, `MX`, `NS`, `TXT` (SPF/DMARC), `SOA`, `CAA`. Results are stored in the report for context (not findings on their own).
+
+### 17.2 Subdomain Discovery
+
+Two concurrent methods:
+1. **Certificate Transparency** — queries `crt.sh` for the apex domain; resolves up to 100 discovered subdomains
+2. **DNS brute-force** — checks 30 common wordlist prefixes (`www`, `api`, `app`, `admin`, `panel`, `dashboard`, `portal`, `vpn`, `dev`, `staging`, `test`, `mail`, `smtp`, `ftp`, `git`, `cdn`, `cloud`, `remote`, `secure`, `mx`, `mail2`, `support`, `help`, `status`, `docs`, `beta`, `internal`, `mobile`, `shop`, `payments`)
+
+Results (hostname + IP + CNAME if applicable + source) are stored in the report. No findings are raised for discovered subdomains themselves — the subdomain takeover probe (`subdomainTakeover.ts`) handles that.
+
+### 17.3 Port Scan
+
+TCP-connect scan of 30 ports with banner grabbing. Each connection is capped at 2 seconds. **Dangerous** ports produce first-class vulnerabilities merged into the scan findings:
+
+| Port | Service | Severity | Reason |
+|------|---------|----------|--------|
+| 23 | Telnet | Critical | Transmits credentials in plaintext |
+| 445 | SMB | Critical | EternalBlue / ransomware vector (WannaCry/NotPetya) |
+| 2375 | Docker API (unencrypted) | Critical | No-auth container escape → full host compromise |
+| 6379 | Redis | Critical | Often no-auth; full DB read/write |
+| 3306 | MySQL | High | Direct DB access from internet |
+| 1433 | MSSQL | High | Direct DB access / brute-force target |
+| 1521 | Oracle DB | High | Direct DB listener exposure |
+| 3389 | RDP | High | Brute-force / BlueKeep vector |
+| 5432 | PostgreSQL | High | Direct DB access from internet |
+| 5984 | CouchDB | High | Often no-auth (CVE-2017-12635) |
+| 9200 | Elasticsearch | High | Often no-auth; full index read/write |
+| 11211 | Memcached | High | No-auth; DDoS amplification vector |
+| 27017 | MongoDB | High | Often no-auth (MongoDB ransomware campaigns) |
+| 2376 | Docker API (TLS) | Medium | Remote Docker access — restrict to known IPs |
+
+**Non-dangerous** ports (21/FTP, 22/SSH, 25/SMTP, 53/DNS, 80/HTTP, 110/POP3, 143/IMAP, 443/HTTPS, 465/SMTPS, 587/SMTP-Sub, 993/IMAPS, 995/POP3S, 3000/dev, 4443/alt-HTTPS, 8000/8080/8443/8888/9000 alt-HTTP) are recorded in the report as open-port context without raising findings.
 
 ---
 
