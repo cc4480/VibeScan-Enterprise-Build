@@ -97,38 +97,8 @@ export function computeConfidence(
 
 // ─── Corroboration merge pass ─────────────────────────────────────────────────
 
-// ─── Root-cause synonym catalog ───────────────────────────────────────────────
-// Maps known finding name patterns to a canonical root-cause key so that
-// independent scanner checks that detect the same underlying vulnerability
-// (e.g. SSL Labs TLS grade + our basic TLS check) get merged together.
+import { ROOT_CAUSE_PATTERNS } from "./scoring-data";
 
-const ROOT_CAUSE_PATTERNS: Array<{ pattern: RegExp; key: string }> = [
-  // Transport Security — TLS quality (SSL Labs grade and basic TLS check)
-  { pattern: /weak tls|ssl labs.*grade|tls.*grade|tls configuration/i, key: "transport::tls-quality" },
-  // Transport Security — HSTS missing
-  { pattern: /hsts|strict.transport.security/i,                         key: "transport::hsts" },
-  // Injection Defense — CSP missing
-  { pattern: /(content.security.policy|(?<!\w)csp(?!\w)).*(missing|absent|not set)/i, key: "injection::csp-missing" },
-  // Injection Defense — CSP unsafe directives
-  { pattern: /unsafe.inline|unsafe.eval/i,                              key: "injection::csp-unsafe" },
-  // UI Security — Clickjacking / X-Frame-Options
-  { pattern: /x-frame.options|clickjack|frame.ancestors/i,              key: "ui::clickjacking" },
-  // Content Sniffing — X-Content-Type-Options
-  { pattern: /x-content-type.options|content.type.sniff|nosniff/i,      key: "content::nosniff" },
-  // Information Disclosure — Server version
-  { pattern: /server.*version|version.*disclosure|server.*header/i,     key: "disclosure::server-version" },
-  // Information Disclosure — X-Powered-By
-  { pattern: /x-powered-by/i,                                           key: "disclosure::x-powered-by" },
-  // CORS — wildcard origin
-  { pattern: /cors.*wildcard|wildcard.*cors|access.control.allow.origin.*\*/i, key: "cors::wildcard" },
-  // Browser Feature Control — Referrer-Policy
-  { pattern: /referrer.policy/i,                                        key: "browser::referrer-policy" },
-  // Browser Feature Control — Permissions-Policy
-  { pattern: /permissions.policy|feature.policy/i,                      key: "browser::permissions-policy" },
-  // NOTE: cookie flag findings (Secure / HttpOnly / SameSite) are intentionally
-  // NOT merged — each controls a distinct security property and must remain
-  // independently reportable and dismissible.
-];
 
 function getRootCauseKey(category: string, name: string): string {
   for (const { pattern, key } of ROOT_CAUSE_PATTERNS) {
@@ -204,85 +174,58 @@ export function autoEnrichConfidence(vulns: ScanVulnerability[]): ScanVulnerabil
   });
 }
 
+// ─── Confidence inference lookup table ───────────────────────────────────────
+
+type InferRule = {
+  test: (ev: string, name: string, cat: string, v: ScanVulnerability) => boolean;
+  cls: DetectionClass;
+};
+
+const INFER_RULES: InferRule[] = [
+  {
+    test: (ev) =>
+      /root:x:0:0:|daemon:[x*]:\d+:\d+:|nobody:[x*]:\d+:\d+:/i.test(ev) ||
+      /\[fonts\]|\[extensions\]|\[mci extensions\]/i.test(ev) ||
+      /location:.*evil-redirect-probe/i.test(ev),
+    cls: "confirmed_exploit",
+  },
+  {
+    test: (_e, _n, cat, v) =>
+      (cat.includes("source code") || cat.includes("credential") || cat.includes("data exposure")) &&
+      (v.evidence ?? "").length > 40,
+    cls: "confirmed_exposure",
+  },
+  { test: (_e, _n, cat) => cat.includes("email") || cat.includes("dns"),       cls: "dns_record"          },
+  { test: (_e, _n, cat) => cat.includes("cve") || cat.includes("outdated"),    cls: "version_heuristic"   },
+  { test: (_e, name)    => name.includes("subdomain") && name.includes("takeover"), cls: "subdomain_heuristic" },
+  { test: (_e, _n, cat) => cat.includes("secret") || cat.includes("credentials"), cls: "secret_regex"     },
+  {
+    test: (_e, name, cat) =>
+      name.includes("open redirect") || name.includes("http method") ||
+      name.includes("cors")          || name.includes("error disclosure") ||
+      name.includes("directory listing") || name.includes("rate limit") ||
+      name.includes("source map")    || name.includes("path traversal") ||
+      cat.includes("unvalidated redirect"),
+    cls: "active_behavioral",
+  },
+  {
+    test: (_e, name) =>
+      /unsafe-inline|unsafe-eval|wildcard|disabled|allows\s+unsafe/i.test(name) ||
+      name.includes("misconfigured") || name.includes("bypassed") || name.includes("incorrect"),
+    cls: "header_misconfigured",
+  },
+  { test: (ev, name) => ev.includes("(header absent") || /\b(no |missing |absent )/i.test(name), cls: "header_absent" },
+];
+
 function inferConfidence(v: ScanVulnerability): number {
-  const ev = v.evidence ?? "";
+  const ev   = v.evidence ?? "";
   const name = v.name.toLowerCase();
-  const cat = v.category.toLowerCase();
+  const cat  = v.category.toLowerCase();
   const opts: ConfidenceOpts = { evidence: ev, cweId: v.cweId, wstgId: v.wstgId };
 
-  // 1. Confirmed exploitation — evidence contains actual filesystem content
-  //    or a confirmed redirect to the probe domain
-  if (
-    /root:x:0:0:|daemon:[x*]:\d+:\d+:|nobody:[x*]:\d+:\d+:/i.test(ev) || // /etc/passwd
-    /\[fonts\]|\[extensions\]|\[mci extensions\]/i.test(ev) ||             // win.ini
-    /location:.*evil-redirect-probe/i.test(ev)                             // open redirect
-  ) {
-    return computeConfidence("confirmed_exploit", opts);
+  for (const rule of INFER_RULES) {
+    if (rule.test(ev, name, cat, v)) return computeConfidence(rule.cls, opts);
   }
-
-  // 2. Confirmed file exposure — sensitive file fetched and body validated
-  if (
-    (cat.includes("source code") || cat.includes("credential") || cat.includes("data exposure")) &&
-    ev.length > 40
-  ) {
-    return computeConfidence("confirmed_exposure", opts);
-  }
-
-  // 3. DNS / email security — deterministic DNS record lookups
-  if (cat.includes("email") || cat.includes("dns")) {
-    return computeConfidence("dns_record", opts);
-  }
-
-  // 4. CVE / outdated software — version string heuristic
-  if (cat.includes("cve") || cat.includes("outdated")) {
-    return computeConfidence("version_heuristic", opts);
-  }
-
-  // 5. Subdomain takeover — NXDOMAIN + CNAME speculation
-  if (name.includes("subdomain") && name.includes("takeover")) {
-    return computeConfidence("subdomain_heuristic", opts);
-  }
-
-  // 6. Exposed secrets — regex pattern match in JS/HTML source
-  if (cat.includes("secret") || cat.includes("credentials")) {
-    return computeConfidence("secret_regex", opts);
-  }
-
-  // 7. Active behavioral — HTTP probe confirmed a response difference
-  if (
-    name.includes("open redirect") ||
-    name.includes("http method") ||
-    name.includes("cors") ||
-    name.includes("error disclosure") ||
-    name.includes("directory listing") ||
-    name.includes("rate limit") ||
-    name.includes("source map") ||
-    name.includes("path traversal") ||
-    cat.includes("unvalidated redirect")
-  ) {
-    return computeConfidence("active_behavioral", opts);
-  }
-
-  // 8. Header misconfigured — header is present but value is insecure
-  if (
-    /unsafe-inline|unsafe-eval|wildcard|disabled|allows\s+unsafe/i.test(name) ||
-    name.includes("misconfigured") ||
-    name.includes("bypassed") ||
-    name.includes("incorrect")
-  ) {
-    return computeConfidence("header_misconfigured", opts);
-  }
-
-  // 9. Header absent — security header entirely missing
-  if (ev.includes("(header absent") || /\b(no |missing |absent )/i.test(name)) {
-    return computeConfidence("header_absent", opts);
-  }
-
-  // 10. Info-only findings
-  if (v.severity === "info") {
-    return computeConfidence("info_disclosure", opts);
-  }
-
-  // Default — passive validated check
+  if (v.severity === "info") return computeConfidence("info_disclosure", opts);
   return computeConfidence("validated_passive", opts);
 }

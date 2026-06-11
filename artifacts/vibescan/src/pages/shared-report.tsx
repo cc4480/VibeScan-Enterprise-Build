@@ -1,186 +1,15 @@
-import { useRoute, Link } from "wouter";
 import { useState, useEffect, useRef } from "react";
+import { useRoute, Link } from "wouter";
 import {
   Shield, Globe, Lock, Loader2, AlertCircle, Clock,
   Download, Share2,
 } from "lucide-react";
 import { cn, getGradeColor } from "@/lib/utils";
-
-interface SharedReportData {
-  id: string;
-  scanId: string | null;
-  targetUrl: string;
-  tier: string;
-  scannedAt: string;
-  duration: number | null;
-  createdAt: string;
-  data: {
-    vulnerabilities: Array<{
-      id: string;
-      name: string;
-      severity: string;
-      category: string;
-      description: string;
-      solution: string;
-      evidence?: string | null;
-      cweId?: string | null;
-      cvssScore?: number | null;
-      wstgId?: string | null;
-      confidence?: number | null;
-    }>;
-    summary: {
-      totalVulnerabilities: number;
-      critical: number;
-      high: number;
-      medium: number;
-      low: number;
-      info: number;
-      riskScore: number;
-      grade: string;
-      executiveSummary: string;
-    };
-    technologies: string[];
-    server?: string | null;
-    tlsGrade?: string | null;
-    aiAnalysis?: {
-      overallRisk: string;
-      topPriorities: string[];
-      quickWins: string[];
-      complianceNotes?: string | null;
-    } | null;
-  };
-}
-
-const SEV_COLORS: Record<string, string> = {
-  critical: "bg-red-950 text-red-400 border-red-800",
-  high:     "bg-orange-950 text-orange-400 border-orange-800",
-  medium:   "bg-yellow-950 text-yellow-400 border-yellow-800",
-  low:      "bg-blue-950 text-blue-400 border-blue-800",
-  info:     "bg-slate-900 text-slate-400 border-slate-700",
-};
-
-const SEV_ORDER: Record<string, number> = {
-  critical: 0, high: 1, medium: 2, low: 3, info: 4,
-};
-
-const VERIFICATION_THRESHOLD = 65;
-
-function GradeRing({ grade, score }: { grade: string; score: number }) {
-  const colorMap: Record<string, string> = {
-    A: "#34d399", B: "#a3e635", C: "#facc15", D: "#fb923c", F: "#f87171",
-  };
-  const color = colorMap[grade] ?? "#94a3b8";
-  return (
-    <div className="relative w-36 h-36 flex items-center justify-center shrink-0">
-      <svg className="w-full h-full transform -rotate-90 absolute inset-0">
-        <circle cx="68" cy="68" r="60" fill="none" stroke="currentColor" strokeWidth="6" className="text-secondary" />
-        <circle
-          cx="68" cy="68" r="60" fill="none" stroke={color} strokeWidth="6"
-          strokeDasharray={`${2 * Math.PI * 60}`}
-          strokeDashoffset={`${2 * Math.PI * 60 * (1 - score / 100)}`}
-          strokeLinecap="round"
-          className="transition-all duration-1000 ease-out"
-        />
-      </svg>
-      <div className="flex flex-col items-center bg-background w-24 h-24 rounded-full border-4 border-card shadow-xl z-10 relative">
-        <div className="flex flex-col items-center justify-center h-full">
-          <span className={cn("text-4xl font-black leading-none", getGradeColor(grade))}>{grade}</span>
-          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest mt-0.5">
-            Risk {score}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function VulnRow({
-  vuln,
-  index,
-  needsVerification,
-}: {
-  vuln: SharedReportData["data"]["vulnerabilities"][0];
-  index: number;
-  needsVerification?: boolean;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const sev = SEV_COLORS[vuln.severity] ?? SEV_COLORS.info;
-
-  return (
-    <div className="rounded-xl overflow-hidden border border-white/5 bg-secondary/10">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full p-4 flex items-center gap-3 text-left hover:bg-white/[0.02] transition-colors"
-      >
-        <span className={cn("px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0 border", sev)}>
-          {vuln.severity}
-        </span>
-        <span className="font-semibold text-sm text-foreground flex-1 truncate">{index + 1}. {vuln.name}</span>
-        {needsVerification && (
-          <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded font-medium shrink-0 hidden sm:inline">
-            verify
-          </span>
-        )}
-        <span className="text-xs text-muted-foreground shrink-0 hidden md:inline">{vuln.category}</span>
-      </button>
-
-      {expanded && (
-        <div className="px-4 pb-4 pt-0 border-t border-white/5 bg-secondary/20 space-y-4">
-          <div className="pt-4">
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Description</p>
-            <p className="text-sm text-foreground/90 leading-relaxed">{vuln.description}</p>
-          </div>
-
-          {vuln.evidence && (
-            <div>
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Evidence</p>
-              <div className="bg-background border border-white/10 rounded-lg p-3 text-xs font-mono text-muted-foreground overflow-x-auto whitespace-pre-wrap">
-                {vuln.evidence}
-              </div>
-            </div>
-          )}
-
-          <div>
-            <p className="text-xs font-bold text-primary uppercase tracking-wider mb-1.5">Recommended Fix</p>
-            <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">
-              {vuln.solution}
-            </div>
-          </div>
-
-          {(vuln.cweId || vuln.cvssScore != null || vuln.wstgId) && (
-            <div className="flex gap-2 flex-wrap">
-              {vuln.cweId && (
-                <a
-                  href={`https://cwe.mitre.org/data/definitions/${vuln.cweId.replace("CWE-", "")}.html`}
-                  target="_blank" rel="noreferrer"
-                  className="text-xs text-muted-foreground bg-secondary px-2 py-1 rounded hover:bg-secondary/80 transition-colors"
-                >
-                  {vuln.cweId}
-                </a>
-              )}
-              {vuln.cvssScore != null && (
-                <span className={cn(
-                  "text-xs px-2 py-1 rounded font-medium",
-                  vuln.cvssScore >= 9 ? "bg-red-950 text-red-400" :
-                  vuln.cvssScore >= 7 ? "bg-orange-950 text-orange-400" :
-                  vuln.cvssScore >= 4 ? "bg-yellow-950 text-yellow-400" :
-                  "bg-secondary text-muted-foreground",
-                )}>
-                  CVSS {vuln.cvssScore.toFixed(1)}
-                </span>
-              )}
-              {vuln.wstgId && (
-                <span className="text-xs text-muted-foreground bg-secondary px-2 py-1 rounded">
-                  {vuln.wstgId}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+import {
+  GradeRing, VulnRow,
+  SEV_COLORS, SEV_ORDER, VERIFICATION_THRESHOLD,
+  type SharedReportData,
+} from "./shared-report-components";
 
 export default function SharedReport() {
   const [, params] = useRoute("/share/:token");
@@ -190,7 +19,6 @@ export default function SharedReport() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ status: number; message: string } | null>(null);
 
-  // PDF generation state — must be declared before any conditional returns (Rules of Hooks)
   const pdfContainerRef = useRef<HTMLDivElement>(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [showPdfContainer, setShowPdfContainer] = useState(false);
@@ -321,7 +149,6 @@ export default function SharedReport() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24">
-      {/* Top nav */}
       <div className="mb-8 flex items-center justify-between">
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary/50 border border-white/5 text-xs text-muted-foreground">
           <Share2 className="w-3.5 h-3.5" />
@@ -337,7 +164,6 @@ export default function SharedReport() {
         </button>
       </div>
 
-      {/* Cover */}
       <div className="glass-panel p-6 md:p-10 rounded-3xl mb-10 relative overflow-hidden flex flex-col sm:flex-row items-center gap-8">
         <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-primary/5 rounded-full blur-[100px] pointer-events-none" />
         <GradeRing grade={summary.grade} score={summary.riskScore} />
@@ -353,7 +179,6 @@ export default function SharedReport() {
         </div>
       </div>
 
-      {/* Severity summary */}
       <div className="flex flex-wrap gap-3 mb-10">
         {(["critical", "high", "medium", "low", "info"] as const).map((sev) => {
           const count = summary[sev];
@@ -368,7 +193,6 @@ export default function SharedReport() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left: Findings */}
         <div className="lg:col-span-2 space-y-6">
           <h2 className="text-xl font-bold border-b border-white/10 pb-4">
             Identified Vulnerabilities
@@ -404,9 +228,7 @@ export default function SharedReport() {
           )}
         </div>
 
-        {/* Right: Sidebar */}
         <div className="space-y-6">
-          {/* AI Analysis */}
           {aiAnalysis && (
             <div className="glass-card rounded-2xl p-5 border-t-4 border-t-primary">
               <h3 className="text-sm font-bold mb-4 flex items-center gap-2">
@@ -445,7 +267,6 @@ export default function SharedReport() {
             </div>
           )}
 
-          {/* Tech Profile */}
           <div className="glass-card rounded-2xl p-5">
             <h3 className="text-sm font-bold mb-4 flex items-center gap-2 text-muted-foreground uppercase tracking-wider">
               Tech Profile
@@ -478,7 +299,6 @@ export default function SharedReport() {
         </div>
       </div>
 
-      {/* Footer badge */}
       <div className="mt-16 pt-8 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="text-center sm:text-left">
           <p className="text-xs text-muted-foreground">
@@ -496,7 +316,6 @@ export default function SharedReport() {
         </Link>
       </div>
 
-      {/* Off-screen container captured by html2canvas for PDF generation */}
       {showPdfContainer && (
         <div
           ref={pdfContainerRef}
@@ -515,7 +334,6 @@ export default function SharedReport() {
             padding: "32px",
           }}
         >
-          {/* PDF Cover */}
           <div style={{ marginBottom: "24px", paddingBottom: "20px", borderBottom: "2px solid #e5e7eb" }}>
             <h1 style={{ fontSize: "24px", fontWeight: "bold", marginBottom: "4px" }}>Security Report</h1>
             <p style={{ color: "#6b7280", marginBottom: "12px" }}>{report.targetUrl}</p>
@@ -527,13 +345,11 @@ export default function SharedReport() {
             </div>
           </div>
 
-          {/* Executive Summary */}
           <div style={{ marginBottom: "20px" }}>
             <h2 style={{ fontSize: "16px", fontWeight: "bold", marginBottom: "8px" }}>Executive Summary</h2>
             <p style={{ color: "#374151" }}>{summary.executiveSummary}</p>
           </div>
 
-          {/* Severity counts */}
           <div style={{ display: "flex", gap: "8px", marginBottom: "24px", flexWrap: "wrap" }}>
             {summary.critical > 0 && <span style={{ padding: "4px 10px", background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca", borderRadius: "4px" }}>🔴 Critical: {summary.critical}</span>}
             {summary.high > 0 && <span style={{ padding: "4px 10px", background: "#fff7ed", color: "#9a3412", border: "1px solid #fed7aa", borderRadius: "4px" }}>🟠 High: {summary.high}</span>}
@@ -542,7 +358,6 @@ export default function SharedReport() {
             {summary.info > 0 && <span style={{ padding: "4px 10px", background: "#f9fafb", color: "#374151", border: "1px solid #e5e7eb", borderRadius: "4px" }}>⚪ Info: {summary.info}</span>}
           </div>
 
-          {/* Confirmed Findings */}
           {confirmed.length > 0 && (
             <div style={{ marginBottom: "24px" }}>
               <h2 style={{ fontSize: "16px", fontWeight: "bold", marginBottom: "12px", color: "#065f46" }}>✅ Confirmed Findings ({confirmed.length})</h2>
@@ -558,7 +373,6 @@ export default function SharedReport() {
             </div>
           )}
 
-          {/* Unverified Findings */}
           {unverified.length > 0 && (
             <div style={{ marginBottom: "24px" }}>
               <h2 style={{ fontSize: "16px", fontWeight: "bold", marginBottom: "12px", color: "#92400e" }}>⚠️ Needs Verification ({unverified.length})</h2>
@@ -573,7 +387,6 @@ export default function SharedReport() {
             </div>
           )}
 
-          {/* AI Analysis */}
           {aiAnalysis && (
             <div style={{ marginBottom: "24px", paddingTop: "16px", borderTop: "1px solid #e5e7eb" }}>
               <h2 style={{ fontSize: "16px", fontWeight: "bold", marginBottom: "12px" }}>🤖 AI Analysis</h2>
@@ -597,7 +410,6 @@ export default function SharedReport() {
             </div>
           )}
 
-          {/* Tech Profile */}
           <div style={{ paddingTop: "16px", borderTop: "1px solid #e5e7eb" }}>
             <h2 style={{ fontSize: "16px", fontWeight: "bold", marginBottom: "8px" }}>🖥️ Tech Profile</h2>
             {tlsGrade && <p><strong>TLS Grade:</strong> {tlsGrade}</p>}
@@ -605,7 +417,6 @@ export default function SharedReport() {
             {technologies.length > 0 && <p><strong>Technologies:</strong> {technologies.join(", ")}</p>}
           </div>
 
-          {/* Footer */}
           <div style={{ marginTop: "32px", paddingTop: "12px", borderTop: "1px solid #e5e7eb", textAlign: "center", color: "#9ca3af", fontSize: "11px" }}>
             Generated by VibeScan — https://vibescan.app | {dateStr}
           </div>
