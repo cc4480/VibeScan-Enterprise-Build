@@ -1,10 +1,12 @@
 import { useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { useListScans, useGetCredits, useGetScanStatus, getGetScanStatusQueryKey } from "@workspace/api-client-react";
-import { Shield, Plus, Clock, CheckCircle2, AlertCircle, RefreshCw, FileText, Loader2, ArrowRight, Info, Zap as ZapIcon } from "lucide-react";
+import { Shield, Plus, Clock, CheckCircle2, AlertCircle, RefreshCw, FileText, Loader2, ArrowRight, Info, Zap as ZapIcon, Bell, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { Scan } from "@workspace/api-client-react";
+import { listMonitorSubscriptions } from "@/lib/monitor-api";
 
 const GRADE_COLORS: Record<string, string> = {
   A: "text-emerald-400 bg-emerald-400/10 border-emerald-400/30",
@@ -213,6 +215,10 @@ export default function DashboardPage() {
 
   const { data: scans, isLoading: loadingScans } = useListScans();
   const { data: credits, isLoading: loadingCredits } = useGetCredits();
+  const { data: monitors } = useQuery({
+    queryKey: ["monitor-subscriptions"],
+    queryFn: listMonitorSubscriptions,
+  });
 
   if (loadingScans || loadingCredits) {
     return (
@@ -223,6 +229,8 @@ export default function DashboardPage() {
   }
 
   const completedCount = scans?.filter((s) => s.status === 'complete').length ?? 0;
+  const activeMonitors = monitors?.filter((m) => m.status === 'active') ?? [];
+  const pendingCveAlerts = activeMonitors.reduce((sum, m) => sum + m.alertCount, 0);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -250,7 +258,7 @@ export default function DashboardPage() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
         <div className="glass-card p-6 rounded-2xl flex flex-col gap-2">
           <div className="text-muted-foreground text-sm font-medium flex items-center gap-2">
             <RefreshCw className="w-4 h-4" /> Total Scans
@@ -277,6 +285,38 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
+
+        <Link
+          href="/monitor"
+          className={cn(
+            "glass-card p-6 rounded-2xl flex flex-col gap-2 relative overflow-hidden group transition-colors hover:border-indigo-500/30",
+            pendingCveAlerts > 0 && "border-red-400/30",
+          )}
+        >
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="text-muted-foreground text-sm font-medium flex items-center gap-2 relative z-10">
+            <Bell className="w-4 h-4 text-indigo-400" /> Active Monitors
+          </div>
+          <div className="flex items-end justify-between relative z-10">
+            <div className={cn("text-4xl font-bold", activeMonitors.length > 0 ? "text-indigo-400" : "")}>
+              {activeMonitors.length}
+            </div>
+            {pendingCveAlerts > 0 ? (
+              <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-red-400/10 border border-red-400/20 pb-1">
+                <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
+                <span className="text-xs font-bold text-red-400">{pendingCveAlerts} CVE{pendingCveAlerts > 1 ? "s" : ""}</span>
+              </div>
+            ) : activeMonitors.length === 0 ? (
+              <span className="text-xs font-medium text-indigo-400 hover:underline underline-offset-4 pb-1">
+                Set up &rarr;
+              </span>
+            ) : (
+              <span className="text-xs font-medium text-indigo-400 pb-1">
+                Watching &rarr;
+              </span>
+            )}
+          </div>
+        </Link>
       </div>
 
       {/* Scan table */}
