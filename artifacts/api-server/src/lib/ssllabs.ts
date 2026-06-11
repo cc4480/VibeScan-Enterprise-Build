@@ -1,14 +1,19 @@
 /**
  * SSL Labs API integration.
  * Uses the free Qualys SSL Labs API v3 (no key required).
- * Polls until the assessment is READY or times out.
+ *
+ * Strategy:
+ *   1. Check cache first (fromCache: "on") — instant for sites assessed in the last 24h.
+ *   2. If not cached, trigger a new assessment and poll for up to MAX_WAIT_MS.
+ *   3. If still not READY, return null (graceful degradation — scan continues without TLS grade).
  *
  * Reference: https://github.com/ssllabs/ssllabs-scan/blob/master/ssllabs-api-docs-v3.md
  */
 
-const SSL_LABS_BASE = "https://api.ssllabs.com/api/v3";
-const POLL_INTERVAL_MS = 15_000;
-const MAX_WAIT_MS = 120_000;
+const SSL_LABS_BASE    = "https://api.ssllabs.com/api/v3";
+const POLL_INTERVAL_MS = 10_000;  // 10 s between polls
+const MAX_WAIT_MS      = 30_000;  // 30 s max total wait (was 120 s — reduced to avoid hung scans)
+const FETCH_TIMEOUT_MS = 10_000;  // 10 s abort timeout per individual HTTP request
 
 export interface SslLabsResult {
   grade: string | null;
@@ -35,29 +40,49 @@ interface SslLabsResponse {
 }
 
 async function fetchAnalysis(host: string, startNew: boolean): Promise<SslLabsResponse> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
   const params = new URLSearchParams({
     host,
     fromCache: startNew ? "off" : "on",
     all: "done",
   });
-  if (startNew) {
-    params.set("startNew", "on");
+  if (startNew) params.set("startNew", "on");
+
+  try {
+    const res = await fetch(`${SSL_LABS_BASE}/analyze?${params.toString()}`, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`SSL Labs API returned ${res.status}`);
+    return res.json() as Promise<SslLabsResponse>;
+  } finally {
+    clearTimeout(timer);
   }
+}
 
-  const res = await fetch(`${SSL_LABS_BASE}/analyze?${params.toString()}`, {
-    headers: { Accept: "application/json" },
-  });
+function extractResult(data: SslLabsResponse): SslLabsResult {
+  const endpoint = data.endpoints?.[0];
+  const grade = endpoint?.grade ?? null;
+  const issues: string[] = [];
 
-  if (!res.ok) {
-    throw new Error(`SSL Labs API returned ${res.status}`);
-  }
+  if (endpoint?.hasWarnings)                    issues.push("SSL Labs flagged configuration warnings");
+  if (grade === "T")                            issues.push("Certificate is not trusted");
+  if (grade && /^[C-F]$/.test(grade))          issues.push(`Weak SSL configuration — grade ${grade}`);
+  if (endpoint?.statusDetailsMessage)           issues.push(endpoint.statusDetailsMessage);
 
-  return res.json() as Promise<SslLabsResponse>;
+  return {
+    grade,
+    hasWarnings:   endpoint?.hasWarnings   ?? false,
+    isExceptional: endpoint?.isExceptional ?? false,
+    issues,
+  };
 }
 
 /**
  * Run an SSL Labs assessment for the given HTTPS hostname.
- * Returns null if the target is not HTTPS or the API times out.
+ * Returns null if the target is not HTTPS, the API times out, or an error occurs.
  */
 export async function checkSslLabs(targetUrl: string): Promise<SslLabsResult | null> {
   let hostname: string;
@@ -69,54 +94,51 @@ export async function checkSslLabs(targetUrl: string): Promise<SslLabsResult | n
     return null;
   }
 
-  const deadline = Date.now() + MAX_WAIT_MS;
-  let isFirstRequest = true;
-
-  while (Date.now() < deadline) {
-    let data: SslLabsResponse;
-    try {
-      data = await fetchAnalysis(hostname, isFirstRequest);
-      isFirstRequest = false;
-    } catch (err) {
-      console.warn("[ssllabs] API request failed:", err);
-      return null;
-    }
-
-    if (data.status === "ERROR") {
-      const msg = data.errors?.[0]?.message ?? "unknown error";
-      console.warn("[ssllabs] Assessment error:", msg);
-      return null;
-    }
-
-    if (data.status === "READY") {
-      const endpoint = data.endpoints?.[0];
-      const grade = endpoint?.grade ?? null;
-      const issues: string[] = [];
-
-      if (endpoint?.hasWarnings) {
-        issues.push("SSL Labs flagged configuration warnings");
-      }
-      if (grade === "T") {
-        issues.push("Certificate is not trusted");
-      }
-      if (grade && /^[C-F]$/.test(grade)) {
-        issues.push(`Weak SSL configuration — grade ${grade}`);
-      }
-      if (endpoint?.statusDetailsMessage) {
-        issues.push(endpoint.statusDetailsMessage);
-      }
-
-      return {
-        grade,
-        hasWarnings: endpoint?.hasWarnings ?? false,
-        isExceptional: endpoint?.isExceptional ?? false,
-        issues,
-      };
-    }
-
-    await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+  // ── Step 1: Try the cache first (no new assessment) ─────────────────────
+  // SSL Labs caches results for ~24 h. For most production sites this resolves
+  // immediately without starting a new assessment.
+  let data: SslLabsResponse;
+  try {
+    data = await fetchAnalysis(hostname, false);
+  } catch (err) {
+    console.warn("[ssllabs] Cache check failed — skipping TLS grade:", err);
+    return null;
   }
 
-  console.warn("[ssllabs] Assessment timed out after", MAX_WAIT_MS, "ms");
+  if (data.status === "READY")  return extractResult(data);
+  if (data.status === "ERROR") {
+    console.warn("[ssllabs] Assessment error:", data.errors?.[0]?.message ?? "unknown");
+    return null;
+  }
+
+  // ── Step 2: Cache miss — trigger a new assessment and poll ───────────────
+  // Cap total wait at MAX_WAIT_MS so a slow SSL Labs response never hangs the scan.
+  const deadline = Date.now() + MAX_WAIT_MS;
+  let isFirstPoll = true;
+
+  while (Date.now() < deadline) {
+    // Brief pause before polling (except on the very first trigger request)
+    if (!isFirstPoll) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break;
+      await new Promise<void>((r) => setTimeout(r, Math.min(POLL_INTERVAL_MS, remaining)));
+    }
+
+    try {
+      data = await fetchAnalysis(hostname, isFirstPoll);
+      isFirstPoll = false;
+    } catch (err) {
+      console.warn("[ssllabs] Poll request failed:", err);
+      return null;
+    }
+
+    if (data.status === "READY")  return extractResult(data);
+    if (data.status === "ERROR") {
+      console.warn("[ssllabs] Assessment error:", data.errors?.[0]?.message ?? "unknown");
+      return null;
+    }
+  }
+
+  console.warn("[ssllabs] Assessment timed out after", MAX_WAIT_MS, "ms — continuing without TLS grade");
   return null;
 }
