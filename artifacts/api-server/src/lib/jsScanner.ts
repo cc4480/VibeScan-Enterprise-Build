@@ -153,6 +153,7 @@ const SECRET_PATTERNS: SecretPattern[] = [
     severity: "high", cvssScore: 7.5, cweId: "CWE-798",
     description: "A Mailchimp API key was found in client-side JavaScript. This provides full access to your email lists, campaigns, and subscriber data.",
     solution: "Rotate this API key in the Mailchimp account settings. Move all Mailchimp API calls to a backend service.",
+    validate: (m) => !/EXAMPLE|SAMPLE|YOUR.KEY|PLACEHOLDER|TEST/i.test(m),
   },
 
   // ── Cryptographic Keys ────────────────────────────────────────────────────
@@ -190,8 +191,24 @@ const SECRET_PATTERNS: SecretPattern[] = [
     description: "A JWT (JSON Web Token) was found hardcoded in JavaScript source code. If this is a long-lived or non-expiring token, anyone who views this code is authenticated as the associated user or service account.",
     solution: "Immediately invalidate this token (rotate the JWT signing secret, or if using a token allowlist, remove this token). Never hardcode JWTs in source code. Tokens should be dynamically obtained at runtime and stored in memory, not in code.",
     validate: (m) => {
-      // Skip very short tokens that are likely examples
-      return m.length > 60;
+      if (m.length <= 60) return false;
+      try {
+        const [, payloadB64] = m.split(".");
+        if (!payloadB64) return false;
+        const padded = payloadB64
+          .replace(/-/g, "+").replace(/_/g, "/")
+          .padEnd(payloadB64.length + (4 - (payloadB64.length % 4)) % 4, "=");
+        const payload = JSON.parse(
+          Buffer.from(padded, "base64").toString("utf8"),
+        ) as Record<string, unknown>;
+        // Supabase anon key (role:"anon") is intentionally public — not a credential.
+        // Supabase service_role key is caught by a dedicated CVSS-10 check — skip here.
+        if (payload.role === "anon" || payload.role === "service_role") return false;
+      } catch {
+        // Malformed base64 / JSON — not a real JWT
+        return false;
+      }
+      return true;
     },
   },
 
@@ -222,9 +239,12 @@ const SECRET_PATTERNS: SecretPattern[] = [
   // ── Internal infrastructure ───────────────────────────────────────────────
   {
     name: "Internal IP Address Exposed",
-    pattern: /\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b/,
+    // Require the IP to be inside a string literal (quotes) — this eliminates false
+    // positives from IPs in minified third-party library code, CSS/regex patterns,
+    // and comment blocks that bundlers commonly include.
+    pattern: /["'](?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})["']/,
     severity: "low", cvssScore: 3.1, cweId: "CWE-200",
-    description: "Internal/private IP addresses were found in JavaScript source code. This reveals internal network topology, making it easier for attackers who gain any foothold to map and attack internal systems.",
+    description: "An internal/private IP address was found hardcoded in a string literal in JavaScript source code. This reveals internal network topology, making it easier for attackers who gain any foothold to map and attack internal systems.",
     solution: "Remove internal IP references from client-side code. Use environment-based configuration to keep internal infrastructure details server-side. Review your build process to ensure internal config doesn't leak into production bundles.",
     validate: (m) => !/(localhost|127\.0\.0\.1|0\.0\.0\.0)/.test(m),
   },

@@ -100,7 +100,10 @@ const SENSITIVE_PATHS: SensitivePath[] = [
     category: "Credential Exposure",
     description: "A .env file is publicly accessible. This file typically contains database passwords, API keys, JWT secrets, and third-party tokens in plaintext. Attackers can immediately compromise every connected service.",
     solution: "Rotate ALL credentials in the file immediately. Block .env* files: `location ~ /\\.env { deny all; }`. Never place .env files in the web root.",
-    validate: (body, ct) => !ct.includes("text/html") || /^[A-Z_][A-Z0-9_]*\s*=.+/m.test(body),
+    // Require at least one KEY=value line AND no HTML content regardless of
+    // content-type — servers that return soft-404 HTML pages as text/plain were
+    // previously passing this check due to the !ct.includes("text/html") short-circuit.
+    validate: (body) => !/<html|<!DOCTYPE/i.test(body.slice(0, 200)) && /^[A-Za-z_]\w*\s*=.+/m.test(body),
   },
   {
     path: "/.env.local",
@@ -109,7 +112,7 @@ const SENSITIVE_PATHS: SensitivePath[] = [
     category: "Credential Exposure",
     description: ".env.local is publicly accessible. This override file often contains developer or staging credentials.",
     solution: "Block all .env* files at the web server and rotate any exposed credentials.",
-    validate: (body, ct) => !ct.includes("text/html") || /^[A-Z_][A-Z0-9_]*\s*=.+/m.test(body),
+    validate: (body) => !/<html|<!DOCTYPE/i.test(body.slice(0, 200)) && /^[A-Za-z_]\w*\s*=.+/m.test(body),
   },
   {
     path: "/.env.production",
@@ -118,7 +121,7 @@ const SENSITIVE_PATHS: SensitivePath[] = [
     category: "Credential Exposure",
     description: "The production .env file is publicly accessible, exposing live database credentials, payment keys, and all production secrets.",
     solution: "Block all .env* files immediately and rotate all exposed production credentials.",
-    validate: (body, ct) => !ct.includes("text/html") || /^[A-Z_][A-Z0-9_]*\s*=.+/m.test(body),
+    validate: (body) => !/<html|<!DOCTYPE/i.test(body.slice(0, 200)) && /^[A-Za-z_]\w*\s*=.+/m.test(body),
   },
   {
     path: "/.env.backup",
@@ -127,7 +130,7 @@ const SENSITIVE_PATHS: SensitivePath[] = [
     category: "Credential Exposure",
     description: "A backup of the environment config is publicly accessible.",
     solution: "Delete .env backups from the server. Block all .env* files.",
-    validate: (body, ct) => !ct.includes("text/html") || /^[A-Z_][A-Z0-9_]*\s*=.+/m.test(body),
+    validate: (body) => !/<html|<!DOCTYPE/i.test(body.slice(0, 200)) && /^[A-Za-z_]\w*\s*=.+/m.test(body),
   },
   {
     path: "/.env.staging",
@@ -136,7 +139,7 @@ const SENSITIVE_PATHS: SensitivePath[] = [
     category: "Credential Exposure",
     description: "Staging environment configuration is publicly accessible, which often shares similar credentials to production.",
     solution: "Block all .env* files at the web server.",
-    validate: (body, ct) => !ct.includes("text/html") || /^[A-Z_][A-Z0-9_]*\s*=.+/m.test(body),
+    validate: (body) => !/<html|<!DOCTYPE/i.test(body.slice(0, 200)) && /^[A-Za-z_]\w*\s*=.+/m.test(body),
   },
 
   // ── PHP / CMS configs ────────────────────────────────────────────────────
@@ -470,7 +473,7 @@ const SENSITIVE_PATHS: SensitivePath[] = [
     category: "Credential Exposure",
     description: "A development .env file is publicly accessible, potentially containing database credentials, API keys, and OAuth secrets used in development — which are often reused in staging or production.",
     solution: "Block all .env* files at the web server. Nginx: `location ~ /\\.env { deny all; }`. Never deploy .env files to the web root.",
-    validate: (body, ct) => !ct.includes("text/html") || /^[A-Z_][A-Z0-9_]*\s*=.+/m.test(body),
+    validate: (body) => !/<html|<!DOCTYPE/i.test(body.slice(0, 200)) && /^[A-Za-z_]\w*\s*=.+/m.test(body),
   },
   {
     path: "/.env.dev",
@@ -479,7 +482,7 @@ const SENSITIVE_PATHS: SensitivePath[] = [
     category: "Credential Exposure",
     description: "A .env.dev file is publicly accessible, potentially containing developer credentials and service keys.",
     solution: "Block all .env* files at the web server and remove them from the web root.",
-    validate: (body, ct) => !ct.includes("text/html") || /^[A-Z_][A-Z0-9_]*\s*=.+/m.test(body),
+    validate: (body) => !/<html|<!DOCTYPE/i.test(body.slice(0, 200)) && /^[A-Za-z_]\w*\s*=.+/m.test(body),
   },
   {
     path: "/.env.development.local",
@@ -488,7 +491,7 @@ const SENSITIVE_PATHS: SensitivePath[] = [
     category: "Credential Exposure",
     description: ".env.development.local is gitignored by default and contains developer-specific overrides, frequently with real third-party API credentials and database passwords.",
     solution: "Block all .env* files at the web server. This file should never be deployed.",
-    validate: (body, ct) => !ct.includes("text/html") || /^[A-Z_][A-Z0-9_]*\s*=.+/m.test(body),
+    validate: (body) => !/<html|<!DOCTYPE/i.test(body.slice(0, 200)) && /^[A-Za-z_]\w*\s*=.+/m.test(body),
   },
   {
     path: "/.env.test",
@@ -497,7 +500,7 @@ const SENSITIVE_PATHS: SensitivePath[] = [
     category: "Credential Exposure",
     description: "A test .env file is accessible. Test environments frequently share credentials with staging or contain real third-party API keys for integration tests.",
     solution: "Block all .env* files at the web server.",
-    validate: (body, ct) => !ct.includes("text/html") || /^[A-Z_][A-Z0-9_]*\s*=.+/m.test(body),
+    validate: (body) => !/<html|<!DOCTYPE/i.test(body.slice(0, 200)) && /^[A-Za-z_]\w*\s*=.+/m.test(body),
   },
 
   // ── CI/CD pipeline configurations ─────────────────────────────────────────
