@@ -188,6 +188,7 @@ export interface AiAnalysis {
   /** @nullable */
   complianceNotes?: string | null;
   agentFixPrompt?: string;
+  detectedAgent?: string;
 }
 
 export type ReconResultSubdomainsItem = {

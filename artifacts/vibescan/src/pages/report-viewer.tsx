@@ -11,6 +11,7 @@ import {
   Terminal, ExternalLink, Package, RefreshCw, Eye, Code2, Wifi,
   AlertTriangle, Monitor, Info, Settings, Network, EyeOff, Filter, X,
   ArrowUpDown, HelpCircle, Download, Copy, Check, Bell, ChevronDown, Search, Minus, Flag, RotateCcw,
+  Sparkles, Zap,
 } from "lucide-react";
 import { cn, formatSeverity, getSeverityColors, getGradeColor } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -683,8 +684,74 @@ function ReconCard({ recon }: { recon: ReconData }) {
 
 // ─── Agent Fix Prompt card ────────────────────────────────────────────────────
 
-function AgentFixPromptCard({ prompt }: { prompt: string }) {
+type AgentEnvironment = "lovable" | "nextjs" | "bolt" | "wordpress" | "supabase" | "generic";
+
+interface AgentMeta {
+  label: string;
+  copyLabel: string;
+  description: string;
+  icon: React.ReactNode;
+  accentClass: string;
+}
+
+function getAgentMeta(agent: AgentEnvironment): AgentMeta {
+  switch (agent) {
+    case "lovable":
+      return {
+        label: "Fix in Lovable",
+        copyLabel: "Copy Lovable prompt",
+        description: "Paste this directly into the Lovable chat to fix all security issues at once.",
+        icon: <Sparkles className="w-5 h-5 text-pink-400" />,
+        accentClass: "border-t-pink-500",
+      };
+    case "nextjs":
+      return {
+        label: "Fix with Cursor / Claude Code",
+        copyLabel: "Copy Cursor prompt",
+        description: "Paste into Cursor Composer or Claude Code — includes exact file paths and code changes.",
+        icon: <Code2 className="w-5 h-5 text-blue-400" />,
+        accentClass: "border-t-blue-500",
+      };
+    case "bolt":
+      return {
+        label: "Fix in Bolt.new",
+        copyLabel: "Copy Bolt.new prompt",
+        description: "Paste this into Bolt.new or Replit Agent to apply all fixes with complete file updates.",
+        icon: <Zap className="w-5 h-5 text-yellow-400" />,
+        accentClass: "border-t-yellow-500",
+      };
+    case "wordpress":
+      return {
+        label: "Fix your WordPress site",
+        copyLabel: "Copy WordPress instructions",
+        description: "Follow these WordPress-specific steps — plugins to install, wp-config.php changes, and admin settings.",
+        icon: <Globe className="w-5 h-5 text-sky-400" />,
+        accentClass: "border-t-sky-500",
+      };
+    case "supabase":
+      return {
+        label: "Fix in Supabase",
+        copyLabel: "Copy Supabase fix",
+        description: "SQL policies to run in the SQL Editor, dashboard settings to change, and code updates.",
+        icon: <Database className="w-5 h-5 text-emerald-400" />,
+        accentClass: "border-t-emerald-500",
+      };
+    case "generic":
+    default:
+      return {
+        label: "Fix with your AI agent",
+        copyLabel: "Copy prompt",
+        description: "Paste into Cursor, Claude, GitHub Copilot, or any coding agent to get all findings fixed at once.",
+        icon: <Terminal className="w-5 h-5 text-violet-400" />,
+        accentClass: "border-t-violet-500",
+      };
+  }
+}
+
+function AgentFixPromptCard({ prompt, detectedAgent }: { prompt: string; detectedAgent?: string }) {
   const [copied, setCopied] = useState(false);
+  const agent = (detectedAgent ?? "generic") as AgentEnvironment;
+  const meta = getAgentMeta(agent);
 
   const handleCopy = useCallback(() => {
     void navigator.clipboard.writeText(prompt).then(() => {
@@ -696,12 +763,19 @@ function AgentFixPromptCard({ prompt }: { prompt: string }) {
   }, [prompt]);
 
   return (
-    <div className="glass-card rounded-2xl p-6 border-t-4 border-t-violet-500">
+    <div className={cn("glass-card rounded-2xl p-6 border-t-4", meta.accentClass)}>
       <div className="flex items-start justify-between gap-4 mb-4">
-        <h3 className="text-lg font-bold flex items-center gap-2">
-          <Terminal className="w-5 h-5 text-violet-400" />
-          Fix with your AI agent
-        </h3>
+        <div>
+          <h3 className="text-lg font-bold flex items-center gap-2">
+            {meta.icon}
+            {meta.label}
+          </h3>
+          {agent !== "generic" && (
+            <span className="mt-1 inline-flex items-center text-xs font-medium text-muted-foreground bg-white/5 border border-white/10 rounded-full px-2 py-0.5">
+              Formatted for your stack
+            </span>
+          )}
+        </div>
         <button
           onClick={handleCopy}
           className={cn(
@@ -714,12 +788,12 @@ function AgentFixPromptCard({ prompt }: { prompt: string }) {
           {copied ? (
             <><Check className="w-4 h-4" /> Copied!</>
           ) : (
-            <><Copy className="w-4 h-4" /> Copy prompt</>
+            <><Copy className="w-4 h-4" /> {meta.copyLabel}</>
           )}
         </button>
       </div>
       <p className="text-xs text-muted-foreground mb-3">
-        Paste this prompt into Cursor, Claude, GitHub Copilot, or any coding agent to get all findings fixed at once.
+        {meta.description}
       </p>
       <div className="bg-background border border-white/10 rounded-lg p-4 max-h-64 overflow-y-auto">
         <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed">{prompt}</pre>
@@ -2429,7 +2503,7 @@ export default function ReportViewer() {
 
           {/* Fix with your AI agent */}
           {aiAnalysis?.agentFixPrompt && (
-            <AgentFixPromptCard prompt={aiAnalysis.agentFixPrompt} />
+            <AgentFixPromptCard prompt={aiAnalysis.agentFixPrompt} detectedAgent={aiAnalysis.detectedAgent} />
           )}
 
           {/* Software Inventory */}

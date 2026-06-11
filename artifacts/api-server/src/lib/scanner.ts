@@ -202,6 +202,14 @@ function detectTechnologies(headers: Record<string, string>, html: string): stri
   if (/wix\.com|static\.wixstatic|wixsite\.com/i.test(s))                                         techs.add("Wix");
   if (/webflow\.com|uploads-ssl\.webflow/i.test(s))                                               techs.add("Webflow");
 
+  // AI-builder / vibe-coding platforms
+  if (/lovable-uploads\.lovable\.app|lovable\.dev|gptengineer\.app/i.test(s))                     techs.add("Lovable");
+  if (/bolt\.new|stackblitz\.io|webcontainer\.io/i.test(s))                                       techs.add("Bolt.new");
+
+  // Backend-as-a-Service platforms (informational, used for agent fix routing)
+  if (/supabase\.co|supabase\.in|createClient.*supabase|SUPABASE_URL/i.test(s))                   techs.add("Supabase");
+  if (/firebase\.google\.com|firebaseapp\.com|initializeApp|firebaseConfig/i.test(s))             techs.add("Firebase");
+
   // JS frameworks
   if (/_next\/static|__NEXT_DATA__|next\/dist/i.test(s))                                          techs.add("Next.js");
   if (/__nuxt__|nuxt\.js|_nuxt\//i.test(s))                                                       techs.add("Nuxt.js");

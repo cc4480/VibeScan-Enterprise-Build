@@ -275,6 +275,7 @@ export const GetReportResponse = zod.object({
         quickWins: zod.array(zod.string()),
         complianceNotes: zod.string().nullish(),
         agentFixPrompt: zod.string().optional(),
+        detectedAgent: zod.string().optional(),
       })
       .optional(),
     recon: zod
@@ -526,6 +527,7 @@ export const GetSharedReportResponse = zod.object({
         quickWins: zod.array(zod.string()),
         complianceNotes: zod.string().nullish(),
         agentFixPrompt: zod.string().optional(),
+        detectedAgent: zod.string().optional(),
       })
       .optional(),
     recon: zod
