@@ -123,10 +123,16 @@ const INFRA_COOKIE_NAMES = new Set([
 ]);
 
 function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[] {
-  const findings: ScanVulnerability[] = [];
-  if (!setCookieHeader) return findings;
+  if (!setCookieHeader) return [];
 
   const cookies = setCookieHeader.split(/\n|,(?=[^;])/);
+
+  // Collect affected cookie names per problem type instead of emitting one
+  // finding per cookie — a site that sets 10 cookies should not score 10×
+  // worse than a site that sets 1. Each type of misconfiguration is one issue.
+  const noSecure: string[] = [];
+  const noHttpOnly: string[] = [];
+  const noSameSite: string[] = [];
 
   for (const cookie of cookies) {
     if (!cookie.trim()) continue;
@@ -142,47 +148,59 @@ function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[
     // cannot add Secure/HttpOnly/SameSite to cookies they don't set.
     if (INFRA_COOKIE_NAMES.has(namePart.toLowerCase())) continue;
 
-    if (!/secure/i.test(cookie)) {
-      findings.push(vuln({
-        name: "Cookie Missing Secure Flag",
-        severity: "high",
-        category: "Session Management",
-        description: `The cookie "${namePart}" is set without the Secure flag, meaning it can be transmitted over unencrypted HTTP connections, making it susceptible to interception.`,
-        evidence: `Set-Cookie: ${cookie.trim()}`,
-        solution: "Add the Secure attribute to all cookies: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax",
-        cweId: "CWE-614",
-        cvssScore: 6.5,
-        wstgId: "WSTG-SESS-02",
-      }));
-    }
+    if (!/secure/i.test(cookie))   noSecure.push(namePart);
+    if (!/httponly/i.test(cookie)) noHttpOnly.push(namePart);
+    if (!/samesite/i.test(cookie)) noSameSite.push(namePart);
+  }
 
-    if (!/httponly/i.test(cookie)) {
-      findings.push(vuln({
-        name: "Cookie Missing HttpOnly Flag",
-        severity: "medium",
-        category: "Session Management",
-        description: `The cookie "${namePart}" is set without the HttpOnly flag, allowing client-side JavaScript to access it. This enables session theft via XSS attacks.`,
-        evidence: `Set-Cookie: ${cookie.trim()}`,
-        solution: "Add the HttpOnly attribute to all session cookies: Set-Cookie: name=value; HttpOnly; Secure; SameSite=Lax",
-        cweId: "CWE-1004",
-        cvssScore: 5.3,
-        wstgId: "WSTG-SESS-02",
-      }));
-    }
+  const findings: ScanVulnerability[] = [];
 
-    if (!/samesite/i.test(cookie)) {
-      findings.push(vuln({
-        name: "Cookie Missing SameSite Attribute",
-        severity: "medium",
-        category: "CSRF Protection",
-        description: `The cookie "${namePart}" lacks the SameSite attribute, making the application potentially vulnerable to Cross-Site Request Forgery (CSRF) attacks.`,
-        evidence: `Set-Cookie: ${cookie.trim()}`,
-        solution: "Set SameSite=Lax or SameSite=Strict on all cookies to prevent CSRF: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax",
-        cweId: "CWE-352",
-        cvssScore: 4.3,
-        wstgId: "WSTG-SESS-02",
-      }));
-    }
+  if (noSecure.length > 0) {
+    const list = noSecure.join(", ");
+    const plural = noSecure.length > 1;
+    findings.push(vuln({
+      name: "Cookie Missing Secure Flag",
+      severity: "high",
+      category: "Session Management",
+      description: `${noSecure.length} cookie${plural ? "s are" : " is"} set without the Secure flag (${list}). ${plural ? "They can" : "It can"} be transmitted over unencrypted HTTP connections, making ${plural ? "them" : "it"} susceptible to interception.`,
+      evidence: `Affected cookie${plural ? "s" : ""}: ${list}`,
+      solution: "Add the Secure attribute to all cookies: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax",
+      cweId: "CWE-614",
+      cvssScore: 6.5,
+      wstgId: "WSTG-SESS-02",
+    }));
+  }
+
+  if (noHttpOnly.length > 0) {
+    const list = noHttpOnly.join(", ");
+    const plural = noHttpOnly.length > 1;
+    findings.push(vuln({
+      name: "Cookie Missing HttpOnly Flag",
+      severity: "medium",
+      category: "Session Management",
+      description: `${noHttpOnly.length} cookie${plural ? "s are" : " is"} set without the HttpOnly flag (${list}), allowing client-side JavaScript to access ${plural ? "them" : "it"}. This can enable session theft via XSS.`,
+      evidence: `Affected cookie${plural ? "s" : ""}: ${list}`,
+      solution: "Add the HttpOnly attribute to all session cookies: Set-Cookie: name=value; HttpOnly; Secure; SameSite=Lax",
+      cweId: "CWE-1004",
+      cvssScore: 5.3,
+      wstgId: "WSTG-SESS-02",
+    }));
+  }
+
+  if (noSameSite.length > 0) {
+    const list = noSameSite.join(", ");
+    const plural = noSameSite.length > 1;
+    findings.push(vuln({
+      name: "Cookie Missing SameSite Attribute",
+      severity: "medium",
+      category: "CSRF Protection",
+      description: `${noSameSite.length} cookie${plural ? "s lack" : " lacks"} the SameSite attribute (${list}), making the application potentially vulnerable to Cross-Site Request Forgery (CSRF) attacks.`,
+      evidence: `Affected cookie${plural ? "s" : ""}: ${list}`,
+      solution: "Set SameSite=Lax or SameSite=Strict on all cookies: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax",
+      cweId: "CWE-352",
+      cvssScore: 4.3,
+      wstgId: "WSTG-SESS-02",
+    }));
   }
 
   return findings;
