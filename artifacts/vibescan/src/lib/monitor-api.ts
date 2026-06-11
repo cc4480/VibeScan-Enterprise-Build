@@ -47,3 +47,17 @@ export async function cancelMonitorSubscription(id: string): Promise<void> {
 export async function listCveAlerts(subscriptionId: string): Promise<CveAlert[]> {
   return customFetch<CveAlert[]>(`/api/monitor/subscriptions/${subscriptionId}/alerts`);
 }
+
+export interface ScanHistoryEntry {
+  id: string;
+  scanId: string | null;
+  scannedAt: string;
+  tier: string;
+  grade: string | null;
+  riskScore: number | null;
+  vulnCount: number | null;
+}
+
+export async function listSubscriptionHistory(subscriptionId: string): Promise<ScanHistoryEntry[]> {
+  return customFetch<ScanHistoryEntry[]>(`/api/monitor/subscriptions/${subscriptionId}/history`);
+}

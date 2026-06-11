@@ -4,15 +4,17 @@ import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell, AlertTriangle, Trash2, ChevronDown, ChevronUp,
-  ExternalLink, Loader2, Shield, Plus,
+  ExternalLink, Loader2, Shield, Plus, FileText, History,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   listCveAlerts,
   cancelMonitorSubscription,
   createMonitorSubscription,
+  listSubscriptionHistory,
   type MonitorSubscription,
   type CveAlert,
+  type ScanHistoryEntry,
 } from "@/lib/monitor-api";
 import { useToast } from "@/hooks/use-toast";
 
@@ -37,7 +39,7 @@ export function daysRemaining(expiresAt: string): number {
   return Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86_400_000));
 }
 
-export function formatDate(iso: string | null): string {
+export function formatDate(iso: string | null | Date): string {
   if (!iso) return "Never";
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
@@ -53,7 +55,7 @@ export function CveAlertRow({ alert }: { alert: CveAlert }) {
   const sev = SEVERITY_CONFIG[alert.severity] ?? SEVERITY_CONFIG.UNKNOWN;
   return (
     <div className="flex items-start gap-3 py-3 border-b border-white/5 last:border-0">
-      <div className={cn("mt-0.5 px-2 py-0.5 rounded text-xs font-bold border", sev.bg, sev.color)}>
+      <div className={cn("mt-0.5 px-2 py-0.5 rounded text-xs font-bold border shrink-0", sev.bg, sev.color)}>
         {sev.label}
       </div>
       <div className="flex-1 min-w-0">
@@ -68,14 +70,58 @@ export function CveAlertRow({ alert }: { alert: CveAlert }) {
   );
 }
 
+function ScanHistoryRow({ entry }: { entry: ScanHistoryEntry }) {
+  return (
+    <div className="flex items-center gap-3 py-3 border-b border-white/5 last:border-0">
+      <div className={cn("w-9 h-9 rounded-lg border flex items-center justify-center font-bold text-base shrink-0",
+        entry.grade
+          ? gradeColor(entry.grade) + " bg-current/10 border-current/20"
+          : "text-muted-foreground bg-secondary border-white/10"
+      )}>
+        {entry.grade ?? "?"}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-xs font-medium text-foreground">{formatDate(entry.scannedAt)}</div>
+        <div className="flex items-center gap-3 mt-0.5">
+          <span className="text-xs text-muted-foreground capitalize">{entry.tier.replace("_", " ")} scan</span>
+          {entry.vulnCount != null && (
+            <span className={cn(
+              "text-xs font-medium",
+              entry.vulnCount === 0 ? "text-emerald-400" : "text-orange-400",
+            )}>
+              {entry.vulnCount} finding{entry.vulnCount !== 1 ? "s" : ""}
+            </span>
+          )}
+          {entry.riskScore != null && (
+            <span className="text-xs text-muted-foreground">Risk {entry.riskScore}</span>
+          )}
+        </div>
+      </div>
+      <Link
+        href={`/report/${entry.id}`}
+        className="shrink-0 flex items-center gap-1 text-xs font-medium text-primary hover:underline underline-offset-4"
+      >
+        <FileText className="w-3.5 h-3.5" /> View
+      </Link>
+    </div>
+  );
+}
+
 export function SubscriptionCard({ sub, onCancel }: { sub: MonitorSubscription; onCancel: (id: string) => void }) {
   const [expanded, setExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState<"history" | "cve">("history");
   const [cancelling, setCancelling] = useState(false);
 
   const alertsQuery = useQuery({
     queryKey: ["monitor-alerts", sub.id],
     queryFn: () => listCveAlerts(sub.id),
-    enabled: expanded,
+    enabled: expanded && activeTab === "cve",
+  });
+
+  const historyQuery = useQuery({
+    queryKey: ["monitor-history", sub.id],
+    queryFn: () => listSubscriptionHistory(sub.id),
+    enabled: expanded && activeTab === "history",
   });
 
   const days = daysRemaining(sub.expiresAt);
@@ -101,6 +147,7 @@ export function SubscriptionCard({ sub, onCancel }: { sub: MonitorSubscription; 
       className="glass-card rounded-2xl overflow-hidden"
     >
       <div className="p-6">
+        {/* Header */}
         <div className="flex items-start justify-between gap-4 mb-4">
           <div className="flex items-center gap-3 min-w-0">
             <div className={cn("w-2 h-2 rounded-full shrink-0 mt-1", isActive ? "bg-emerald-400" : "bg-slate-500")} />
@@ -151,6 +198,7 @@ export function SubscriptionCard({ sub, onCancel }: { sub: MonitorSubscription; 
           </div>
         </div>
 
+        {/* Stats strip */}
         <div className="grid grid-cols-3 gap-3 mb-4">
           <div className="bg-background/40 rounded-xl p-3 text-center">
             <div className={cn("text-2xl font-black", gradeColor(sub.lastReport?.grade ?? null))}>
@@ -168,6 +216,7 @@ export function SubscriptionCard({ sub, onCancel }: { sub: MonitorSubscription; 
           </div>
         </div>
 
+        {/* Footer row */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {sub.lastReportId && (
@@ -175,22 +224,21 @@ export function SubscriptionCard({ sub, onCancel }: { sub: MonitorSubscription; 
                 href={`/report/${sub.lastReportId}`}
                 className="text-xs font-medium text-primary hover:underline flex items-center gap-1"
               >
-                <Shield className="w-3.5 h-3.5" /> View latest report
+                <Shield className="w-3.5 h-3.5" /> Latest report
               </Link>
             )}
           </div>
-          {sub.alertCount > 0 && (
-            <button
-              onClick={() => setExpanded((x) => !x)}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              {expanded ? "Hide" : "Show"} CVE alerts
-            </button>
-          )}
+          <button
+            onClick={() => setExpanded((x) => !x)}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            {expanded ? "Hide" : "Show"} details
+          </button>
         </div>
       </div>
 
+      {/* Expandable detail panel */}
       <AnimatePresence>
         {expanded && (
           <motion.div
@@ -200,19 +248,82 @@ export function SubscriptionCard({ sub, onCancel }: { sub: MonitorSubscription; 
             className="border-t border-white/5 overflow-hidden"
           >
             <div className="p-6 pt-4">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
-                <Bell className="w-3.5 h-3.5" /> CVE Alerts
-              </h4>
-              {alertsQuery.isLoading && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Loading alerts…
-                </div>
+              {/* Tab bar */}
+              <div className="flex gap-1 mb-4 bg-background/40 rounded-xl p-1">
+                <button
+                  onClick={() => setActiveTab("history")}
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors",
+                    activeTab === "history"
+                      ? "bg-primary/20 text-primary"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <History className="w-3.5 h-3.5" /> Scan History
+                </button>
+                <button
+                  onClick={() => setActiveTab("cve")}
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors",
+                    activeTab === "cve"
+                      ? "bg-red-400/20 text-red-400"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  CVE Alerts
+                  {sub.alertCount > 0 && (
+                    <span className="ml-1 px-1.5 py-0.5 rounded-full bg-red-400/20 text-red-400 text-[10px] font-bold">
+                      {sub.alertCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* Scan History tab */}
+              {activeTab === "history" && (
+                <>
+                  {historyQuery.isLoading && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Loading history…
+                    </div>
+                  )}
+                  {historyQuery.data && historyQuery.data.length > 0 && (
+                    <div>
+                      {historyQuery.data.map((entry) => (
+                        <ScanHistoryRow key={entry.id} entry={entry} />
+                      ))}
+                    </div>
+                  )}
+                  {historyQuery.data?.length === 0 && (
+                    <div className="text-center py-6 text-muted-foreground">
+                      <History className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                      <p className="text-sm">No completed scans yet.</p>
+                      <p className="text-xs mt-1 opacity-70">The baseline scan is running — check back shortly.</p>
+                    </div>
+                  )}
+                </>
               )}
-              {alertsQuery.data?.map((alert) => (
-                <CveAlertRow key={alert.id} alert={alert} />
-              ))}
-              {alertsQuery.data?.length === 0 && (
-                <p className="text-sm text-muted-foreground py-2">No CVE alerts yet.</p>
+
+              {/* CVE Alerts tab */}
+              {activeTab === "cve" && (
+                <>
+                  {alertsQuery.isLoading && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Loading alerts…
+                    </div>
+                  )}
+                  {alertsQuery.data?.map((alert) => (
+                    <CveAlertRow key={alert.id} alert={alert} />
+                  ))}
+                  {alertsQuery.data?.length === 0 && (
+                    <div className="text-center py-6 text-muted-foreground">
+                      <Shield className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                      <p className="text-sm">No CVE alerts yet.</p>
+                      <p className="text-xs mt-1 opacity-70">We check the NVD feed daily — you'll be notified if anything matches your stack.</p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </motion.div>
@@ -233,12 +344,12 @@ export function AddSubscriptionForm({ onSuccess }: { onSuccess: () => void }) {
     setError(null);
     setLoading(true);
     try {
-      const result = await createMonitorSubscription(url.trim());
-      if (result.initialScanId) {
-        toast({ title: "Monitoring activated", description: `Baseline scan queued for ${url.trim()} — results will appear shortly.` });
-      } else {
-        toast({ title: "Monitoring activated", description: `Using your most recent scan results. Next automated rescan in ~7 days.` });
-      }
+      await createMonitorSubscription(url.trim());
+      toast({
+        title: "Monitoring activated",
+        description: `Baseline scan queued for ${url.trim()} — check Scan History once it completes.`,
+      });
+      setUrl("https://");
       onSuccess();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to create subscription";

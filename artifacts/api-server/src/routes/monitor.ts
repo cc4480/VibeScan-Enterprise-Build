@@ -93,22 +93,9 @@ router.post("/monitor/subscriptions", async (req, res): Promise<void> => {
     })
     .returning();
 
-  // Only enqueue a new scan if there is no recent report (> 7 days old counts as stale).
-  const reportAge = existingReport
-    ? now.getTime() - new Date(existingReport.scannedAt).getTime()
-    : Infinity;
-  const needsInitialScan = reportAge > SEVEN_DAYS_MS;
-
-  if (!needsInitialScan) {
-    logger.info(
-      { subscriptionId: sub.id, existingReportId: seedReportId },
-      "Recent report found — skipping initial scan",
-    );
-    res.status(201).json({ subscription: sub, initialScanId: null });
-    return;
-  }
-
-  // No recent report — trigger a baseline deep scan.
+  // Always trigger a baseline deep scan immediately on subscription activation.
+  // The card is already seeded with the most recent report above so it shows
+  // historical data while the new scan runs.
   try {
     const [scan] = await db
       .insert(scansTable)
@@ -255,6 +242,66 @@ router.delete("/monitor/subscriptions/:id", async (req, res): Promise<void> => {
     .where(eq(monitorSubscriptionsTable.id, subId));
 
   res.json({ success: true });
+});
+
+// ── GET /api/monitor/subscriptions/:id/history ───────────────────────────────
+// Return all completed reports for the subscription's URL, newest first.
+
+router.get("/monitor/subscriptions/:id/history", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const [sub] = await db
+    .select()
+    .from(monitorSubscriptionsTable)
+    .where(
+      and(
+        eq(monitorSubscriptionsTable.id, req.params.id),
+        eq(monitorSubscriptionsTable.userId, req.user.id),
+      ),
+    );
+
+  if (!sub) {
+    res.status(404).json({ error: "Subscription not found" });
+    return;
+  }
+
+  const reports = await db
+    .select({
+      id: reportsTable.id,
+      scanId: reportsTable.scanId,
+      scannedAt: reportsTable.scannedAt,
+      tier: reportsTable.tier,
+      data: reportsTable.data,
+    })
+    .from(reportsTable)
+    .where(
+      and(
+        eq(reportsTable.userId, req.user.id),
+        eq(reportsTable.targetUrl, sub.targetUrl),
+      ),
+    )
+    .orderBy(desc(reportsTable.scannedAt))
+    .limit(20);
+
+  const history = reports.map((r) => {
+    const data = r.data as {
+      summary?: { grade?: string; riskScore?: number; vulnCount?: number };
+    };
+    return {
+      id: r.id,
+      scanId: r.scanId,
+      scannedAt: r.scannedAt,
+      tier: r.tier,
+      grade: data.summary?.grade ?? null,
+      riskScore: data.summary?.riskScore ?? null,
+      vulnCount: data.summary?.vulnCount ?? null,
+    };
+  });
+
+  res.json(history);
 });
 
 // ── GET /api/monitor/subscriptions/:id/alerts ────────────────────────────────
