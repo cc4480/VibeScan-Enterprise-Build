@@ -3,9 +3,10 @@
  * Uses the free Qualys SSL Labs API v3 (no key required).
  *
  * Strategy:
- *   1. Check cache first (fromCache: "on") — instant for sites assessed in the last 24h.
- *   2. If not cached, trigger a new assessment and poll for up to MAX_WAIT_MS.
- *   3. If still not READY, return null (graceful degradation — scan continues without TLS grade).
+ *   Always trigger a fresh assessment (startNew=on, fromCache=off) so every
+ *   scan reflects the current TLS configuration rather than 24h-old data.
+ *   Poll for up to MAX_WAIT_MS. If still not READY, return null (graceful
+ *   degradation — scan continues without TLS grade).
  *
  * Reference: https://github.com/ssllabs/ssllabs-scan/blob/master/ssllabs-api-docs-v3.md
  */
@@ -94,30 +95,13 @@ export async function checkSslLabs(targetUrl: string): Promise<SslLabsResult | n
     return null;
   }
 
-  // ── Step 1: Try the cache first (no new assessment) ─────────────────────
-  // SSL Labs caches results for ~24 h. For most production sites this resolves
-  // immediately without starting a new assessment.
-  let data: SslLabsResponse;
-  try {
-    data = await fetchAnalysis(hostname, false);
-  } catch (err) {
-    console.warn("[ssllabs] Cache check failed — skipping TLS grade:", err);
-    return null;
-  }
-
-  if (data.status === "READY")  return extractResult(data);
-  if (data.status === "ERROR") {
-    console.warn("[ssllabs] Assessment error:", data.errors?.[0]?.message ?? "unknown");
-    return null;
-  }
-
-  // ── Step 2: Cache miss — trigger a new assessment and poll ───────────────
-  // Cap total wait at MAX_WAIT_MS so a slow SSL Labs response never hangs the scan.
+  // Always trigger a fresh assessment — never serve cached data.
+  // Poll for up to MAX_WAIT_MS; gracefully skip if SSL Labs doesn't finish in time.
   const deadline = Date.now() + MAX_WAIT_MS;
   let isFirstPoll = true;
+  let data: SslLabsResponse;
 
   while (Date.now() < deadline) {
-    // Brief pause before polling (except on the very first trigger request)
     if (!isFirstPoll) {
       const remaining = deadline - Date.now();
       if (remaining <= 0) break;
