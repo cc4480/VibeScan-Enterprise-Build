@@ -30,6 +30,9 @@ async function isHstsPreloaded(hostname: string): Promise<boolean> {
   const apex = hostname.replace(/^www\./, "");
 
   // ── hstspreload.org tracking API ─────────────────────────────────────────
+  // This API only tracks domains submitted via their form. Domains natively
+  // hardcoded in Chrome (google.com, youtube.com, etc.) return "unknown".
+  let apiKnows = false;
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 5_000);
@@ -40,9 +43,24 @@ async function isHstsPreloaded(hostname: string): Promise<boolean> {
     clearTimeout(timer);
     if (res.ok) {
       const json = (await res.json()) as { status?: string };
-      if (json.status === "preloaded") return true;
-      // "pending" means submitted but not yet active — don't suppress
+      if (json.status === "preloaded") return true;  // confirmed on list
+      if (json.status === "pending")   return false; // submitted, not yet live
+      // status === "unknown" — domain may still be natively preloaded; fall through
+      apiKnows = json.status === "preloaded" || json.status === "pending";
     }
+  } catch { /* fall through */ }
+
+  if (apiKnows) return false;
+
+  // ── Behavioral fallback for natively preloaded domains ───────────────────
+  // If http:// traffic automatically upgrades to https://, the domain is
+  // enforcing HTTPS one way or another — suppress the HSTS finding.
+  try {
+    const ctrl2 = new AbortController();
+    const timer2 = setTimeout(() => ctrl2.abort(), 5_000);
+    const httpRes = await fetch(`http://${apex}/`, { redirect: "follow", signal: ctrl2.signal });
+    clearTimeout(timer2);
+    if (httpRes.url.startsWith("https://")) return true;
   } catch { /* fall through */ }
 
   return false;
@@ -110,16 +128,20 @@ function headerVal(headers: Record<string, string>, name: string): string | unde
 // that the site owner has no ability to modify.  Flagging these produces
 // unfixable false positives — the fix would require contacting the infra vendor.
 const INFRA_COOKIE_NAMES = new Set([
-  "gaesa",      // Replit CDN / proxy
-  "__cf_bm",    // Cloudflare Bot Management
-  "__cflb",     // Cloudflare Load Balancing
-  "_cfuvid",    // Cloudflare UVID
+  "gaesa",        // Replit CDN / proxy
+  "__cf_bm",      // Cloudflare Bot Management
+  "__cflb",       // Cloudflare Load Balancing
+  "_cfuvid",      // Cloudflare UVID
   "cf_clearance", // Cloudflare challenge clearance
-  "__utmz",     // Google Analytics (legacy)
-  "__utma",     // Google Analytics (legacy)
-  "_ga",        // Google Analytics
-  "_gid",       // Google Analytics
-  "_gat",       // Google Analytics throttle
+  "__utmz",       // Google Analytics (legacy)
+  "__utma",       // Google Analytics (legacy)
+  "_ga",          // Google Analytics
+  "_gid",         // Google Analytics
+  "_gat",         // Google Analytics throttle
+  "bm_sz",        // Akamai Bot Manager — set by CDN, not the site operator
+  "bm_sv",        // Akamai Bot Manager session
+  "ak_bmsc",      // Akamai Bot Manager session cookie
+  "_abck",        // Akamai Bot Manager
 ]);
 
 function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[] {

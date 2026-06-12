@@ -263,16 +263,20 @@ const probeUrlFn = probeUrl;
 // Cookies set by third-party infrastructure (CDN proxies, load balancers, etc.)
 // that the site owner cannot control.  Must match the list in scanner.ts.
 const INFRA_COOKIE_NAMES = new Set([
-  "gaesa",      // Replit CDN / proxy
-  "__cf_bm",    // Cloudflare Bot Management
-  "__cflb",     // Cloudflare Load Balancing
-  "_cfuvid",    // Cloudflare UVID
+  "gaesa",        // Replit CDN / proxy
+  "__cf_bm",      // Cloudflare Bot Management
+  "__cflb",       // Cloudflare Load Balancing
+  "_cfuvid",      // Cloudflare UVID
   "cf_clearance", // Cloudflare challenge clearance
-  "__utmz",     // Google Analytics (legacy)
-  "__utma",     // Google Analytics (legacy)
-  "_ga",        // Google Analytics
-  "_gid",       // Google Analytics
-  "_gat",       // Google Analytics throttle
+  "__utmz",       // Google Analytics (legacy)
+  "__utma",       // Google Analytics (legacy)
+  "_ga",          // Google Analytics
+  "_gid",         // Google Analytics
+  "_gat",         // Google Analytics throttle
+  "bm_sz",        // Akamai Bot Manager — set by CDN, not the site operator
+  "bm_sv",        // Akamai Bot Manager session
+  "ak_bmsc",      // Akamai Bot Manager session cookie
+  "_abck",        // Akamai Bot Manager
 ]);
 
 function checkPageCookies(

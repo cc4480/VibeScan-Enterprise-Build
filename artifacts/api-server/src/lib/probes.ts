@@ -420,30 +420,14 @@ export async function checkHttpsRedirect(targetUrl: string): Promise<ScanVulnera
     return [];
   }
 
-  // Follow the redirect chain manually (up to 5 hops) so we can tell whether
-  // HTTP traffic eventually reaches HTTPS — even through intermediate http:// hops.
-  let currentUrl = `http://${hostname}/`;
-  for (let hop = 0; hop < 5; hop++) {
-    const result = await safeGet(currentUrl, { redirect: "manual" }, 6_000);
-    if (!result) return []; // network error — don't false-positive
+  // Follow redirects automatically. Node.js fetch with redirect:"manual" returns
+  // an opaque redirect (status 0, no headers) so we can't read the Location header.
+  // Using redirect:"follow" and inspecting the final URL is simpler and reliable.
+  const result = await safeGet(`http://${hostname}/`, { redirect: "follow" }, 8_000);
+  if (!result) return []; // network error — don't false-positive
 
-    // If the transparent proxy upgraded the connection, res.url will be https://
-    if (result.finalUrl?.startsWith("https://")) return [];
-
-    if (result.status >= 300 && result.status < 400) {
-      const location = result.headers["location"] ?? "";
-      if (!location) break;
-      // Reached HTTPS anywhere in the chain — redirect is in place
-      if (location.startsWith("https://")) return [];
-      // Still on HTTP — follow the next hop
-      currentUrl = location.startsWith("http")
-        ? location
-        : `http://${hostname}${location.startsWith("/") ? location : `/${location}`}`;
-    } else {
-      // 200 or error — chain ended without reaching HTTPS
-      break;
-    }
-  }
+  // If the final URL landed on HTTPS, the redirect chain is in place — all good.
+  if (result.finalUrl.startsWith("https://")) return [];
 
   // We know HTTPS is accessible (the scan target IS https://) but HTTP doesn't
   // Before filing a finding, verify the domain is not on the HSTS preload list.
