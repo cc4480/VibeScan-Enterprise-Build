@@ -11,20 +11,11 @@ version = "1.0.0"
 
 [[services]]
 name = "web"
-paths = [ "/" ]
+paths = [ "/_vite-dev" ]
 localPort = 18425
 
 [services.development]
 run = "pnpm --filter @workspace/vibescan run dev"
-
-[services.production]
-build = [ "pnpm", "--filter", "@workspace/vibescan", "run", "build" ]
-publicDir = "artifacts/vibescan/dist/public"
-serve = "static"
-
-[[services.production.rewrites]]
-from = "/*"
-to = "/index.html"
 
 [services.env]
 PORT = "18425"

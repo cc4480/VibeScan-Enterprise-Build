@@ -2,27 +2,64 @@ import express, { type Express } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
+import { existsSync } from "node:fs";
+import nodePath from "node:path";
+import { fileURLToPath } from "node:url";
+import { createProxyMiddleware } from "http-proxy-middleware";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { authMiddleware } from "./middlewares/authMiddleware";
 
+const __dirname = nodePath.dirname(fileURLToPath(import.meta.url));
+
+// CSP for the frontend SPA — no unsafe-inline in script-src because Vite's
+// production bundle uses only external JS files.  style-src keeps unsafe-inline
+// for Tailwind's runtime class injection.
+const FRONTEND_CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self' data:",
+  "img-src 'self' data: https: blob:",
+  "connect-src 'self' https: wss: ws:",
+  "worker-src 'self' blob:",
+  "frame-ancestors 'none'",
+  "object-src 'none'",
+  "base-uri 'self'",
+].join("; ");
+
 const app: Express = express();
 
-// Security response headers — set before all routes
-app.use((_, res, next) => {
+// ── Security response headers — set before all routes ────────────────────────
+// Express owns all routes (paths = ["/"]) so these headers are guaranteed on
+// every response: API JSON, static HTML/JS/CSS, and the SPA index.html.
+app.use((req, res, next) => {
+  const isApi = req.path.startsWith("/api");
+
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("X-XSS-Protection", "1; mode=block");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  // API only — no HTML served, so a restrictive CSP is fine
-  res.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
+
+  if (isApi) {
+    // API responses are JSON — a strict no-content CSP is safe and correct.
+    res.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
+  } else {
+    // Frontend routes — full SPA CSP + cross-origin isolation headers.
+    res.setHeader("Content-Security-Policy", FRONTEND_CSP);
+    res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+    res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+    res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
+  }
+
   if (process.env.NODE_ENV === "production") {
     res.setHeader(
       "Strict-Transport-Security",
       "max-age=31536000; includeSubDomains; preload",
     );
   }
+
   next();
 });
 
@@ -59,5 +96,39 @@ app.use(express.urlencoded({ extended: true }));
 app.use(authMiddleware);
 
 app.use("/api", router);
+
+// ── Frontend serving ──────────────────────────────────────────────────────────
+// Development:  forward all non-API traffic to the Vite dev server (port 18425)
+//               so HMR and fast-refresh work.
+// Production:   serve the pre-built Vite bundle; SPA fallback rewrites unknown
+//               paths to index.html so client-side routing (/report/123) works.
+if (process.env.NODE_ENV !== "production") {
+  const viteTarget = `http://localhost:${process.env.VITE_PORT ?? "18425"}`;
+  logger.info({ viteTarget }, "Dev mode: proxying frontend to Vite");
+
+  app.use(
+    createProxyMiddleware({
+      target: viteTarget,
+      changeOrigin: false,
+      ws: true,
+    }),
+  );
+} else {
+  const staticDir = nodePath.resolve(
+    process.cwd(),
+    process.env.FRONTEND_STATIC_DIR ?? "artifacts/vibescan/dist/public",
+  );
+
+  if (existsSync(staticDir)) {
+    logger.info({ staticDir }, "Production: serving static frontend");
+    app.use(express.static(staticDir));
+    // SPA fallback — client-side routes (e.g. /report/abc) must receive index.html
+    app.get(/.*/, (_req, res) => {
+      res.sendFile(nodePath.join(staticDir, "index.html"));
+    });
+  } else {
+    logger.warn({ staticDir }, "Frontend static dir not found — frontend will not be served");
+  }
+}
 
 export default app;
