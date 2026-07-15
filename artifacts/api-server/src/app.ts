@@ -1,5 +1,5 @@
 import express, { type Express } from "express";
-import cors from "cors";
+import cors, { type CorsOptions } from "cors";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import { existsSync } from "node:fs";
@@ -28,7 +28,31 @@ const FRONTEND_CSP = [
   "base-uri 'self'",
 ].join("; ");
 
+// Explicit CORS allowlist — never reflect the incoming Origin blindly.
+// In dev, also allow *.replit.dev preview domains.
+const CORS_ALLOWLIST: (string | RegExp)[] = [
+  "https://vibe-scan.replit.app",
+  "https://vibescan.app",
+  ...(process.env.CORS_EXTRA_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? []),
+  ...(process.env.NODE_ENV !== "production" ? [/\.replit\.dev$/] : []),
+];
+
+const corsOptions: CorsOptions = {
+  credentials: true,
+  origin(origin, callback) {
+    // Same-origin browser requests have no Origin header — always allow.
+    if (!origin) return callback(null, true);
+    const allowed = CORS_ALLOWLIST.some((pattern) =>
+      typeof pattern === "string" ? pattern === origin : pattern.test(origin),
+    );
+    callback(null, allowed ? origin : false);
+  },
+};
+
 const app: Express = express();
+
+// Hide "X-Powered-By: Express" — no reason to advertise the server tech.
+app.disable("x-powered-by");
 
 // ── Security response headers — set before all routes ────────────────────────
 // Express owns all routes (paths = ["/"]) so these headers are guaranteed on
@@ -82,7 +106,12 @@ app.use(
     },
   }),
 );
-app.use(cors({ credentials: true, origin: true }));
+
+// CORS is scoped to /api only — static frontend files are same-origin and
+// don't need CORS headers.  Applying cors() globally was what caused the
+// "Origin reflection + credentials" critical finding.
+app.use("/api", cors(corsOptions));
+
 app.use(cookieParser());
 
 // Stripe webhook needs raw body BEFORE json() middleware
@@ -102,6 +131,9 @@ app.use("/api", router);
 //               so HMR and fast-refresh work.
 // Production:   serve the pre-built Vite bundle; SPA fallback rewrites unknown
 //               paths to index.html so client-side routing (/report/123) works.
+//
+// dotfiles: "allow" is required so /.well-known/security.txt is served —
+// express.static silently ignores dot-directories by default.
 if (process.env.NODE_ENV !== "production") {
   const viteTarget = `http://localhost:${process.env.VITE_PORT ?? "18425"}`;
   logger.info({ viteTarget }, "Dev mode: proxying frontend to Vite");
@@ -121,7 +153,7 @@ if (process.env.NODE_ENV !== "production") {
 
   if (existsSync(staticDir)) {
     logger.info({ staticDir }, "Production: serving static frontend");
-    app.use(express.static(staticDir));
+    app.use(express.static(staticDir, { dotfiles: "allow" }));
     // SPA fallback — client-side routes (e.g. /report/abc) must receive index.html
     app.get(/.*/, (_req, res) => {
       res.sendFile(nodePath.join(staticDir, "index.html"));
