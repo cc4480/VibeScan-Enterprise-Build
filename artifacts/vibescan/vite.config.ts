@@ -20,11 +20,15 @@ const securityHeaders: Record<string, string> = {
         "X-Frame-Options": "DENY",
         "Cross-Origin-Opener-Policy": "same-origin",
         "Cross-Origin-Resource-Policy": "same-origin",
+        // credentialless is compatible with third-party resources; require-corp would break CDN assets
+        "Cross-Origin-Embedder-Policy": "credentialless",
       }
     : {}),
   "Content-Security-Policy": [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline'",
+    // Production bundles contain no inline scripts — drop unsafe-inline.
+    // Dev keeps it because Vite HMR injects inline module scripts.
+    isProduction ? "script-src 'self'" : "script-src 'self' 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
     "img-src 'self' data: https: blob:",
