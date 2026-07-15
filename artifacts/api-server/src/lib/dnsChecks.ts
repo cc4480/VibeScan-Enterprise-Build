@@ -273,6 +273,49 @@ export async function checkDnssec(hostname: string): Promise<ScanVulnerability[]
 // ORCHESTRATOR
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Cloud-hosting platforms where the subdomain owner has NO DNS control.
+ * The apex domain is managed by the platform, so DMARC/SPF/DKIM records
+ * cannot be configured by the app owner — flagging their absence is a
+ * false positive with zero actionability.
+ *
+ * Each entry is matched as a suffix: "foo.vercel.app" matches ".vercel.app".
+ */
+const UNCONTROLLED_DNS_PLATFORMS = [
+  ".replit.app",
+  ".replit.dev",
+  ".repl.co",
+  ".vercel.app",
+  ".netlify.app",
+  ".github.io",
+  ".fly.dev",
+  ".onrender.com",
+  ".render.com",
+  ".railway.app",
+  ".up.railway.app",
+  ".azurewebsites.net",
+  ".azurestaticapps.net",
+  ".workers.dev",
+  ".pages.dev",
+  ".web.app",
+  ".firebaseapp.com",
+  ".amplifyapp.com",
+  ".surge.sh",
+  ".glitch.me",
+  ".codesandbox.io",
+  ".stackblitz.io",
+  ".cloudflare.dev",
+  ".deno.dev",
+  ".val.run",
+  ".brev.sh",
+];
+
+/** Returns true when the hostname is a subdomain on a managed hosting platform. */
+function isUncontrolledPlatformSubdomain(hostname: string): boolean {
+  const lower = hostname.toLowerCase();
+  return UNCONTROLLED_DNS_PLATFORMS.some((suffix) => lower.endsWith(suffix));
+}
+
 export async function checkDnsSecurity(targetUrl: string): Promise<ScanVulnerability[]> {
   let hostname: string;
   try {
@@ -283,6 +326,13 @@ export async function checkDnsSecurity(targetUrl: string): Promise<ScanVulnerabi
 
   // Don't run DNS checks on IP addresses
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || hostname === "localhost") {
+    return [];
+  }
+
+  // Skip email-auth checks for cloud-hosting subdomains where the app owner
+  // has no DNS control.  Adding DMARC/SPF/DKIM records to these domains is
+  // impossible — the findings would be unfixable false positives.
+  if (isUncontrolledPlatformSubdomain(hostname)) {
     return [];
   }
 
