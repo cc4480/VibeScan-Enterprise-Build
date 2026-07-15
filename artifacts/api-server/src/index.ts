@@ -31,6 +31,25 @@ getBoss()
     logger.error({ err }, "Failed to initialize job queue — scans will not be processed");
   });
 
+// Graceful shutdown — stop pg-boss before exiting so in-flight scan jobs can
+// complete rather than being abandoned mid-execution (which leaves scans stuck
+// in "scanning" state).  Replit sends SIGTERM when deploying a new version;
+// giving the old process 90 s to drain is enough for most scans to finish.
+process.on("SIGTERM", () => {
+  logger.info("SIGTERM received — draining in-flight scan jobs before exit");
+  getBoss()
+    .then(async (boss) => {
+      await boss.stop({ graceful: true, timeout: 90_000 });
+      logger.info("pg-boss drained — exiting cleanly");
+    })
+    .catch((err: unknown) => {
+      logger.error({ err }, "Error draining pg-boss on shutdown");
+    })
+    .finally(() => {
+      process.exit(0);
+    });
+});
+
 app.listen(port, (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
