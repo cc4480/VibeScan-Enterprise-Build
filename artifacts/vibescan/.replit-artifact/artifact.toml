@@ -19,12 +19,15 @@ run = "pnpm --filter @workspace/vibescan run dev"
 
 [services.production]
 build = [ "pnpm", "--filter", "@workspace/vibescan", "run", "build" ]
-publicDir = "artifacts/vibescan/dist/public"
-serve = "static"
 
-[[services.production.rewrites]]
-from = "/*"
-to = "/index.html"
+[services.production.run]
+# vite preview serves the built output with the security headers configured in
+# vite.config.ts preview.headers — the static file server has no header support.
+args = ["pnpm", "--filter", "@workspace/vibescan", "run", "serve"]
+
+[services.production.run.env]
+PORT = "18425"
+NODE_ENV = "production"
 
 [services.env]
 PORT = "18425"
