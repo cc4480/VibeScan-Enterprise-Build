@@ -71,9 +71,21 @@ async function processScanJob(job: ScanJob): Promise<void> {
     return null;
   });
 
+  // Hard deadline for the entire HTTP scan phase.
+  // Individual probes have per-request timeouts (5–10 s each) but the aggregate
+  // across all deep-scan probes can still hang indefinitely on complex targets.
+  // 3 minutes is generous for any legitimate target; it prevents zombie jobs.
+  const SCAN_HTTP_TIMEOUT_MS = 3 * 60 * 1_000;
+
   let scanResult;
   try {
-    scanResult = await runScan(targetUrl, tier);
+    const scanTimeout = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`HTTP scan timed out after ${SCAN_HTTP_TIMEOUT_MS / 1000}s`)),
+        SCAN_HTTP_TIMEOUT_MS,
+      ),
+    );
+    scanResult = await Promise.race([runScan(targetUrl, tier), scanTimeout]);
     log.info(
       { vulnCount: scanResult.vulnerabilities.length, durationMs: scanResult.requestDurationMs },
       "HTTP scan complete",
