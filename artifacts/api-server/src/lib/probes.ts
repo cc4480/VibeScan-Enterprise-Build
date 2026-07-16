@@ -103,7 +103,11 @@ export async function checkHttpMethods(targetUrl: string): Promise<ScanVulnerabi
   const result = await safeGet(targetUrl, { method: "OPTIONS", redirect: "follow" });
   if (!result) return [];
 
-  const allow = result.headers["allow"] ?? result.headers["access-control-allow-methods"] ?? "";
+  // Only read the standard HTTP Allow header — NOT Access-Control-Allow-Methods.
+  // ACAM is a CORS preflight header that legitimately lists methods for cross-origin
+  // requests; conflating it with Allow would flag all CORS-enabled API endpoints as
+  // "dangerous methods" false positives.
+  const allow = result.headers["allow"] ?? "";
   if (!allow) return [];
 
   const vulns: ScanVulnerability[] = [];

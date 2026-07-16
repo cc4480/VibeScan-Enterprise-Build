@@ -362,18 +362,52 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       cvssScore: 7.2,
       wstgId: "WSTG-CONF-12",
     }));
-  } else if (/unsafe-inline|unsafe-eval/i.test(csp)) {
-    vulnerabilities.push(vuln({
-      name: "Weak Content-Security-Policy (unsafe-inline / unsafe-eval)",
-      severity: "medium",
-      category: "Injection Defense",
-      description: "The Content-Security-Policy header allows 'unsafe-inline' or 'unsafe-eval', which significantly weakens XSS protection. Attackers who achieve HTML injection can still execute scripts.",
-      evidence: `GET ${finalUrl}\nContent-Security-Policy: ${csp}`,
-      solution: "Replace 'unsafe-inline' with nonce-based or hash-based CSP directives. Avoid 'unsafe-eval' entirely. Use a CSP evaluator (csp-evaluator.withgoogle.com) to check your policy.",
-      cweId: "CWE-79",
-      cvssScore: 5.4,
-      wstgId: "WSTG-CONF-12",
-    }));
+  } else {
+    // Parse directives into a map so we can check WHICH directives contain
+    // unsafe-inline / unsafe-eval.  This matters because:
+    //   • unsafe-inline / unsafe-eval in script-src → MEDIUM (XSS, scripts execute)
+    //   • unsafe-inline ONLY in style-src (script-src is clean) → LOW (CSS injection
+    //     only — can spoof UI / exfiltrate via attribute selectors, but cannot run JS)
+    const cspDirMap = new Map<string, string>();
+    for (const seg of csp.split(";").map((s) => s.trim()).filter(Boolean)) {
+      const spaceIdx = seg.indexOf(" ");
+      const dname = spaceIdx === -1 ? seg : seg.slice(0, spaceIdx);
+      const dval  = spaceIdx === -1 ? ""  : seg.slice(spaceIdx + 1);
+      cspDirMap.set(dname.toLowerCase(), dval);
+    }
+
+    const defaultSrc      = cspDirMap.get("default-src") ?? "";
+    const effectiveScript = cspDirMap.get("script-src") ?? defaultSrc;
+    const effectiveStyle  = cspDirMap.get("style-src")  ?? defaultSrc;
+
+    const scriptHasUnsafe = /unsafe-inline|unsafe-eval/i.test(effectiveScript);
+    const styleOnlyUnsafe = /unsafe-inline/i.test(effectiveStyle) && !scriptHasUnsafe;
+
+    if (scriptHasUnsafe) {
+      vulnerabilities.push(vuln({
+        name: "Weak Content-Security-Policy (unsafe-inline / unsafe-eval in script-src)",
+        severity: "medium",
+        category: "Injection Defense",
+        description: "The Content-Security-Policy allows 'unsafe-inline' or 'unsafe-eval' in script-src (or default-src). This significantly weakens XSS protection — attackers who achieve HTML injection can execute arbitrary JavaScript in the page's security context.",
+        evidence: `GET ${finalUrl}\nContent-Security-Policy: ${csp}\n(unsafe-inline or unsafe-eval present in script-src — inline script execution is permitted)`,
+        solution: "Replace 'unsafe-inline' with nonce-based or hash-based CSP directives. Avoid 'unsafe-eval' entirely. Use a CSP evaluator (csp-evaluator.withgoogle.com) to audit your policy.",
+        cweId: "CWE-79",
+        cvssScore: 5.4,
+        wstgId: "WSTG-CONF-12",
+      }));
+    } else if (styleOnlyUnsafe) {
+      vulnerabilities.push(vuln({
+        name: "Content-Security-Policy Allows Inline Styles (unsafe-inline in style-src)",
+        severity: "low",
+        category: "Injection Defense",
+        description: "The Content-Security-Policy permits 'unsafe-inline' in style-src. Script execution is properly restricted (script-src has no unsafe-inline). CSS injection cannot execute JavaScript but can enable visual spoofing, clickjacking, and CSS-based data exfiltration via attribute selectors.",
+        evidence: `GET ${finalUrl}\nContent-Security-Policy: ${csp}\n(unsafe-inline in style-src only — script-src is clean, no JS execution risk)`,
+        solution: "For the strongest defence, replace style-src 'unsafe-inline' with nonce-based or hash-based directives. For Tailwind CSS builds, all styles compile to an external stylesheet in production — unsafe-inline can usually be removed once any remaining inline style= attributes are eliminated.",
+        cweId: "CWE-79",
+        cvssScore: 3.1,
+        wstgId: "WSTG-CONF-12",
+      }));
+    }
   }
 
   // ── CSP deep analysis (when CSP exists) ──────────────────────────────
