@@ -333,8 +333,8 @@ export function VulnCard({
 
 // ─── Recon card ───────────────────────────────────────────────────────────────
 
-export const DANGEROUS_RECON_PORTS = new Set([23, 445, 2375, 6379, 27017, 9200, 1433, 3306, 5432, 3389, 11211, 5984, 1521, 27018]);
-export const MEDIUM_RECON_PORTS = new Set([2376, 8888, 9000]);
+const DANGEROUS_RECON_PORTS = new Set([23, 445, 2375, 6379, 27017, 9200, 1433, 3306, 5432, 3389, 11211, 5984, 1521, 27018]);
+const MEDIUM_RECON_PORTS = new Set([2376, 8888, 9000]);
 
 export interface ReconData {
   subdomains?: Array<{ subdomain: string; ip?: string | null; cname?: string | null; source: string }>;
