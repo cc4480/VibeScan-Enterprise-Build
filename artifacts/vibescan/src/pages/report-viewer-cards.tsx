@@ -583,39 +583,42 @@ export function AgentFixPromptCard({ prompt, detectedAgent }: { prompt: string; 
 
   return (
     <div className={cn("glass-card rounded-2xl p-6 border-t-4", meta.accentClass)}>
-      <div className="flex items-start justify-between gap-4 mb-4">
-        <div>
-          <h3 className="text-lg font-bold flex items-center gap-2">
-            {meta.icon}
-            {meta.label}
-          </h3>
-          {agent !== "generic" && (
-            <span className="mt-1 inline-flex items-center text-xs font-medium text-muted-foreground bg-white/5 border border-white/10 rounded-full px-2 py-0.5">
-              Formatted for your stack
-            </span>
-          )}
-        </div>
-        <button
-          onClick={handleCopy}
-          className={cn(
-            "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200",
-            copied
-              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-              : "bg-violet-500/20 text-violet-300 border border-violet-500/30 hover:bg-violet-500/30",
-          )}
-        >
-          {copied ? (
-            <><Check className="w-4 h-4" /> Copied!</>
-          ) : (
-            <><Copy className="w-4 h-4" /> {meta.copyLabel}</>
-          )}
-        </button>
+      <div className="flex items-start justify-between gap-4 mb-1">
+        <h3 className="text-lg font-bold flex items-center gap-2">
+          {meta.icon}
+          {meta.label}
+        </h3>
+        {agent !== "generic" && (
+          <span className="shrink-0 inline-flex items-center text-xs font-medium text-muted-foreground bg-white/5 border border-white/10 rounded-full px-2 py-0.5">
+            Formatted for your stack
+          </span>
+        )}
       </div>
-      <p className="text-xs text-muted-foreground mb-3">
+      <p className="text-xs text-muted-foreground mb-4">
         {meta.description}
       </p>
-      <div className="bg-background border border-white/10 rounded-lg p-4 max-h-64 overflow-y-auto">
-        <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed">{prompt}</pre>
+      <div className="relative mb-3 rounded-lg overflow-hidden border border-white/20 bg-black/40">
+        <div className="flex items-center justify-between px-4 py-2 border-b border-white/10 bg-white/5">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Paste-ready prompt</span>
+          <button
+            onClick={handleCopy}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold transition-all duration-200",
+              copied
+                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                : "bg-violet-500/20 text-violet-300 border border-violet-500/30 hover:bg-violet-500/30",
+            )}
+          >
+            {copied ? (
+              <><Check className="w-3 h-3" /> Copied!</>
+            ) : (
+              <><Copy className="w-3 h-3" /> {meta.copyLabel}</>
+            )}
+          </button>
+        </div>
+        <div className="p-4 max-h-72 overflow-y-auto">
+          <pre className="text-xs font-mono text-foreground/85 whitespace-pre-wrap leading-relaxed">{prompt}</pre>
+        </div>
       </div>
     </div>
   );
