@@ -55,33 +55,41 @@ const app: Express = express();
 app.disable("x-powered-by");
 
 // ── Security response headers — set before all routes ────────────────────────
-// Express owns all routes (paths = ["/"]) so these headers are guaranteed on
-// every response: API JSON, static HTML/JS/CSS, and the SPA index.html.
+// In production Express owns everything (API + static frontend) so we set
+// headers on every response.
+//
+// In development Express proxies non-API traffic to the Vite dev server.
+// Vite injects an inline <script type="module"> preamble that React Fast
+// Refresh needs.  If Express also sets `script-src 'self'` (no unsafe-inline)
+// on those proxied responses the browser sees TWO CSP headers and enforces
+// the union — the restrictive Express header wins and blocks the preamble,
+// causing the "@vitejs/plugin-react can't detect preamble" runtime error.
+// Fix: in dev mode skip CSP and cross-origin isolation headers on frontend
+// routes; Vite's own headers (which include 'unsafe-inline') take effect.
+const isProd = process.env.NODE_ENV === "production";
+
 app.use((req, res, next) => {
   const isApi = req.path.startsWith("/api");
 
+  // Safe headers that don't interfere with Vite HMR in any environment.
   res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("X-XSS-Protection", "1; mode=block");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
 
   if (isApi) {
-    // API responses are JSON — a strict no-content CSP is safe and correct.
+    // API responses: strict no-content CSP in all environments.
     res.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
-  } else {
-    // Frontend routes — full SPA CSP + cross-origin isolation headers.
+    res.setHeader("X-Frame-Options", "DENY");
+  } else if (isProd) {
+    // Production frontend: full SPA CSP + cross-origin isolation.
+    // In dev these are omitted so Vite's own headers apply unmolested.
     res.setHeader("Content-Security-Policy", FRONTEND_CSP);
+    res.setHeader("X-Frame-Options", "DENY");
     res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
     res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
     res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
-  }
-
-  if (process.env.NODE_ENV === "production") {
-    res.setHeader(
-      "Strict-Transport-Security",
-      "max-age=31536000; includeSubDomains; preload",
-    );
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
   }
 
   next();
