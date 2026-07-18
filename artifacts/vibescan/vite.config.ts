@@ -4,41 +4,35 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
-// Security headers applied to both the dev server and preview server.
-
-
-// In development (Replit preview), X-Frame-Options and frame-ancestors are
-// omitted so the app renders correctly inside Replit's preview iframe.
-// In production these restrictive headers are applied via the API server.
+// Security headers for the Vite preview server (production build previews only).
+// Dev server intentionally has NO custom headers — the Express API server
+// applies the full header set in production, and injecting a CSP from Vite in
+// dev mode causes the "@vitejs/plugin-react can't detect preamble" error because
+// the browser enforces the union of any duplicate CSP headers.
 const isProduction = process.env.NODE_ENV === "production";
-const securityHeaders: Record<string, string> = {
-  "X-Content-Type-Options": "nosniff",
-  "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Permissions-Policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()",
-  ...(isProduction
-    ? {
-        "X-Frame-Options": "DENY",
-        "Cross-Origin-Opener-Policy": "same-origin",
-        "Cross-Origin-Resource-Policy": "same-origin",
-        // credentialless is compatible with third-party resources; require-corp would break CDN assets
-        "Cross-Origin-Embedder-Policy": "credentialless",
-      }
-    : {}),
-  "Content-Security-Policy": [
-    "default-src 'self'",
-    // Production bundles contain no inline scripts — drop unsafe-inline.
-    // Dev keeps it because Vite HMR injects inline module scripts.
-    isProduction ? "script-src 'self'" : "script-src 'self' 'unsafe-inline'",
-    "style-src 'self' 'unsafe-inline'",
-    "font-src 'self' data:",
-    "img-src 'self' data: https: blob:",
-    "connect-src 'self' https: wss: ws:",
-    "worker-src 'self' blob:",
-    ...(isProduction ? ["frame-ancestors 'none'"] : []),
-    "object-src 'none'",
-    "base-uri 'self'",
-  ].join("; "),
-};
+const securityHeaders: Record<string, string> = isProduction
+  ? {
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+      "Permissions-Policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+      "X-Frame-Options": "DENY",
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Resource-Policy": "same-origin",
+      "Cross-Origin-Embedder-Policy": "credentialless",
+      "Content-Security-Policy": [
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline'",
+        "font-src 'self' data:",
+        "img-src 'self' data: https: blob:",
+        "connect-src 'self' https: wss: ws:",
+        "worker-src 'self' blob:",
+        "frame-ancestors 'none'",
+        "object-src 'none'",
+        "base-uri 'self'",
+      ].join("; "),
+    }
+  : {};
 
 // PORT and BASE_PATH are injected by the artifact router via artifact.toml [services.env].
 // Defaults match the artifact.toml values so the config also works when run directly.

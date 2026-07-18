@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    <script>
+      (function () {
+        var hook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
+        if (hook) {
+          if (!(hook.renderers instanceof Map)) hook.renderers = new Map();
+          if (typeof hook.inject !== 'function') hook.inject = function () { return 0; };
+        }
+      })();
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <title>VibeScan — Black-Box Penetration Testing for Vibe Coders</title>
