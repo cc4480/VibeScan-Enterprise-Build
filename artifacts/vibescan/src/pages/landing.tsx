@@ -288,57 +288,84 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Pricing */}
+      {/* What you get */}
       <section id="pricing" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">Pay only when you scan</h2>
-          <p className="text-muted-foreground">No monthly subscriptions. Buy single scans, save with a pack, or monitor continuously.</p>
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold mb-4 uppercase tracking-wider">
+            <Zap className="w-3.5 h-3.5" /> Free Early Access
+          </div>
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">Everything included, free right now</h2>
+          <p className="text-muted-foreground max-w-2xl mx-auto">We're in early access. All scans and continuous monitoring are free while we fine-tune the platform.</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
           {[
-            { name: "Basic Scan", price: "$29", period: null, desc: "Core checks for quick health checks.", features: ["Header analysis", "SSL/TLS grading", "Basic tech fingerprint", "Letter grade & score"], cta: "Buy Basic", highlight: false, monitor: false },
-            { name: "Deep Scan", price: "$79", period: null, desc: "Full analysis with AI remediation.", features: ["Everything in Basic", "Active path probing", "DNS / email security", "DeepSeek AI analysis", "Step-by-step fix guides"], cta: "Buy Deep", highlight: true, monitor: false },
-            { name: "5-Scan Pack", price: "$99", period: null, desc: "Save $296 on Deep Scans.", features: ["5× Deep Scan credits", "Credits never expire", "Use on any project", "Priority queue"], cta: "Get 5 Pack", highlight: false, monitor: false },
-            { name: "20-Scan Pack", price: "$299", period: null, desc: "For agencies and dev shops.", features: ["20× Deep Scan credits", "Highest priority queue", "API access (soon)", "White-label reports (soon)"], cta: "Get 20 Pack", highlight: false, monitor: false },
-            { name: "Monitor", price: "$129", period: "/yr", desc: "Continuous automated security.", features: ["Weekly deep rescans", "Daily CVE feed monitoring", "Instant alerts when new CVEs match your stack", "1 year · per URL"], cta: "Start Monitoring", highlight: false, monitor: true },
-          ].map((tier, i) => (
-            <div key={i} className={cn("glass-panel p-8 rounded-2xl flex flex-col", tier.highlight ? "border-primary/50 relative transform md:-translate-y-4 shadow-[0_0_30px_rgba(20,184,120,0.1)]" : "", tier.monitor ? "border-indigo-500/30 bg-indigo-500/5" : "")}>
-              {tier.highlight && (
+            {
+              icon: Search,
+              title: "Basic Scan",
+              desc: "Core OWASP checks in minutes.",
+              features: ["Security headers audit", "SSL/TLS grading", "Tech fingerprinting", "Letter grade A–F"],
+              cta: "Run Basic Scan",
+              href: "/scan",
+              color: "text-primary",
+              bg: "bg-primary/10",
+              border: "",
+            },
+            {
+              icon: Bot,
+              title: "Deep Scan",
+              desc: "Full analysis + AI remediation guide.",
+              features: ["Everything in Basic", "Active path probing", "DNS & email security", "DeepSeek AI analysis", "Step-by-step fix guides"],
+              cta: "Run Deep Scan",
+              href: "/scan",
+              color: "text-primary",
+              bg: "bg-primary/10",
+              border: "border-primary/50 shadow-[0_0_30px_rgba(20,184,120,0.1)]",
+              popular: true,
+            },
+            {
+              icon: Bell,
+              title: "Continuous Monitor",
+              desc: "Automated rescans + CVE alerts.",
+              features: ["Weekly deep rescans", "Daily CVE feed monitoring", "Instant alerts for your stack", "Full AI report every run"],
+              cta: "Start Monitoring",
+              href: "/monitor",
+              color: "text-indigo-400",
+              bg: "bg-indigo-400/10",
+              border: "border-indigo-500/30",
+            },
+          ].map((item, i) => (
+            <div key={i} className={cn("glass-panel p-8 rounded-2xl flex flex-col relative", item.border)}>
+              {item.popular && (
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-primary text-primary-foreground px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
                   Most Popular
                 </div>
               )}
-              {tier.monitor && (
-                <div className="flex items-center gap-1.5 mb-3">
-                  <Bell className="w-4 h-4 text-indigo-400" />
-                  <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">Always-On</span>
-                </div>
-              )}
-              <h3 className="text-xl font-bold mb-2">{tier.name}</h3>
-              <div className="flex items-baseline gap-1 mb-4">
-                <span className="text-4xl font-black">{tier.price}</span>
-                {tier.period && <span className="text-muted-foreground text-sm">{tier.period}</span>}
+              <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center mb-5", item.bg, item.color)}>
+                <item.icon className="w-6 h-6" />
               </div>
-              <p className="text-sm text-muted-foreground pb-6 border-b border-white/10 mb-6">{tier.desc}</p>
-
-              <ul className="flex flex-col gap-3 mb-8 flex-1">
-                {tier.features.map((feat, j) => (
+              <h3 className="text-xl font-bold mb-2">{item.title}</h3>
+              <p className="text-sm text-muted-foreground pb-5 border-b border-white/10 mb-5">{item.desc}</p>
+              <ul className="flex flex-col gap-2.5 mb-8 flex-1">
+                {item.features.map((feat, j) => (
                   <li key={j} className="flex items-start gap-2 text-sm">
-                    <CheckCircle2 className={cn("w-5 h-5 shrink-0", tier.monitor ? "text-indigo-400" : "text-primary")} />
+                    <CheckCircle2 className={cn("w-4 h-4 shrink-0 mt-0.5", item.color)} />
                     <span>{feat}</span>
                   </li>
                 ))}
               </ul>
-
               <Link
-                href={tier.monitor ? "/monitor" : "/scan"}
-                className={cn("w-full py-3 rounded-xl font-bold transition-all text-center block",
-                  tier.highlight ? "bg-primary text-primary-foreground hover:shadow-[0_0_20px_rgba(20,184,120,0.4)]"
-                  : tier.monitor ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30"
-                  : "bg-secondary text-foreground hover:bg-white/10")}
+                href={item.href}
+                className={cn(
+                  "w-full py-3 rounded-xl font-bold transition-all text-center block",
+                  item.popular
+                    ? "bg-primary text-primary-foreground hover:shadow-[0_0_20px_rgba(20,184,120,0.4)]"
+                    : item.href === "/monitor"
+                    ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30"
+                    : "bg-secondary text-foreground hover:bg-white/10",
+                )}
               >
-                {tier.cta}
+                {item.cta}
               </Link>
             </div>
           ))}

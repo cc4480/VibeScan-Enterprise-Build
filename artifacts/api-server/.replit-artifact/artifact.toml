@@ -27,6 +27,7 @@ args = ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
 PORT = "8080"
 NODE_ENV = "production"
 FRONTEND_STATIC_DIR = "artifacts/vibescan/dist/public"
+DISABLE_PAYMENTS = "true"
 
 [services.production.health.startup]
 path = "/api/healthz"

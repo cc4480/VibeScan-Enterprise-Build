@@ -46,12 +46,6 @@ router.post("/monitor/subscriptions", async (req, res): Promise<void> => {
   }
 
   const { targetUrl } = parsed.data;
-  const paymentsDisabled = process.env.DISABLE_PAYMENTS === "true";
-
-  if (!paymentsDisabled) {
-    res.status(503).json({ error: "Subscription payments are not yet configured." });
-    return;
-  }
 
   // Check for an existing active subscription for this user+URL
   const [existing] = await db

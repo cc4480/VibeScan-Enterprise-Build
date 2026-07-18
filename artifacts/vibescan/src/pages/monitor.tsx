@@ -43,7 +43,7 @@ export default function MonitorPage() {
               <Bell className="w-7 h-7 text-primary" /> Continuous Monitoring
             </h1>
             <p className="text-muted-foreground max-w-lg">
-              Weekly automated rescans + instant alerts when new CVEs match your tech stack. $129/yr per URL.
+              Weekly automated rescans + instant alerts when new CVEs match your tech stack.
             </p>
           </div>
         </div>
@@ -67,8 +67,8 @@ export default function MonitorPage() {
           },
           {
             icon: CalendarClock,
-            title: "1-Year Subscription",
-            desc: "Flat $129/year. No seats, no per-scan billing. Cancel any time.",
+            title: "Always-On Coverage",
+            desc: "Set it and forget it — continuous monitoring with no manual re-runs needed. Cancel any time.",
             color: "text-amber-400",
             bg: "bg-amber-400/10",
           },

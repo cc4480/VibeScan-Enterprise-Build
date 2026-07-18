@@ -102,8 +102,8 @@ router.post("/scans", async (req, res): Promise<void> => {
     }
   }
 
-  // ── Payment bypass for testing (DISABLE_PAYMENTS=true) ──────────────
-  if (paymentsDisabled && !isPack) {
+  // ── Free mode: payments disabled or Stripe not configured ───────────
+  if ((paymentsDisabled || !stripe) && !isPack) {
     const [scan] = await db
       .insert(scansTable)
       .values({
@@ -126,8 +126,8 @@ router.post("/scans", async (req, res): Promise<void> => {
     return;
   }
 
-  // ── Pack bypass for testing ──────────────────────────────────────────
-  if (paymentsDisabled && isPack) {
+  // ── Pack: free credits when payments are disabled or Stripe absent ──
+  if ((paymentsDisabled || !stripe) && isPack) {
     // In test mode, add 5 or 20 credits directly without payment
     const creditsToAdd = tier === "pack_5" ? 5 : 20;
     const [existing] = await db
