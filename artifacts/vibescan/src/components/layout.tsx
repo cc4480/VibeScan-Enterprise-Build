@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Shield, LayoutDashboard, Menu, X, Plus, Bell } from "lucide-react";
+import { Shield, LayoutDashboard, Menu, X, Plus, BookOpen, Bell } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
@@ -36,7 +36,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Shield className="w-5 h-5 text-primary-foreground" />
             </div>
             <span className="font-display font-bold text-xl tracking-tight text-foreground">
-              VibeScan
+              Seclayer
             </span>
           </Link>
 
@@ -68,6 +68,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
               )}
             >
               <Bell className="w-3.5 h-3.5" /> Monitor
+            </Link>
+            <Link
+              href="/learn"
+              className={cn(
+                "text-sm font-medium transition-colors hover:text-foreground flex items-center gap-1.5",
+                location === "/learn" ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              <BookOpen className="w-3.5 h-3.5" /> Learn
             </Link>
 
             <div className="w-px h-6 bg-border" />
@@ -113,6 +122,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
             >
               <Bell className="w-4 h-4" /> Monitor
             </Link>
+            <Link
+              href="/learn"
+              onClick={() => setMobileMenuOpen(false)}
+              className="px-4 py-2 text-foreground font-medium rounded-lg hover:bg-secondary flex items-center gap-2"
+            >
+              <BookOpen className="w-4 h-4" /> Learn
+            </Link>
             <div className="h-px bg-border mx-4" />
             <Link
               href="/scan"
@@ -133,10 +149,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-2 opacity-50">
             <Shield className="w-5 h-5 text-foreground" />
-            <span className="font-display font-bold tracking-tight text-foreground">VibeScan</span>
+            <span className="font-display font-bold tracking-tight text-foreground">Seclayer</span>
           </div>
           <p className="text-sm text-muted-foreground">
-            Your app is live. Is it safe? © {new Date().getFullYear()} VibeScan
+            Your app is live. Is it safe? © {new Date().getFullYear()} Seclayer
           </p>
         </div>
       </footer>

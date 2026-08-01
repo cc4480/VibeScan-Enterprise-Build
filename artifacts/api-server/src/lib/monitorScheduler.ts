@@ -1,37 +1,140 @@
 /**
- * Monitor Scheduler — registers two pg-boss recurring jobs:
+ * Monitor Scheduler — 2026 continuous monitoring standard.
  *
- *  1. monitor-weekly-scans  (cron: 0 2 * * 0 — every Sunday 02:00 UTC)
- *     Fans out a deep rescan for every active monitor subscription whose
- *     last scan is older than 6 days.
+ * Jobs:
+ *  1. monitor-sweep  (every 6 h) — risk-adaptive rescan sweep
+ *     Replaces the fixed Sunday-only weekly scan. After each scan completes,
+ *     nextScanAt is set based on the resulting grade (A→14d, B/C→7d, D/F→3d).
+ *     This sweep finds all subscriptions where nextScanAt ≤ now and enqueues them.
  *
- *  2. monitor-cve-check  (cron: 0 6 * * * — every day 06:00 UTC)
- *     Fetches CVEs published in the last 24 h from NVD, matches them
- *     against each active subscription's most-recent tech stack, creates
- *     cve_alerts rows, and enqueues immediate rescans for matches.
+ *  2. monitor-cve-check  (daily 06:00 UTC)
+ *     Fetches CVEs from NVD, matches them against each active subscription's tech
+ *     stack, enriches matches with EPSS scores from api.first.org, creates
+ *     cve_alerts rows, enqueues immediate rescans, fires webhooks and emails.
+ *
+ *  3. monitor-cert-expiry  (daily 07:00 UTC)
+ *     Checks TLS certificate expiry dates stored in the most recent scan report's
+ *     rawData. Fires alerts at ≤30, ≤14, ≤7 days (each threshold once per cert cycle).
  */
 
 import { getBoss } from "./queue";
-import { db, monitorSubscriptionsTable, cveAlertsTable, reportsTable, scansTable } from "@workspace/db";
-import { eq, and, lt, desc } from "drizzle-orm";
+import {
+  db,
+  monitorSubscriptionsTable,
+  cveAlertsTable,
+  reportsTable,
+  scansTable,
+  certExpiryAlertsTable,
+} from "@workspace/db";
+import { eq, and, lte, desc, isNull, or } from "drizzle-orm";
 import { enqueueScan } from "./queue";
 import { logger } from "./logger";
 import { fetchRecentCves, matchCvesToTechnologies } from "./cveMonitor";
-import { sendMonitorCveAlertEmail, sendMonitorScanQueuedEmail } from "./mailer";
-import { randomUUID } from "node:crypto";
+import {
+  sendMonitorCveAlertEmail,
+  sendMonitorScanQueuedEmail,
+  sendRegressionAlertEmail,
+  sendCertExpiryEmail,
+} from "./mailer";
+import { fireWebhook } from "./webhook";
 
-const WEEKLY_QUEUE  = "monitor-weekly-scans";
-const CVE_QUEUE     = "monitor-cve-check";
-const SIX_DAYS_MS   = 6 * 24 * 60 * 60 * 1000;
+const SWEEP_QUEUE      = "monitor-sweep";
+const CVE_QUEUE        = "monitor-cve-check";
+const CERT_QUEUE       = "monitor-cert-expiry";
 
-// ─── Weekly rescan ────────────────────────────────────────────────────────────
+// ─── Cadence helpers ──────────────────────────────────────────────────────────
 
-async function runWeeklyScans(): Promise<void> {
-  const log = logger.child({ job: "monitor-weekly-scans" });
-  log.info("Running weekly monitor rescans");
+export function nextScanDelayDays(grade: string): number {
+  if (grade === "A") return 14;
+  if (grade === "B" || grade === "C") return 7;
+  return 3; // D or F
+}
 
+export function computeNextScanAt(grade: string, from: Date = new Date()): Date {
+  const days = nextScanDelayDays(grade);
+  return new Date(from.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+// ─── EPSS enrichment ──────────────────────────────────────────────────────────
+
+interface EpssEntry { cve: string; epss: string; percentile: string }
+
+async function fetchEpssScores(
+  cveIds: string[],
+): Promise<Map<string, { score: number; percentile: number }>> {
+  if (cveIds.length === 0) return new Map();
+  const log = logger.child({ job: "epss-fetch" });
+
+  try {
+    const url = `https://api.first.org/data/json?cve=${cveIds.join(",")}`;
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(15_000),
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) throw new Error(`EPSS API ${res.status}`);
+
+    const json = (await res.json()) as { data?: EpssEntry[] };
+    const map = new Map<string, { score: number; percentile: number }>();
+    for (const entry of json.data ?? []) {
+      map.set(entry.cve, {
+        score: parseFloat(entry.epss),
+        percentile: parseFloat(entry.percentile),
+      });
+    }
+    log.info({ fetched: map.size }, "EPSS scores fetched");
+    return map;
+  } catch (err) {
+    log.warn({ err }, "EPSS fetch failed (non-fatal)");
+    return new Map();
+  }
+}
+
+// ─── Helper: enqueue a monitor scan ──────────────────────────────────────────
+
+async function enqueueMonitorScan(sub: {
+  id: string;
+  userId: string;
+  userEmail: string;
+  targetUrl: string;
+}, reason: "adaptive" | "cve"): Promise<string | null> {
+  try {
+    const [scan] = await db
+      .insert(scansTable)
+      .values({
+        userId: sub.userId,
+        userEmail: sub.userEmail,
+        targetUrl: sub.targetUrl,
+        tier: "deep",
+        status: "paid",
+      })
+      .returning();
+
+    await enqueueScan({
+      scanId: scan.id,
+      userId: sub.userId,
+      targetUrl: sub.targetUrl,
+      tier: "deep",
+      monitorSubscriptionId: sub.id,
+    });
+
+    await db
+      .update(scansTable)
+      .set({ status: "queued", startedAt: new Date() })
+      .where(eq(scansTable.id, scan.id));
+
+    return scan.id;
+  } catch (err) {
+    logger.error({ err, subscriptionId: sub.id }, "Failed to enqueue monitor scan");
+    return null;
+  }
+}
+
+// ─── 1. Sweep job ─────────────────────────────────────────────────────────────
+
+async function runSweep(): Promise<void> {
+  const log = logger.child({ job: SWEEP_QUEUE });
   const now = new Date();
-  const cutoff = new Date(now.getTime() - SIX_DAYS_MS);
+  log.info("Running adaptive scan sweep");
 
   const subscriptions = await db
     .select()
@@ -39,62 +142,56 @@ async function runWeeklyScans(): Promise<void> {
     .where(eq(monitorSubscriptionsTable.status, "active"));
 
   const due = subscriptions.filter((sub) => {
-    if (sub.status !== "active") return false;
     if (sub.expiresAt <= now) return false;
-    if (!sub.lastScanAt) return true;
-    return sub.lastScanAt <= cutoff;
+    if (!sub.nextScanAt) {
+      // No nextScanAt set yet — schedule if also no lastScanAt, or lastScanAt > 7 days ago
+      if (!sub.lastScanAt) return true;
+      return sub.lastScanAt.getTime() < now.getTime() - 7 * 24 * 60 * 60 * 1000;
+    }
+    return sub.nextScanAt <= now;
   });
 
-  log.info({ total: subscriptions.length, due: due.length }, "Subscriptions due for weekly rescan");
+  log.info({ total: subscriptions.length, due: due.length }, "Subscriptions due for rescan");
+
+  const appOrigin = process.env.APP_ORIGIN ?? "https://seclayer.io";
 
   for (const sub of due) {
-    try {
-      const [scan] = await db
-        .insert(scansTable)
-        .values({
-          userId: sub.userId,
-          userEmail: sub.userEmail,
-          targetUrl: sub.targetUrl,
-          tier: "deep",
-          status: "paid",
-        })
-        .returning();
+    // Advance nextScanAt to a sentinel (minimum cadence = 3 days) before enqueueing
+    // so that the next 6h sweep does not double-pick this subscription while the
+    // job is still in-flight. Worker will overwrite with the accurate grade-based value.
+    await db
+      .update(monitorSubscriptionsTable)
+      .set({ nextScanAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) })
+      .where(eq(monitorSubscriptionsTable.id, sub.id));
 
-      await enqueueScan({
-        scanId: scan.id,
-        userId: sub.userId,
+    const scanId = await enqueueMonitorScan(sub, "adaptive");
+    if (!scanId) continue;
+
+    log.info({ subscriptionId: sub.id, scanId, targetUrl: sub.targetUrl }, "Adaptive rescan queued");
+
+    if (sub.userEmail) {
+      await sendMonitorScanQueuedEmail({
+        toEmail: sub.userEmail,
         targetUrl: sub.targetUrl,
-        tier: "deep",
-        monitorSubscriptionId: sub.id,
+        scanId,
+        reason: "adaptive",
+        dashboardUrl: `${appOrigin}/monitor`,
       });
+    }
 
-      await db
-        .update(scansTable)
-        .set({ status: "queued", startedAt: new Date() })
-        .where(eq(scansTable.id, scan.id));
-
-      log.info({ subscriptionId: sub.id, scanId: scan.id, targetUrl: sub.targetUrl }, "Weekly rescan queued");
-
-      if (sub.userEmail) {
-        const appOrigin = process.env.APP_ORIGIN ?? "https://vibescan.app";
-        await sendMonitorScanQueuedEmail({
-          toEmail: sub.userEmail,
-          targetUrl: sub.targetUrl,
-          scanId: scan.id,
-          reason: "weekly",
-          dashboardUrl: `${appOrigin}/monitor`,
-        });
-      }
-    } catch (err) {
-      log.error({ err, subscriptionId: sub.id }, "Failed to enqueue weekly rescan");
+    if (sub.webhookUrl) {
+      await fireWebhook(sub.webhookUrl, "scan_complete", sub.targetUrl, sub.id, {
+        scanId,
+        reason: "adaptive",
+      });
     }
   }
 }
 
-// ─── Daily CVE check ──────────────────────────────────────────────────────────
+// ─── 2. CVE check job ─────────────────────────────────────────────────────────
 
 async function runCveCheck(): Promise<void> {
-  const log = logger.child({ job: "monitor-cve-check" });
+  const log = logger.child({ job: CVE_QUEUE });
   log.info("Running daily CVE check");
 
   const now = new Date();
@@ -102,7 +199,6 @@ async function runCveCheck(): Promise<void> {
 
   const cves = await fetchRecentCves(yesterday, now);
   log.info({ cveCount: cves.length }, "Fetched CVEs from NVD");
-
   if (cves.length === 0) return;
 
   const activeSubscriptions = await db
@@ -113,11 +209,10 @@ async function runCveCheck(): Promise<void> {
   const validSubs = activeSubscriptions.filter((s) => s.expiresAt > now);
   log.info({ subscriptions: validSubs.length }, "Checking active subscriptions against CVEs");
 
-  const appOrigin = process.env.APP_ORIGIN ?? "https://vibescan.app";
+  const appOrigin = process.env.APP_ORIGIN ?? "https://seclayer.io";
 
   for (const sub of validSubs) {
     try {
-      // Get the most recent completed report for this subscription's target URL
       const [latestReport] = await db
         .select({ id: reportsTable.id, data: reportsTable.data })
         .from(reportsTable)
@@ -141,63 +236,201 @@ async function runCveCheck(): Promise<void> {
 
       log.info(
         { subscriptionId: sub.id, targetUrl: sub.targetUrl, matches: matches.length },
-        "CVE matches found — triggering rescan",
+        "CVE matches found — enriching with EPSS and triggering rescan",
       );
 
-      // Create a new scan triggered by CVE match
-      const [scan] = await db
-        .insert(scansTable)
-        .values({
-          userId: sub.userId,
-          userEmail: sub.userEmail,
-          targetUrl: sub.targetUrl,
-          tier: "deep",
-          status: "paid",
-        })
-        .returning();
+      // Fetch EPSS scores for all matched CVEs
+      const cveIds = matches.map(({ cve }) => cve.id);
+      const epssMap = await fetchEpssScores(cveIds);
 
-      await enqueueScan({
-        scanId: scan.id,
-        userId: sub.userId,
-        targetUrl: sub.targetUrl,
-        tier: "deep",
-        monitorSubscriptionId: sub.id,
-      });
+      // Enqueue immediate rescan
+      const scanId = await enqueueMonitorScan(sub, "cve");
 
+      // Schedule a 24h follow-up rescan: set nextScanAt = now + 24h so the adaptive
+      // sweep will pick it up again 24 hours after the CVE-triggered scan.
       await db
-        .update(scansTable)
-        .set({ status: "queued", startedAt: new Date() })
-        .where(eq(scansTable.id, scan.id));
+        .update(monitorSubscriptionsTable)
+        .set({ nextScanAt: new Date(Date.now() + 24 * 60 * 60 * 1000) })
+        .where(eq(monitorSubscriptionsTable.id, sub.id));
 
-      // Record each CVE alert
-      for (const { cve, matchedTech } of matches) {
+      // Insert CVE alerts sorted by EPSS × severity_weight descending
+      const SEVERITY_WEIGHT: Record<string, number> = {
+        CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1,
+      };
+      const combinedScore = (cveId: string, severity: string) =>
+        (epssMap.get(cveId)?.score ?? 0) * (SEVERITY_WEIGHT[severity?.toUpperCase()] ?? 1);
+
+      const sortedMatches = [...matches].sort((a, b) =>
+        combinedScore(b.cve.id, b.cve.severity) - combinedScore(a.cve.id, a.cve.severity),
+      );
+
+      for (const { cve, matchedTech } of sortedMatches) {
+        const epss = epssMap.get(cve.id);
         await db.insert(cveAlertsTable).values({
           subscriptionId: sub.id,
           cveId: cve.id,
           cveSummary: cve.description.slice(0, 500),
           affectedTech: matchedTech,
           severity: cve.severity,
-          triggerScanId: scan.id,
+          epssScore: epss?.score ?? null,
+          epssPercentile: epss?.percentile ?? null,
+          triggerScanId: scanId ?? undefined,
         });
       }
 
-      // Send CVE alert email
+      // Email
       if (sub.userEmail) {
         await sendMonitorCveAlertEmail({
           toEmail: sub.userEmail,
           targetUrl: sub.targetUrl,
-          cveMatches: matches.map(({ cve, matchedTech }) => ({
+          cveMatches: sortedMatches.map(({ cve, matchedTech }) => ({
             cveId: cve.id,
             summary: cve.description.slice(0, 200),
             severity: cve.severity,
             affectedTech: matchedTech,
           })),
-          scanId: scan.id,
+          scanId: scanId ?? "",
           dashboardUrl: `${appOrigin}/monitor`,
+        });
+      }
+
+      // Webhook
+      if (sub.webhookUrl) {
+        await fireWebhook(sub.webhookUrl, "cve_alert", sub.targetUrl, sub.id, {
+          cves: sortedMatches.map(({ cve, matchedTech }) => {
+            const epss = epssMap.get(cve.id);
+            return {
+              cveId: cve.id,
+              severity: cve.severity,
+              affectedTech: matchedTech,
+              epssScore: epss?.score,
+              epssPercentile: epss?.percentile,
+            };
+          }),
+          scanId,
         });
       }
     } catch (err) {
       log.error({ err, subscriptionId: sub.id }, "CVE check failed for subscription");
+    }
+  }
+}
+
+// ─── 3. Certificate expiry job ────────────────────────────────────────────────
+
+const CERT_THRESHOLDS = [30, 14, 7] as const;
+
+async function runCertExpiryCheck(): Promise<void> {
+  const log = logger.child({ job: CERT_QUEUE });
+  log.info("Running daily certificate expiry check");
+
+  const now = new Date();
+
+  const activeSubscriptions = await db
+    .select()
+    .from(monitorSubscriptionsTable)
+    .where(eq(monitorSubscriptionsTable.status, "active"));
+
+  const validSubs = activeSubscriptions.filter((s) => s.expiresAt > now);
+  log.info({ subscriptions: validSubs.length }, "Checking cert expiry for active subscriptions");
+
+  const appOrigin = process.env.APP_ORIGIN ?? "https://seclayer.io";
+
+  for (const sub of validSubs) {
+    try {
+      // Look for cert expiry date in the most recent report's rawData
+      const [latestReport] = await db
+        .select({ data: reportsTable.data })
+        .from(reportsTable)
+        .where(
+          and(
+            eq(reportsTable.userId, sub.userId),
+            eq(reportsTable.targetUrl, sub.targetUrl),
+          ),
+        )
+        .orderBy(desc(reportsTable.createdAt))
+        .limit(1);
+
+      if (!latestReport) continue;
+
+      // SSL Labs stores cert expiry in report data under tlsGrade section
+      const reportData = latestReport.data as {
+        tlsGrade?: string;
+        certExpiry?: string | null;
+        rawData?: { certExpiry?: string | null };
+      };
+
+      // Extract cert expiry — stored by the scanner when SSL Labs returns cert info
+      const certExpiryRaw =
+        reportData.certExpiry ??
+        reportData.rawData?.certExpiry ??
+        null;
+
+      if (!certExpiryRaw) continue;
+
+      const expiryDate = new Date(certExpiryRaw);
+      if (isNaN(expiryDate.getTime())) continue;
+
+      const daysRemaining = Math.ceil((expiryDate.getTime() - now.getTime()) / 86_400_000);
+      if (daysRemaining <= 0 || daysRemaining > 30) continue;
+
+      // Check each threshold
+      for (const threshold of CERT_THRESHOLDS) {
+        if (daysRemaining > threshold) continue;
+
+        // Check if we already sent an alert for this threshold + cert cycle
+        // Must include expiryDate so alerts re-fire when the cert is renewed (new cycle = new expiry date)
+        const existing = await db
+          .select({ id: certExpiryAlertsTable.id })
+          .from(certExpiryAlertsTable)
+          .where(
+            and(
+              eq(certExpiryAlertsTable.subscriptionId, sub.id),
+              eq(certExpiryAlertsTable.alertThreshold, threshold),
+              eq(certExpiryAlertsTable.expiryDate, expiryDate),
+            ),
+          )
+          .limit(1);
+
+        if (existing.length > 0) continue; // already alerted at this threshold for this cert cycle
+
+        // Insert alert record
+        await db.insert(certExpiryAlertsTable).values({
+          subscriptionId: sub.id,
+          expiryDate,
+          daysRemaining,
+          alertThreshold: threshold,
+        });
+
+        log.info(
+          { subscriptionId: sub.id, targetUrl: sub.targetUrl, daysRemaining, threshold },
+          "Cert expiry alert fired",
+        );
+
+        // Email
+        if (sub.userEmail) {
+          await sendCertExpiryEmail({
+            toEmail: sub.userEmail,
+            targetUrl: sub.targetUrl,
+            daysRemaining,
+            expiryDate,
+            dashboardUrl: `${appOrigin}/monitor`,
+          });
+        }
+
+        // Webhook
+        if (sub.webhookUrl) {
+          await fireWebhook(sub.webhookUrl, "cert_expiry", sub.targetUrl, sub.id, {
+            daysRemaining,
+            expiryDate: expiryDate.toISOString(),
+            alertThreshold: threshold,
+          });
+        }
+
+        break; // Only fire one threshold per run (the lowest applicable one)
+      }
+    } catch (err) {
+      log.error({ err, subscriptionId: sub.id }, "Cert expiry check failed for subscription");
     }
   }
 }
@@ -207,19 +440,21 @@ async function runCveCheck(): Promise<void> {
 export async function startMonitorScheduler(): Promise<void> {
   const boss = await getBoss();
 
-  await boss.createQueue(WEEKLY_QUEUE);
+  await boss.createQueue(SWEEP_QUEUE);
   await boss.createQueue(CVE_QUEUE);
+  await boss.createQueue(CERT_QUEUE);
 
-  await boss.schedule(WEEKLY_QUEUE, "0 2 * * 0", {});
+  // Every 6 hours
+  await boss.schedule(SWEEP_QUEUE, "0 */6 * * *", {});
+  // Daily 06:00 UTC
   await boss.schedule(CVE_QUEUE, "0 6 * * *", {});
+  // Daily 07:00 UTC
+  await boss.schedule(CERT_QUEUE, "0 7 * * *", {});
 
-  await boss.work(WEEKLY_QUEUE, async () => {
-    await runWeeklyScans();
-  });
+  await boss.work(SWEEP_QUEUE, async () => { await runSweep(); });
+  await boss.work(CVE_QUEUE, async () => { await runCveCheck(); });
+  await boss.work(CERT_QUEUE, async () => { await runCertExpiryCheck(); });
 
-  await boss.work(CVE_QUEUE, async () => {
-    await runCveCheck();
-  });
-
-  logger.info("Monitor scheduler registered (weekly scans + daily CVE check)");
+  logger.info("Monitor scheduler registered (adaptive sweep 6h + daily CVE + daily cert expiry)");
 }
+

@@ -1,6 +1,9 @@
 import { Router, type IRouter } from "express";
-import { db, monitorSubscriptionsTable, cveAlertsTable, reportsTable } from "@workspace/db";
-import { eq, and, desc, count } from "drizzle-orm";
+import {
+  db, monitorSubscriptionsTable, cveAlertsTable, reportsTable,
+  monitorScoreHistoryTable, monitorRegressionsTable, certExpiryAlertsTable,
+} from "@workspace/db";
+import { eq, and, desc, count, sql } from "drizzle-orm";
 import { z } from "zod";
 import { enqueueScan } from "../lib/queue";
 import { scansTable } from "@workspace/db";
@@ -27,6 +30,7 @@ const router: IRouter = Router();
 
 const CreateMonitorBody = z.object({
   targetUrl: z.string().url("Must be a valid URL"),
+  webhookUrl: z.string().url().optional(),
 });
 
 // ── POST /api/monitor/subscriptions ──────────────────────────────────────────
@@ -45,7 +49,13 @@ router.post("/monitor/subscriptions", async (req, res): Promise<void> => {
     return;
   }
 
-  const { targetUrl } = parsed.data;
+  const { targetUrl, webhookUrl } = parsed.data;
+  const paymentsDisabled = process.env.DISABLE_PAYMENTS === "true";
+
+  if (!paymentsDisabled) {
+    res.status(503).json({ error: "Subscription payments are not yet configured." });
+    return;
+  }
 
   // Check for an existing active subscription for this user+URL
   const [existing] = await db
@@ -84,6 +94,7 @@ router.post("/monitor/subscriptions", async (req, res): Promise<void> => {
       expiresAt,
       lastReportId: seedReportId,
       lastScanAt: seedScanAt,
+      webhookUrl: webhookUrl ?? null,
     })
     .returning();
 
@@ -188,6 +199,38 @@ router.get("/monitor/subscriptions", async (req, res): Promise<void> => {
         .from(cveAlertsTable)
         .where(eq(cveAlertsTable.subscriptionId, sub.id));
 
+      // Count regressions from the most recent scan only
+      const [latestHistory] = await db
+        .select({ scanId: monitorScoreHistoryTable.scanId })
+        .from(monitorScoreHistoryTable)
+        .where(eq(monitorScoreHistoryTable.subscriptionId, sub.id))
+        .orderBy(desc(monitorScoreHistoryTable.scannedAt))
+        .limit(1);
+
+      let regressionCount = 0;
+      if (latestHistory?.scanId) {
+        const [{ value }] = await db
+          .select({ value: count() })
+          .from(monitorRegressionsTable)
+          .where(
+            and(
+              eq(monitorRegressionsTable.subscriptionId, sub.id),
+              eq(monitorRegressionsTable.scanId, latestHistory.scanId),
+            ),
+          );
+        regressionCount = Number(value);
+      }
+
+      // Check for cert expiry from most recent cert_expiry_alerts
+      const [latestCertAlert] = await db
+        .select({ daysRemaining: certExpiryAlertsTable.daysRemaining })
+        .from(certExpiryAlertsTable)
+        .where(eq(certExpiryAlertsTable.subscriptionId, sub.id))
+        .orderBy(desc(certExpiryAlertsTable.sentAt))
+        .limit(1);
+
+      const certExpiryDays = latestCertAlert?.daysRemaining ?? null;
+
       // Use the resolved scanAt so the card shows the correct date even before
       // the subscription row was backfilled.
       const lastScanAt = sub.lastScanAt ?? resolvedReport?.scannedAt ?? null;
@@ -197,6 +240,8 @@ router.get("/monitor/subscriptions", async (req, res): Promise<void> => {
         lastScanAt,
         lastReport,
         alertCount,
+        regressionCount: Number(regressionCount),
+        certExpiryDays,
       };
     }),
   );
@@ -324,13 +369,188 @@ router.get("/monitor/subscriptions/:id/alerts", async (req, res): Promise<void> 
     return;
   }
 
+  // Order by EPSS × severity_weight descending (highest exploit probability × impact first)
   const alerts = await db
     .select()
     .from(cveAlertsTable)
     .where(eq(cveAlertsTable.subscriptionId, subId))
-    .orderBy(desc(cveAlertsTable.detectedAt));
+    .orderBy(
+      sql`COALESCE(${cveAlertsTable.epssScore}, 0) * CASE ${cveAlertsTable.severity}
+        WHEN 'CRITICAL' THEN 4
+        WHEN 'HIGH' THEN 3
+        WHEN 'MEDIUM' THEN 2
+        WHEN 'LOW' THEN 1
+        ELSE 1 END DESC`,
+      desc(cveAlertsTable.detectedAt),
+    );
 
   res.json(alerts);
+});
+
+// ── GET /api/monitor/subscriptions/:id/score-history ──────────────────────────
+// Return the last 30 score history points for a subscription (for charting).
+
+router.get("/monitor/subscriptions/:id/score-history", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const subId = req.params.id;
+
+  const [sub] = await db
+    .select({ id: monitorSubscriptionsTable.id })
+    .from(monitorSubscriptionsTable)
+    .where(
+      and(
+        eq(monitorSubscriptionsTable.id, subId),
+        eq(monitorSubscriptionsTable.userId, req.user.id),
+      ),
+    );
+
+  if (!sub) {
+    res.status(404).json({ error: "Subscription not found" });
+    return;
+  }
+
+  // Join with reports to include reportId so the frontend can link to each report
+  const history = await db
+    .select({
+      id: monitorScoreHistoryTable.id,
+      subscriptionId: monitorScoreHistoryTable.subscriptionId,
+      scanId: monitorScoreHistoryTable.scanId,
+      grade: monitorScoreHistoryTable.grade,
+      riskScore: monitorScoreHistoryTable.riskScore,
+      criticalCount: monitorScoreHistoryTable.criticalCount,
+      highCount: monitorScoreHistoryTable.highCount,
+      scannedAt: monitorScoreHistoryTable.scannedAt,
+      reportId: reportsTable.id,
+    })
+    .from(monitorScoreHistoryTable)
+    .leftJoin(reportsTable, eq(reportsTable.scanId, monitorScoreHistoryTable.scanId))
+    .where(eq(monitorScoreHistoryTable.subscriptionId, subId))
+    .orderBy(desc(monitorScoreHistoryTable.scannedAt))
+    .limit(30);
+
+  res.json(history.reverse()); // oldest first for charting
+});
+
+// ── GET /api/monitor/subscriptions/:id/regressions ───────────────────────────
+// Return regressions from the most recent completed monitor scan.
+
+router.get("/monitor/subscriptions/:id/regressions", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const subId = req.params.id;
+
+  const [sub] = await db
+    .select({ id: monitorSubscriptionsTable.id })
+    .from(monitorSubscriptionsTable)
+    .where(
+      and(
+        eq(monitorSubscriptionsTable.id, subId),
+        eq(monitorSubscriptionsTable.userId, req.user.id),
+      ),
+    );
+
+  if (!sub) {
+    res.status(404).json({ error: "Subscription not found" });
+    return;
+  }
+
+  // Find the most recent scan tracked in score history
+  const [latestHistory] = await db
+    .select({ scanId: monitorScoreHistoryTable.scanId })
+    .from(monitorScoreHistoryTable)
+    .where(eq(monitorScoreHistoryTable.subscriptionId, subId))
+    .orderBy(desc(monitorScoreHistoryTable.scannedAt))
+    .limit(1);
+
+  if (!latestHistory?.scanId) {
+    res.json([]);
+    return;
+  }
+
+  const regressions = await db
+    .select()
+    .from(monitorRegressionsTable)
+    .where(
+      and(
+        eq(monitorRegressionsTable.subscriptionId, subId),
+        eq(monitorRegressionsTable.scanId, latestHistory.scanId),
+      ),
+    )
+    .orderBy(desc(monitorRegressionsTable.detectedAt));
+
+  res.json(regressions);
+});
+
+// ── POST /api/monitor/subscriptions/:id/scan ─────────────────────────────────
+// Immediately enqueue a manual deep scan for a subscription.
+
+router.post("/monitor/subscriptions/:id/scan", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const subId = req.params.id;
+
+  const [sub] = await db
+    .select()
+    .from(monitorSubscriptionsTable)
+    .where(
+      and(
+        eq(monitorSubscriptionsTable.id, subId),
+        eq(monitorSubscriptionsTable.userId, req.user.id),
+      ),
+    );
+
+  if (!sub) {
+    res.status(404).json({ error: "Subscription not found" });
+    return;
+  }
+
+  if (sub.status !== "active") {
+    res.status(400).json({ error: "Subscription is not active" });
+    return;
+  }
+
+  try {
+    const [scan] = await db
+      .insert(scansTable)
+      .values({
+        userId: req.user.id,
+        userEmail: req.user.email ?? "",
+        targetUrl: sub.targetUrl,
+        tier: "deep",
+        status: "paid",
+      })
+      .returning();
+
+    await enqueueScan({
+      scanId: scan.id,
+      userId: req.user.id,
+      targetUrl: sub.targetUrl,
+      tier: "deep",
+      monitorSubscriptionId: sub.id,
+    });
+
+    await db
+      .update(scansTable)
+      .set({ status: "queued", startedAt: new Date() })
+      .where(eq(scansTable.id, scan.id));
+
+    logger.info({ subscriptionId: sub.id, scanId: scan.id }, "Manual monitor scan queued");
+
+    res.json({ scanId: scan.id });
+  } catch (err) {
+    logger.error({ err }, "Failed to enqueue manual monitor scan");
+    res.status(500).json({ error: "Failed to enqueue scan" });
+  }
 });
 
 export default router;

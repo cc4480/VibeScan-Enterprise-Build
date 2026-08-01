@@ -26,8 +26,26 @@ import { randomUUID } from "node:crypto";
  * Returns true to SUPPRESS the HSTS finding; false to allow it (at MEDIUM).
  * Always fails-safe: any network error returns false so the check still runs.
  */
+// Domains hardcoded in Chrome's built-in HSTS preload list that are NOT
+// tracked by hstspreload.org's submission API (which only knows about
+// user-submitted entries, not Chrome's built-in set).
+const CHROME_BUILTIN_PRELOADED = new Set([
+  "google.com", "youtube.com", "gmail.com", "android.com", "appspot.com",
+  "blogger.com", "chromium.org", "googleapis.com", "googlesyndication.com",
+  "googleusercontent.com", "gstatic.com", "ytimg.com", "doubleclick.net",
+  "apple.com", "icloud.com", "github.com", "github.io", "githubusercontent.com",
+  "facebook.com", "instagram.com", "whatsapp.com", "twitter.com", "x.com",
+  "linkedin.com", "microsoft.com", "live.com", "outlook.com", "office.com",
+  "paypal.com", "amazon.com", "stripe.com", "cloudflare.com",
+  "wordpress.com", "shopify.com", "dropbox.com", "box.com",
+  "tumblr.com", "medium.com", "reddit.com", "wikipedia.org",
+]);
+
 async function isHstsPreloaded(hostname: string): Promise<boolean> {
   const apex = hostname.replace(/^www\./, "");
+
+  // Fast path: known Chrome built-in preloaded domains not tracked by hstspreload.org
+  if (CHROME_BUILTIN_PRELOADED.has(apex)) return true;
 
   // ── hstspreload.org tracking API ─────────────────────────────────────────
   // This API only tracks domains submitted via their form. Domains natively
@@ -78,6 +96,11 @@ import { checkSourceMaps } from "./sourceMaps";
 import { checkVibeStackSecurity } from "./vibeStackProbes";
 import { autoEnrichConfidence } from "./scoring";
 import { detectTechnologies } from "./techFingerprint";
+import { runBaasProbes } from "./baasProbes";
+import { runGraphqlProbe } from "./graphqlProbe";
+import { runApiDocsProbe } from "./apiDocsProbe";
+import { runNextjsProbe } from "./nextjsProbe";
+import { runStorageProbe } from "./storageProbe";
 
 export interface ScanVulnerability {
   id: string;
@@ -243,9 +266,11 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       redirect: "follow",
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (compatible; VibeScan-Security-Bot/1.0; +https://vibescan.app/bot)",
+          "Mozilla/5.0 (compatible; Seclayer-Security-Bot/1.0; +https://seclayer.io/bot)",
         "Accept": "text/html,application/xhtml+xml,*/*",
         "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache, no-store",
+        "Pragma": "no-cache",
       },
     });
     finalUrl = response.url || targetUrl;
@@ -639,19 +664,10 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
     }));
   }
 
-  // ── X-XSS-Protection (deprecated but flag if disabled) ────────────────
-  const xxss = headerVal(rawHeaders, "x-xss-protection");
-  if (xxss && xxss.trim() === "0") {
-    vulnerabilities.push(vuln({
-      name: "XSS Auditor Disabled (X-XSS-Protection: 0)",
-      severity: "info",
-      category: "Injection Defense",
-      description: "X-XSS-Protection is explicitly set to 0, which disables the browser's built-in XSS auditor (in older browsers). While modern browsers have deprecated this header, setting it to 0 provides no benefit and may confuse automated scanners.",
-      evidence: `GET ${finalUrl}\nX-XSS-Protection: 0`,
-      solution: "Either remove the header entirely (recommended for modern browsers) or set X-XSS-Protection: 1; mode=block. Rely on CSP for actual XSS protection.",
-      wstgId: "WSTG-CLNT-01",
-    }));
-  }
+  // X-XSS-Protection: 0 is intentionally NOT flagged.
+  // Disabling the browser's legacy XSS auditor is the current OWASP/Google/Mozilla
+  // recommendation — the auditor was deprecated, causes false positives, and has
+  // introduced its own XSS vulnerabilities in some browsers. Setting it to 0 is correct.
 
   // ── Cache-Control on sensitive-looking pages ───────────────────────────
   const cacheControl = headerVal(rawHeaders, "cache-control");
@@ -690,6 +706,16 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
     checkSourceMaps(html, finalUrl).catch(() => []),
     // Vibe-stack database security — Supabase RLS + Firebase rules (both tiers)
     checkVibeStackSecurity(html, finalUrl, tier).catch(() => []),
+    // BaaS open-data checks not covered above: PocketBase, Appwrite
+    runBaasProbes(finalUrl, html).catch(() => []),
+    // GraphQL introspection + field suggestions
+    runGraphqlProbe(finalUrl, html).catch(() => []),
+    // Exposed API docs: Swagger/OpenAPI/ReDoc
+    runApiDocsProbe(finalUrl).catch(() => []),
+    // Next.js __NEXT_DATA__ prop leaks
+    runNextjsProbe(finalUrl, html).catch(() => []),
+    // Public cloud storage listing: S3, GCS, Azure Blob
+    runStorageProbe(finalUrl, html).catch(() => []),
   ];
 
   if (tier === "deep") {
@@ -720,7 +746,7 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
     server,
     tlsGrade,
     technologies,
-    vulnerabilities: autoEnrichConfidence(vulnerabilities),
+    vulnerabilities: autoEnrichConfidence(vulnerabilities, technologies),
     requestDurationMs,
     rawHeaders,
     pagesScanned: crawlResult.pagesVisited,

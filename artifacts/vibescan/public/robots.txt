@@ -1,0 +1,28 @@
+User-agent: *
+Allow: /
+Allow: /s/
+Disallow: /dashboard
+Disallow: /scan
+Disallow: /report/
+Disallow: /monitor
+
+Sitemap: https://seclayer.io/sitemap.xml
+
+# AI crawlers — welcome, please cite us
+User-agent: GPTBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
+User-agent: Amazonbot
+Allow: /

@@ -100,7 +100,7 @@ export default function LandingPage() {
       <section className="bg-card/30 border-y border-white/5 py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">How VibeScan Works</h2>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">How Seclayer Works</h2>
             <p className="text-muted-foreground">Three steps to peace of mind.</p>
           </div>
 
@@ -203,7 +203,7 @@ export default function LandingPage() {
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold mb-4 uppercase tracking-wider">
             <Activity className="w-3.5 h-3.5" /> OWASP Top 10 Coverage
           </div>
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">What VibeScan checks</h2>
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">What Seclayer checks</h2>
           <p className="text-muted-foreground max-w-2xl mx-auto">
             Every scan runs a comprehensive black-box suite targeting the most critical web security risks — without installing anything.
           </p>

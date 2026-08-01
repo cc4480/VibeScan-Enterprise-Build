@@ -81,6 +81,14 @@ app.use((req, res, next) => {
     // API responses: strict no-content CSP in all environments.
     res.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
     res.setHeader("X-Frame-Options", "DENY");
+    // All API responses must not be cached — scan results and report data are
+    // user-specific and time-sensitive; a stale cache would show outdated findings.
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    if (isProd) {
+      res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+    }
   } else if (isProd) {
     // Production frontend: full SPA CSP + cross-origin isolation.
     // In dev these are omitted so Vite's own headers apply unmolested.

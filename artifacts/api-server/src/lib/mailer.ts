@@ -6,7 +6,7 @@
  */
 
 const RESEND_API = "https://api.resend.com/emails";
-const FROM_EMAIL = "VibeScan <reports@vibescan.app>";
+const FROM_EMAIL = "Seclayer <reports@seclayer.io>";
 
 interface SendReportEmailOptions {
   toEmail: string;
@@ -39,7 +39,7 @@ function buildHtml(opts: SendReportEmailOptions): string {
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <!-- Header -->
         <tr><td style="padding-bottom:32px;text-align:center;">
-          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Vibe<span style="color:#6366f1;">Scan</span></span>
+          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Sec<span style="color:#6366f1;">layer</span></span>
         </td></tr>
 
         <!-- Grade Card -->
@@ -59,8 +59,8 @@ function buildHtml(opts: SendReportEmailOptions): string {
 
         <!-- Footer -->
         <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
-          <p style="margin:0;">You received this because you ran a VibeScan deep scan.</p>
-          <p style="margin:4px 0 0;">© 2026 VibeScan</p>
+          <p style="margin:0;">You received this because you ran a Seclayer deep scan.</p>
+          <p style="margin:4px 0 0;">© 2026 Seclayer</p>
         </td></tr>
       </table>
     </td></tr>
@@ -86,7 +86,7 @@ export async function sendReportReadyEmail(opts: SendReportEmailOptions): Promis
       body: JSON.stringify({
         from: FROM_EMAIL,
         to: [opts.toEmail],
-        subject: `Your VibeScan report is ready — Grade ${opts.grade} for ${opts.targetUrl}`,
+        subject: `Your Seclayer report is ready — Grade ${opts.grade} for ${opts.targetUrl}`,
         html: buildHtml(opts),
       }),
     });
@@ -165,7 +165,7 @@ export async function sendMonitorCveAlertEmail(opts: SendMonitorCveAlertOptions)
     <tr><td align="center" style="padding:40px 16px;">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <tr><td style="padding-bottom:32px;text-align:center;">
-          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Vibe<span style="color:#6366f1;">Scan</span></span>
+          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Sec<span style="color:#6366f1;">layer</span></span>
         </td></tr>
 
         <tr><td style="background:#1a1d27;border-radius:16px;border:1px solid rgba(255,255,255,0.08);padding:40px;">
@@ -189,8 +189,8 @@ export async function sendMonitorCveAlertEmail(opts: SendMonitorCveAlertOptions)
         </td></tr>
 
         <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
-          <p style="margin:0;">You received this because you have a VibeScan continuous monitor active for ${targetUrl}.</p>
-          <p style="margin:4px 0 0;">© 2026 VibeScan · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
+          <p style="margin:0;">You received this because you have a Seclayer continuous monitor active for ${targetUrl}.</p>
+          <p style="margin:4px 0 0;">© 2026 Seclayer · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
         </td></tr>
       </table>
     </td></tr>
@@ -221,20 +221,37 @@ export async function sendMonitorCveAlertEmail(opts: SendMonitorCveAlertOptions)
   }
 }
 
-interface SendMonitorScanQueuedOptions {
+// ── Regression alert email ─────────────────────────────────────────────────────
+
+export interface RegressionItem {
+  checkTitle: string;
+  severity: string;
+}
+
+interface SendRegressionAlertOptions {
   toEmail: string;
   targetUrl: string;
+  regressions: RegressionItem[];
   scanId: string;
-  reason: "weekly" | "cve";
   dashboardUrl: string;
 }
 
-export async function sendMonitorScanQueuedEmail(opts: SendMonitorScanQueuedOptions): Promise<void> {
+export async function sendRegressionAlertEmail(opts: SendRegressionAlertOptions): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return;
 
-  const { targetUrl, reason, dashboardUrl } = opts;
-  const label = reason === "weekly" ? "Weekly security rescan" : "CVE-triggered rescan";
+  const { targetUrl, regressions, dashboardUrl } = opts;
+
+  const rows = regressions.slice(0, 8).map((r) => {
+    const color = SEVERITY_COLOR[r.severity.toUpperCase()] ?? "#94a3b8";
+    return `
+      <tr>
+        <td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+          <span style="font-size:11px;background:${color}22;color:${color};padding:2px 8px;border-radius:12px;font-weight:700;margin-right:8px;">${r.severity}</span>
+          <span style="font-size:14px;color:#f8fafc;">${r.checkTitle}</span>
+        </td>
+      </tr>`;
+  }).join("");
 
   const html = `<!DOCTYPE html>
 <html>
@@ -244,7 +261,136 @@ export async function sendMonitorScanQueuedEmail(opts: SendMonitorScanQueuedOpti
     <tr><td align="center" style="padding:40px 16px;">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <tr><td style="padding-bottom:32px;text-align:center;">
-          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Vibe<span style="color:#6366f1;">Scan</span></span>
+          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Sec<span style="color:#6366f1;">layer</span></span>
+        </td></tr>
+        <tr><td style="background:#1a1d27;border-radius:16px;border:1px solid rgba(255,255,255,0.08);padding:40px;">
+          <div style="display:inline-flex;align-items:center;gap:8px;background:#fb923c22;padding:6px 14px;border-radius:20px;margin-bottom:24px;">
+            <span style="font-size:13px;font-weight:700;color:#fb923c;">🔴 Security Regression</span>
+          </div>
+          <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;">Security checks are now failing</h2>
+          <p style="margin:0 0 24px;color:#94a3b8;font-size:14px;">
+            <strong style="color:#f8fafc;">${regressions.length} check${regressions.length > 1 ? "s" : ""}</strong> that previously passed are now failing on
+            <strong style="color:#f8fafc;">${targetUrl}</strong>.
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0">${rows}</table>
+          <div style="margin-top:32px;text-align:center;">
+            <a href="${dashboardUrl}" style="display:inline-block;background:#6366f1;color:#fff;font-weight:700;font-size:15px;padding:14px 32px;border-radius:10px;text-decoration:none;">View Monitor Dashboard →</a>
+          </div>
+        </td></tr>
+        <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
+          <p style="margin:0;">© 2026 Seclayer · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  try {
+    const res = await fetch(RESEND_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        from: FROM_EMAIL,
+        to: [opts.toEmail],
+        subject: `🔴 Regression alert: ${regressions.length} security check${regressions.length > 1 ? "s" : ""} failing on ${targetUrl}`,
+        html,
+      }),
+    });
+    if (!res.ok) throw new Error(`Resend API ${res.status}`);
+    console.log("[mailer] Regression alert email sent", { to: opts.toEmail });
+  } catch (err) {
+    console.error("[mailer] Failed to send regression alert email:", err);
+  }
+}
+
+// ── Cert expiry email ──────────────────────────────────────────────────────────
+
+interface SendCertExpiryOptions {
+  toEmail: string;
+  targetUrl: string;
+  daysRemaining: number;
+  expiryDate: Date;
+  dashboardUrl: string;
+}
+
+export async function sendCertExpiryEmail(opts: SendCertExpiryOptions): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return;
+
+  const { targetUrl, daysRemaining, expiryDate, dashboardUrl } = opts;
+  const urgency = daysRemaining <= 7 ? "🚨 URGENT" : daysRemaining <= 14 ? "⚠️ Warning" : "📋 Notice";
+  const expiryStr = expiryDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#0f1117;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#f8fafc;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f1117;min-height:100vh;">
+    <tr><td align="center" style="padding:40px 16px;">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+        <tr><td style="padding-bottom:32px;text-align:center;">
+          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Sec<span style="color:#6366f1;">layer</span></span>
+        </td></tr>
+        <tr><td style="background:#1a1d27;border-radius:16px;border:1px solid rgba(255,255,255,0.08);padding:40px;text-align:center;">
+          <div style="display:inline-block;font-size:48px;margin-bottom:16px;">🔒</div>
+          <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;">TLS Certificate Expiring Soon</h2>
+          <p style="margin:0 0 8px;font-size:18px;font-weight:700;color:#f8fafc;">${targetUrl}</p>
+          <p style="margin:0 0 24px;color:#94a3b8;font-size:14px;">Certificate expires on <strong style="color:#facc15;">${expiryStr}</strong> — <strong style="color:#f8fafc;">${daysRemaining} day${daysRemaining !== 1 ? "s" : ""} remaining</strong>.</p>
+          <p style="margin:0 0 32px;color:#94a3b8;font-size:13px;">Renew your TLS certificate immediately to avoid downtime and security warnings in browsers. Let's Encrypt certificates can be renewed with: <code style="background:#0f1117;padding:2px 6px;border-radius:4px;">certbot renew</code></p>
+          <a href="${dashboardUrl}" style="display:inline-block;background:#6366f1;color:#fff;font-weight:700;font-size:15px;padding:14px 32px;border-radius:10px;text-decoration:none;">View Monitor Dashboard →</a>
+        </td></tr>
+        <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
+          <p style="margin:0;">© 2026 Seclayer · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  try {
+    const res = await fetch(RESEND_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        from: FROM_EMAIL,
+        to: [opts.toEmail],
+        subject: `${urgency}: TLS certificate for ${targetUrl} expires in ${daysRemaining} days`,
+        html,
+      }),
+    });
+    if (!res.ok) throw new Error(`Resend API ${res.status}`);
+    console.log("[mailer] Cert expiry email sent", { to: opts.toEmail, daysRemaining });
+  } catch (err) {
+    console.error("[mailer] Failed to send cert expiry email:", err);
+  }
+}
+
+interface SendMonitorScanQueuedOptions {
+  toEmail: string;
+  targetUrl: string;
+  scanId: string;
+  reason: "weekly" | "cve" | "adaptive";
+  dashboardUrl: string;
+}
+
+export async function sendMonitorScanQueuedEmail(opts: SendMonitorScanQueuedOptions): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return;
+
+  const { targetUrl, reason, dashboardUrl } = opts;
+  const label = reason === "weekly" ? "Weekly security rescan" : reason === "adaptive" ? "Scheduled security rescan" : "CVE-triggered rescan";
+
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#0f1117;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#f8fafc;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f1117;min-height:100vh;">
+    <tr><td align="center" style="padding:40px 16px;">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+        <tr><td style="padding-bottom:32px;text-align:center;">
+          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Sec<span style="color:#6366f1;">layer</span></span>
         </td></tr>
         <tr><td style="background:#1a1d27;border-radius:16px;border:1px solid rgba(255,255,255,0.08);padding:40px;text-align:center;">
           <p style="margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:0.1em;color:#94a3b8;">${label}</p>
@@ -253,7 +399,7 @@ export async function sendMonitorScanQueuedEmail(opts: SendMonitorScanQueuedOpti
           <a href="${dashboardUrl}" style="display:inline-block;background:#6366f1;color:#fff;font-weight:700;font-size:15px;padding:14px 32px;border-radius:10px;text-decoration:none;">View Monitor Dashboard →</a>
         </td></tr>
         <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
-          <p style="margin:0;">© 2026 VibeScan · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
+          <p style="margin:0;">© 2026 Seclayer · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
         </td></tr>
       </table>
     </td></tr>

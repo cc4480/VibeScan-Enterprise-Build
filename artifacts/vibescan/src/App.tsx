@@ -1,5 +1,6 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
@@ -8,21 +9,35 @@ import { Layout } from "@/components/layout";
 import LandingPage from "@/pages/landing";
 import DashboardPage from "@/pages/dashboard";
 import ScanFormPage from "@/pages/scan-form";
+import ScanProgressPage from "@/pages/scan-progress";
 import ReportViewer from "@/pages/report-viewer";
 import MonitorPage from "@/pages/monitor";
 import SharedReport from "@/pages/shared-report";
+import LearnPage from "@/pages/learn";
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: false,
-      refetchOnWindowFocus: false,
+      staleTime: 0,
+      refetchOnWindowFocus: true,
+      refetchOnMount: true,
     },
   },
 });
 
+function ScrollToTop() {
+  const [location] = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location]);
+  return null;
+}
+
 function Router() {
   return (
+    <>
+    <ScrollToTop />
     <Switch>
       {/* Public share page — rendered without the app Layout (no nav/auth required) */}
       <Route path="/share/:token" component={SharedReport} />
@@ -34,13 +49,16 @@ function Router() {
             <Route path="/" component={LandingPage} />
             <Route path="/dashboard" component={DashboardPage} />
             <Route path="/scan" component={ScanFormPage} />
+            <Route path="/scan/:id" component={ScanProgressPage} />
             <Route path="/report/:id" component={ReportViewer} />
             <Route path="/monitor" component={MonitorPage} />
+            <Route path="/learn" component={LearnPage} />
             <Route component={NotFound} />
           </Switch>
         </Layout>
       </Route>
     </Switch>
+    </>
   );
 }
 

@@ -8,8 +8,14 @@
  *            failed
  */
 
-import { db, scansTable, reportsTable, monitorSubscriptionsTable, dismissedFindingsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import {
+  db, scansTable, reportsTable, monitorSubscriptionsTable, dismissedFindingsTable,
+  monitorScoreHistoryTable, monitorRegressionsTable,
+} from "@workspace/db";
+import { eq, and, desc } from "drizzle-orm";
+import { computeNextScanAt } from "./monitorScheduler";
+import { sendRegressionAlertEmail } from "./mailer";
+import { fireWebhook } from "./webhook";
 import { getBoss, SCAN_QUEUE, type ScanJobData } from "./queue";
 import { runScan, computeRiskScore, computeGrade, type ScanVulnerability } from "./scanner";
 import { corroborateMerge } from "./scoring";
@@ -22,7 +28,33 @@ import { checkSslLabs } from "./ssllabs";
 import { sendReportReadyEmail } from "./mailer";
 import { logger } from "./logger";
 import { randomUUID } from "node:crypto";
+import * as tls from "node:tls";
 import type { Job } from "pg-boss";
+
+/** Probe the TLS certificate expiry date for an https:// URL. Returns null for HTTP or on error. */
+async function getCertExpiry(url: string): Promise<Date | null> {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return null;
+    const host = parsed.hostname;
+    const port = parseInt(parsed.port || "443", 10);
+    return await new Promise<Date | null>((resolve) => {
+      const socket = tls.connect(
+        { host, port, servername: host, rejectUnauthorized: false },
+        () => {
+          const cert = socket.getPeerCertificate();
+          socket.destroy();
+          if (!cert || !cert.valid_to) { resolve(null); return; }
+          resolve(new Date(cert.valid_to));
+        },
+      );
+      socket.on("error", () => resolve(null));
+      socket.setTimeout(8_000, () => { socket.destroy(); resolve(null); });
+    });
+  } catch {
+    return null;
+  }
+}
 
 type ScanJob = Job<ScanJobData>;
 
@@ -35,14 +67,6 @@ import { reprobe } from "./reprobe";
  * to the target URL and re-verifies header-based conditions.
  * Confirmed findings get +10 confidence; contradicted ones get -20.
  */
-
-
-/**
- * Validates DNS-based security findings against live TXT record data from
- * a DNS-over-HTTPS probe. Returns true if the finding is confirmed (issue
- * still present), false if disconfirmed, or null if undecidable.
- */
-
 
 async function processScanJob(job: ScanJob): Promise<void> {
   const { scanId, userId, targetUrl, tier, monitorSubscriptionId } = job.data;
@@ -237,12 +261,16 @@ async function processScanJob(job: ScanJob): Promise<void> {
     severityCounts,
   );
 
+  // Probe TLS cert expiry for https:// targets (non-blocking, failures are soft)
+  const certExpiry = await getCertExpiry(scanResult.finalUrl || targetUrl).catch(() => null);
+
   const reportData = {
     targetUrl: scanResult.finalUrl || targetUrl,
     vulnerabilities: scanResult.vulnerabilities,
     technologies: scanResult.technologies,
     server: scanResult.server,
     tlsGrade: scanResult.tlsGrade,
+    certExpiry: certExpiry ? certExpiry.toISOString() : null,
     pagesScanned: scanResult.pagesScanned,
     probedNotFound: scanResult.probedNotFound,
     summary: {
@@ -287,14 +315,33 @@ async function processScanJob(job: ScanJob): Promise<void> {
 
     log.info({ reportId: report.id, grade, riskScore }, "Scan complete");
 
-    // ── 8. Update monitor subscription if this was a monitored scan ───
+    // ── 8. Update monitor subscription + write score history + detect regressions ──
     if (monitorSubscriptionId) {
       try {
+        // Fetch current subscription for webhook URL and email
+        const [sub] = await db
+          .select()
+          .from(monitorSubscriptionsTable)
+          .where(eq(monitorSubscriptionsTable.id, monitorSubscriptionId))
+          .limit(1);
+
+        const gradeCadenceAt = computeNextScanAt(grade, completedAt);
+        // Preserve a CVE follow-up nextScanAt if it was set sooner than the grade cadence.
+        // The CVE job sets nextScanAt = now+24h BEFORE the scan runs; the worker must not
+        // overwrite it with the longer grade cadence, or the 24h re-check is silently lost.
+        const nextScanAt =
+          sub?.nextScanAt &&
+          sub.nextScanAt > completedAt &&
+          sub.nextScanAt < gradeCadenceAt
+            ? sub.nextScanAt
+            : gradeCadenceAt;
+
         await db
           .update(monitorSubscriptionsTable)
           .set({
             lastScanAt: completedAt,
             lastReportId: report.id,
+            nextScanAt,
           })
           .where(
             and(
@@ -302,7 +349,132 @@ async function processScanJob(job: ScanJob): Promise<void> {
               eq(monitorSubscriptionsTable.userId, userId),
             ),
           );
-        log.info({ monitorSubscriptionId, reportId: report.id }, "Monitor subscription updated");
+
+        log.info(
+          { monitorSubscriptionId, reportId: report.id, grade, nextScanAt },
+          "Monitor subscription updated",
+        );
+
+        // ── Score snapshot ──────────────────────────────────────────────
+        const criticalCount = severityCounts["critical"] ?? 0;
+        const highCount = severityCounts["high"] ?? 0;
+
+        await db.insert(monitorScoreHistoryTable).values({
+          subscriptionId: monitorSubscriptionId,
+          scanId,
+          grade,
+          riskScore,
+          criticalCount,
+          highCount,
+          scannedAt: completedAt,
+        });
+
+        log.info({ monitorSubscriptionId, grade, riskScore }, "Score history snapshot saved");
+
+        // ── Regression detection ────────────────────────────────────────
+        // Compare current vuln check IDs against the *previous* snapshot
+        const [prevHistory] = await db
+          .select()
+          .from(monitorScoreHistoryTable)
+          .where(eq(monitorScoreHistoryTable.subscriptionId, monitorSubscriptionId))
+          .orderBy(desc(monitorScoreHistoryTable.scannedAt))
+          .offset(1)
+          .limit(1);
+
+        if (prevHistory) {
+          // Get previous scan's vulnerabilities from that scan's report
+          const [prevReport] = await db
+            .select({ data: reportsTable.data })
+            .from(reportsTable)
+            .where(eq(reportsTable.scanId, prevHistory.scanId!))
+            .limit(1);
+
+          if (prevReport) {
+            type VulnShape = { category: string; name: string; evidence?: string | null; severity: string };
+            const prevData = prevReport.data as { vulnerabilities?: VulnShape[] };
+            const prevFingerprints = new Set(
+              (prevData.vulnerabilities ?? []).map((v) =>
+                findingFingerprint(v.category, v.name, v.evidence),
+              ),
+            );
+
+            const newRegressions = scanResult.vulnerabilities.filter(
+              (v) => !prevFingerprints.has(findingFingerprint(v.category, v.name, v.evidence)),
+            );
+
+            if (newRegressions.length > 0) {
+              log.info(
+                { subscriptionId: monitorSubscriptionId, regressions: newRegressions.length },
+                "Regressions detected",
+              );
+
+              await db.insert(monitorRegressionsTable).values(
+                newRegressions.map((v) => ({
+                  subscriptionId: monitorSubscriptionId,
+                  scanId,
+                  checkId: findingFingerprint(v.category, v.name, v.evidence),
+                  checkTitle: v.name,
+                  severity: v.severity,
+                })),
+              ).onConflictDoNothing();
+
+              const appOrigin = process.env.APP_ORIGIN ?? "https://seclayer.io";
+
+              if (sub?.userEmail) {
+                await sendRegressionAlertEmail({
+                  toEmail: sub.userEmail,
+                  targetUrl,
+                  regressions: newRegressions.map((v) => ({
+                    checkTitle: v.name,
+                    severity: v.severity,
+                  })),
+                  scanId,
+                  dashboardUrl: `${appOrigin}/monitor`,
+                }).catch((err) =>
+                  log.warn({ err }, "Failed to send regression email (non-fatal)"),
+                );
+              }
+
+              if (sub?.webhookUrl) {
+                await fireWebhook(
+                  sub.webhookUrl,
+                  "regression_detected",
+                  targetUrl,
+                  monitorSubscriptionId,
+                  {
+                    regressions: newRegressions.map((v) => ({
+                      checkTitle: v.name,
+                      severity: v.severity,
+                    })),
+                    scanId,
+                    grade,
+                    riskScore,
+                  },
+                ).catch((err) =>
+                  log.warn({ err }, "Failed to fire regression webhook (non-fatal)"),
+                );
+              }
+            }
+          }
+        }
+
+        // ── Fire scan_complete webhook ──────────────────────────────────
+        if (sub?.webhookUrl) {
+          const appOrigin = process.env.APP_ORIGIN ?? "https://seclayer.io";
+          await fireWebhook(
+            sub.webhookUrl,
+            "scan_complete",
+            targetUrl,
+            monitorSubscriptionId,
+            {
+              scanId,
+              reportId: report.id,
+              grade,
+              riskScore,
+              reportUrl: `${appOrigin}/report/${report.id}`,
+            },
+          ).catch((err) => log.warn({ err }, "Failed to fire scan_complete webhook (non-fatal)"));
+        }
       } catch (monitorErr) {
         log.warn({ err: monitorErr }, "Failed to update monitor subscription (non-fatal)");
       }
@@ -317,7 +489,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
         .where(eq(scansTable.id, scanId));
 
       if (scan?.userEmail) {
-        const appOrigin = process.env.APP_ORIGIN ?? "https://vibescan.app";
+        const appOrigin = process.env.APP_ORIGIN ?? "https://seclayer.io";
         await sendReportReadyEmail({
           toEmail: scan.userEmail,
           targetUrl: scanResult.finalUrl || targetUrl,

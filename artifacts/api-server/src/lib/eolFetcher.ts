@@ -197,7 +197,7 @@ async function fetchEolCycles(product: string): Promise<EolCycle[]> {
       signal: controller.signal,
       headers: {
         Accept: "application/json",
-        "User-Agent": "VibeScan-SecurityScanner/1.0",
+        "User-Agent": "Seclayer-SecurityScanner/1.0",
       },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status} fetching endoflife.date/${product}`);
