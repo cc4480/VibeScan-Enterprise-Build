@@ -219,51 +219,11 @@ export const SENSITIVE_PATHS: SensitivePath[] = [
   },
 
   // ── API documentation ─────────────────────────────────────────────────────
-  {
-    path: "/swagger.json",
-    name: "API Documentation Exposed (Swagger)",
-    severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
-    category: "Information Disclosure",
-    description: "Swagger/OpenAPI documentation is publicly accessible without authentication. This gives attackers a complete blueprint of every API endpoint, required parameters, authentication schemes, and data models.",
-    solution: "Require authentication to access API docs in production. Add middleware to protect /swagger.json and /swagger-ui.html, or serve docs only on internal network.",
-    validate: (body) => /"swagger"|"openapi"/.test(body.slice(0, 500)),
-  },
-  {
-    path: "/openapi.json",
-    name: "API Documentation Exposed (OpenAPI)",
-    severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
-    category: "Information Disclosure",
-    description: "OpenAPI documentation is publicly accessible, providing a complete map of your API surface.",
-    solution: "Restrict API docs to authenticated users or internal network access.",
-    validate: (body) => /"openapi"|"swagger"/.test(body.slice(0, 500)),
-  },
-  {
-    path: "/swagger-ui.html",
-    name: "Swagger UI Exposed",
-    severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
-    category: "Information Disclosure",
-    description: "Swagger UI is publicly accessible, allowing anyone to browse, test, and interact with your API directly from their browser.",
-    solution: "Require authentication to access Swagger UI in production environments.",
-    validate: (body) => /swagger-ui|SwaggerUI/i.test(body),
-  },
-  {
-    path: "/api-docs",
-    name: "API Documentation Exposed",
-    severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
-    category: "Information Disclosure",
-    description: "API documentation is publicly accessible.",
-    solution: "Restrict API documentation to authenticated users.",
-    validate: (body) => /"swagger"|"openapi"|"paths"/.test(body.slice(0, 1000)),
-  },
-  {
-    path: "/graphql",
-    name: "GraphQL Introspection Exposed",
-    severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
-    category: "Information Disclosure",
-    description: "A GraphQL endpoint appears accessible. If introspection is enabled, attackers can enumerate your entire schema including all queries, mutations, types, and fields.",
-    solution: "Disable GraphQL introspection in production environments. Add depth limiting and query complexity analysis to prevent abuse.",
-    validate: (body) => /\"__schema\"|\"__type\"|graphql|GraphQL/i.test(body),
-  },
+  // NOTE: generic /swagger.json, /openapi.json, /swagger-ui.html, /api-docs, and
+  // /graphql entries were removed from here — they duplicated (with much weaker
+  // validation) the dedicated apiDocsProbe.ts and graphqlProbe.ts modules, which
+  // confirm actual OpenAPI/Swagger-UI/GraphQL structure instead of matching on
+  // the mere presence of a keyword. See runAllProbes() in scanner.ts.
 
   // ── Spring Boot Actuator ─────────────────────────────────────────────────
   {
@@ -424,9 +384,18 @@ export const SENSITIVE_PATHS: SensitivePath[] = [
     name: "Permissive crossdomain.xml Policy",
     severity: "medium", cweId: "CWE-942", cvssScore: 6.5,
     category: "CORS Misconfiguration",
-    description: "A Flash/Silverlight cross-domain policy file exists. If it allows access from all domains (*), legacy Flash or PDF plugins can make credentialed cross-origin requests to your application.",
+    description: "A Flash/Silverlight cross-domain policy file allows access from all domains (*). Legacy Flash or PDF plugins can use this to make credentialed cross-origin requests to your application.",
     solution: "Remove crossdomain.xml if Flash is not used. If needed, restrict to specific domains instead of using wildcards.",
-    validate: (body) => /<cross-domain-policy|allow-access-from domain/i.test(body),
+    // The mere presence of crossdomain.xml is not a vulnerability — most sites
+    // that ship one (including GitHub's, which uses permitted-cross-domain-policies
+    // ="master-only") are intentionally restrictive. Only flag genuine wildcard
+    // access: a "*" domain entry, or a site-control policy of "all".
+    validate: (body) => {
+      if (!/<cross-domain-policy/i.test(body)) return false;
+      const hasWildcardDomain = /<allow-access-from\s+domain\s*=\s*["']\*["']/i.test(body);
+      const siteControl = /permitted-cross-domain-policies\s*=\s*["'](\w[\w-]*)["']/i.exec(body)?.[1];
+      return hasWildcardDomain || siteControl?.toLowerCase() === "all";
+    },
   },
 
   // ── Additional .env variants ──────────────────────────────────────────────
@@ -636,7 +605,12 @@ export const SENSITIVE_PATHS: SensitivePath[] = [
     category: "Information Disclosure",
     description: "A phpMyAdmin database administration interface is accessible. If default or weak credentials are used, attackers gain full database access including reading all data, exfiltrating user credentials, modifying records, and executing SQL to write webshells.",
     solution: "Restrict phpMyAdmin to localhost or VPN-only access. Enable authentication with a strong password. Ideally, remove it from the production server entirely and use a secure tunnel for DB access.",
-    validate: (body) => /phpMyAdmin|phpmyadmin|pma_/i.test(body),
+    // Require an actual login-form/interface marker, not just the word
+    // "phpMyAdmin" appearing in the page — that alone also matches unrelated
+    // pages that merely mention the project by name (e.g. a GitHub org page
+    // for the real phpMyAdmin project).
+    validate: (body) =>
+      /name=["']pma_username["']|name=["']pma_password["']|id=["']pma_navigation["']|pmaHomepage|pma_absolute_uri/i.test(body),
   },
   {
     path: "/adminer.php",
@@ -645,7 +619,10 @@ export const SENSITIVE_PATHS: SensitivePath[] = [
     category: "Information Disclosure",
     description: "Adminer (formerly phpMinAdmin) is publicly accessible. This single-file database admin tool gives attackers a GUI to connect to any database server visible from the web server, not just the local database.",
     solution: "Remove adminer.php from production immediately. For development use only — restrict with IP allowlisting if kept on staging servers.",
-    validate: (body) => /adminer|Adminer/i.test(body),
+    // Require Adminer's actual login-form field names or footer credit link,
+    // not just the word "adminer" appearing anywhere in the page.
+    validate: (body) =>
+      /name=["']auth\[(driver|server|username|password)\]["']|href=["'][^"']*adminer\.org/i.test(body),
   },
 
   // ── WordPress ─────────────────────────────────────────────────────────────

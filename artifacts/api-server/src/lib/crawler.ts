@@ -285,6 +285,18 @@ const INFRA_COOKIE_NAMES = new Set([
   "_abck",        // Akamai Bot Manager
 ]);
 
+// Cookies whose name suggests they actually carry session/auth state — see
+// the identical pattern (and rationale) in scanner.ts's analyzeCookies().
+// Duplicated rather than imported so this pure-logic module doesn't pull in
+// scanner.ts's runtime dependency graph (which requires DATABASE_URL at
+// import time). Must match the pattern in scanner.ts.
+const SESSION_COOKIE_PATTERN =
+  /session|token|jwt|csrf|xsrf|login|credential|phpsessid|jsessionid|connect\.sid|remember_?me|auth_?token|access_?token|refresh_?token|\bsid\b/i;
+
+function isLikelySessionCookie(name: string): boolean {
+  return SESSION_COOKIE_PATTERN.test(name);
+}
+
 function checkPageCookies(
   setCookies: string[],
   pageUrl: string,
@@ -309,20 +321,28 @@ function checkPageCookies(
     // Skip infrastructure-owned cookies that the site operator cannot modify.
     if (INFRA_COOKIE_NAMES.has(namePart.toLowerCase())) continue;
 
+    // Non-session cookies (UI-state flags, analytics/tracking IDs) pose much
+    // less real risk than an actual session/auth cookie missing these flags —
+    // see isLikelySessionCookie in scanner.ts for the shared classification.
+    const isSession = isLikelySessionCookie(namePart);
+
     if (isHttps && !/secure/i.test(cookie)) {
       const key = `secure::${namePart}`;
       if (!seenCookieIssues.has(key)) {
         seenCookieIssues.add(key);
         findings.push(vuln({
-          name: "Cookie Missing Secure Flag on Inner Page",
-          severity: "high",
+          name: isSession ? "Session Cookie Missing Secure Flag on Inner Page" : "Non-Session Cookie Missing Secure Flag on Inner Page",
+          severity: isSession ? "high" : "low",
           category: "Session Management",
-          description: `The page "${path}" sets the cookie "${namePart}" without the Secure flag, allowing it to be transmitted over unencrypted HTTP even on an HTTPS site.`,
+          description: isSession
+            ? `The page "${path}" sets the cookie "${namePart}" without the Secure flag, allowing it to be transmitted over unencrypted HTTP even on an HTTPS site.`
+            : `The page "${path}" sets the cookie "${namePart}" without the Secure flag. It doesn't appear to carry session/auth state, so the practical risk is low.`,
           evidence: `${sourcePrefix}GET ${pageUrl}\nSet-Cookie: ${cookie.trim()}`,
           solution: "Add the Secure attribute to all cookies: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax",
           cweId: "CWE-614",
-          cvssScore: 6.5,
+          cvssScore: isSession ? 6.5 : 3.1,
           wstgId: "WSTG-SESS-02",
+          ...(isSession ? {} : { confidence: 70 }),
         }));
       }
     }
@@ -332,15 +352,18 @@ function checkPageCookies(
       if (!seenCookieIssues.has(key)) {
         seenCookieIssues.add(key);
         findings.push(vuln({
-          name: "Cookie Missing HttpOnly Flag on Inner Page",
-          severity: "medium",
+          name: isSession ? "Session Cookie Missing HttpOnly Flag on Inner Page" : "Non-Session Cookie Readable by JavaScript on Inner Page",
+          severity: isSession ? "medium" : "info",
           category: "Session Management",
-          description: `The page "${path}" sets the cookie "${namePart}" without the HttpOnly flag, allowing client-side JavaScript to access it. This enables session theft via XSS.`,
+          description: isSession
+            ? `The page "${path}" sets the cookie "${namePart}" without the HttpOnly flag, allowing client-side JavaScript to access it. This enables session theft via XSS.`
+            : `The page "${path}" sets the cookie "${namePart}" without the HttpOnly flag. It doesn't appear to carry session/auth state — many such cookies (UI-state flags, analytics IDs) are intentionally client-readable.`,
           evidence: `${sourcePrefix}GET ${pageUrl}\nSet-Cookie: ${cookie.trim()}`,
           solution: "Add the HttpOnly attribute to all session cookies: Set-Cookie: name=value; HttpOnly; Secure; SameSite=Lax",
           cweId: "CWE-1004",
-          cvssScore: 5.3,
+          cvssScore: isSession ? 5.3 : 2.6,
           wstgId: "WSTG-SESS-02",
+          ...(isSession ? {} : { confidence: 60 }),
         }));
       }
     }

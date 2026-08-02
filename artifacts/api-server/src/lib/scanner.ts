@@ -170,6 +170,23 @@ const INFRA_COOKIE_NAMES = new Set([
   "_abck",        // Akamai Bot Manager
 ]);
 
+// Cookies whose name suggests they actually carry session/auth state — a
+// missing Secure/HttpOnly/SameSite flag on one of these is a real
+// session-hijack or CSRF risk. Cookies that DON'T match (UI-state flags like
+// "logged_in=yes", analytics/tracking IDs like "_octo" or "_ga") pose much
+// less real-world risk since there's no session to steal or forge, so they're
+// reported as a separate, lower-severity finding instead of being lumped in
+// with genuine session cookies. Without this split, a scan of any site that
+// merely sets a non-sensitive marker cookie (which is extremely common —
+// e.g. GitHub's "logged_in" flag) gets penalized as if it leaked a session
+// token.
+const SESSION_COOKIE_PATTERN =
+  /session|token|jwt|csrf|xsrf|login|credential|phpsessid|jsessionid|connect\.sid|remember_?me|auth_?token|access_?token|refresh_?token|\bsid\b/i;
+
+function isLikelySessionCookie(name: string): boolean {
+  return SESSION_COOKIE_PATTERN.test(name);
+}
+
 function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[] {
   if (!setCookieHeader) return [];
 
@@ -178,9 +195,14 @@ function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[
   // Collect affected cookie names per problem type instead of emitting one
   // finding per cookie — a site that sets 10 cookies should not score 10×
   // worse than a site that sets 1. Each type of misconfiguration is one issue.
+  // Session-like and non-session cookies are tracked separately (see
+  // SESSION_COOKIE_PATTERN above) since the real-world risk differs a lot.
   const noSecure: string[] = [];
+  const noSecureOther: string[] = [];
   const noHttpOnly: string[] = [];
+  const noHttpOnlyOther: string[] = [];
   const noSameSite: string[] = [];
+  const noSameSiteOther: string[] = [];
 
   for (const cookie of cookies) {
     if (!cookie.trim()) continue;
@@ -196,9 +218,11 @@ function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[
     // cannot add Secure/HttpOnly/SameSite to cookies they don't set.
     if (INFRA_COOKIE_NAMES.has(namePart.toLowerCase())) continue;
 
-    if (!/secure/i.test(cookie))   noSecure.push(namePart);
-    if (!/httponly/i.test(cookie)) noHttpOnly.push(namePart);
-    if (!/samesite/i.test(cookie)) noSameSite.push(namePart);
+    const isSession = isLikelySessionCookie(namePart);
+
+    if (!/secure/i.test(cookie))   (isSession ? noSecure : noSecureOther).push(namePart);
+    if (!/httponly/i.test(cookie)) (isSession ? noHttpOnly : noHttpOnlyOther).push(namePart);
+    if (!/samesite/i.test(cookie)) (isSession ? noSameSite : noSameSiteOther).push(namePart);
   }
 
   const findings: ScanVulnerability[] = [];
@@ -207,15 +231,32 @@ function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[
     const list = noSecure.join(", ");
     const plural = noSecure.length > 1;
     findings.push(vuln({
-      name: "Cookie Missing Secure Flag",
+      name: "Session Cookie Missing Secure Flag",
       severity: "high",
       category: "Session Management",
-      description: `${noSecure.length} cookie${plural ? "s are" : " is"} set without the Secure flag (${list}). ${plural ? "They can" : "It can"} be transmitted over unencrypted HTTP connections, making ${plural ? "them" : "it"} susceptible to interception.`,
+      description: `${noSecure.length} likely session/auth cookie${plural ? "s are" : " is"} set without the Secure flag (${list}). ${plural ? "They can" : "It can"} be transmitted over unencrypted HTTP connections, making ${plural ? "them" : "it"} susceptible to interception.`,
       evidence: `Affected cookie${plural ? "s" : ""}: ${list}`,
-      solution: "Add the Secure attribute to all cookies: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax",
+      solution: "Add the Secure attribute to all session cookies: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax",
       cweId: "CWE-614",
       cvssScore: 6.5,
       wstgId: "WSTG-SESS-02",
+    }));
+  }
+
+  if (noSecureOther.length > 0) {
+    const list = noSecureOther.join(", ");
+    const plural = noSecureOther.length > 1;
+    findings.push(vuln({
+      name: "Non-Session Cookie Missing Secure Flag",
+      severity: "low",
+      category: "Session Management",
+      description: `${noSecureOther.length} cookie${plural ? "s" : ""} without an obvious session/auth purpose ${plural ? "are" : "is"} set without the Secure flag (${list}). These don't appear to carry authentication state, so the practical risk is low — but worth fixing for defense in depth.`,
+      evidence: `Affected cookie${plural ? "s" : ""}: ${list}`,
+      solution: "Add the Secure attribute to all cookies where practical: Set-Cookie: name=value; Secure; SameSite=Lax",
+      cweId: "CWE-614",
+      cvssScore: 3.1,
+      wstgId: "WSTG-SESS-02",
+      confidence: 70,
     }));
   }
 
@@ -223,10 +264,10 @@ function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[
     const list = noHttpOnly.join(", ");
     const plural = noHttpOnly.length > 1;
     findings.push(vuln({
-      name: "Cookie Missing HttpOnly Flag",
+      name: "Session Cookie Missing HttpOnly Flag",
       severity: "medium",
       category: "Session Management",
-      description: `${noHttpOnly.length} cookie${plural ? "s are" : " is"} set without the HttpOnly flag (${list}), allowing client-side JavaScript to access ${plural ? "them" : "it"}. This can enable session theft via XSS.`,
+      description: `${noHttpOnly.length} likely session/auth cookie${plural ? "s are" : " is"} set without the HttpOnly flag (${list}), allowing client-side JavaScript to access ${plural ? "them" : "it"}. This can enable session theft via XSS.`,
       evidence: `Affected cookie${plural ? "s" : ""}: ${list}`,
       solution: "Add the HttpOnly attribute to all session cookies: Set-Cookie: name=value; HttpOnly; Secure; SameSite=Lax",
       cweId: "CWE-1004",
@@ -235,19 +276,53 @@ function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[
     }));
   }
 
+  if (noHttpOnlyOther.length > 0) {
+    const list = noHttpOnlyOther.join(", ");
+    const plural = noHttpOnlyOther.length > 1;
+    findings.push(vuln({
+      name: "Non-Session Cookie Readable by JavaScript",
+      severity: "info",
+      category: "Session Management",
+      description: `${noHttpOnlyOther.length} cookie${plural ? "s" : ""} without an obvious session/auth purpose ${plural ? "are" : "is"} readable by client-side JavaScript (${list}). Many such cookies (UI-state flags, analytics IDs) are intentionally client-readable, so this is informational unless the cookie actually holds sensitive data.`,
+      evidence: `Affected cookie${plural ? "s" : ""}: ${list}`,
+      solution: "If any of these cookies hold sensitive data, add HttpOnly. If they're purely UI-state or analytics markers, no action is needed.",
+      cweId: "CWE-1004",
+      cvssScore: 2.6,
+      wstgId: "WSTG-SESS-02",
+      confidence: 60,
+    }));
+  }
+
   if (noSameSite.length > 0) {
     const list = noSameSite.join(", ");
     const plural = noSameSite.length > 1;
     findings.push(vuln({
-      name: "Cookie Missing SameSite Attribute",
+      name: "Session Cookie Missing SameSite Attribute",
       severity: "medium",
       category: "CSRF Protection",
-      description: `${noSameSite.length} cookie${plural ? "s lack" : " lacks"} the SameSite attribute (${list}), making the application potentially vulnerable to Cross-Site Request Forgery (CSRF) attacks.`,
+      description: `${noSameSite.length} likely session/auth cookie${plural ? "s lack" : " lacks"} the SameSite attribute (${list}), making the application potentially vulnerable to Cross-Site Request Forgery (CSRF) attacks.`,
       evidence: `Affected cookie${plural ? "s" : ""}: ${list}`,
-      solution: "Set SameSite=Lax or SameSite=Strict on all cookies: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax",
+      solution: "Set SameSite=Lax or SameSite=Strict on all session cookies: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax",
       cweId: "CWE-352",
       cvssScore: 4.3,
       wstgId: "WSTG-SESS-02",
+    }));
+  }
+
+  if (noSameSiteOther.length > 0) {
+    const list = noSameSiteOther.join(", ");
+    const plural = noSameSiteOther.length > 1;
+    findings.push(vuln({
+      name: "Non-Session Cookie Missing SameSite Attribute",
+      severity: "info",
+      category: "CSRF Protection",
+      description: `${noSameSiteOther.length} cookie${plural ? "s" : ""} without an obvious session/auth purpose ${plural ? "lack" : "lacks"} the SameSite attribute (${list}). Since these don't appear to gate authenticated actions, CSRF risk from them specifically is minimal.`,
+      evidence: `Affected cookie${plural ? "s" : ""}: ${list}`,
+      solution: "Set SameSite=Lax on these cookies where practical, though the CSRF risk here is low.",
+      cweId: "CWE-352",
+      cvssScore: 2.1,
+      wstgId: "WSTG-SESS-02",
+      confidence: 60,
     }));
   }
 

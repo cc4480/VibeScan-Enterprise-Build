@@ -10,6 +10,7 @@
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 import { OPEN_REDIRECT_PROBE, OPEN_REDIRECT_PARAMS } from "./payloads";
+import { detectCatchAll, matchesCatchAll } from "./spaCatchAll";
 
 const PROBE_TIMEOUT_MS = 8_000;
 
@@ -63,6 +64,13 @@ export async function checkSensitiveFiles(baseUrl: string): Promise<ScanVulnerab
     return [];
   }
 
+  // Fingerprint catch-all routing BEFORE probing real paths. SPAs (client-side
+  // routing) and multi-tenant platforms (GitHub/npm/PyPI, where any path
+  // segment is treated as a username) return HTTP 200 + the same shell page
+  // for virtually any path — without this, every probed path below (admin
+  // panels, .env variants, etc.) looks "exposed."
+  const catchAll = await detectCatchAll(origin).catch(() => null);
+
   const results = await Promise.allSettled(
     SENSITIVE_PATHS.map(async (p): Promise<ScanVulnerability | null> => {
       const url = `${origin}${p.path}`;
@@ -76,6 +84,9 @@ export async function checkSensitiveFiles(baseUrl: string): Promise<ScanVulnerab
       } catch {
         return null;
       }
+
+      // Suppress if the response is just the catch-all shell, not real content
+      if (matchesCatchAll(result.body, catchAll)) return null;
 
       const ct = result.headers["content-type"] ?? "";
       if (!p.validate(result.body, ct)) return null;

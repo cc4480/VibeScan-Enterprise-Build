@@ -102,17 +102,33 @@ describe("SENSITIVE_PATHS: /backup.sql", () => {
     expect(validate("", "text/plain")).toBe(false));
 });
 
-// ─── /api-docs (Swagger) ──────────────────────────────────────────────────────
+// NOTE: /swagger.json, /openapi.json, /swagger-ui.html, /api-docs, and /graphql
+// were removed from SENSITIVE_PATHS — that coverage now lives in the dedicated
+// apiDocsProbe.ts and graphqlProbe.ts modules, which validate actual structure
+// instead of matching on keyword presence (see probes-data.ts comment).
 
-describe("SENSITIVE_PATHS: /swagger.json", () => {
-  const validate = probeByPath("/swagger.json");
+// ─── phpMyAdmin ────────────────────────────────────────────────────────────────
 
-  it("matches a Swagger 2.0 document", () =>
-    expect(validate(`{"swagger":"2.0","paths":{}}`, "application/json")).toBe(true));
-  it("matches an OpenAPI 3 document", () =>
-    expect(validate(`{"openapi":"3.0.0","paths":{}}`, "application/json")).toBe(true));
-  it("rejects an empty JSON object", () =>
-    expect(validate("{}", "application/json")).toBe(false));
-  it("rejects HTML", () =>
-    expect(validate("<html>Not found</html>", "text/html")).toBe(false));
+describe("SENSITIVE_PATHS: /phpmyadmin/", () => {
+  const validate = probeByPath("/phpmyadmin/");
+
+  it("matches a real phpMyAdmin login form", () =>
+    expect(validate('<input name="pma_username"><input name="pma_password">', "text/html")).toBe(true));
+  it("rejects a page that merely mentions phpMyAdmin by name", () =>
+    expect(validate("<title>phpMyAdmin · GitHub</title><body>Some org page</body>", "text/html")).toBe(false));
+});
+
+// ─── crossdomain.xml ────────────────────────────────────────────────────────────
+
+describe("SENSITIVE_PATHS: /crossdomain.xml", () => {
+  const validate = probeByPath("/crossdomain.xml");
+
+  it("matches a wildcard domain policy", () =>
+    expect(validate('<cross-domain-policy><allow-access-from domain="*"/></cross-domain-policy>', "text/xml")).toBe(true));
+  it("matches an explicit permitted-cross-domain-policies=\"all\"", () =>
+    expect(validate('<cross-domain-policy><site-control permitted-cross-domain-policies="all"/></cross-domain-policy>', "text/xml")).toBe(true));
+  it("rejects a restrictive master-only policy (e.g. GitHub's)", () =>
+    expect(validate('<cross-domain-policy><site-control permitted-cross-domain-policies="master-only"/></cross-domain-policy>', "text/xml")).toBe(false));
+  it("rejects a non-wildcard allow-access-from", () =>
+    expect(validate('<cross-domain-policy><allow-access-from domain="trusted.example.com"/></cross-domain-policy>', "text/xml")).toBe(false));
 });
