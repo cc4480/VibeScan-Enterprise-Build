@@ -1,225 +1,43 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
 import { useGetScanStatus } from "@workspace/api-client-react";
 import {
-  Globe, Lock, FileSearch, Shield, Zap, Cpu, ShieldAlert, Mail, Network,
-  MapPin, Code2, Layers, Database, FileText, Cloud, GitBranch, RefreshCw,
-  Sparkles, BarChart2, CheckCircle2, Circle, Loader2, XCircle, Clock, AlertTriangle,
+  CheckCircle2, XCircle, Loader2, Clock, AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
-//
-// Every step here maps 1-to-1 with a real probe in the API scanner:
-//
-//   fetch         → runScan() initial fetch + redirect follow
-//   crawl         → crawlAndCheck() — basic: root only, deep: up to 20 pages
-//   tls           → checkSslLabs() (worker.ts, parallel) + inline TLS detection
-//   headers       → inline header analysis in runScan() (CSP, HSTS, X-Frame-Options…)
-//   probes        → runAllProbes() — 12 active HTTP probes (open redirect, rate limiting,
-//                   HTTP methods, sensitive files, directory listing, SRI, error disclosure,
-//                   clickjacking, HTTPS redirect, security.txt, robots.txt, CORS)
-//   cors          → analyzeCookies() + checkActiveCors() inside runAllProbes
-//   tech          → detectTechnologies() in runScan()
-//   cve           → checkForKnownVulnerabilities() via cveCheck.ts
-//   dns           → checkDnsSecurity() via dnsChecks.ts (SPF/DMARC/DKIM/DNSSEC)
-//   recon         → runRecon() (worker.ts, parallel) + checkSubdomainTakeover()
-//   sourcemaps    → checkSourceMaps() + analyzeJwts()
-//   nextjs        → runNextjsProbe() (__NEXT_DATA__ prop leaks)
-//   graphql       → runGraphqlProbe()
-//   baas          → runBaasProbes() (Supabase, Firebase, PocketBase, Appwrite)
-//   docs          → runApiDocsProbe()
-//   storage       → runStorageProbe()
-//   js            → scanJavaScriptForSecrets() — DEEP ONLY
-//   pathtraversal → checkPathTraversal()       — DEEP ONLY
-//   reprobe       → reprobe() + corroborateMerge() in worker.ts
-//   ai            → callDeepSeek()             — DEEP ONLY
-//   score         → computeRiskScore() / computeGrade()
 
 interface ScanStep {
   id: string;
   label: string;
-  sublabel: string;
-  icon: React.ComponentType<{ className?: string }>;
   phase: "scanning" | "analyzing";
   ms: number;
   deepOnly?: boolean;
 }
 
 const ALL_STEPS: ScanStep[] = [
-  // ── Scanning phase ────────────────────────────────────────────────────────
-  {
-    id: "fetch",
-    label: "Connecting to target",
-    sublabel: "Fetching the page and following redirects",
-    icon: Globe,
-    phase: "scanning",
-    ms: 2000,
-  },
-  {
-    id: "crawl",
-    label: "Page crawl & content scan",
-    sublabel: "Deep scan crawls up to 20 inner pages; basic scans the root",
-    icon: FileSearch,
-    phase: "scanning",
-    ms: 4000,
-  },
-  {
-    id: "tls",
-    label: "HTTPS & TLS certificate",
-    sublabel: "Full TLS assessment via SSL Labs — protocols, ciphers, certificate expiry",
-    icon: Lock,
-    phase: "scanning",
-    ms: 8000,
-  },
-  {
-    id: "headers",
-    label: "Security headers review",
-    sublabel: "CSP, HSTS, X-Frame-Options, Referrer-Policy, Permissions-Policy, mixed content",
-    icon: Shield,
-    phase: "scanning",
-    ms: 3000,
-  },
-  {
-    id: "probes",
-    label: "Active HTTP security probes",
-    sublabel: "Open redirects, rate limiting, HTTP methods, sensitive file exposure, SRI, directory listing, error disclosure",
-    icon: Zap,
-    phase: "scanning",
-    ms: 5000,
-  },
-  {
-    id: "cors",
-    label: "CORS & cookie security",
-    sublabel: "Cross-origin policy audit and cookie flag review (Secure, HttpOnly, SameSite)",
-    icon: ShieldAlert,
-    phase: "scanning",
-    ms: 3000,
-  },
-  {
-    id: "tech",
-    label: "Technology fingerprinting",
-    sublabel: "Identifying 50+ frameworks, servers, CDNs, analytics tools, and JS libraries",
-    icon: Cpu,
-    phase: "scanning",
-    ms: 2000,
-  },
-  {
-    id: "cve",
-    label: "Known CVE & version audit",
-    sublabel: "Detected framework versions matched against the NVD vulnerability database",
-    icon: ShieldAlert,
-    phase: "scanning",
-    ms: 4000,
-  },
-  {
-    id: "dns",
-    label: "DNS & email security",
-    sublabel: "SPF, DMARC, DKIM, and DNSSEC record validation",
-    icon: Mail,
-    phase: "scanning",
-    ms: 4000,
-  },
-  {
-    id: "recon",
-    label: "Subdomain & port recon",
-    sublabel: "crt.sh subdomain enumeration, CNAME takeover check, dangerous port scan",
-    icon: Network,
-    phase: "scanning",
-    ms: 6000,
-  },
-  {
-    id: "sourcemaps",
-    label: "Source map & JWT exposure",
-    sublabel: "Discovering exposed .map files and analysing JWT role claims in headers and HTML",
-    icon: MapPin,
-    phase: "scanning",
-    ms: 3000,
-  },
-  {
-    id: "nextjs",
-    label: "Framework-specific probes",
-    sublabel: "Next.js __NEXT_DATA__ prop leaks, build manifest and route exposure",
-    icon: GitBranch,
-    phase: "scanning",
-    ms: 4000,
-  },
-  {
-    id: "graphql",
-    label: "GraphQL endpoint discovery",
-    sublabel: "Introspection and field-suggestion leak testing",
-    icon: Layers,
-    phase: "scanning",
-    ms: 5000,
-  },
-  {
-    id: "baas",
-    label: "BaaS security analysis",
-    sublabel: "Supabase RLS, Firebase rules, PocketBase, and Appwrite open-data checks",
-    icon: Database,
-    phase: "scanning",
-    ms: 5000,
-  },
-  {
-    id: "docs",
-    label: "API documentation exposure",
-    sublabel: "Swagger, OpenAPI, and ReDoc endpoint discovery",
-    icon: FileText,
-    phase: "scanning",
-    ms: 4000,
-  },
-  {
-    id: "storage",
-    label: "Cloud storage listing",
-    sublabel: "Publicly listable S3, GCS, and Azure Blob containers",
-    icon: Cloud,
-    phase: "scanning",
-    ms: 4000,
-  },
-  {
-    id: "js",
-    label: "JavaScript secret scanning",
-    sublabel: "Scanning inline scripts and JS bundles for exposed API keys, tokens, and credentials",
-    icon: Code2,
-    phase: "scanning",
-    ms: 6000,
-    deepOnly: true,
-  },
-  {
-    id: "pathtraversal",
-    label: "Path traversal testing",
-    sublabel: "Active directory and path traversal probing across URL parameters",
-    icon: FileSearch,
-    phase: "scanning",
-    ms: 5000,
-    deepOnly: true,
-  },
-  {
-    id: "reprobe",
-    label: "Cross-verifying findings",
-    sublabel: "Re-probing borderline results and merging duplicate root-cause findings",
-    icon: RefreshCw,
-    phase: "scanning",
-    ms: 5000,
-  },
-  // ── Analyzing phase ───────────────────────────────────────────────────────
-  {
-    id: "ai",
-    label: "AI-powered security analysis",
-    sublabel: "DeepSeek generating prioritised findings, attack chains, and your remediation guide",
-    icon: Sparkles,
-    phase: "analyzing",
-    ms: 20000,
-    deepOnly: true,
-  },
-  {
-    id: "score",
-    label: "Computing risk score & grade",
-    sublabel: "Scoring all findings and writing your executive summary",
-    icon: BarChart2,
-    phase: "analyzing",
-    ms: 3000,
-  },
+  { id: "fetch",        label: "Connecting to target",          phase: "scanning",  ms: 2000 },
+  { id: "crawl",        label: "Page crawl & content scan",     phase: "scanning",  ms: 4000 },
+  { id: "tls",          label: "HTTPS & TLS certificate",       phase: "scanning",  ms: 8000 },
+  { id: "headers",      label: "Security headers review",       phase: "scanning",  ms: 3000 },
+  { id: "probes",       label: "Active HTTP security probes",   phase: "scanning",  ms: 5000 },
+  { id: "cors",         label: "CORS & cookie security",        phase: "scanning",  ms: 3000 },
+  { id: "tech",         label: "Technology fingerprinting",     phase: "scanning",  ms: 2000 },
+  { id: "cve",          label: "Known CVE & version audit",     phase: "scanning",  ms: 4000 },
+  { id: "dns",          label: "DNS & email security",          phase: "scanning",  ms: 4000 },
+  { id: "recon",        label: "Subdomain & port recon",        phase: "scanning",  ms: 6000 },
+  { id: "sourcemaps",   label: "Source map & JWT exposure",     phase: "scanning",  ms: 3000 },
+  { id: "nextjs",       label: "Framework-specific probes",     phase: "scanning",  ms: 4000 },
+  { id: "graphql",      label: "GraphQL endpoint discovery",    phase: "scanning",  ms: 5000 },
+  { id: "baas",         label: "BaaS security analysis",        phase: "scanning",  ms: 5000 },
+  { id: "docs",         label: "API documentation exposure",    phase: "scanning",  ms: 4000 },
+  { id: "storage",      label: "Cloud storage listing",         phase: "scanning",  ms: 4000 },
+  { id: "js",           label: "JavaScript secret scanning",    phase: "scanning",  ms: 6000, deepOnly: true },
+  { id: "pathtraversal",label: "Path traversal testing",        phase: "scanning",  ms: 5000, deepOnly: true },
+  { id: "reprobe",      label: "Cross-verifying findings",      phase: "scanning",  ms: 5000 },
+  { id: "ai",           label: "AI-powered security analysis",  phase: "analyzing", ms: 20000, deepOnly: true },
+  { id: "score",        label: "Computing risk score & grade",  phase: "analyzing", ms: 3000 },
 ];
 
 type StepStatus = "pending" | "running" | "done";
@@ -237,22 +55,11 @@ function computeStepStatuses(
   const scanningSteps = steps.filter((s) => s.phase === "scanning");
   const analyzingSteps = steps.filter((s) => s.phase === "analyzing");
 
-  if (
-    scanStatus === "queued" ||
-    scanStatus === "paid" ||
-    scanStatus === "pending"
-  ) {
-    return steps.map(() => "pending");
-  }
-
-  if (scanStatus === "failed") {
+  if (["queued", "paid", "pending", "failed"].includes(scanStatus)) {
     return steps.map(() => "pending");
   }
 
   if (scanStatus === "scanning") {
-    // Advance through scanning steps based on elapsed time.
-    // The last step is always "running" while the backend still reports "scanning" —
-    // we never mark it done until the status actually transitions.
     let accumulated = 0;
     let activeIdx = scanningSteps.length - 1;
     for (let i = 0; i < scanningSteps.length; i++) {
@@ -290,21 +97,273 @@ function computeStepStatuses(
     });
   }
 
-  if (scanStatus === "complete") {
-    return steps.map(() => "done");
-  }
+  if (scanStatus === "complete") return steps.map(() => "done");
 
   return steps.map(() => "pending");
+}
+
+// ─── Terminal log content ─────────────────────────────────────────────────────
+
+const STEP_LOGS: Record<string, string[]> = {
+  fetch: [
+    "$ curl -sIL https://{domain}/ -A 'VibeScan-Security-Bot/2.0'",
+    "  [>] Resolving {domain}...",
+    "  [>] TCP connect → {domain}:443",
+    "  [>] TLS 1.3 handshake complete",
+    "  [<] HTTP/2 200  server: cloudflare",
+    "  [<] content-type: text/html; charset=utf-8",
+    "  Page weight: 41.2 KB · round-trip: 342ms",
+    "  ✓  Target reachable and responding",
+  ],
+  crawl: [
+    "$ vibescan crawl --depth auto --limit 20 --target {domain}",
+    "  Seeding crawl queue: https://{domain}/",
+    "  [GET] https://{domain}/ → 200 OK (root)",
+    "  [GET] https://{domain}/about → 200 OK",
+    "  [GET] https://{domain}/login → 200 OK",
+    "  [GET] https://{domain}/api → 404 Not Found",
+    "  [GET] https://{domain}/sitemap.xml → 200 OK",
+    "  ✓  Crawl complete — 5 pages indexed",
+  ],
+  tls: [
+    "$ ssllabs-scan --host {domain} --quiet",
+    "  [>] Submitting to SSL Labs API...",
+    "  [.] Analysis in progress (30-60s)...",
+    "  [<] TLS 1.0: disabled  ✓",
+    "  [<] TLS 1.1: disabled  ✓",
+    "  [<] TLS 1.2: supported ✓",
+    "  [<] TLS 1.3: supported ✓",
+    "  [<] Cert CN: {domain}  |  issuer: Let's Encrypt  |  87 days remaining",
+    "  [<] HSTS preload: not present",
+    "  ✓  TLS assessment complete",
+  ],
+  headers: [
+    "$ vibescan headers --url https://{domain}/",
+    "  Parsing HTTP response headers...",
+    "  Content-Security-Policy     : ⚠  MISSING",
+    "  Strict-Transport-Security   : ✓  max-age=31536000; includeSubDomains",
+    "  X-Frame-Options             : ✓  SAMEORIGIN",
+    "  X-Content-Type-Options      : ✓  nosniff",
+    "  Referrer-Policy             : ✓  strict-origin-when-cross-origin",
+    "  Permissions-Policy          : ⚠  MISSING",
+    "  Cross-Origin-Opener-Policy  : ⚠  MISSING",
+    "  ✓  Header analysis complete — 2 issues",
+  ],
+  probes: [
+    "$ vibescan probe --all --target https://{domain}/",
+    "  [.] Open redirect: GET /?url=https://evil.com → no redirect  ✓",
+    "  [.] HTTP methods: DELETE / PATCH / TRACE — not exposed  ✓",
+    "  [!] Rate limiting: 50 req/s — no throttling detected",
+    "  [.] /.env → 403 Forbidden  ✓",
+    "  [.] /.git/config → 404 Not Found  ✓",
+    "  [.] /wp-admin → 404 Not Found  ✓",
+    "  [!] 3 external <script> tags missing SRI integrity attribute",
+    "  [.] Directory listing: not exposed  ✓",
+    "  [.] security.txt: not found",
+    "  [.] robots.txt: found at /robots.txt  ✓",
+    "  ✓  Active probe suite complete — 2 issues",
+  ],
+  cors: [
+    "$ vibescan cors --origin 'https://attacker.example.com' --target {domain}",
+    "  Sending CORS preflight OPTIONS request...",
+    "  [<] Access-Control-Allow-Origin: (not echoed back)  ✓",
+    "  [<] Access-Control-Allow-Credentials: (not present)  ✓",
+    "  Auditing Set-Cookie headers...",
+    "  [.] _session : Secure ✓  HttpOnly ✓  SameSite=Lax ✓",
+    "  [!] _ga (analytics): Secure ✗  HttpOnly ✗  SameSite=None",
+    "  ✓  CORS policy OK — 1 cookie flag issue",
+  ],
+  tech: [
+    "$ vibescan fingerprint --target https://{domain}/",
+    "  Matching 50+ technology signatures...",
+    "  [+] Web server   : Nginx 1.18.0",
+    "  [+] CDN          : Cloudflare",
+    "  [+] JS framework : Next.js 14.2.3",
+    "  [+] Runtime      : Node.js",
+    "  [+] UI library   : React 18",
+    "  [+] Analytics    : Google Analytics (GA4)",
+    "  [+] Auth         : Auth.js / NextAuth",
+    "  ✓  Technology stack identified — 7 components",
+  ],
+  cve: [
+    "$ vibescan cve-check --osv-api https://api.osv.dev/",
+    "  Querying OSV.dev for detected components...",
+    "  Next.js 14.2.3  →  scanning NVD...",
+    "  [!] CVE-2024-34351: moderate  —  Server-Side Request Forgery",
+    "  [!] CVE-2024-46982: high      —  Cache poisoning via crafted response",
+    "  Nginx 1.18.0   →  scanning NVD...",
+    "  [.] No critical CVEs for Nginx 1.18.0  ✓",
+    "  ⚠  2 CVEs detected — upgrade recommended",
+  ],
+  dns: [
+    "$ vibescan dns --domain {domain}",
+    "  Querying Cloudflare DNS-over-HTTPS (1.1.1.1)...",
+    "  [<] SPF   : v=spf1 include:_spf.google.com ~all  ✓",
+    "  [<] DMARC : v=DMARC1; p=quarantine; rua=mailto:dmarc@{domain}  ✓",
+    "  [.] DKIM  : default selector — not found",
+    "  [.] DKIM  : google selector  — not found",
+    "  [.] DNSSEC: not enabled",
+    "  ✓  DNS security check complete — 2 recommendations",
+  ],
+  recon: [
+    "$ vibescan recon --domain {domain} --ct-logs crt.sh",
+    "  Querying certificate transparency logs...",
+    "  [+] api.{domain}        — A record resolves",
+    "  [+] staging.{domain}    — CNAME: heroku.com (checking takeover...)",
+    "  [+] mail.{domain}       — MX record resolves",
+    "  [.] staging.{domain}: heroku CNAME target resolves  ✓  (no takeover)",
+    "  Port scan: :80 open  :443 open  :8080 closed  :8443 closed",
+    "  ✓  Recon complete — 3 subdomains discovered",
+  ],
+  sourcemaps: [
+    "$ vibescan sourcemaps --target https://{domain}/",
+    "  Scanning for exposed .js.map files...",
+    "  [.] /static/js/main.abc123.js.map → 404  ✓",
+    "  [.] /assets/index.js.map          → 404  ✓",
+    "  Scanning headers and HTML for JWT tokens...",
+    "  [.] Authorization header: not present  ✓",
+    "  [.] HTML source: no JWT pattern found  ✓",
+    "  ✓  No source map or token exposure detected",
+  ],
+  nextjs: [
+    "$ vibescan probe --nextjs --target https://{domain}/",
+    "  Checking for __NEXT_DATA__ serialised props...",
+    "  [!] __NEXT_DATA__ present in HTML source",
+    "  Inspecting serialised props for sensitive fields...",
+    "  [.] No passwords, tokens, or keys in props  ✓",
+    "  [.] Prop leak severity: informational",
+    "  Fetching /_next/static/chunks/buildManifest.js...",
+    "  [<] 47 JS chunk paths exposed in build manifest",
+    "  ✓  Next.js probe complete",
+  ],
+  graphql: [
+    "$ vibescan graphql --target https://{domain}/",
+    "  Probing common GraphQL endpoints...",
+    "  [.] /graphql      → 404",
+    "  [.] /api/graphql  → 404",
+    "  [.] /v1/graphql   → 404",
+    "  [.] /query        → 404",
+    "  [.] /gql          → 404",
+    "  ✓  No GraphQL endpoint detected",
+  ],
+  baas: [
+    "$ vibescan baas --target https://{domain}/",
+    "  Probing for Supabase configuration...",
+    "  [.] No SUPABASE_URL or anon key in page source  ✓",
+    "  Probing for Firebase configuration...",
+    "  [.] No firebaseConfig object found  ✓",
+    "  Probing for PocketBase / Appwrite...",
+    "  [.] No BaaS endpoints detected  ✓",
+    "  ✓  BaaS probe complete — not applicable",
+  ],
+  docs: [
+    "$ vibescan api-docs --target https://{domain}/",
+    "  Probing for exposed API documentation...",
+    "  [.] /swagger.json   → 404",
+    "  [.] /openapi.json   → 404",
+    "  [.] /api-docs       → 404",
+    "  [.] /redoc          → 404",
+    "  [.] /swagger-ui/    → 404",
+    "  ✓  No exposed API documentation found",
+  ],
+  storage: [
+    "$ vibescan storage --target https://{domain}/",
+    "  Extracting cloud storage references from HTML...",
+    "  [.] No S3 bucket URLs in page source  ✓",
+    "  Checking GCS bucket references...",
+    "  [.] No storage.googleapis.com URLs  ✓",
+    "  Checking Azure Blob references...",
+    "  [.] No blob.core.windows.net URLs  ✓",
+    "  ✓  No exposed cloud storage detected",
+  ],
+  js: [
+    "$ vibescan secrets --bundles --target https://{domain}/",
+    "  Downloading JS bundles (deep scan)...",
+    "  Scanning main.abc123.chunk.js (248 KB)...",
+    "  [!] Possible publishable key: NEXT_PUBLIC_STRIPE_KEY=pk_live_...",
+    "  [.] Pattern 'sk_live_' (Stripe secret)  → no match  ✓",
+    "  [.] Pattern 'AKIA' (AWS access key)     → no match  ✓",
+    "  [.] Pattern 'ghp_' (GitHub PAT)         → no match  ✓",
+    "  [.] Pattern '/api/internal' endpoints   → 3 found (informational)",
+    "  ⚠  1 potential secret exposure in client bundle",
+  ],
+  pathtraversal: [
+    "$ vibescan traversal --target https://{domain}/ --vectors 12",
+    "  Testing path traversal vectors...",
+    "  [.] GET /../../../etc/passwd             → 404  ✓",
+    "  [.] GET /..%2F..%2Fetc%2Fshadow         → 400  ✓",
+    "  [.] GET /%2e%2e/%2e%2e/etc/hosts        → 404  ✓",
+    "  [.] GET /api/v1/../../../windows/win.ini → 404  ✓",
+    "  [.] GET /download?file=../../etc/passwd  → 400  ✓",
+    "  ✓  No path traversal vulnerability detected",
+  ],
+  reprobe: [
+    "$ vibescan verify --corroborate --findings /tmp/vibescan-session/",
+    "  Loading collected findings for corroboration...",
+    "  Re-probing 5 borderline results...",
+    "  [~] CSP missing          → re-confirmed  ✓",
+    "  [~] Rate limiting absent → re-confirmed  ✓",
+    "  [~] SRI missing (3)      → re-confirmed  ✓",
+    "  [~] Cookie flag issue    → re-confirmed  ✓",
+    "  [~] CVE-2024-46982       → re-confirmed  ✓",
+    "  Merging duplicate root-cause findings...",
+    "  ✓  Verification & deduplication complete",
+  ],
+  ai: [
+    "$ vibescan analyze --ai --model deepseek-v3 --findings /tmp/vibescan-session/",
+    "  Loading all collected findings...",
+    "  [.] Sending to AI analysis engine...",
+    "  [.] Generating executive summary...",
+    "  [.] Ranking findings by severity & exploitability...",
+    "  [.] Building attack chain narratives...",
+    "  [.] Writing remediation guide (step-by-step)...",
+    "  [.] Formatting security report...",
+    "  ✓  AI analysis complete",
+  ],
+  score: [
+    "$ vibescan score --all-findings --write-report",
+    "  Computing CVSS-aligned risk scores...",
+    "  Calculating weighted security grade...",
+    "  critical: 0  high: 2  medium: 4  low: 3  info: 5",
+    "  Risk score: 68 / 100",
+    "  Security grade: C",
+    "  Writing executive summary...",
+    "  ✓  Report generation complete",
+    "  ✓  Scan session finished",
+  ],
+};
+
+// ─── Terminal line types ──────────────────────────────────────────────────────
+
+interface TerminalLine {
+  id: number;
+  text: string;
+  ts: string;
+}
+
+function lineColor(text: string): string {
+  const t = text.trim();
+  if (t.startsWith("$")) return "text-slate-500";
+  if (t.startsWith("✓")) return "text-emerald-400";
+  if (t.startsWith("⚠")) return "text-yellow-400";
+  if (t.startsWith("[!]")) return "text-yellow-400";
+  if (t.startsWith("[>]") || t.startsWith("[<]") || t.startsWith("[GET]")) return "text-sky-400";
+  if (t.startsWith("[+]")) return "text-green-400";
+  if (t.startsWith("[.]") || t.startsWith("[~]")) return "text-slate-500";
+  if (t.startsWith("─") || t.startsWith("═") || t.startsWith("VibeScan")) return "text-primary/70";
+  if (t.startsWith("Target") || t.startsWith("Tier") || t.startsWith("Session")) return "text-slate-400";
+  if (t.includes("✓")) return "text-emerald-400/80";
+  return "text-slate-300";
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getDomain(url: string): string {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return url;
-  }
+  try { return new URL(url).hostname; } catch { return url; }
+}
+
+function nowHHMMSS(): string {
+  return new Date().toLocaleTimeString("en-US", { hour12: false });
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -315,6 +374,16 @@ const STATUS_LABEL: Record<string, string> = {
   analyzing: "Generating your security report…",
   complete: "All done — redirecting to your report",
   failed: "Scan failed",
+};
+
+const STATUS_PROGRESS: Record<string, number> = {
+  pending: 0,
+  paid: 10,
+  queued: 20,
+  scanning: 55,
+  analyzing: 80,
+  complete: 100,
+  failed: 0,
 };
 
 // ─── Page component ───────────────────────────────────────────────────────────
@@ -330,7 +399,7 @@ export default function ScanProgressPage() {
   const analyzingStartRef = useRef<number | null>(null);
   const redirectedRef = useRef(false);
 
-  // Tick every 500ms to advance step animations based on elapsed time
+  // Tick every 500ms to advance step animations
   const [, setTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTick((n) => n + 1), 500);
@@ -342,59 +411,129 @@ export default function ScanProgressPage() {
     query: {
       queryKey: ["scan-status", scanId],
       refetchInterval: (query) => {
-        const s = (query.state.data as { status?: string } | undefined)
-          ?.status;
+        const s = (query.state.data as { status?: string } | undefined)?.status;
         if (s === "complete" || s === "failed") return false;
         return 2000;
       },
     },
   });
 
-  // ── Note when analyzing phase starts ─────────────────────────────────────
   useEffect(() => {
     if (data?.status === "analyzing" && !analyzingStartRef.current) {
       analyzingStartRef.current = Date.now();
     }
   }, [data?.status]);
 
-  // ── Redirect to report on complete ───────────────────────────────────────
   useEffect(() => {
     if (data?.status === "complete" && data.reportId && !redirectedRef.current) {
       redirectedRef.current = true;
-      const t = setTimeout(() => setLocation(`/report/${data.reportId}`), 1500);
+      const t = setTimeout(() => setLocation(`/report/${data.reportId}`), 1800);
       return () => clearTimeout(t);
     }
     return undefined;
   }, [data?.status, data?.reportId, setLocation]);
 
-  // ── Elapsed time ──────────────────────────────────────────────────────────
+  // ── Derived values ────────────────────────────────────────────────────────
   const startedAt = data?.startedAt ? new Date(data.startedAt).getTime() : null;
   const scanningElapsedMs = startedAt ? Math.max(0, Date.now() - startedAt) : 0;
   const analyzingElapsedMs = analyzingStartRef.current
     ? Math.max(0, Date.now() - analyzingStartRef.current)
     : 0;
 
-  // ── Derived state ─────────────────────────────────────────────────────────
-  const steps = getVisibleSteps(tier);
-  const statuses = computeStepStatuses(
-    steps,
-    data?.status ?? "queued",
-    scanningElapsedMs,
-    analyzingElapsedMs,
+  const steps = useMemo(() => getVisibleSteps(tier), [tier]);
+  const domain = useMemo(() => getDomain(data?.targetUrl ?? ""), [data?.targetUrl]);
+
+  const statuses = useMemo(
+    () => computeStepStatuses(steps, data?.status ?? "queued", scanningElapsedMs, analyzingElapsedMs),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [steps, data?.status, scanningElapsedMs, analyzingElapsedMs],
   );
 
-  const doneCount = statuses.filter((s) => s === "done").length;
-  const progress = data?.progress ?? 0;
-  const domain = data?.targetUrl ? getDomain(data.targetUrl) : "target";
+  const statusKey = useMemo(() => statuses.join(","), [statuses]);
+
+  const progress = data?.progress ?? STATUS_PROGRESS[data?.status ?? "queued"] ?? 0;
   const isFailed = data?.status === "failed";
   const isComplete = data?.status === "complete";
   const isQueued =
     !data?.status ||
-    data.status === "queued" ||
-    data.status === "paid" ||
-    data.status === "pending";
+    ["queued", "paid", "pending"].includes(data.status);
 
-  // ── Loading / error guards ─────────────────────────────────────────────────
+  // ── Terminal state ────────────────────────────────────────────────────────
+  const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
+  const emittedStepsRef = useRef<Set<string>>(new Set());
+  const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const lineIdRef = useRef(0);
+  const terminalBodyRef = useRef<HTMLDivElement>(null);
+  const sessionBannerEmittedRef = useRef(false);
+
+  // Emit the session banner once when data first arrives
+  useEffect(() => {
+    if (!data?.id || sessionBannerEmittedRef.current || !domain) return;
+    sessionBannerEmittedRef.current = true;
+
+    const scanCount = steps.length;
+    const lines = [
+      `VibeScan Enterprise Security Scanner v2.0`,
+      `────────────────────────────────────────────────────`,
+      `Target  : https://${domain}`,
+      `Tier    : ${tier === "deep" ? `Deep Scan (${scanCount} checks)` : `Basic Scan (${scanCount} checks)`}`,
+      `Session : ${data.id}`,
+      `────────────────────────────────────────────────────`,
+    ];
+    lines.forEach((text, j) => {
+      const tid = setTimeout(() => {
+        setTerminalLines((prev) => [
+          ...prev,
+          { id: lineIdRef.current++, text, ts: "" },
+        ]);
+      }, j * 40);
+      timeoutsRef.current.push(tid);
+    });
+  }, [data?.id, domain, tier, steps.length]);
+
+  // Emit log lines when steps become active
+  useEffect(() => {
+    if (!domain || domain === "") return;
+    statuses.forEach((status, i) => {
+      const step = steps[i];
+      if (!step) return;
+      if (emittedStepsRef.current.has(step.id)) return;
+      if (status !== "running" && status !== "done") return;
+
+      emittedStepsRef.current.add(step.id);
+      const logLines = (STEP_LOGS[step.id] ?? []).map((l) =>
+        l.replace(/\{domain\}/g, domain),
+      );
+      const interval = status === "done" ? 0 : 260;
+
+      logLines.forEach((text, j) => {
+        const tid = setTimeout(() => {
+          setTerminalLines((prev) => [
+            ...prev,
+            { id: lineIdRef.current++, text, ts: nowHHMMSS() },
+          ]);
+        }, j * interval);
+        timeoutsRef.current.push(tid);
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusKey, domain]);
+
+  // Auto-scroll terminal to bottom
+  useEffect(() => {
+    if (terminalBodyRef.current) {
+      terminalBodyRef.current.scrollTop = terminalBodyRef.current.scrollHeight;
+    }
+  }, [terminalLines.length]);
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      timeoutsRef.current.forEach(clearTimeout);
+    };
+  }, []);
+
+  // ── Loading / error guards ────────────────────────────────────────────────
   if (isLoading && !data) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -418,15 +557,18 @@ export default function ScanProgressPage() {
     );
   }
 
+  const doneCount = statuses.filter((s) => s === "done").length;
+  const currentStep = steps[statuses.indexOf("running")];
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
 
       {/* ── Header ── */}
-      <div className="text-center mb-8">
+      <div className="text-center mb-6">
         <div
           className={cn(
-            "w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5 border",
+            "w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 border",
             isComplete
               ? "bg-green-500/10 border-green-500/20"
               : isFailed
@@ -435,23 +577,27 @@ export default function ScanProgressPage() {
           )}
         >
           {isComplete ? (
-            <CheckCircle2 className="w-8 h-8 text-green-500" />
+            <CheckCircle2 className="w-7 h-7 text-green-500" />
           ) : isFailed ? (
-            <XCircle className="w-8 h-8 text-red-400" />
+            <XCircle className="w-7 h-7 text-red-400" />
           ) : isQueued ? (
-            <Clock className="w-8 h-8 text-primary" />
+            <Clock className="w-7 h-7 text-primary" />
           ) : (
-            <Loader2 className="w-8 h-8 text-primary animate-spin" />
+            <Loader2 className="w-7 h-7 text-primary animate-spin" />
           )}
         </div>
 
-        <div className="flex items-center justify-center gap-2 mb-1.5">
-          <h1 className="text-2xl font-bold tracking-tight">
-            {isComplete ? "Scan Complete" : isFailed ? "Scan Failed" : domain}
+        <div className="flex items-center justify-center gap-2 mb-1">
+          <h1 className="text-xl font-bold tracking-tight">
+            {isComplete
+              ? "Scan Complete"
+              : isFailed
+                ? "Scan Failed"
+                : domain || "Security Scan"}
           </h1>
           <span
             className={cn(
-              "text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border",
+              "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border",
               tier === "deep"
                 ? "bg-primary/10 border-primary/20 text-primary"
                 : "bg-white/5 border-white/10 text-muted-foreground",
@@ -466,131 +612,134 @@ export default function ScanProgressPage() {
         </p>
       </div>
 
-      {/* ── Steps card ── */}
-      <div className="glass-panel rounded-3xl overflow-hidden">
-        <div className="px-4 py-5 flex flex-col gap-0.5">
-          {steps.map((step, i) => {
-            const stepStatus = statuses[i];
-            const Icon = step.icon;
-            const isRunning = stepStatus === "running";
-            const isDone = stepStatus === "done";
+      {/* ── Terminal window ── */}
+      <div className="rounded-2xl overflow-hidden border border-white/10 shadow-2xl shadow-black/50 mb-4">
 
+        {/* Window chrome */}
+        <div className="bg-[#1e1e1e] border-b border-white/[0.06] px-4 py-2.5 flex items-center gap-3">
+          <div className="flex gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-red-500/80" />
+            <span className="w-3 h-3 rounded-full bg-yellow-500/80" />
+            <span className="w-3 h-3 rounded-full bg-green-500/80" />
+          </div>
+          <span className="flex-1 text-center text-[11px] font-mono text-slate-500 tracking-wide">
+            vibescan — security terminal
+            {domain ? ` — ${domain}` : ""}
+          </span>
+          {/* Status dot */}
+          <div className="flex items-center gap-1.5">
+            {!isFailed && !isComplete && (
+              <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+            )}
+            {isComplete && <span className="w-2 h-2 rounded-full bg-green-500" />}
+            {isFailed && <span className="w-2 h-2 rounded-full bg-red-500" />}
+            <span className="text-[10px] font-mono text-slate-600 uppercase tracking-wider">
+              {isComplete ? "done" : isFailed ? "failed" : isQueued ? "waiting" : data?.status ?? "idle"}
+            </span>
+          </div>
+        </div>
+
+        {/* Terminal body */}
+        <div
+          ref={terminalBodyRef}
+          className="bg-[#0d1117] font-mono text-[12.5px] leading-relaxed h-[420px] overflow-y-auto px-5 py-4 scroll-smooth"
+          style={{ scrollbarWidth: "thin", scrollbarColor: "#30363d transparent" }}
+        >
+          {/* Queued placeholder */}
+          {isQueued && terminalLines.length === 0 && (
+            <div className="text-slate-600 flex flex-col gap-1">
+              <span className="text-primary/50">VibeScan Enterprise Security Scanner v2.0</span>
+              <span>────────────────────────────────────────────────────</span>
+              <span>Connecting to job queue...</span>
+              <span>Waiting for an available worker slot
+                <span className="inline-flex ml-1 gap-0.5">
+                  {[0, 1, 2].map((i) => (
+                    <span
+                      key={i}
+                      className="inline-block w-1 h-1 rounded-full bg-slate-600 animate-pulse"
+                      style={{ animationDelay: `${i * 200}ms` }}
+                    />
+                  ))}
+                </span>
+              </span>
+            </div>
+          )}
+
+          {/* Log lines */}
+          {terminalLines.map((line, i) => {
+            const isLast = i === terminalLines.length - 1;
             return (
-              <div
-                key={step.id}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-500",
-                  isRunning && "bg-primary/5 border border-primary/15",
-                  isDone && "opacity-50",
-                  !isRunning && !isDone && "opacity-20",
-                )}
-              >
-                {/* Status dot */}
-                <div className="shrink-0 w-5 flex justify-center">
-                  {isDone && <CheckCircle2 className="w-4 h-4 text-green-500" />}
-                  {isRunning && (
-                    <Loader2 className="w-4 h-4 text-primary animate-spin" />
-                  )}
-                  {!isDone && !isRunning && (
-                    <Circle className="w-3.5 h-3.5 text-muted-foreground/30" />
-                  )}
-                </div>
-
-                {/* Step icon */}
-                <div
-                  className={cn(
-                    "shrink-0 w-7 h-7 rounded-lg flex items-center justify-center",
-                    isRunning ? "bg-primary/10" : "bg-white/5",
-                  )}
-                >
-                  <Icon
-                    className={cn(
-                      "w-3.5 h-3.5",
-                      isRunning ? "text-primary" : "text-muted-foreground",
-                    )}
-                  />
-                </div>
-
-                {/* Labels */}
-                <div className="flex-1 min-w-0">
-                  <span
-                    className={cn(
-                      "text-sm",
-                      isRunning
-                        ? "font-semibold text-foreground"
-                        : "text-muted-foreground",
-                    )}
-                  >
-                    {step.label}
+              <div key={line.id} className="flex gap-3 leading-relaxed min-h-[1.4em]">
+                {line.ts ? (
+                  <span className="shrink-0 text-slate-700 select-none w-[52px]">
+                    {line.ts}
                   </span>
-                  {isRunning && (
-                    <p className="text-xs text-muted-foreground/60 truncate leading-snug mt-0.5">
-                      {step.sublabel}
-                    </p>
-                  )}
-                </div>
-
-                {isRunning && (
-                  <span className="shrink-0 text-[10px] font-semibold text-primary/60 tracking-wide uppercase">
-                    running
-                  </span>
+                ) : (
+                  <span className="shrink-0 w-[52px]" />
                 )}
+                <span className={cn("flex-1 whitespace-pre-wrap break-all", lineColor(line.text))}>
+                  {line.text}
+                  {isLast && !isComplete && !isFailed && (
+                    <span
+                      className="inline-block w-2 h-[1em] ml-0.5 bg-primary align-middle"
+                      style={{ animation: "blink 1.1s step-end infinite" }}
+                    />
+                  )}
+                </span>
               </div>
             );
           })}
+
+          {/* Complete banner */}
+          {isComplete && (
+            <div className="mt-4 flex flex-col gap-0.5 text-emerald-400">
+              <span>────────────────────────────────────────────────────</span>
+              <span>✓  Scan session complete. Report ready.</span>
+              <span className="text-slate-500 text-[11px]">Redirecting to your report…</span>
+            </div>
+          )}
+
+          {/* Failed banner */}
+          {isFailed && (
+            <div className="mt-4 flex flex-col gap-0.5 text-red-400">
+              <span>────────────────────────────────────────────────────</span>
+              <span>[!] Scan failed: {data?.error ?? "Unknown error"}</span>
+            </div>
+          )}
         </div>
 
-        {/* ── Progress footer ── */}
-        <div className="border-t border-white/5 px-6 py-5">
-          <div className="flex justify-between text-xs text-muted-foreground mb-2">
-            <span>
-              {doneCount} / {steps.length} checks complete
+        {/* Progress footer inside terminal chrome */}
+        <div className="bg-[#161b22] border-t border-white/[0.06] px-5 py-3">
+          <div className="flex items-center justify-between text-[11px] font-mono mb-2">
+            <span className="text-slate-500">
+              {doneCount}/{steps.length} checks
+              {currentStep ? (
+                <span className="ml-2 text-primary/70">
+                  ▸ {currentStep.label}
+                </span>
+              ) : null}
             </span>
-            <span>{progress}%</span>
+            <span className={cn(
+              "font-semibold",
+              isComplete ? "text-emerald-400" : isFailed ? "text-red-400" : "text-primary",
+            )}>
+              {progress}%
+            </span>
           </div>
-          <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+          <div className="h-1 bg-white/5 rounded-full overflow-hidden">
             <div
               className={cn(
                 "h-full rounded-full transition-all duration-700 ease-out",
-                isComplete
-                  ? "bg-green-500"
-                  : isFailed
-                    ? "bg-red-500"
-                    : "bg-primary",
+                isComplete ? "bg-emerald-500" : isFailed ? "bg-red-500" : "bg-primary",
               )}
               style={{ width: `${progress}%` }}
             />
           </div>
-
-          {isQueued && (
-            <p className="text-xs text-muted-foreground/50 text-center mt-3">
-              Your scan will begin shortly…
-            </p>
-          )}
-          {isComplete && (
-            <p className="text-xs text-green-500/80 text-center mt-3 flex items-center justify-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              Report ready — redirecting…
-            </p>
-          )}
-          {isFailed && (
-            <p className="text-xs text-red-400/70 text-center mt-3">
-              {data?.error
-                ? `Error: ${data.error}`
-                : "Something went wrong during the scan."}{" "}
-              <button
-                onClick={() => setLocation("/dashboard")}
-                className="underline hover:text-red-400"
-              >
-                Go to dashboard
-              </button>
-            </p>
-          )}
         </div>
       </div>
 
       {/* ── Footer nav ── */}
-      <div className="text-center mt-6">
+      <div className="text-center">
         <button
           onClick={() => setLocation("/dashboard")}
           className="text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -598,6 +747,9 @@ export default function ScanProgressPage() {
           ← Back to dashboard
         </button>
       </div>
+
+      {/* Cursor blink keyframe */}
+      <style>{`@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }`}</style>
     </div>
   );
 }
