@@ -25,13 +25,17 @@
 | 18 | Cache-Control headers missing | Info |
 | 19 | Mixed content (HTTP resources on HTTPS page) | Medium |
 
-**Cookie analysis** — runs per cookie in Set-Cookie:
+**Cookie analysis** — runs per cookie in Set-Cookie. Cookies are classified by
+name as likely session/auth cookies (`session`, `token`, `jwt`, `sid`,
+`PHPSESSID`, etc.) vs. everything else (UI-state flags, analytics/tracking
+IDs) — a missing flag means very different things for each, so they're scored
+separately:
 
-| # | Check | Severity if failing |
-|---|---|---|
-| 20 | Cookie missing `Secure` flag | Medium |
-| 21 | Cookie missing `HttpOnly` flag | Medium |
-| 22 | Cookie missing `SameSite` attribute | Low |
+| # | Check | Session cookie | Non-session cookie |
+|---|---|---|---|
+| 20 | Cookie missing `Secure` flag | High | Low |
+| 21 | Cookie missing `HttpOnly` flag | Medium | Info |
+| 22 | Cookie missing `SameSite` attribute | Medium | Info |
 
 ---
 
@@ -73,7 +77,22 @@ Probes ~75 paths for publicly accessible files.
 | Credentials | `/.htpasswd` |
 | Admin panels | `/admin`, `/wp-admin`, `/phpmyadmin`, `/adminer` |
 | Spring Boot Actuators | `/actuator/env`, `/actuator/health`, `/actuator/beans`, `/actuator/mappings`, `/actuator/heapdump`, `/actuator/loggers`, `/actuator/metrics` |
-| API documentation | `/swagger.json`, `/openapi.json`, `/api-docs`, `/graphql`, `/api/swagger.json`, `/api/v1/swagger.json`, `/api/v2/swagger.json` |
+| API documentation (versioned paths) | `/api/swagger.json`, `/api/v1/swagger.json`, `/api/v2/swagger.json` |
+
+All path probes fingerprint the target's catch-all behavior first (fetch a
+random nonexistent path) and suppress any hit whose body matches that same
+shell — this stops multi-tenant platforms (GitHub, npm, PyPI — anywhere an
+arbitrary path segment renders a normal 200 page) and SPA client routers from
+false-positiving on every probed path. `/phpmyadmin`/`/adminer` additionally
+require an actual login-form marker (e.g. `pma_username` field), not just the
+tool's name appearing on the page.
+
+`/swagger.json`, `/openapi.json`, `/swagger-ui.html`, `/api-docs`, and
+`/graphql` (unversioned) moved out of this generic list — they're now covered
+by the dedicated `apiDocsProbe.ts` and `graphqlProbe.ts` modules (see
+SCAN_TESTS.md), which confirm real structure (an actual OpenAPI schema,
+Swagger UI bundle, or GraphQL introspection response) instead of matching on
+keyword presence.
 | IDE configs | `.vscode/settings.json`, `.idea/workspace.xml` |
 | YAML configs | `config.yaml`, `config.yml`, `app.yaml` |
 | Java internals | `/WEB-INF/web.xml`, `/WEB-INF/classes/application.properties` |

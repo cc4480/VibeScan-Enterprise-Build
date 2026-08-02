@@ -5,6 +5,7 @@
  * VibeScan API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { AiAnalysisDetectedAgent } from "./aiAnalysisDetectedAgent";
 
 export interface AiAnalysis {
   overallRisk: string;
@@ -13,5 +14,6 @@ export interface AiAnalysis {
   /** @nullable */
   complianceNotes?: string | null;
   agentFixPrompt?: string;
-  detectedAgent?: string;
+  /** The AI coding tool/platform detected from the scanned app's tech stack, used to format agentFixPrompt. */
+  detectedAgent?: AiAnalysisDetectedAgent;
 }

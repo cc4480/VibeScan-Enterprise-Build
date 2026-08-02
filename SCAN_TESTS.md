@@ -37,7 +37,7 @@ Target URL
                                      crt.sh + brute-force, TCP port scan (30 ports)
 ```
 
-False-positive philosophy: every check requires a **positive confirmation signal** — not just a non-200 absence or a keyword match. Findings cite the exact HTTP response, header value, or decoded data that triggered them.
+False-positive philosophy: every check requires a **positive confirmation signal** — not just a non-200 absence or a keyword match. Findings cite the exact HTTP response, header value, or decoded data that triggered them. Path-existence probes additionally fingerprint the target's catch-all/SPA routing behavior before trusting any HTTP 200 (see §2.1) — without this, multi-tenant platforms and client-routed SPAs false-positive on nearly every probed path.
 
 ---
 
@@ -61,9 +61,12 @@ Passive analysis of the initial HTTP response headers and page HTML.
 | CORS wildcard | `Access-Control-Allow-Origin: *` on non-public API | Medium |
 | Server version disclosure | `Server` header contains version number (e.g. `nginx/1.18.0`) | Low |
 | X-Powered-By disclosure | `X-Powered-By` header present (e.g. `Express`, `PHP/8.1`) | Info |
-| Cookie missing `Secure` flag | `Set-Cookie` without `Secure` (skips infra cookies: `__cf_bm`, `_ga`, etc.) | High |
-| Cookie missing `HttpOnly` flag | `Set-Cookie` without `HttpOnly` | Medium |
-| Cookie missing `SameSite` | `Set-Cookie` without `SameSite` | Medium |
+| Session cookie missing `Secure` flag | `Set-Cookie` without `Secure` on a likely session/auth cookie name (`session`, `token`, `jwt`, `sid`, `PHPSESSID`, etc.) — skips infra cookies: `__cf_bm`, `_ga`, etc. | High |
+| Non-session cookie missing `Secure` flag | Same, but the cookie name doesn't look session/auth-related (UI-state flags, analytics IDs) | Low |
+| Session cookie missing `HttpOnly` flag | `Set-Cookie` without `HttpOnly` on a likely session/auth cookie | Medium |
+| Non-session cookie readable by JS | Same, non-session cookie name | Info |
+| Session cookie missing `SameSite` | `Set-Cookie` without `SameSite` on a likely session/auth cookie | Medium |
+| Non-session cookie missing `SameSite` | Same, non-session cookie name | Info |
 | Mixed content | HTTP resource referenced on HTTPS page | Medium |
 | Technology fingerprinting | Detected frameworks/servers surfaced in report (not a vulnerability) | Info |
 
@@ -97,9 +100,6 @@ Probes 50+ paths. Each has a `validate()` function that inspects the response bo
 | `/settings.php` | Drupal settings + DB credentials | Critical |
 | `/backup.sql`, `/dump.sql`, `/db.sql`, `/database.sql` | Raw database export downloadable | Critical |
 | `/backup.zip`, `/backup.tar.gz` | Backup archive with source + credentials | Critical |
-| `/swagger.json`, `/openapi.json` | API spec — full endpoint blueprint | Medium |
-| `/swagger-ui.html`, `/api-docs` | Interactive API docs | Medium |
-| `/graphql` | GraphQL endpoint accessible | Medium |
 | `/actuator/env` | Spring Boot actuator — dumps ALL env vars + secrets | Critical |
 | `/actuator/configprops` | Spring Boot config properties | Critical |
 | `/actuator/beans` | Spring Boot bean graph | Medium |
@@ -116,6 +116,22 @@ Probes 50+ paths. Each has a `validate()` function that inspects the response bo
 | `/.gitignore` | Reveals names of sensitive untracked files on server | Info |
 | `/server-status` | Apache server-status — live request URIs + tokens in URLs | Medium |
 | `/.DS_Store` | macOS metadata — discloses directory tree | Info |
+
+`phpMyAdmin`/`Adminer` findings require an actual login-form marker (e.g. a
+`pma_username` field, or Adminer's `auth[driver]` field / `adminer.org`
+credit link) — not just the tool's name appearing on the page. `crossdomain.xml`
+only fires on genuine wildcard access (`domain="*"` or
+`permitted-cross-domain-policies="all"`) — a restrictive policy like
+`master-only` (GitHub's, for example) is not flagged. `/swagger.json`,
+`/openapi.json`, `/swagger-ui.html`, `/api-docs`, and unversioned `/graphql`
+were removed from this list — they're covered more rigorously by §6 and §11
+below (which confirm real structure, not keyword presence). Every path probe
+here also fingerprints the target's catch-all behavior first — a GET to a
+random nonexistent path — and suppresses any hit whose body matches that same
+shell (body size within 3%, or identical `<title>`). This is what stops
+multi-tenant platforms (GitHub, npm, PyPI — anywhere an arbitrary path
+segment renders a normal 200 page) and SPA client routers from
+false-positiving on every probed path (`spaCatchAll.ts`, shared with §11).
 
 ### 2.2 HTTP Methods
 
@@ -531,7 +547,7 @@ Extracts bucket/container references from HTML + inline JS. Runs all listing che
 Follows same-domain `<a href>` links, then for each inner page:
 - Checks security headers (reports gaps vs. the root page — catches CDN bypasses on `/api/*` routes)
 - Probes sensitive files relative to the discovered path
-- Checks cookie flags
+- Checks cookie flags — same session vs. non-session classification and severities as §1 (Transport Security) above, evaluated independently per page
 
 Additionally probes high-value paths regardless of whether they appear in HTML:
 
