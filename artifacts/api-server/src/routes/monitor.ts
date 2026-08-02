@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, monitorSubscriptionsTable, cveAlertsTable, reportsTable } from "@workspace/db";
-import { eq, and, desc, count } from "drizzle-orm";
+import { eq, and, desc, count, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { enqueueScan } from "../lib/queue";
 import { scansTable } from "@workspace/db";
@@ -46,13 +46,6 @@ router.post("/monitor/subscriptions", async (req, res): Promise<void> => {
   }
 
   const { targetUrl } = parsed.data;
-  const paymentsDisabled = process.env.DISABLE_PAYMENTS === "true";
-
-  if (!paymentsDisabled) {
-    res.status(503).json({ error: "Subscription payments are not yet configured." });
-    return;
-  }
-
   // Check for an existing active subscription for this user+URL
   const [existing] = await db
     .select()
@@ -155,72 +148,79 @@ router.get("/monitor/subscriptions", async (req, res): Promise<void> => {
     return;
   }
 
-  const subs = await db
-    .select()
-    .from(monitorSubscriptionsTable)
-    .where(eq(monitorSubscriptionsTable.userId, req.user.id))
-    .orderBy(desc(monitorSubscriptionsTable.createdAt));
+  try {
+    const subs = await db
+      .select()
+      .from(monitorSubscriptionsTable)
+      .where(eq(monitorSubscriptionsTable.userId, req.user.id))
+      .orderBy(desc(monitorSubscriptionsTable.createdAt));
 
-  // Attach latest report info and alert count to each subscription
-  const enriched = await Promise.all(
-    subs.map(async (sub) => {
-      // Resolve the report: prefer lastReportId, fall back to most-recent report for the URL
-      let resolvedReport: { id: string; scannedAt: Date; data: unknown } | null = null;
+    if (subs.length === 0) {
+      res.json([]);
+      return;
+    }
 
-      if (sub.lastReportId) {
-        const [r] = await db
-          .select({ id: reportsTable.id, scannedAt: reportsTable.scannedAt, data: reportsTable.data })
-          .from(reportsTable)
-          .where(eq(reportsTable.id, sub.lastReportId));
-        resolvedReport = r ?? null;
-      }
+    // Batch-fetch all referenced reports in one query
+    const reportIds = subs.map((s) => s.lastReportId).filter((id): id is string => !!id);
+    const reportsById = new Map<string, { id: string; scannedAt: Date; data: unknown }>();
+    if (reportIds.length > 0) {
+      const rows = await db
+        .select({ id: reportsTable.id, scannedAt: reportsTable.scannedAt, data: reportsTable.data })
+        .from(reportsTable)
+        .where(inArray(reportsTable.id, reportIds));
+      rows.forEach((r) => reportsById.set(r.id, r));
+    }
 
-      // Fallback: look up the most recent report for this user+URL
-      if (!resolvedReport) {
-        resolvedReport = await fetchLatestReport(sub.userId, sub.targetUrl);
-        // If we found one via fallback, backfill the subscription row so future
-        // calls use the fast path.
-        if (resolvedReport) {
-          await db
-            .update(monitorSubscriptionsTable)
-            .set({
-              lastReportId: resolvedReport.id,
-              lastScanAt: resolvedReport.scannedAt,
-            })
-            .where(eq(monitorSubscriptionsTable.id, sub.id));
+    // Batch-fetch all alert counts in one query
+    const subIds = subs.map((s) => s.id);
+    const alertCounts = await db
+      .select({ subscriptionId: cveAlertsTable.subscriptionId, value: count() })
+      .from(cveAlertsTable)
+      .where(inArray(cveAlertsTable.subscriptionId, subIds))
+      .groupBy(cveAlertsTable.subscriptionId);
+    const alertCountMap = new Map(alertCounts.map((a) => [a.subscriptionId, a.value]));
+
+    // Enrich each subscription — fall back to latest report lookup only when needed
+    const enriched = await Promise.all(
+      subs.map(async (sub) => {
+        let resolvedReport = sub.lastReportId ? (reportsById.get(sub.lastReportId) ?? null) : null;
+
+        if (!resolvedReport) {
+          resolvedReport = await fetchLatestReport(sub.userId, sub.targetUrl);
+          // Backfill async — never block the response on a write inside GET
+          if (resolvedReport) {
+            void db
+              .update(monitorSubscriptionsTable)
+              .set({ lastReportId: resolvedReport.id, lastScanAt: resolvedReport.scannedAt })
+              .where(eq(monitorSubscriptionsTable.id, sub.id))
+              .catch(() => {/* non-fatal */});
+          }
         }
-      }
 
-      let lastReport: { id: string; grade: string | null; riskScore: number | null } | null = null;
-      if (resolvedReport) {
-        const data = resolvedReport.data as { summary?: { grade?: string; riskScore?: number } };
-        lastReport = {
-          id: resolvedReport.id,
-          grade: data.summary?.grade ?? null,
-          riskScore: data.summary?.riskScore ?? null,
+        let lastReport: { id: string; grade: string | null; riskScore: number | null } | null = null;
+        if (resolvedReport) {
+          const data = resolvedReport.data as { summary?: { grade?: string; riskScore?: number } };
+          lastReport = {
+            id: resolvedReport.id,
+            grade: data.summary?.grade ?? null,
+            riskScore: data.summary?.riskScore ?? null,
+          };
+        }
+
+        return {
+          ...sub,
+          lastScanAt: sub.lastScanAt ?? resolvedReport?.scannedAt ?? null,
+          lastReport,
+          alertCount: alertCountMap.get(sub.id) ?? 0,
         };
-      }
+      }),
+    );
 
-      // Count CVE alerts
-      const [{ value: alertCount }] = await db
-        .select({ value: count() })
-        .from(cveAlertsTable)
-        .where(eq(cveAlertsTable.subscriptionId, sub.id));
-
-      // Use the resolved scanAt so the card shows the correct date even before
-      // the subscription row was backfilled.
-      const lastScanAt = sub.lastScanAt ?? resolvedReport?.scannedAt ?? null;
-
-      return {
-        ...sub,
-        lastScanAt,
-        lastReport,
-        alertCount,
-      };
-    }),
-  );
-
-  res.json(enriched);
+    res.json(enriched);
+  } catch (err) {
+    req.log.error({ err }, "Failed to list subscriptions");
+    res.status(500).json({ error: "Failed to load subscriptions" });
+  }
 });
 
 // ── DELETE /api/monitor/subscriptions/:id ────────────────────────────────────
@@ -234,27 +234,32 @@ router.delete("/monitor/subscriptions/:id", async (req, res): Promise<void> => {
 
   const subId = req.params.id;
 
-  const [sub] = await db
-    .select()
-    .from(monitorSubscriptionsTable)
-    .where(
-      and(
-        eq(monitorSubscriptionsTable.id, subId),
-        eq(monitorSubscriptionsTable.userId, req.user.id),
-      ),
-    );
+  try {
+    const [sub] = await db
+      .select()
+      .from(monitorSubscriptionsTable)
+      .where(
+        and(
+          eq(monitorSubscriptionsTable.id, subId),
+          eq(monitorSubscriptionsTable.userId, req.user.id),
+        ),
+      );
 
-  if (!sub) {
-    res.status(404).json({ error: "Subscription not found" });
-    return;
+    if (!sub) {
+      res.status(404).json({ error: "Subscription not found" });
+      return;
+    }
+
+    await db
+      .update(monitorSubscriptionsTable)
+      .set({ status: "cancelled" })
+      .where(eq(monitorSubscriptionsTable.id, subId));
+
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to cancel subscription");
+    res.status(500).json({ error: "Failed to cancel subscription" });
   }
-
-  await db
-    .update(monitorSubscriptionsTable)
-    .set({ status: "cancelled" })
-    .where(eq(monitorSubscriptionsTable.id, subId));
-
-  res.json({ success: true });
 });
 
 // ── GET /api/monitor/subscriptions/:id/alerts ────────────────────────────────
@@ -283,13 +288,19 @@ router.get("/monitor/subscriptions/:id/alerts", async (req, res): Promise<void> 
     return;
   }
 
-  const alerts = await db
-    .select()
-    .from(cveAlertsTable)
-    .where(eq(cveAlertsTable.subscriptionId, subId))
-    .orderBy(desc(cveAlertsTable.detectedAt));
+  try {
+    const alerts = await db
+      .select()
+      .from(cveAlertsTable)
+      .where(eq(cveAlertsTable.subscriptionId, subId))
+      .orderBy(desc(cveAlertsTable.detectedAt))
+      .limit(200);
 
-  res.json(alerts);
+    res.json(alerts);
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch CVE alerts");
+    res.status(500).json({ error: "Failed to fetch alerts" });
+  }
 });
 
 export default router;

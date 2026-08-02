@@ -34,7 +34,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
   await db
     .update(scansTable)
     .set({ status: "scanning", startedAt: new Date() })
-    .where(eq(scansTable.id, scanId));
+    .where(and(eq(scansTable.id, scanId), eq(scansTable.status, "queued")));
 
   // ── 2. Run header scan + SSL Labs check in parallel ───────────────────
   log.info("Starting HTTP scan, SSL Labs check, and reconnaissance in parallel");
@@ -77,7 +77,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
     scanResult.tlsGrade = sslLabsResult.grade;
 
     // Add SSL Labs findings as vulnerabilities
-    if (sslLabsResult.grade && /^[C-F]$/.test(sslLabsResult.grade)) {
+    if (sslLabsResult.grade && /^([C-F]|T|M)$/.test(sslLabsResult.grade)) {
       scanResult.vulnerabilities.push({
         id: randomUUID(),
         name: `Weak TLS Configuration (SSL Labs Grade: ${sslLabsResult.grade})`,

@@ -45,7 +45,20 @@ app.use(
     },
   }),
 );
-app.use(cors({ credentials: true, origin: true }));
+const allowedOrigin = process.env.APP_ORIGIN ?? "http://localhost:3000";
+app.use(
+  cors({
+    credentials: true,
+    origin: (origin, callback) => {
+      // Allow same-origin requests (no Origin header) and the configured frontend origin
+      if (!origin || origin === allowedOrigin) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+  }),
+);
 app.use(cookieParser());
 
 // Stripe webhook needs raw body BEFORE json() middleware

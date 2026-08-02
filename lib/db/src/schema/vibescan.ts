@@ -36,13 +36,14 @@ export const reportsTable = pgTable("reports", {
 }, (table) => [
   index("idx_reports_user_id").on(table.userId),
   index("idx_reports_scan_id").on(table.scanId),
+  index("idx_reports_user_target_scanned").on(table.userId, table.targetUrl, table.scannedAt),
 ]);
 
 export const creditsTable = pgTable("credits", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull().unique(),
   balance: integer("balance").notNull().default(0),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
 
 export const monitorSubscriptionsTable = pgTable("monitor_subscriptions", {
@@ -69,7 +70,7 @@ export const cveAlertsTable = pgTable("cve_alerts", {
   cveId: text("cve_id").notNull(),
   cveSummary: text("cve_summary").notNull(),
   affectedTech: text("affected_tech").notNull(),
-  severity: text("severity").notNull(),
+  severity: text("severity", { enum: ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"] }).notNull().default("UNKNOWN"),
   triggerScanId: uuid("trigger_scan_id"),
   detectedAt: timestamp("detected_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [

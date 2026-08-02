@@ -17,6 +17,7 @@
     "cors": "^2",
     "drizzle-orm": "catalog:",
     "express": "^5",
+    "express-rate-limit": "^8.6.1",
     "pg-boss": "^12.14.0",
     "pino": "^9",
     "pino-http": "^10",

@@ -36,8 +36,7 @@ export const CREDITS_MAP: Record<string, number> = {
   pack_20: 20,
 };
 
-export function getOrigin(req: { headers: Record<string, string | string[] | undefined> }): string {
-  const proto = req.headers["x-forwarded-proto"] || "https";
-  const host = req.headers["x-forwarded-host"] || req.headers["host"] || "localhost";
-  return `${proto}://${host}`;
+export function getOrigin(_req?: unknown): string {
+  // Use the configured APP_ORIGIN — never trust request headers for redirect URLs
+  return process.env.APP_ORIGIN ?? "http://localhost:3000";
 }

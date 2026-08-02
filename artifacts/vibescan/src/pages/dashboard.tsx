@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
-import { useListScans, useGetCredits, useGetScanStatus, getGetScanStatusQueryKey } from "@workspace/api-client-react";
-import { Shield, Plus, Clock, CheckCircle2, AlertCircle, RefreshCw, FileText, Loader2, ArrowRight, Info, Zap as ZapIcon } from "lucide-react";
+import { useListScans, useGetScanStatus, getGetScanStatusQueryKey } from "@workspace/api-client-react";
+import { Shield, Plus, Clock, CheckCircle2, AlertCircle, RefreshCw, FileText, Loader2, ArrowRight, Info, Globe } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { Scan } from "@workspace/api-client-react";
@@ -34,12 +34,12 @@ function ScanRow({ initialScan, highlight }: { initialScan: Scan; highlight?: bo
     query: {
       queryKey: getGetScanStatusQueryKey(initialScan.id),
       refetchInterval: isPolling ? 3000 : false,
+      enabled: isPolling,
     },
   });
 
   const scan = statusData ?? initialScan;
 
-  // Auto-redirect to report when scan transitions from in-progress to complete
   useEffect(() => {
     if (
       wasPolling.current &&
@@ -55,7 +55,6 @@ function ScanRow({ initialScan, highlight }: { initialScan: Scan; highlight?: bo
     }
   }, [scan.status, scan, setLocation]);
 
-  // Scroll into view when highlighted (new scan from checkout)
   useEffect(() => {
     if (highlight && rowRef.current) {
       rowRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -115,7 +114,7 @@ function ScanRow({ initialScan, highlight }: { initialScan: Scan; highlight?: bo
       <td className="p-4 py-5">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center border border-white/5 shrink-0">
-            <GlobeIcon className="w-5 h-5 text-muted-foreground" />
+            <Globe className="w-5 h-5 text-muted-foreground" />
           </div>
           <div className="min-w-0">
             <div className="font-medium text-foreground truncate max-w-[180px] sm:max-w-[280px] lg:max-w-[360px]">
@@ -184,37 +183,15 @@ function ScanRow({ initialScan, highlight }: { initialScan: Scan; highlight?: bo
   );
 }
 
-function GlobeIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="24" height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <circle cx="12" cy="12" r="10" />
-      <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
-      <path d="M2 12h20" />
-    </svg>
-  );
-}
-
 export default function DashboardPage() {
   const params = new URLSearchParams(
     typeof window !== "undefined" ? window.location.search : "",
   );
   const highlightScanId = params.get("scan");
-  const creditsPurchased = params.get("credits") === "purchased";
 
-  const { data: scans, isLoading: loadingScans } = useListScans();
-  const { data: credits, isLoading: loadingCredits } = useGetCredits();
+  const { data: scans, isLoading, isError, error } = useListScans();
 
-  if (loadingScans || loadingCredits) {
+  if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center min-h-[60vh]">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -222,7 +199,36 @@ export default function DashboardPage() {
     );
   }
 
+  if (isError) {
+    const is401 = error && String(error).includes("401");
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-[60vh]">
+        <div className="text-center max-w-sm">
+          <AlertCircle className="w-10 h-10 text-red-400 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold mb-2">
+            {is401 ? "Sign in required" : "Failed to load scans"}
+          </h3>
+          <p className="text-muted-foreground text-sm mb-4">
+            {is401
+              ? "Please sign in to view your dashboard."
+              : "Something went wrong. Please refresh the page."}
+          </p>
+          {is401 ? (
+            <Link href="/login" className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold">
+              Sign In
+            </Link>
+          ) : (
+            <button onClick={() => window.location.reload()} className="px-4 py-2 bg-secondary text-foreground rounded-lg text-sm font-semibold border border-white/10">
+              Refresh
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const completedCount = scans?.filter((s) => s.status === 'complete').length ?? 0;
+  const activeCount = scans?.filter((s) => ['queued', 'scanning', 'analyzing'].includes(s.status)).length ?? 0;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -238,16 +244,6 @@ export default function DashboardPage() {
           <Plus className="w-4 h-4" /> New Scan
         </Link>
       </div>
-
-      {/* Credits purchased banner */}
-      {creditsPurchased && (
-        <div className="mb-6 flex items-center gap-3 px-5 py-4 bg-primary/10 border border-primary/30 rounded-2xl text-sm text-primary">
-          <ZapIcon className="w-5 h-5 shrink-0" />
-          <span>
-            <strong>Credits added!</strong> Your scan credits are now available. Select a scan tier below to use them.
-          </span>
-        </div>
-      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-10">
@@ -265,17 +261,11 @@ export default function DashboardPage() {
           <div className="text-4xl font-bold">{completedCount}</div>
         </div>
 
-        <div className="glass-card p-6 rounded-2xl flex flex-col gap-2 relative overflow-hidden group">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-          <div className="text-muted-foreground text-sm font-medium flex items-center gap-2 relative z-10">
-            <ZapIcon className="w-4 h-4 text-primary" /> Available Credits
+        <div className="glass-card p-6 rounded-2xl flex flex-col gap-2">
+          <div className="text-muted-foreground text-sm font-medium flex items-center gap-2">
+            <Loader2 className="w-4 h-4 text-primary" /> Active
           </div>
-          <div className="flex items-end justify-between relative z-10">
-            <div className="text-4xl font-bold text-primary">{credits?.balance ?? 0}</div>
-            <Link href="/scan" className="text-xs font-medium text-primary hover:underline underline-offset-4 pb-1">
-              Get more &rarr;
-            </Link>
-          </div>
+          <div className="text-4xl font-bold text-primary">{activeCount}</div>
         </div>
       </div>
 
@@ -311,7 +301,7 @@ export default function DashboardPage() {
             </div>
             <h3 className="text-xl font-bold mb-2">No scans yet</h3>
             <p className="text-muted-foreground max-w-sm mb-6">
-              You haven&apos;t run any security scans yet. Launch your first scan to see how secure your app is.
+              Run your first free security scan to see how secure your app is.
             </p>
             <Link
               href="/scan"
