@@ -14,6 +14,19 @@ import {
 const router: IRouter = Router();
 
 const PKCE_COOKIE = "oidc_pkce";
+
+// Simple in-memory rate limiter for the /login redirect (prevents OIDC redirect spam).
+const _loginAttempts = new Map<string, number[]>();
+const LOGIN_WINDOW_MS = 60_000;
+const LOGIN_MAX = 10;
+
+function isLoginRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const times = (_loginAttempts.get(ip) ?? []).filter((t) => now - t < LOGIN_WINDOW_MS);
+  times.push(now);
+  _loginAttempts.set(ip, times);
+  return times.length > LOGIN_MAX;
+}
 const PKCE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 function getCallbackUrl(req: Request): string {
@@ -23,6 +36,14 @@ function getCallbackUrl(req: Request): string {
 }
 
 router.get("/login", async (req: Request, res: Response): Promise<void> => {
+  const ip = String(
+    req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "unknown",
+  ).split(",")[0].trim();
+  if (isLoginRateLimited(ip)) {
+    res.status(429).send("Too many login attempts. Please try again later.");
+    return;
+  }
+
   try {
     const config = await getOidcConfig();
     const returnTo = typeof req.query["returnTo"] === "string" ? req.query["returnTo"] : "/";

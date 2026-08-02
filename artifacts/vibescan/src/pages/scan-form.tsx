@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useSeo } from "@/lib/seo";
-import { useCreateScan, useGetCredits } from "@workspace/api-client-react";
+import { useCreateScan } from "@workspace/api-client-react";
 import { Shield, Zap, Globe, Lock, CheckCircle2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ScanTier } from "@workspace/api-client-react";
@@ -47,11 +47,9 @@ export default function ScanFormPage() {
   const [tier, setTier] = useState<ScanTier>("deep");
   const [, setLocation] = useLocation();
 
-  const { data: credits, isLoading: loadingCredits } = useGetCredits();
   const createScan = useCreateScan();
 
   const selectedTier = TIERS.find((t) => t.id === tier);
-  const hasCredits = credits && credits.balance > 0;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,11 +64,7 @@ export default function ScanFormPage() {
       { data: { targetUrl, tier } },
       {
         onSuccess: (data) => {
-          if (data.checkoutUrl) {
-            window.location.href = data.checkoutUrl;
-          } else {
-            setLocation(`/scan/${data.scanId}?tier=${tier}`);
-          }
+          setLocation(`/scan/${data.scanId}?tier=${tier}`);
         },
       },
     );
@@ -122,13 +116,6 @@ export default function ScanFormPage() {
               <label className="text-sm font-semibold flex items-center gap-2">
                 <Zap className="w-4 h-4 text-primary" /> Scan Depth
               </label>
-
-              {!loadingCredits && hasCredits && (
-                <div className="flex items-center gap-1.5 px-3 py-1 bg-primary/10 border border-primary/20 rounded-full text-xs font-medium text-primary">
-                  <Zap className="w-3.5 h-3.5" />
-                  {credits.balance} Credit{credits.balance !== 1 ? "s" : ""} Available
-                </div>
-              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -2,8 +2,8 @@ import { useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useSeo } from "@/lib/seo";
-import { useListScans, useGetCredits, useGetScanStatus, getGetScanStatusQueryKey } from "@workspace/api-client-react";
-import { Shield, Plus, Clock, CheckCircle2, AlertCircle, RefreshCw, FileText, Loader2, ArrowRight, Info, Zap as ZapIcon, Bell, AlertTriangle } from "lucide-react";
+import { useListScans, useGetScanStatus, getGetScanStatusQueryKey } from "@workspace/api-client-react";
+import { Shield, Plus, Clock, CheckCircle2, AlertCircle, RefreshCw, FileText, Loader2, ArrowRight, Info, Bell, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { Scan } from "@workspace/api-client-react";
@@ -213,16 +213,14 @@ export default function DashboardPage() {
     typeof window !== "undefined" ? window.location.search : "",
   );
   const highlightScanId = params.get("scan");
-  const creditsPurchased = params.get("credits") === "purchased";
 
   const { data: scans, isLoading: loadingScans } = useListScans();
-  const { data: credits, isLoading: loadingCredits } = useGetCredits();
   const { data: monitors } = useQuery({
     queryKey: ["monitor-subscriptions"],
     queryFn: listMonitorSubscriptions,
   });
 
-  if (loadingScans || loadingCredits) {
+  if (loadingScans) {
     return (
       <div className="flex-1 flex items-center justify-center min-h-[60vh]">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -249,18 +247,8 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* Credits purchased banner */}
-      {creditsPurchased && (
-        <div className="mb-6 flex items-center gap-3 px-5 py-4 bg-primary/10 border border-primary/30 rounded-2xl text-sm text-primary">
-          <ZapIcon className="w-5 h-5 shrink-0" />
-          <span>
-            <strong>Credits added!</strong> Your scan credits are now available. Select a scan tier below to use them.
-          </span>
-        </div>
-      )}
-
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
         <div className="glass-card p-6 rounded-2xl flex flex-col gap-2">
           <div className="text-muted-foreground text-sm font-medium flex items-center gap-2">
             <RefreshCw className="w-4 h-4" /> Total Scans
@@ -273,19 +261,6 @@ export default function DashboardPage() {
             <Shield className="w-4 h-4 text-emerald-400" /> Completed
           </div>
           <div className="text-4xl font-bold">{completedCount}</div>
-        </div>
-
-        <div className="glass-card p-6 rounded-2xl flex flex-col gap-2 relative overflow-hidden group">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-          <div className="text-muted-foreground text-sm font-medium flex items-center gap-2 relative z-10">
-            <ZapIcon className="w-4 h-4 text-primary" /> Available Credits
-          </div>
-          <div className="flex items-end justify-between relative z-10">
-            <div className="text-4xl font-bold text-primary">{credits?.balance ?? 0}</div>
-            <Link href="/scan" className="text-xs font-medium text-primary hover:underline underline-offset-4 pb-1">
-              Get more &rarr;
-            </Link>
-          </div>
         </div>
 
         <Link
