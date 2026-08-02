@@ -10,7 +10,7 @@
 
 import {
   db, scansTable, reportsTable, monitorSubscriptionsTable, dismissedFindingsTable,
-  monitorScoreHistoryTable, monitorRegressionsTable,
+  monitorScoreHistoryTable, monitorRegressionsTable, usersTable,
 } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { computeNextScanAt } from "./monitorScheduler";
@@ -24,6 +24,7 @@ import { runRecon } from "./recon";
 import { warnIfLocalDataStale, OSV_CACHE_MAX_SIZE } from "./cveCheck";
 import { refreshEolData, loadEolCacheFromDb, EOL_REFRESH_QUEUE } from "./eolFetcher";
 import { callDeepSeek } from "./deepseek";
+import { decryptSecret } from "./crypto";
 import { checkSslLabs } from "./ssllabs";
 import { sendReportReadyEmail } from "./mailer";
 import { initBrowser, closeBrowser } from "./browser";
@@ -229,11 +230,27 @@ async function processScanJob(job: ScanJob): Promise<void> {
       { total: scanResult.vulnerabilities.length, gated: vulnsForAi.length },
       "Confidence-gated findings passed to AI",
     );
+
+    // Prefer the user's own DeepSeek key (set in Settings) over the server default
+    let userApiKey: string | null = null;
+    const [user] = await db
+      .select({ deepseekApiKeyEncrypted: usersTable.deepseekApiKeyEncrypted })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId));
+    if (user?.deepseekApiKeyEncrypted) {
+      try {
+        userApiKey = decryptSecret(user.deepseekApiKeyEncrypted);
+      } catch (err) {
+        log.warn({ err }, "Failed to decrypt user's DeepSeek key — falling back to server default");
+      }
+    }
+
     aiAnalysis = await callDeepSeek(
       targetUrl,
       vulnsForAi,
       scanResult.technologies,
       tier,
+      userApiKey,
     );
     if (aiAnalysis) {
       log.info("DeepSeek analysis complete");

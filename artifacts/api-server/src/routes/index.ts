@@ -8,6 +8,7 @@ import stripeRouter from "./stripe";
 import monitorRouter from "./monitor";
 import dismissalsRouter from "./dismissals";
 import sharesRouter from "./shares";
+import settingsRouter from "./settings";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(stripeRouter);
 router.use(monitorRouter);
 router.use(dismissalsRouter);
 router.use(sharesRouter);
+router.use(settingsRouter);
 
 export default router;

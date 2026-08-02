@@ -7,6 +7,7 @@
  */
 
 export * from "./aiAnalysis";
+export * from "./aiAnalysisDetectedAgent";
 export * from "./authorizationSessionHeaderParameter";
 export * from "./authUser";
 export * from "./authUserEnvelope";
@@ -22,6 +23,7 @@ export * from "./createShareRequestExpiresIn";
 export * from "./credits";
 export * from "./cveAlert";
 export * from "./cveAlertSeverity";
+export * from "./deepseekKeyStatus";
 export * from "./deleteDismissalParams";
 export * from "./dismissalEntry";
 export * from "./errorEnvelope";
@@ -48,6 +50,7 @@ export * from "./scanStatus";
 export * from "./scanStatusEnum";
 export * from "./scanSummary";
 export * from "./scanTier";
+export * from "./setDeepseekKeyRequest";
 export * from "./sharedReport";
 export * from "./triggerMonitorScan200";
 export * from "./vulnerability";

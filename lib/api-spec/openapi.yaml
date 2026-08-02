@@ -537,6 +537,80 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
+  /settings/deepseek-key:
+    get:
+      tags: [settings]
+      operationId: getDeepseekKeyStatus
+      summary: Get whether the current user has a personal DeepSeek API key configured
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        '200':
+          description: DeepSeek key status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeepseekKeyStatus'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    put:
+      tags: [settings]
+      operationId: setDeepseekKey
+      summary: Set (or replace) the current user's personal DeepSeek API key
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetDeepseekKeyRequest'
+      responses:
+        '200':
+          description: Key saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeepseekKeyStatus'
+        '400':
+          description: Invalid key format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    delete:
+      tags: [settings]
+      operationId: deleteDeepseekKey
+      summary: Remove the current user's personal DeepSeek API key
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        '200':
+          description: Key removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeepseekKeyStatus'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
   /monitor/subscriptions:
     get:
       tags: [monitor]
@@ -1035,6 +1109,10 @@ components:
           type: [string, 'null']
         agentFixPrompt:
           type: string
+        detectedAgent:
+          type: string
+          enum: [lovable, bolt, nextjs, wordpress, supabase, generic]
+          description: The AI coding tool/platform detected from the scanned app's tech stack, used to format agentFixPrompt.
 
     ReportData:
       type: object
@@ -1242,6 +1320,24 @@ components:
       properties:
         balance:
           type: integer
+
+    DeepseekKeyStatus:
+      type: object
+      required: [configured, last4]
+      properties:
+        configured:
+          type: boolean
+        last4:
+          type: [string, 'null']
+          description: Last 4 characters of the configured key, for display only. Null if unconfigured.
+
+    SetDeepseekKeyRequest:
+      type: object
+      required: [apiKey]
+      properties:
+        apiKey:
+          type: string
+          minLength: 10
 
     MonitorSubscription:
       type: object

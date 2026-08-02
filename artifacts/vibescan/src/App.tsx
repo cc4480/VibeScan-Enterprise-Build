@@ -15,6 +15,7 @@ import ReportViewer from "@/pages/report-viewer";
 import MonitorPage from "@/pages/monitor";
 import SharedReport from "@/pages/shared-report";
 import LearnPage from "@/pages/learn";
+import SettingsPage from "@/pages/settings";
 
 // ── ErrorBoundary ────────────────────────────────────────────────────────────
 
@@ -116,6 +117,7 @@ function Router() {
             <Route path="/report/:id" component={ReportViewer} />
             <Route path="/monitor" component={MonitorPage} />
             <Route path="/learn" component={LearnPage} />
+            <Route path="/settings" component={SettingsPage} />
             <Route component={NotFound} />
           </Switch>
         </Layout>

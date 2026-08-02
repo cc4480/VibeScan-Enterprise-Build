@@ -181,6 +181,21 @@ export interface ScanSummary {
   executiveSummary: string;
 }
 
+/**
+ * The AI coding tool/platform detected from the scanned app's tech stack, used to format agentFixPrompt.
+ */
+export type AiAnalysisDetectedAgent =
+  (typeof AiAnalysisDetectedAgent)[keyof typeof AiAnalysisDetectedAgent];
+
+export const AiAnalysisDetectedAgent = {
+  lovable: "lovable",
+  bolt: "bolt",
+  nextjs: "nextjs",
+  wordpress: "wordpress",
+  supabase: "supabase",
+  generic: "generic",
+} as const;
+
 export interface AiAnalysis {
   overallRisk: string;
   topPriorities: string[];
@@ -188,7 +203,8 @@ export interface AiAnalysis {
   /** @nullable */
   complianceNotes?: string | null;
   agentFixPrompt?: string;
-  detectedAgent?: string;
+  /** The AI coding tool/platform detected from the scanned app's tech stack, used to format agentFixPrompt. */
+  detectedAgent?: AiAnalysisDetectedAgent;
 }
 
 export type ReconResultSubdomainsItem = {
@@ -316,6 +332,20 @@ export interface CreateShareRequest {
 
 export interface Credits {
   balance: number;
+}
+
+export interface DeepseekKeyStatus {
+  configured: boolean;
+  /**
+   * Last 4 characters of the configured key, for display only. Null if unconfigured.
+   * @nullable
+   */
+  last4: string | null;
+}
+
+export interface SetDeepseekKeyRequest {
+  /** @minLength 10 */
+  apiKey: string;
 }
 
 export type MonitorSubscriptionStatus =

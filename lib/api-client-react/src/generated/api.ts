@@ -28,6 +28,7 @@ import type {
   CreateShareRequest,
   Credits,
   CveAlert,
+  DeepseekKeyStatus,
   DeleteDismissalParams,
   DismissalEntry,
   ErrorEnvelope,
@@ -44,6 +45,7 @@ import type {
   ReportShare,
   Scan,
   ScanStatus,
+  SetDeepseekKeyRequest,
   SharedReport,
   TriggerMonitorScan200,
 } from "./api.schemas";
@@ -1678,6 +1680,248 @@ export function useGetCredits<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Get whether the current user has a personal DeepSeek API key configured
+ */
+export const getGetDeepseekKeyStatusUrl = () => {
+  return `/api/settings/deepseek-key`;
+};
+
+export const getDeepseekKeyStatus = async (
+  options?: RequestInit,
+): Promise<DeepseekKeyStatus> => {
+  return customFetch<DeepseekKeyStatus>(getGetDeepseekKeyStatusUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetDeepseekKeyStatusQueryKey = () => {
+  return [`/api/settings/deepseek-key`] as const;
+};
+
+export const getGetDeepseekKeyStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDeepseekKeyStatus>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDeepseekKeyStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDeepseekKeyStatusQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getDeepseekKeyStatus>>
+  > = ({ signal }) => getDeepseekKeyStatus({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDeepseekKeyStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDeepseekKeyStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDeepseekKeyStatus>>
+>;
+export type GetDeepseekKeyStatusQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Get whether the current user has a personal DeepSeek API key configured
+ */
+
+export function useGetDeepseekKeyStatus<
+  TData = Awaited<ReturnType<typeof getDeepseekKeyStatus>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDeepseekKeyStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDeepseekKeyStatusQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Set (or replace) the current user's personal DeepSeek API key
+ */
+export const getSetDeepseekKeyUrl = () => {
+  return `/api/settings/deepseek-key`;
+};
+
+export const setDeepseekKey = async (
+  setDeepseekKeyRequest: SetDeepseekKeyRequest,
+  options?: RequestInit,
+): Promise<DeepseekKeyStatus> => {
+  return customFetch<DeepseekKeyStatus>(getSetDeepseekKeyUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(setDeepseekKeyRequest),
+  });
+};
+
+export const getSetDeepseekKeyMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setDeepseekKey>>,
+    TError,
+    { data: BodyType<SetDeepseekKeyRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setDeepseekKey>>,
+  TError,
+  { data: BodyType<SetDeepseekKeyRequest> },
+  TContext
+> => {
+  const mutationKey = ["setDeepseekKey"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setDeepseekKey>>,
+    { data: BodyType<SetDeepseekKeyRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return setDeepseekKey(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetDeepseekKeyMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setDeepseekKey>>
+>;
+export type SetDeepseekKeyMutationBody = BodyType<SetDeepseekKeyRequest>;
+export type SetDeepseekKeyMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Set (or replace) the current user's personal DeepSeek API key
+ */
+export const useSetDeepseekKey = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setDeepseekKey>>,
+    TError,
+    { data: BodyType<SetDeepseekKeyRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setDeepseekKey>>,
+  TError,
+  { data: BodyType<SetDeepseekKeyRequest> },
+  TContext
+> => {
+  return useMutation(getSetDeepseekKeyMutationOptions(options));
+};
+
+/**
+ * @summary Remove the current user's personal DeepSeek API key
+ */
+export const getDeleteDeepseekKeyUrl = () => {
+  return `/api/settings/deepseek-key`;
+};
+
+export const deleteDeepseekKey = async (
+  options?: RequestInit,
+): Promise<DeepseekKeyStatus> => {
+  return customFetch<DeepseekKeyStatus>(getDeleteDeepseekKeyUrl(), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteDeepseekKeyMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteDeepseekKey>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteDeepseekKey>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["deleteDeepseekKey"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteDeepseekKey>>,
+    void
+  > = () => {
+    return deleteDeepseekKey(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteDeepseekKeyMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteDeepseekKey>>
+>;
+
+export type DeleteDeepseekKeyMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Remove the current user's personal DeepSeek API key
+ */
+export const useDeleteDeepseekKey = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteDeepseekKey>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteDeepseekKey>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getDeleteDeepseekKeyMutationOptions(options));
+};
 
 /**
  * @summary List the current user's monitoring subscriptions

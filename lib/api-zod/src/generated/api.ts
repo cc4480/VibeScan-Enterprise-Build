@@ -275,7 +275,19 @@ export const GetReportResponse = zod.object({
         quickWins: zod.array(zod.string()),
         complianceNotes: zod.string().nullish(),
         agentFixPrompt: zod.string().optional(),
-        detectedAgent: zod.string().optional(),
+        detectedAgent: zod
+          .enum([
+            "lovable",
+            "bolt",
+            "nextjs",
+            "wordpress",
+            "supabase",
+            "generic",
+          ])
+          .optional()
+          .describe(
+            "The AI coding tool\/platform detected from the scanned app's tech stack, used to format agentFixPrompt.",
+          ),
       })
       .optional(),
     recon: zod
@@ -527,7 +539,19 @@ export const GetSharedReportResponse = zod.object({
         quickWins: zod.array(zod.string()),
         complianceNotes: zod.string().nullish(),
         agentFixPrompt: zod.string().optional(),
-        detectedAgent: zod.string().optional(),
+        detectedAgent: zod
+          .enum([
+            "lovable",
+            "bolt",
+            "nextjs",
+            "wordpress",
+            "supabase",
+            "generic",
+          ])
+          .optional()
+          .describe(
+            "The AI coding tool\/platform detected from the scanned app's tech stack, used to format agentFixPrompt.",
+          ),
       })
       .optional(),
     recon: zod
@@ -584,6 +608,72 @@ export const GetCreditsHeader = zod.object({
 
 export const GetCreditsResponse = zod.object({
   balance: zod.number(),
+});
+
+/**
+ * @summary Get whether the current user has a personal DeepSeek API key configured
+ */
+export const GetDeepseekKeyStatusHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — `Bearer <sid>`."),
+});
+
+export const GetDeepseekKeyStatusResponse = zod.object({
+  configured: zod.boolean(),
+  last4: zod
+    .string()
+    .nullable()
+    .describe(
+      "Last 4 characters of the configured key, for display only. Null if unconfigured.",
+    ),
+});
+
+/**
+ * @summary Set (or replace) the current user's personal DeepSeek API key
+ */
+export const SetDeepseekKeyHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — `Bearer <sid>`."),
+});
+
+export const setDeepseekKeyBodyApiKeyMin = 10;
+
+export const SetDeepseekKeyBody = zod.object({
+  apiKey: zod.string().min(setDeepseekKeyBodyApiKeyMin),
+});
+
+export const SetDeepseekKeyResponse = zod.object({
+  configured: zod.boolean(),
+  last4: zod
+    .string()
+    .nullable()
+    .describe(
+      "Last 4 characters of the configured key, for display only. Null if unconfigured.",
+    ),
+});
+
+/**
+ * @summary Remove the current user's personal DeepSeek API key
+ */
+export const DeleteDeepseekKeyHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — `Bearer <sid>`."),
+});
+
+export const DeleteDeepseekKeyResponse = zod.object({
+  configured: zod.boolean(),
+  last4: zod
+    .string()
+    .nullable()
+    .describe(
+      "Last 4 characters of the configured key, for display only. Null if unconfigured.",
+    ),
 });
 
 /**
