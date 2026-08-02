@@ -101,6 +101,7 @@ import { runGraphqlProbe } from "./graphqlProbe";
 import { runApiDocsProbe } from "./apiDocsProbe";
 import { runNextjsProbe } from "./nextjsProbe";
 import { runStorageProbe } from "./storageProbe";
+import { isSpa, renderPage } from "./browser";
 
 export interface ScanVulnerability {
   id: string;
@@ -131,6 +132,8 @@ export interface ScanResult {
   pagesScanned: string[];
   /** High-value probe paths that returned HTTP 404 during the crawl (see CrawlResult.probedNotFound) */
   probedNotFound: string[];
+  /** True when the root page was rendered via headless browser (SPA detected) */
+  renderedWithBrowser?: boolean;
 }
 
 const FETCH_TIMEOUT_MS = 20_000;
@@ -286,6 +289,20 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
   response.headers.forEach((val, key) => {
     rawHeaders[key] = val;
   });
+
+  // ── SPA detection + headless rendering (deep tier only) ───────────────────
+  // If the server returned a JS-shell SPA (empty <div id="root"> etc.), re-fetch
+  // via headless browser so content analysis operates on the fully-rendered DOM.
+  // HTTP security headers stay from the raw fetch above — they're identical.
+  let renderedWithBrowser = false;
+  if (tier === "deep" && isSpa(html)) {
+    const rendered = await renderPage(finalUrl).catch(() => null);
+    if (rendered) {
+      html = rendered.html;
+      finalUrl = rendered.finalUrl || finalUrl;
+      renderedWithBrowser = true;
+    }
+  }
 
   const isHttps = finalUrl.startsWith("https://");
   const tlsGrade = isHttps ? "A" : null;
@@ -751,6 +768,7 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
     rawHeaders,
     pagesScanned: crawlResult.pagesVisited,
     probedNotFound: crawlResult.probedNotFound,
+    renderedWithBrowser,
   };
 }
 
