@@ -18,6 +18,7 @@ import { refreshEolData, loadEolCacheFromDb, EOL_REFRESH_QUEUE } from "./eolFetc
 import { callDeepSeek } from "./deepseek";
 import { checkSslLabs } from "./ssllabs";
 import { sendReportReadyEmail } from "./mailer";
+import { initBrowser, closeBrowser } from "./browser";
 import { logger } from "./logger";
 import { randomUUID } from "node:crypto";
 import type { Job } from "pg-boss";
@@ -166,6 +167,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
     tlsGrade: scanResult.tlsGrade,
     pagesScanned: scanResult.pagesScanned,
     probedNotFound: scanResult.probedNotFound,
+    renderedWithBrowser: scanResult.renderedWithBrowser ?? false,
     summary: {
       totalVulnerabilities: scanResult.vulnerabilities.length,
       critical: severityCounts["critical"] ?? 0,
@@ -296,6 +298,19 @@ export async function startWorker(): Promise<void> {
     { osvCacheMaxSize: OSV_CACHE_MAX_SIZE, envVar: "OSV_CACHE_MAX_SIZE" },
     "[cveCheck] OSV cache initialised",
   );
+
+  // Launch headless browser for SPA rendering (deep tier scans).
+  // Non-fatal — if Chromium is unavailable the scanner falls back to raw fetch.
+  await initBrowser();
+
+  // Gracefully close the browser on worker shutdown so the Chromium process
+  // does not linger after the Node.js process exits.
+  const shutdown = async () => {
+    await closeBrowser();
+    process.exit(0);
+  };
+  process.once("SIGTERM", () => { void shutdown(); });
+  process.once("SIGINT",  () => { void shutdown(); });
 
   // Hydrate EOL cache from the last DB-persisted fetch BEFORE the staleness check
   // so that warnIfLocalDataStale() uses the live fetchedAt timestamp, not the

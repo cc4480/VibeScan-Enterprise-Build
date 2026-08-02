@@ -58,6 +58,7 @@ import { checkSubdomainTakeover } from "./subdomainTakeover";
 import { checkPathTraversal } from "./pathTraversal";
 import { checkSourceMaps } from "./sourceMaps";
 import { autoEnrichConfidence } from "./scoring";
+import { isSpa, renderPage } from "./browser";
 
 export interface ScanVulnerability {
   id: string;
@@ -88,6 +89,8 @@ export interface ScanResult {
   pagesScanned: string[];
   /** High-value probe paths that returned HTTP 404 during the crawl (see CrawlResult.probedNotFound) */
   probedNotFound: string[];
+  /** True when the page was rendered via headless browser (SPA detected and rendered) */
+  renderedWithBrowser?: boolean;
 }
 
 const FETCH_TIMEOUT_MS = 20_000;
@@ -340,6 +343,7 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
   let finalUrl = targetUrl;
   let html = "";
 
+  // ── Step 1: raw fetch (always) — gives us HTTP headers and a first-pass HTML ──
   try {
     response = await fetch(targetUrl, {
       signal: controller.signal,
@@ -364,6 +368,24 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
   response.headers.forEach((val, key) => {
     rawHeaders[key] = val;
   });
+
+  // ── Step 2: SPA detection + headless rendering (deep tier only) ───────────
+  // If the server returned a JavaScript-shell SPA (empty <div id="root"> etc.)
+  // we re-fetch via the headless browser so that all subsequent content analysis
+  // (tech fingerprinting, JS secret scanning, source-map detection, CVE checks)
+  // operates on the fully-rendered DOM rather than an empty shell.
+  //
+  // HTTP security headers are still read from the raw fetch response above —
+  // they're identical to what the browser sees and the fetch response is faster.
+  let renderedWithBrowser = false;
+  if (tier === "deep" && isSpa(html)) {
+    const rendered = await renderPage(finalUrl).catch(() => null);
+    if (rendered) {
+      html = rendered.html;
+      finalUrl = rendered.finalUrl || finalUrl;
+      renderedWithBrowser = true;
+    }
+  }
 
   const isHttps = finalUrl.startsWith("https://");
   const tlsGrade = isHttps ? "A" : null;
@@ -792,6 +814,7 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
     rawHeaders,
     pagesScanned: crawlResult.pagesVisited,
     probedNotFound: crawlResult.probedNotFound,
+    renderedWithBrowser,
   };
 }
 

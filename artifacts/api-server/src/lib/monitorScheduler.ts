@@ -176,7 +176,7 @@ async function runCveCheck(): Promise<void> {
           cveId: cve.id,
           cveSummary: cve.description.slice(0, 500),
           affectedTech: matchedTech,
-          severity: cve.severity,
+          severity: cve.severity as "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "UNKNOWN",
           triggerScanId: scan.id,
         });
       }
