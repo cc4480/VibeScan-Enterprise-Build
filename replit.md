@@ -72,6 +72,47 @@ lib/
 
 - Keep `DISABLE_PAYMENTS=true` in development `.replit` userenv
 
+## Scanner false-positive prevention
+
+The product differentiates on signal quality — a wolf-crying scanner trains
+non-technical users to ignore real findings. These rules apply to every new
+probe or pattern added to the scanner:
+
+- **SPA / multi-tenant catch-all suppression** (`spaCatchAll.ts`, shared by
+  the path-probe engine and the API-docs probe): before path probing, hit a
+  random nonexistent path. If it returns HTTP 200, fingerprint the response
+  (body length + `<title>`). Any subsequent probe result within 3% body
+  length or with the same title is suppressed as a catch-all false positive,
+  not a real finding. Without this, any SPA with client-side routing (or a
+  multi-tenant platform like GitHub, where an arbitrary path segment renders
+  a normal 200 page) false-positives on nearly every probed path.
+- **GraphQL confirmation**: requires `data.__typename` to be a string
+  (unique to GraphQL — no REST API returns this) or an `errors[].locations`
+  array (GraphQL-spec-only field). Paths `/api` and `/query` are excluded —
+  too generic, they'd match any REST API.
+- **Session vs. non-session cookies**: cookies are classified by name
+  pattern (`session`, `token`, `jwt`, `sid`, `PHPSESSID`, etc.) before
+  flagging missing Secure/HttpOnly/SameSite flags — a non-session cookie
+  (UI-state flag, analytics ID) missing these flags is scored low/info, not
+  high/medium, since there's no session to actually hijack.
+- **Key/token classification** (jsScanner + Supabase/Firebase probes):
+  `pk_live_`/`pk_test_` (Stripe), `sb_publishable_*` (Supabase),
+  Mapbox `pk.ey…`, Sentry DSNs, and Firebase `AIza…` keys are public-by-design
+  and never flagged on their own — only the resulting data exposure (e.g. an
+  open Supabase table) is a finding. `sk_live_`, `sb_secret_*`, Mapbox
+  `sk.ey…`, and Sentry auth tokens are flagged Critical/High immediately.
+- **Entropy validation**: generic password/secret-key patterns require
+  Shannon entropy ≥2.5–3.0 bits/char (`shannonEntropy()` in `jsScanner.ts`)
+  before matching — placeholders and repeating strings score below that.
+- **Confidence is numeric (0–100)**: ≥85 means directly observed/confirmed
+  (a real HTTP response returned the data); never emit ≥85 for a pattern-only
+  match with no behavioral confirmation.
+- **Structural markers over keyword matches**: e.g. phpMyAdmin/Adminer
+  require an actual login-form field name, not just the tool's name
+  appearing on the page (a GitHub org page for the real phpMyAdmin project
+  mentions "phpMyAdmin" too). `crossdomain.xml` is only flagged for genuine
+  wildcard access, not mere presence of the file.
+
 ## Gotchas
 
 - **Shared libs must be built before typecheck on a fresh clone** — `lib/db`, `lib/api-zod`, `lib/api-client-react`, and `lib/replit-auth-web` all use TypeScript project references and must have their `dist/` emitted first. Each has a `build` script (`tsc -p tsconfig.json`). The `typecheck` workflow does this automatically.
@@ -80,6 +121,7 @@ lib/
 - Vite runs on port 18425 (artifact router) AND port 5000 (webview) simultaneously — both are separate workflow instances
 - The artifact router config lives in `artifacts/*/replit-artifact/artifact.toml` — do not delete these files
 - **Avoid runtime (value) imports from `scanner.ts` in modules with standalone unit tests** — `scanner.ts` transitively imports `@workspace/db`, which throws at import time if `DATABASE_URL` isn't set. `crawler.test.ts` doesn't set it, so a value import (e.g. importing a helper function) breaks that whole test file even though the function itself doesn't touch the DB. `import type { ... }` is erased at compile time and is safe; small pure-logic helpers shared between the two are duplicated instead (see `INFRA_COOKIE_NAMES` / `SESSION_COOKIE_PATTERN` — both intentionally copy-pasted between `scanner.ts` and `crawler.ts` with a "must match" comment, rather than imported)
+- **Mocking `fetch` in Vitest**: use `vi.stubGlobal("fetch", vi.fn())` + `vi.unstubAllGlobals()` in `afterEach` — not `vi.spyOn(globalThis, "fetch")`, which wraps the existing property while the module under test closed over its own reference to `globalThis.fetch` at import time, so the spy silently doesn't apply. For network-failure tests use `vi.mocked(fetch).mockRejectedValue(new Error(...))`, not a synchronous throw in `mockImplementation` (it propagates out of the test instead of being caught by the module's try/catch). `fetch`'s first arg is `string | URL | Request` — convert with `String(input)`, not `input.toString()` (throws if `input` is undefined).
 
 ## Pointers
 
@@ -91,3 +133,4 @@ lib/
 - BYO DeepSeek key settings: `artifacts/api-server/src/routes/settings.ts`, `artifacts/vibescan/src/pages/settings.tsx`
 - SPA/multi-tenant catch-all detection (shared by the path-probe engine and the API-docs probe): `artifacts/api-server/src/lib/spaCatchAll.ts`
 - API contract source of truth: `lib/api-spec/openapi.yaml` — after editing, regenerate with `pnpm --filter @workspace/api-spec run codegen`, then rebuild `lib/api-zod` and `lib/api-client-react` (their `dist/*.d.ts` is what typecheck actually reads, not `src` directly)
+- Continuous Monitoring v2 schema: `monitor_score_history` (per-scan grade/riskScore snapshot), `monitor_regressions` (checks newly failing vs. the previous scan), `cert_expiry_alerts` (dedup table). Rescan cadence is risk-adaptive — `computeNextScanAt(grade)` in `monitorScheduler.ts` schedules A-grade sites every 14 days, B/C every 7, D/F every 3; a 6-hour sweep picks up any subscription past its `nextScanAt`. Outbound webhooks (`webhook.ts`) fire Slack-compatible JSON for `cve_alert`, `regression_detected`, `cert_expiry`, `scan_complete` with a single retry.
