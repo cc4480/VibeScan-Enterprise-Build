@@ -162,10 +162,14 @@ if (process.env.NODE_ENV !== "production") {
     }),
   );
 } else {
-  const staticDir = nodePath.resolve(
-    process.cwd(),
-    process.env.FRONTEND_STATIC_DIR ?? "artifacts/vibescan/dist/public",
-  );
+  // Resolved relative to this bundled file's own location (dist/index.mjs),
+  // not process.cwd() — CWD varies with how the process is launched (e.g.
+  // `pnpm --filter @workspace/api-server run start` runs with CWD set to
+  // the package dir, not the repo root), which silently broke frontend
+  // serving in production (every request 404'd).
+  const staticDir = process.env.FRONTEND_STATIC_DIR
+    ? nodePath.resolve(process.cwd(), process.env.FRONTEND_STATIC_DIR)
+    : nodePath.resolve(__dirname, "../../vibescan/dist/public");
 
   if (existsSync(staticDir)) {
     logger.info({ staticDir }, "Production: serving static frontend");
