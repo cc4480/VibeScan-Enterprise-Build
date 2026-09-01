@@ -13,18 +13,26 @@ A website and vulnerability scanning SaaS that runs black-box security scans and
 | `pnpm --filter @workspace/db run build && pnpm --filter @workspace/api-zod run build && pnpm --filter @workspace/api-client-react run build && pnpm --filter @workspace/replit-auth-web run build` | Build shared lib `.d.ts` files (required before full typecheck on fresh clone) |
 
 Required env vars (secrets):
+- `PORT` — the API server throws at boot without it (`8080` locally; the Vite
+  dev server proxies `/api` there). Injected by the artifact router on Replit.
 - `DATABASE_URL` — auto-provisioned by Replit PostgreSQL
 - `DEEPSEEK_API_KEY` — fallback AI analysis key for Deep scan reports, used when a user hasn't set their own key in Settings
 - `ENCRYPTION_KEY` — 32-byte base64 AES-256 key, encrypts user-supplied secrets (BYO DeepSeek key) at rest. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. Without it, the Settings → DeepSeek key feature returns 503.
 - `RESEND_API_KEY` — Email notifications (report ready, CVE alerts)
-- `STRIPE_SECRET_KEY` — Payments (set `DISABLE_PAYMENTS=true` in dev to skip)
+- `STRIPE_SECRET_KEY` — Payments. Dormant: scans are free during early access,
+  so nothing in the request path reaches Stripe. `DISABLE_PAYMENTS` is no
+  longer read by any code — it survives only in `.replit`'s userenv.
 
 ### Local (non-Replit) development
 
 Replit injects the above as real environment variables; running elsewhere
 (e.g. a local Windows/Mac/Linux machine) needs its own PostgreSQL 16 instance
 and a `.env` file (see `.env.example`) — `.env` is gitignored, never commit
-it. Verified working on Windows as of 2026-08; `lib/db/drizzle.config.ts` and
+it. The API server's `start` script loads it with Node's
+`--env-file-if-exists=../../.env`; real environment variables take precedence,
+so the file is inert on Replit. Nothing else reads it — `db:push` shells out to
+drizzle-kit, which sees only the shell environment, so export `DATABASE_URL`
+for that command. Verified working on Windows as of 2026-08; `lib/db/drizzle.config.ts` and
 `pnpm-workspace.yaml`'s `overrides` needed fixes for Windows path separators
 and previously-stripped `win32-*-msvc` optional binaries (`rollup`,
 `@tailwindcss/oxide`, `lightningcss`) respectively — both now resolve
@@ -57,13 +65,18 @@ lib/
 - **Artifact router handles external routing**: The Replit artifact router (`REPLIT_ARTIFACT_ROUTER`) proxies `/api` to Express (port 8080) and `/` to Vite (port 18425). The `Start application` webview workflow runs Vite on port 5000 for the Replit preview pane.
 - **No login required**: Auth is a UUID token auto-generated in `localStorage` (`vibescan_client_token`). The `authMiddleware` reads it from the `Authorization: Bearer` header.
 - **Graceful degradation**: All three external services (DeepSeek, Resend, Stripe) check for their env var and skip with a warning if not set — the app remains fully functional.
-- **Payments gated**: `DISABLE_PAYMENTS=true` disables Stripe in development. Set to `false` in production after configuring `STRIPE_SECRET_KEY`.
+- **Payments dormant**: scans are free during early access, so the Stripe route and webhook are unreachable from the scan flow. Reviving billing means restoring the checkout branch in `routes/scans.ts`, not just setting `STRIPE_SECRET_KEY`.
 - **Job queue**: pg-boss runs inside the API server process, handling async scan jobs and the EOL/CVE refresh scheduler.
 
 ## Product
 
-- **Free tier**: Basic black-box scan (headers, SSL/TLS, tech fingerprint)
-- **Paid tiers**: Deep scan with DeepSeek AI report, scan credit packs (5 or 20)
+Everything is free during early access — `POST /scans` queues immediately and
+returns `checkoutUrl: null`; the `pack_5`/`pack_20` tiers are rejected at the
+route. The tier column and Stripe plumbing remain for a future revival.
+
+- **Basic scan**: headers, SSL/TLS, DNS, tech fingerprint
+- **Deep scan**: adds JS secret scanning, path traversal, and the site crawler,
+  with a DeepSeek AI report
 - **Monitor**: Continuous monitoring with weekly rescans and CVE-triggered alerts via email
 - **Reports**: Graded A–F with CVSS scores, remediation steps, and paste-ready AI fix prompt
 - **Settings**: users can add their own DeepSeek API key (`/settings`) to use their own account's credits for Deep scan AI analysis instead of the shared server key — encrypted at rest, never re-displayed after saving
