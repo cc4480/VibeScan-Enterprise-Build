@@ -163,7 +163,17 @@ export function detectTechnologies(headers: Record<string, string>, html: string
 
   // Language indicators from error messages / comments
   if (/python|django|flask|fastapi/i.test(s) && techs.size === 0)                                 techs.add("Python");
-  if (/ruby on rails|rack/i.test(s) && !techs.has("Ruby on Rails"))                              techs.add("Ruby on Rails");
+  // Rails: match structural markers only. The old `rack` substring matched
+  // "tracking" (Tailwind's tracking-* utilities), "bracket", "crack", etc. —
+  // firing on nearly every styled page. Use Rails-specific signals instead:
+  // the authenticity_token CSRF field/meta, the csrf-param meta, or the
+  // capitalised Rack:: middleware namespace as it appears in Rack error pages.
+  if (
+    /ruby on rails/i.test(s) ||
+    /name=["']authenticity_token["']/i.test(s) ||
+    /name=["']csrf-param["']/i.test(s) ||
+    /\bRack::[A-Z]/.test(s)
+  ) techs.add("Ruby on Rails");
 
   return [...techs];
 }

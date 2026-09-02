@@ -22,6 +22,10 @@ const securityHeaders: Record<string, string> = isProduction
       "Content-Security-Policy": [
         "default-src 'self'",
         "script-src 'self'",
+        // style-src keeps 'unsafe-inline': bundled libs (html2canvas, jsPDF,
+        // chart/animation) inject <style> elements at runtime, which style-src
+        // governs — removing it breaks PDF export and some UI styling. See the
+        // matching note in api-server/src/app.ts (FRONTEND_CSP).
         "style-src 'self' 'unsafe-inline'",
         "font-src 'self' data:",
         "img-src 'self' data: https: blob:",
