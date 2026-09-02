@@ -81,8 +81,14 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: false,
-      staleTime: 0,
+      // retry once: a single transient failure (dropped connection, dev-server
+      // restart) previously flipped a query straight to its error state, which
+      // blanked whatever it was rendering until the next refetch.
+      retry: 1,
+      // staleTime 0 combined with the refetch flags below re-fetched every
+      // query on every window focus and every mount, so simply alt-tabbing back
+      // re-ran the whole screen's data. 30s keeps data fresh without the storm.
+      staleTime: 30_000,
       refetchOnWindowFocus: true,
       refetchOnMount: true,
     },

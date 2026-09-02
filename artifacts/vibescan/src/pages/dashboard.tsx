@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useSeo } from "@/lib/seo";
 import { useListScans, useGetScanStatus, getGetScanStatusQueryKey } from "@workspace/api-client-react";
@@ -29,8 +29,6 @@ function GradeBadge({ grade }: { grade: string | null | undefined }) {
 
 function ScanRow({ initialScan, highlight }: { initialScan: Scan; highlight?: boolean }) {
   const rowRef = useRef<HTMLTableRowElement>(null);
-  const [, setLocation] = useLocation();
-  const wasPolling = useRef(['pending', 'paid', 'queued', 'scanning', 'analyzing'].includes(initialScan.status));
   const isPolling = ['pending', 'paid', 'queued', 'scanning', 'analyzing'].includes(initialScan.status);
 
   const { data: statusData } = useGetScanStatus(initialScan.id, {
@@ -42,21 +40,10 @@ function ScanRow({ initialScan, highlight }: { initialScan: Scan; highlight?: bo
 
   const scan = statusData ?? initialScan;
 
-  // Auto-redirect to report when scan transitions from in-progress to complete
-  useEffect(() => {
-    if (
-      wasPolling.current &&
-      scan.status === "complete" &&
-      "reportId" in scan &&
-      scan.reportId
-    ) {
-      wasPolling.current = false;
-      setLocation(`/report/${scan.reportId}`);
-    }
-    if (!["pending", "paid", "queued", "scanning", "analyzing"].includes(scan.status)) {
-      wasPolling.current = false;
-    }
-  }, [scan.status, scan, setLocation]);
+  // Note: a scan completing deliberately does NOT navigate away from the
+  // dashboard. Auto-redirecting on completion pulled the user off the scan
+  // list mid-session, which read as the list "disappearing". The completed
+  // row now just updates in place and links to its report.
 
   // Scroll into view when highlighted (new scan from checkout)
   useEffect(() => {
