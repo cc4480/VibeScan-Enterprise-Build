@@ -58,7 +58,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
 // ── ProtectedRoute ───────────────────────────────────────────────────────────
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { data, isLoading } = useGetCurrentAuthUser();
+  const { data, isLoading, isFetching, refetch } = useGetCurrentAuthUser();
 
   if (isLoading) {
     return (
@@ -68,9 +68,36 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
     );
   }
 
+  // A missing user means the auth request failed or returned nothing. This
+  // previously hard-redirected to /api/login, which is Replit OIDC: anywhere
+  // other than Replit that route cannot complete and answers 500, so one failed
+  // request tore down the SPA, wiped the query cache and left the user on an
+  // error page. Identity is normally an anonymous token the API accepts on
+  // sight, so the realistic cause is a transient failure — say so and let them
+  // retry in place.
   if (!data?.user) {
-    window.location.href = "/api/login";
-    return null;
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="text-center max-w-md">
+          <h1 className="text-2xl font-bold mb-2">Can’t reach the server</h1>
+          <p className="text-muted-foreground text-sm mb-6">
+            We couldn’t confirm your session. This is usually temporary.
+          </p>
+          <button
+            onClick={() => void refetch()}
+            disabled={isFetching}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium disabled:opacity-60"
+          >
+            {isFetching ? "Retrying…" : "Try again"}
+          </button>
+          <p className="mt-6 text-xs text-muted-foreground">
+            <a href="/api/login" className="underline underline-offset-4">
+              Sign in instead
+            </a>
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return <>{children}</>;
