@@ -17,16 +17,14 @@
 import { logger } from "./logger";
 
 // ── Chromium executable resolution ──────────────────────────────────────────
-
-function resolveChromiumPath(): string | undefined {
-  const base = process.env.PLAYWRIGHT_BROWSERS_PATH;
-  if (base) {
-    // Playwright pre-installs under <base>/chromium-<revision>/chrome-linux/chrome
-    const rev = "1194";
-    return `${base}/chromium-${rev}/chrome-linux/chrome`;
-  }
-  return undefined;
-}
+//
+// We intentionally do NOT pass an explicit executablePath. Playwright resolves
+// the Chromium build that matches the installed Playwright version on its own,
+// honouring PLAYWRIGHT_BROWSERS_PATH when it is set. A previous version hardcoded
+// a browser revision into the path ("chromium-1194/…"), which silently broke
+// launch whenever the Playwright version — and thus the required revision —
+// changed (e.g. Playwright 1.62 needs revision 1234, not 1194), disabling SPA
+// rendering in production with no error surfaced to the user.
 
 // ── Browser singleton ────────────────────────────────────────────────────────
 
@@ -59,12 +57,10 @@ export async function initBrowser(): Promise<void> {
     return;
   }
 
-  const executablePath = resolveChromiumPath();
   const proxy = proxyConfig();
 
   try {
     _browser = await chromium.launch({
-      executablePath,
       headless: true,
       proxy,
       args: [
@@ -84,7 +80,7 @@ export async function initBrowser(): Promise<void> {
       ],
     });
     logger.info(
-      { executablePath, proxy: proxy?.server ?? "none" },
+      { proxy: proxy?.server ?? "none" },
       "Headless browser initialised — SPA rendering enabled",
     );
   } catch (err) {
