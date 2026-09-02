@@ -1156,6 +1156,7 @@ function SummaryNewFindings({ categories }: { categories: Record<string, number>
 const CATEGORY_TO_OWASP: Record<string, string[]> = {
   "Transport Security":             ["A02"],
   "Injection Defense":              ["A03"],
+  "Injection":                      ["A03"],
   "UI Security":                    ["A05"],
   "Content Sniffing":               ["A05"],
   "Information Disclosure":         ["A05"],

@@ -124,7 +124,7 @@ function buildPrompt(
 
   const agentInstructions = agentPromptInstructions(agent, domain);
 
-  return `You are a senior application security engineer (AppSec) writing a penetration test summary for a developer who built their app with an AI coding assistant and is not a security expert.${vibeCodingContext}
+  return `You are a senior application security engineer (AppSec) writing an automated security scan summary for a developer who built their app with an AI coding assistant and is not a security expert. This is the output of an automated black-box scanner, not a manual penetration test — do not describe it as a pentest or imply exploitation was attempted.${vibeCodingContext}
 
 Target: ${targetUrl}
 Scan tier: ${tier}

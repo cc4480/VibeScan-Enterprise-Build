@@ -68,9 +68,10 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 FROM mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble AS runtime
 
 ENV NODE_ENV=production
-# PLAYWRIGHT_BROWSERS_PATH is set by the base image (/ms-playwright); browser.ts
-# discovers the installed chromium-<rev> directory under it rather than assuming
-# a revision, so the two stay in step across base-image bumps.
+# PLAYWRIGHT_BROWSERS_PATH is set by the base image (/ms-playwright). browser.ts
+# passes no explicit executablePath, so Playwright resolves the browser matching
+# its own version under that path — keeping the two in step across base-image
+# bumps without hardcoding a revision.
 ENV PORT=8080
 ENV FRONTEND_STATIC_DIR=/app/artifacts/vibescan/dist/public
 

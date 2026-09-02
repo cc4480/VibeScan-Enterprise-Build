@@ -113,6 +113,21 @@ describe("detectTechnologies — HTML: analytics", () => {
     expect(detectTechnologies({}, `window.intercomSettings = { app_id: "abc" }`)).toContain("Intercom"));
 });
 
+describe("detectTechnologies — HTML: Ruby on Rails", () => {
+  it("detects Rails from authenticity_token CSRF field", () =>
+    expect(detectTechnologies({}, `<input type="hidden" name="authenticity_token" value="abc">`)).toContain("Ruby on Rails"));
+  it("detects Rails from csrf-param meta tag", () =>
+    expect(detectTechnologies({}, `<meta name="csrf-param" content="authenticity_token">`)).toContain("Ruby on Rails"));
+  it("detects Rails from Rack:: middleware namespace in error output", () =>
+    expect(detectTechnologies({}, `Rack::Timeout::Error`)).toContain("Ruby on Rails"));
+  it("detects Rails from literal 'Ruby on Rails'", () =>
+    expect(detectTechnologies({}, `<address>Ruby on Rails 7.1</address>`)).toContain("Ruby on Rails"));
+  it("does NOT flag Rails on Tailwind tracking-* utility classes", () =>
+    expect(detectTechnologies({}, `<h1 class="text-2xl font-bold tracking-tight tracking-wider">Dashboard</h1>`)).not.toContain("Ruby on Rails"));
+  it("does NOT flag Rails on incidental words containing 'rack'", () =>
+    expect(detectTechnologies({}, `<p>Track your progress. Fix the bracket bug before it cracks.</p>`)).not.toContain("Ruby on Rails"));
+});
+
 describe("detectTechnologies — edge cases", () => {
   it("returns empty array for empty inputs", () =>
     expect(detectTechnologies({}, "")).toEqual([]));

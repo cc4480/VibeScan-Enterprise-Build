@@ -15,8 +15,18 @@ import { configureTrustProxy } from "./lib/clientIp";
 const __dirname = nodePath.dirname(fileURLToPath(import.meta.url));
 
 // CSP for the frontend SPA — no unsafe-inline in script-src because Vite's
-// production bundle uses only external JS files.  style-src keeps unsafe-inline
-// for Tailwind's runtime class injection.
+// production bundle uses only external JS files.
+//
+// style-src MUST keep 'unsafe-inline'. Verified against the production build:
+// the HTML shell has no inline styles, but bundled runtime libraries inject
+// <style> elements via document.createElement("style") at load time —
+// html2canvas + jsPDF (report PDF export) and chart/animation libs in the main
+// bundle. style-src governs those injections, so dropping 'unsafe-inline'
+// silently breaks PDF export and some UI styling. The only correct way to
+// remove it is nonce-based CSP, which requires injecting a per-response nonce
+// into server-rendered markup — not possible while the built index.html is
+// served as a static file. Left as an accepted LOW finding (CSS-injection only;
+// script-src is clean, so no JS execution risk).
 const FRONTEND_CSP = [
   "default-src 'self'",
   "script-src 'self'",
@@ -82,7 +92,14 @@ app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-XSS-Protection", "1; mode=block");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), interest-cohort=()");
+  // COOP and CORP are safe on every response — they don't break Vite HMR — so
+  // set them universally. This means API responses and the dev server carry
+  // them too, not only the production frontend. COEP is the one isolation
+  // header that can block cross-origin resource loads, so it stays scoped to
+  // the production frontend below (as credentialless).
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
 
   if (isApi) {
     // API responses: strict no-content CSP in all environments.
@@ -98,11 +115,14 @@ app.use((req, res, next) => {
     }
   } else if (isProd) {
     // Production frontend: full SPA CSP + cross-origin isolation.
-    // In dev these are omitted so Vite's own headers apply unmolested.
+    // COOP/CORP are set unconditionally above; here we add the CSP, COEP,
+    // frame protection and HSTS that are only safe once Vite HMR is out of the
+    // picture. In dev these are omitted so Vite's own headers apply unmolested.
     res.setHeader("Content-Security-Policy", FRONTEND_CSP);
     res.setHeader("X-Frame-Options", "DENY");
-    res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
-    res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+    // credentialless (not require-corp): the app loads legitimate cross-origin
+    // resources (Stripe.js, remote images) that don't send CORP headers;
+    // require-corp would block them. credentialless still opts into isolation.
     res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
     res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
   }

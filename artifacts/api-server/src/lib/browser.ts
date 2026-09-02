@@ -14,45 +14,17 @@
  * Pages are closed immediately after rendering.
  */
 
-import { readdirSync, existsSync } from "node:fs";
 import { logger } from "./logger";
 
 // ── Chromium executable resolution ──────────────────────────────────────────
-
-function resolveChromiumPath(): string | undefined {
-  const base = process.env.PLAYWRIGHT_BROWSERS_PATH;
-  if (!base) return undefined;
-
-  // Playwright installs to <base>/chromium-<revision>/chrome-linux/chrome. The
-  // revision was previously hardcoded, which silently disabled SPA rendering
-  // wherever the installed browser differed — the Playwright Docker image sets
-  // PLAYWRIGHT_BROWSERS_PATH itself and ships a different revision, so the
-  // guessed path simply did not exist and launch fell back to raw fetch.
-  // Discover it instead, newest revision first.
-  let entries: string[];
-  try {
-    entries = readdirSync(base);
-  } catch {
-    return undefined;
-  }
-
-  const candidates = entries
-    .filter((name) => /^chromium-\d+$/.test(name))
-    .sort((a, b) => Number(b.split("-")[1]) - Number(a.split("-")[1]));
-
-  // Layout changed across Playwright versions: "chrome-linux64" on current
-  // releases, "chrome-linux" on older ones. Check both rather than assuming.
-  for (const dir of candidates) {
-    for (const layout of ["chrome-linux64", "chrome-linux"]) {
-      const exe = `${base}/${dir}/${layout}/chrome`;
-      if (existsSync(exe)) return exe;
-    }
-  }
-
-  // Nothing matched — let Playwright resolve the browser itself rather than
-  // handing launch() a path we know is wrong.
-  return undefined;
-}
+//
+// We intentionally do NOT pass an explicit executablePath. Playwright resolves
+// the Chromium build that matches the installed Playwright version on its own,
+// honouring PLAYWRIGHT_BROWSERS_PATH when it is set. A previous version hardcoded
+// a browser revision into the path ("chromium-1194/…"), which silently broke
+// launch whenever the Playwright version — and thus the required revision —
+// changed (e.g. Playwright 1.62 needs revision 1234, not 1194), disabling SPA
+// rendering in production with no error surfaced to the user.
 
 // ── Browser singleton ────────────────────────────────────────────────────────
 
@@ -85,12 +57,10 @@ export async function initBrowser(): Promise<void> {
     return;
   }
 
-  const executablePath = resolveChromiumPath();
   const proxy = proxyConfig();
 
   try {
     _browser = await chromium.launch({
-      executablePath,
       headless: true,
       proxy,
       args: [
@@ -110,7 +80,7 @@ export async function initBrowser(): Promise<void> {
       ],
     });
     logger.info(
-      { executablePath, proxy: proxy?.server ?? "none" },
+      { proxy: proxy?.server ?? "none" },
       "Headless browser initialised — SPA rendering enabled",
     );
   } catch (err) {

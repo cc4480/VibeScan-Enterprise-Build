@@ -201,7 +201,7 @@ export default function LandingPage() {
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold mb-4 uppercase tracking-wider">
-            <Activity className="w-3.5 h-3.5" /> OWASP Top 10 Coverage
+            <Activity className="w-3.5 h-3.5" /> OWASP Top 10-Aligned
           </div>
           <h2 className="text-3xl md:text-4xl font-bold mb-4">What Seclayer checks</h2>
           <p className="text-muted-foreground max-w-2xl mx-auto">
