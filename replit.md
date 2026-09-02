@@ -126,6 +126,29 @@ probe or pattern added to the scanner:
   mentions "phpMyAdmin" too). `crossdomain.xml` is only flagged for genuine
   wildcard access, not mere presence of the file.
 
+## SSRF guard (scan targets and webhooks)
+
+The scanner fetches user-supplied URLs from inside our own network and quotes
+responses back in report `evidence`, so an unguarded target is an open proxy
+into the deployment. `ssrfGuard.ts` is the single implementation — do not add a
+second copy:
+
+- `checkScanTarget(url)` — http/https + public-host check, called by
+  `POST /scans` and `POST /monitor/subscriptions` before a job is queued, and
+  again at the top of `runScan()` so no internal caller bypasses it.
+- `checkHostname(host)` — host-only check. `webhook.ts` layers its https-only
+  rule on top (a token must not leave in cleartext); scan targets allow http
+  because a plaintext target is itself a finding.
+- Blocks loopback, RFC 1918, link-local/IMDS (169.254.169.254), CGNAT,
+  IPv6 ULA/link-local, IPv4-mapped IPv6, `.local`/`.internal`, and public
+  hostnames whose A/AAAA records point anywhere internal. **Fails closed** on
+  DNS failure.
+- `runScan()` re-checks after redirects: `redirect: "follow"` means a public
+  host can bounce the scanner to an internal one, and every probe downstream
+  runs against `finalUrl`.
+- Not covered: DNS rebinding between check and connect. Closing that needs
+  connection-level pinning of the resolved IP.
+
 ## Gotchas
 
 - **Shared libs must be built before typecheck on a fresh clone** — `lib/db`, `lib/api-zod`, `lib/api-client-react`, and `lib/replit-auth-web` all use TypeScript project references and must have their `dist/` emitted first. Each has a `build` script (`tsc -p tsconfig.json`). The `typecheck` workflow does this automatically.

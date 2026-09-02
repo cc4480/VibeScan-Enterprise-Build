@@ -3,6 +3,26 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+import type { Plugin } from "vite";
+
+// index.html carries an inline <script> that repairs a half-initialised React
+// DevTools hook (added in 71fca36 — without it the Replit dev environment fails
+// to render at all). Production CSP is `script-src 'self'` with no nonce, so the
+// browser blocks it and logs a violation on every page load; the shim is a dev
+// concern and does nothing in production anyway. Strip it from the build rather
+// than weakening the CSP to admit it.
+function stripDevtoolsShim(): Plugin {
+  return {
+    name: "strip-devtools-hook-shim",
+    apply: "build",
+    transformIndexHtml(html) {
+      return html.replace(
+        /\s*<script>\s*\(function \(\) \{[\s\S]*?__REACT_DEVTOOLS_GLOBAL_HOOK__[\s\S]*?\}\)\(\);?\s*<\/script>/,
+        "",
+      );
+    },
+  };
+}
 
 // Security headers for the Vite preview server (production build previews only).
 // Dev server intentionally has NO custom headers — the Express API server
@@ -42,6 +62,7 @@ const basePath = process.env.BASE_PATH ?? "/";
 export default defineConfig({
   base: basePath,
   plugins: [
+    stripDevtoolsShim(),
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),

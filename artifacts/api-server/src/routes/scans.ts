@@ -7,6 +7,7 @@ import {
   GetScanStatusResponse,
 } from "@workspace/api-zod";
 import { enqueueScan } from "../lib/queue";
+import { checkScanTarget } from "../lib/ssrfGuard";
 
 const router: IRouter = Router();
 
@@ -93,13 +94,12 @@ router.post("/scans", async (req, res): Promise<void> => {
     return;
   }
 
-  try {
-    const parsedUrl = new URL(targetUrl);
-    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-      throw new Error("bad protocol");
-    }
-  } catch {
-    res.status(400).json({ error: "Invalid URL. Must start with http:// or https://" });
+  // Rejects internal targets before a job is ever queued — the scanner runs
+  // inside our network and quotes responses back in the report, so an
+  // unguarded target URL is an open proxy into it.
+  const targetCheck = await checkScanTarget(targetUrl);
+  if (!targetCheck.safe) {
+    res.status(400).json({ error: targetCheck.reason ?? "Invalid URL." });
     return;
   }
 

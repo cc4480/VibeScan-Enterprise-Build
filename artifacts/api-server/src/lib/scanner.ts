@@ -102,6 +102,7 @@ import { runApiDocsProbe } from "./apiDocsProbe";
 import { runNextjsProbe } from "./nextjsProbe";
 import { runStorageProbe } from "./storageProbe";
 import { isSpa, renderPage } from "./browser";
+import { checkScanTarget, checkHostname } from "./ssrfGuard";
 
 export interface ScanVulnerability {
   id: string;
@@ -331,6 +332,15 @@ function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[
 
 export async function runScan(targetUrl: string, tier: string): Promise<ScanResult> {
   const startedAt = Date.now();
+
+  // Defence in depth: the routes already reject internal targets, but every
+  // probe below derives its URL from this one, so re-check here rather than
+  // trusting the caller.
+  const entryCheck = await checkScanTarget(targetUrl);
+  if (!entryCheck.safe) {
+    throw new Error(entryCheck.reason ?? "Target URL is not permitted.");
+  }
+
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
@@ -358,6 +368,22 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
     throw new Error(`Failed to reach target URL: ${msg}`);
   } finally {
     clearTimeout(timeoutHandle);
+  }
+
+  // `redirect: "follow"` above means a public host can bounce us to an internal
+  // one, so the address we actually landed on has to clear the guard too —
+  // every probe from here on runs against finalUrl.
+  if (finalUrl !== targetUrl) {
+    let redirectedHost = "";
+    try {
+      redirectedHost = new URL(finalUrl).hostname;
+    } catch {
+      throw new Error("Target redirected to an invalid URL.");
+    }
+    const redirectCheck = await checkHostname(redirectedHost);
+    if (!redirectCheck.safe) {
+      throw new Error(`Target redirected to a non-public address (${redirectedHost}).`);
+    }
   }
 
   const rawHeaders: Record<string, string> = {};

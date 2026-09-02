@@ -31,6 +31,8 @@ const FRONTEND_CSP = [
 // Explicit CORS allowlist — never reflect the incoming Origin blindly.
 // In dev, also allow *.replit.dev preview domains.
 const CORS_ALLOWLIST: (string | RegExp)[] = [
+  "https://seclayer.io",
+  "https://www.seclayer.io",
   "https://vibe-scan.replit.app",
   "https://vibescan.app",
   ...(process.env.CORS_EXTRA_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? []),

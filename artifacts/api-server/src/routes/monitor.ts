@@ -8,6 +8,7 @@ import { z } from "zod";
 import { enqueueScan } from "../lib/queue";
 import { scansTable } from "@workspace/db";
 import { logger } from "../lib/logger";
+import { checkScanTarget } from "../lib/ssrfGuard";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -50,6 +51,14 @@ router.post("/monitor/subscriptions", async (req, res): Promise<void> => {
   }
 
   const { targetUrl, webhookUrl } = parsed.data;
+
+  // Same guard as POST /scans — a subscription schedules recurring scans, so
+  // an internal target here is the SSRF hole on a 3-to-14-day timer.
+  const targetCheck = await checkScanTarget(targetUrl);
+  if (!targetCheck.safe) {
+    res.status(400).json({ error: targetCheck.reason ?? "Invalid URL." });
+    return;
+  }
 
   // Check for an existing active subscription for this user+URL
   const [existing] = await db
