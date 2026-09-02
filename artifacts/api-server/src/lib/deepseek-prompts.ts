@@ -67,7 +67,7 @@ Rules for agentFixPrompt:
       return `AGENT TARGET: Generic AI coding agent (Cursor, Claude, GitHub Copilot)
 
 Rules for agentFixPrompt:
-- Open with: "I ran a penetration test on ${domain} and found the following security issues that need to be fixed in my codebase."
+- Open with: "I ran an automated security scan on ${domain} and found the following security issues that need to be fixed in my codebase."
 - For each finding use a markdown heading like "### 1. <Finding Name> (<SEVERITY>)" followed by a one-sentence description and the exact remediation to implement
 - Close with: "Please fix all of the above issues in my codebase. For each fix, show me the exact code change."
 - Use plain text with markdown headings only — do not wrap in a code fence

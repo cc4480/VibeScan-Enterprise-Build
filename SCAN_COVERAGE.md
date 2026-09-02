@@ -243,6 +243,25 @@ keyword presence.
 
 ---
 
+## Module 12 — Active Injection Probing (A03) ⚡ *Deep scans only*
+*Reflected XSS and error-based SQL injection on discovered parameters. Detection-only — no exploitation, no data extraction.*
+
+Collects candidate parameters from the target URL query string, in-page `<form>`
+input names, in-page link query params, and a small set of common search/lookup
+param names (`q`, `s`, `search`, `id`, `name`, …) — capped at 20 candidates.
+
+| # | Check | Severity | Method |
+|---|---|---|---|
+| 98 | Reflected Cross-Site Scripting (XSS) | High | Injects a random canary wrapped in HTML metacharacters; confirmed only when the literal `<canary>` reflects back with angle brackets **unencoded**. Encoded reflections (`&lt;canary&gt;`) are not flagged. |
+| 99 | SQL Injection (error-based) | Critical | Fetches a benign baseline, then the same parameter with a trailing single quote; confirmed only when a distinctive SQL error signature appears that was **absent from the baseline**. |
+
+*False-positive prevention: XSS uses a random per-request token and requires the
+metacharacters to survive unencoded (output encoding ⇒ no finding). SQLi requires
+a baseline diff, so a page that always contains SQL-error-looking text is not
+flagged. Both are behaviourally confirmed — confidence 90.*
+
+---
+
 ## Module 11 — Site Crawler ⚡ *Deep scans only*
 *Crawls up to 20 internal pages and re-runs header + cookie checks on each.*
 

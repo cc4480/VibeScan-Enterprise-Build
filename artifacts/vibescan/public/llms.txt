@@ -1,13 +1,13 @@
 # Seclayer
 
-> Black-box penetration testing for web applications — built for vibe coders who ship fast.
+> Automated black-box security scanning for web applications — built for vibe coders who ship fast.
 
-Seclayer is a pay-per-scan security scanning SaaS that performs automated black-box penetration tests on any public URL. Users paste a URL, choose a scan tier, pay, and receive a plain-English security report powered by DeepSeek AI — in under 10 minutes, with no installs or agents required.
+Seclayer is a pay-per-scan SaaS that performs automated black-box security scans on any public URL. Users paste a URL, choose a scan tier, pay, and receive a plain-English security report powered by DeepSeek AI — in under 10 minutes, with no installs or agents required. It is an automated scanner, not a manual penetration test: it does not log in to your app or actively exploit vulnerabilities.
 
 ## What Seclayer does
 
 - Performs automated black-box security scans on any publicly accessible web application
-- Covers OWASP Top 10 categories: broken access control, cryptographic failures, injection risks, security misconfiguration, vulnerable components, and authentication flaws
+- Aligned with the OWASP Top 10 categories testable from outside an app: strongest on security misconfiguration (A05), cryptographic/transport failures (A02), and vulnerable components (A06); partial on broken access control (A01) via exposed routes, directory listing and BaaS data exposure. It does NOT do authenticated testing; injection (A03) coverage is unauthenticated black-box only — reflected XSS, error-based SQL injection, and path traversal/LFI on exposed parameters — while SSRF (A10), logging (A09) and insecure design (A04) are out of scope for black-box scanning
 - Detects 15+ security issues including missing security headers (CSP, HSTS, X-Frame-Options), weak TLS configuration, cookie flag violations, CORS misconfigurations, server version disclosure, and Supabase RLS exposure
 - Assigns a letter-grade security score (A through F) with a numeric risk score (0–100)
 - Generates AI-powered plain-English reports via DeepSeek that explain findings and prioritize fixes
@@ -21,7 +21,7 @@ Vibe coders, solo founders, indie developers, and dev agencies who build with AI
 ## Pricing
 
 - Basic Scan: $9 — headers, SSL/TLS grading, tech fingerprint, Supabase RLS check
-- Deep Scan: $19 — full pentest with DeepSeek AI analysis and per-agent fix prompts
+- Deep Scan: $19 — full deep scan with DeepSeek AI analysis and per-agent fix prompts
 - 5-Scan Pack: $79 — 5 Deep Scan credits, never expire (saves $16 vs singles)
 - 20-Scan Pack: $199 — 20 Deep Scan credits for agencies (saves $181 vs singles)
 - Monitor: $49/month — weekly deep rescans + daily CVE feed monitoring with instant alerts
@@ -53,7 +53,7 @@ Supabase: Row Level Security (RLS) probe — detects exposed tables, missing pol
 - Built on: Node.js / Express, React / Vite, PostgreSQL, pg-boss queue
 - AI: DeepSeek (deepseek-chat model)
 - Auth: Replit OIDC
-- All scans are passive and non-destructive by default
+- Scans are read-only by default; a few active checks send bounded, non-destructive test requests (e.g. a single self-cleaning write probe against an exposed Supabase/Firebase backend). No destructive requests, credential brute-forcing, or exploitation are ever performed
 - No agents, browser extensions, or code changes required
 
 ## Contact

@@ -13,7 +13,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <title>Seclayer — Black-Box Security Scanning for Vibe Coders</title>
-    <meta name="description" content="Paste a URL, pay once, get a plain-English security report in under 10 minutes. OWASP Top 10 coverage, AI-powered analysis, per-agent fix prompts. No subscriptions." />
+    <meta name="description" content="Paste a URL, pay once, get a plain-English security report in under 10 minutes. OWASP Top 10-aligned checks, AI-powered analysis, per-agent fix prompts. No subscriptions." />
     <meta name="keywords" content="penetration testing, security scan, web security, OWASP, vibe coding, AI security, black-box testing, Supabase RLS, security headers" />
     <meta name="robots" content="index, follow" />
     <meta name="author" content="Seclayer" />
@@ -26,7 +26,7 @@
     <meta property="og:url" content="https://seclayer.io/" />
     <meta property="og:site_name" content="Seclayer" />
     <meta property="og:title" content="Seclayer — Black-Box Security Scanning for Vibe Coders" />
-    <meta property="og:description" content="Paste a URL, pay once, get a plain-English security report in under 10 minutes. OWASP Top 10 coverage, AI-powered analysis, per-agent fix prompts." />
+    <meta property="og:description" content="Paste a URL, pay once, get a plain-English security report in under 10 minutes. OWASP Top 10-aligned checks, AI-powered analysis, per-agent fix prompts." />
     <meta property="og:image" content="https://seclayer.io/opengraph.jpg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -62,7 +62,7 @@
             "width": 512,
             "height": 512
           },
-          "description": "Black-box penetration testing SaaS for vibe coders. Automated security scanning for web applications.",
+          "description": "Automated black-box security scanning SaaS for vibe coders — scans web applications for exposed secrets, misconfigurations, and data exposure.",
           "contactPoint": {
             "@type": "ContactPoint",
             "email": "reports@seclayer.io",
@@ -75,7 +75,7 @@
           "@id": "https://seclayer.io/#website",
           "url": "https://seclayer.io",
           "name": "Seclayer",
-          "description": "Black-box penetration testing for vibe coders",
+          "description": "Automated black-box security scanning for vibe coders",
           "publisher": { "@id": "https://seclayer.io/#organization" }
         },
         {
@@ -83,7 +83,7 @@
           "@id": "https://seclayer.io/#webpage",
           "url": "https://seclayer.io/",
           "name": "Seclayer — Black-Box Security Scanning for Vibe Coders",
-          "description": "Paste a URL, pay once, get a plain-English security report in under 10 minutes. OWASP Top 10 coverage, AI-powered analysis, per-agent fix prompts.",
+          "description": "Paste a URL, pay once, get a plain-English security report in under 10 minutes. OWASP Top 10-aligned checks, AI-powered analysis, per-agent fix prompts.",
           "isPartOf": { "@id": "https://seclayer.io/#website" },
           "about": { "@id": "https://seclayer.io/#organization" },
           "breadcrumb": {
@@ -104,11 +104,11 @@
           "name": "Seclayer",
           "url": "https://seclayer.io",
           "applicationCategory": "SecurityApplication",
-          "applicationSubCategory": "Penetration Testing",
+          "applicationSubCategory": "Security Scanning",
           "operatingSystem": "Any (web-based)",
-          "description": "Automated black-box penetration testing for web applications. Scans for OWASP Top 10 vulnerabilities, security headers, TLS configuration, cookie flags, CORS misconfigurations, and more. Powered by DeepSeek AI.",
+          "description": "Automated black-box security scanning for web applications. Checks OWASP Top 10-aligned risks that are observable from outside the app: security headers, TLS configuration, cookie flags, CORS misconfigurations, exposed secrets and files, and BaaS (Supabase/Firebase) data exposure. Powered by DeepSeek AI.",
           "featureList": [
-            "OWASP Top 10 coverage",
+            "OWASP Top 10-aligned checks",
             "Security headers analysis (CSP, HSTS, X-Frame-Options)",
             "SSL/TLS grading",
             "Cookie flags (HttpOnly, Secure, SameSite)",
@@ -134,7 +134,7 @@
               "name": "Deep Scan",
               "price": "19.00",
               "priceCurrency": "USD",
-              "description": "Full pentest with DeepSeek AI analysis and per-agent fix prompts"
+              "description": "Full deep scan with DeepSeek AI analysis and per-agent fix prompts"
             },
             {
               "@type": "Offer",
@@ -156,7 +156,7 @@
         {
           "@type": "HowTo",
           "name": "How to scan your web app with Seclayer",
-          "description": "Run a black-box penetration test on any public web application in under 10 minutes.",
+          "description": "Run an automated black-box security scan on any public web application in under 10 minutes.",
           "totalTime": "PT10M",
           "step": [
             {
@@ -169,7 +169,7 @@
               "@type": "HowToStep",
               "position": 2,
               "name": "Choose a scan tier",
-              "text": "Select Basic ($9) for header and SSL checks, or Deep ($19) for a full pentest with DeepSeek AI analysis and per-agent fix prompts."
+              "text": "Select Basic ($9) for header and SSL checks, or Deep ($19) for a full deep scan with DeepSeek AI analysis and per-agent fix prompts."
             },
             {
               "@type": "HowToStep",
@@ -193,7 +193,7 @@
               "name": "What is Seclayer?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Seclayer is a pay-per-scan black-box penetration testing tool for web applications. You paste a URL, pay once, and receive a plain-English security report in under 10 minutes. No installs, agents, or code changes required."
+                "text": "Seclayer is a pay-per-scan automated black-box security scanner for web applications. You paste a URL, pay once, and receive a plain-English security report in under 10 minutes. No installs, agents, or code changes required. It is an automated scanner rather than a manual penetration test."
               }
             },
             {
@@ -201,7 +201,7 @@
               "name": "What security checks does Seclayer perform?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Seclayer checks security headers (CSP, HSTS, X-Frame-Options, Referrer-Policy, Permissions-Policy), SSL/TLS configuration and grade, cookie flags (HttpOnly, Secure, SameSite), CORS misconfigurations, server version disclosure, technology fingerprinting, Supabase Row Level Security (RLS) exposure, and more — covering the OWASP Top 10."
+                "text": "Seclayer checks security headers (CSP, HSTS, X-Frame-Options, Referrer-Policy, Permissions-Policy), SSL/TLS configuration and grade, cookie flags (HttpOnly, Secure, SameSite), CORS misconfigurations, server version disclosure, technology fingerprinting, exposed secrets and sensitive files, known-CVE component versions, and Supabase/Firebase data exposure — aligned with the OWASP Top 10 categories that are testable from outside the app (it does not perform authenticated or server-side testing, so categories like A04, A09 and A10 are out of scope)."
               }
             },
             {
@@ -217,7 +217,7 @@
               "name": "Is Seclayer safe? Will it harm my app?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Yes. Seclayer performs passive, non-destructive black-box scans. It sends normal HTTP requests to analyze your app's responses — it does not write data, exploit vulnerabilities, or interfere with your app's normal operation."
+                "text": "Seclayer runs automated black-box scans designed to be safe and non-disruptive. The large majority of checks are read-only — they analyze your app's normal HTTP responses. A small number of active checks send benign test requests: for example, when an exposed Supabase or Firebase backend is detected, Seclayer sends a single bounded write probe using a synthetic field name that cannot exist in a real schema, and immediately deletes any row it creates. It never sends destructive requests against your data (no PATCH or DELETE of existing records), never brute-forces credentials, and never attempts to exploit a vulnerability or gain persistence. Only scan applications you own or are authorized to test."
               }
             },
             {

@@ -17,7 +17,7 @@ export const PRICE_MAP: Record<string, { amount: number; name: string; descripti
   deep: {
     amount: 1900,
     name: "Seclayer Deep",
-    description: "Full black-box penetration test with DeepSeek AI report + per-agent fix prompt",
+    description: "Full black-box deep scan with DeepSeek AI report + per-agent fix prompt",
   },
   pack_5: {
     amount: 7900,

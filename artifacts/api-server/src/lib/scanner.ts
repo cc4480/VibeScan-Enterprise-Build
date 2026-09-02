@@ -92,6 +92,7 @@ import { checkForKnownVulnerabilities, extractVersionedTechnologies } from "./cv
 import { analyzeJwts } from "./jwtAnalysis";
 import { checkSubdomainTakeover } from "./subdomainTakeover";
 import { checkPathTraversal } from "./pathTraversal";
+import { runInjectionProbes } from "./injectionProbe";
 import { checkSourceMaps } from "./sourceMaps";
 import { checkVibeStackSecurity } from "./vibeStackProbes";
 import { autoEnrichConfidence } from "./scoring";
@@ -815,6 +816,8 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       scanJavaScriptForSecrets(html, finalUrl).catch(() => []),
       // Active path traversal probing — multiple HTTP requests
       checkPathTraversal(finalUrl, html).catch(() => []),
+      // A03 Injection — reflected XSS + error-based SQLi active probing
+      runInjectionProbes(finalUrl, html).catch(() => []),
     );
   }
 
