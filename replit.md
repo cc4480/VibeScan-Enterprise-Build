@@ -38,6 +38,17 @@ and previously-stripped `win32-*-msvc` optional binaries (`rollup`,
 `@tailwindcss/oxide`, `lightningcss`) respectively — both now resolve
 correctly cross-platform.
 
+## Deploying (non-Replit)
+
+Production runs on Docker Compose — see `DEPLOY.md`. `Dockerfile`,
+`compose.yaml` and `deploy/Caddyfile` are the deployment surface; `.replit` and
+the `.replit-artifact/` configs are for Replit **development** only and are not
+used in production.
+
+Note `APP_ORIGIN` is a build arg, not just an env var: `vite.config.ts` bakes it
+into index.html, the sitemap and robots.txt at build time, so a domain change
+needs a rebuilt image.
+
 ## Stack
 
 - **Frontend**: React 19 + Vite 7, Tailwind CSS, Wouter (routing), TanStack Query

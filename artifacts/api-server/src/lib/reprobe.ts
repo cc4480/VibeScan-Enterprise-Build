@@ -13,6 +13,7 @@
  */
 
 import type { ScanVulnerability } from "./scanner";
+import { APP_DOMAIN } from "./appOrigin";
 
 const REPROBE_MIN = 50;
 const REPROBE_MAX = 70;
@@ -71,7 +72,7 @@ export async function reprobe(
     ? fetch(targetUrl, {
         method: "OPTIONS",
         headers: {
-          "Origin": "https://cors-probe.seclayer.io",
+          "Origin": `https://cors-probe.${APP_DOMAIN}`,
           "Access-Control-Request-Method": "GET",
         },
         signal: globalCtrl.signal,

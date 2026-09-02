@@ -9,6 +9,7 @@ import { createProxyMiddleware } from "http-proxy-middleware";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { authMiddleware } from "./middlewares/authMiddleware";
+import { APP_ORIGIN } from "./lib/appOrigin";
 
 const __dirname = nodePath.dirname(fileURLToPath(import.meta.url));
 
@@ -31,10 +32,8 @@ const FRONTEND_CSP = [
 // Explicit CORS allowlist — never reflect the incoming Origin blindly.
 // In dev, also allow *.replit.dev preview domains.
 const CORS_ALLOWLIST: (string | RegExp)[] = [
-  "https://seclayer.io",
-  "https://www.seclayer.io",
-  "https://vibe-scan.replit.app",
-  "https://vibescan.app",
+  APP_ORIGIN,
+  APP_ORIGIN.replace("://", "://www."),
   ...(process.env.CORS_EXTRA_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? []),
   ...(process.env.NODE_ENV !== "production" ? [/\.replit\.dev$/] : []),
 ];

@@ -1,0 +1,101 @@
+# Seclayer — production stack.
+#
+#   cp .env.example .env   # fill in APP_ORIGIN, POSTGRES_PASSWORD, keys
+#   docker compose up -d --build
+#
+# Caddy terminates TLS and obtains certificates from Let's Encrypt automatically
+# using the hostname in APP_ORIGIN, so ports 80 and 443 must both be reachable
+# from the internet — the HTTP-01 challenge needs port 80 even though the site
+# itself is HTTPS-only.
+
+name: seclayer
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-seclayer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-seclayer}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-seclayer} -d ${POSTGRES_DB:-seclayer}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # No ports: mapping — Postgres is reachable only on the internal network.
+    # Exposing 5432 to the host is the single most common way these deployments
+    # get compromised.
+
+  # One-shot: applies the Drizzle schema, then exits. Runs from the builder
+  # stage because drizzle-kit is a devDependency and is deliberately absent from
+  # the runtime image. `app` waits for this to succeed, so a failed migration
+  # stops the deploy instead of starting a server against a stale schema.
+  migrate:
+    build:
+      context: .
+      target: builder
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-seclayer}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-seclayer}
+    command: ["pnpm", "--filter", "@workspace/db", "run", "db:push"]
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      args:
+        # Baked into the frontend bundle; changing it requires a rebuild.
+        APP_ORIGIN: ${APP_ORIGIN:?set APP_ORIGIN in .env}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      PORT: 8080
+      NODE_ENV: production
+      APP_ORIGIN: ${APP_ORIGIN}
+      DATABASE_URL: postgres://${POSTGRES_USER:-seclayer}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-seclayer}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      FROM_EMAIL: ${FROM_EMAIL:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    # Chromium spawns many short-lived processes; without a raised limit the
+    # browser pool exhausts the default and scans start failing under load.
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    # Chromium's /dev/shm usage exceeds Docker's 64MB default and it crashes
+    # mid-render on content-heavy pages.
+    shm_size: 1gb
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      APP_ORIGIN: ${APP_ORIGIN}
+      TLS_EMAIL: ${TLS_EMAIL:?set TLS_EMAIL in .env — Let's Encrypt needs it for expiry notices}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:

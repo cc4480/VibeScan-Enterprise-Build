@@ -52,7 +52,7 @@ Supabase: Row Level Security (RLS) probe — detects exposed tables, missing pol
 
 - Built on: Node.js / Express, React / Vite, PostgreSQL, pg-boss queue
 - AI: DeepSeek (deepseek-chat model)
-- Auth: Replit OIDC
+- Auth: anonymous client token (no account required)
 - All scans are passive and non-destructive by default
 - No agents, browser extensions, or code changes required
 

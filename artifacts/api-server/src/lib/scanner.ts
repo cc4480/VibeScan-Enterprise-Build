@@ -103,6 +103,7 @@ import { runNextjsProbe } from "./nextjsProbe";
 import { runStorageProbe } from "./storageProbe";
 import { isSpa, renderPage } from "./browser";
 import { checkScanTarget, checkHostname } from "./ssrfGuard";
+import { SCANNER_USER_AGENT } from "./appOrigin";
 
 export interface ScanVulnerability {
   id: string;
@@ -353,8 +354,7 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
       signal: controller.signal,
       redirect: "follow",
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; Seclayer-Security-Bot/1.0; +https://seclayer.io/bot)",
+        "User-Agent": SCANNER_USER_AGENT,
         "Accept": "text/html,application/xhtml+xml,*/*",
         "Accept-Language": "en-US,en;q=0.9",
         "Cache-Control": "no-cache, no-store",

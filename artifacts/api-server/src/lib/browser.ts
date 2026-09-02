@@ -14,17 +14,43 @@
  * Pages are closed immediately after rendering.
  */
 
+import { readdirSync, existsSync } from "node:fs";
 import { logger } from "./logger";
 
 // ── Chromium executable resolution ──────────────────────────────────────────
 
 function resolveChromiumPath(): string | undefined {
   const base = process.env.PLAYWRIGHT_BROWSERS_PATH;
-  if (base) {
-    // Playwright pre-installs under <base>/chromium-<revision>/chrome-linux/chrome
-    const rev = "1194";
-    return `${base}/chromium-${rev}/chrome-linux/chrome`;
+  if (!base) return undefined;
+
+  // Playwright installs to <base>/chromium-<revision>/chrome-linux/chrome. The
+  // revision was previously hardcoded, which silently disabled SPA rendering
+  // wherever the installed browser differed — the Playwright Docker image sets
+  // PLAYWRIGHT_BROWSERS_PATH itself and ships a different revision, so the
+  // guessed path simply did not exist and launch fell back to raw fetch.
+  // Discover it instead, newest revision first.
+  let entries: string[];
+  try {
+    entries = readdirSync(base);
+  } catch {
+    return undefined;
   }
+
+  const candidates = entries
+    .filter((name) => /^chromium-\d+$/.test(name))
+    .sort((a, b) => Number(b.split("-")[1]) - Number(a.split("-")[1]));
+
+  // Layout changed across Playwright versions: "chrome-linux64" on current
+  // releases, "chrome-linux" on older ones. Check both rather than assuming.
+  for (const dir of candidates) {
+    for (const layout of ["chrome-linux64", "chrome-linux"]) {
+      const exe = `${base}/${dir}/${layout}/chrome`;
+      if (existsSync(exe)) return exe;
+    }
+  }
+
+  // Nothing matched — let Playwright resolve the browser itself rather than
+  // handing launch() a path we know is wrong.
   return undefined;
 }
 

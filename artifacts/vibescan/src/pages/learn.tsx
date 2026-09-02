@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSeo } from "@/lib/seo";
+import { APP_ORIGIN } from "@/lib/origin";
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -770,7 +771,7 @@ export default function LearnPage() {
   useSeo({
     title: "Security Documentation — Seclayer",
     description: "Plain-English explanations of every security check Seclayer runs: HTTPS, HSTS, CSP, X-Frame-Options, CORS, cookie flags, Supabase RLS, and more. With code fixes.",
-    canonical: "https://seclayer.io/learn",
+    canonical: `${APP_ORIGIN}/learn`,
   });
 
   const [activeCategory, setActiveCategory] = useState(CATEGORIES[0].id);

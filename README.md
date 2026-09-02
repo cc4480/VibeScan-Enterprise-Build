@@ -187,11 +187,28 @@ Key entry points:
 
 ## Deployment
 
-The production target builds the front end and API together and serves the
-static bundle from the API process — set `FRONTEND_STATIC_DIR` to the built
-front end (`artifacts/vibescan/dist/public`) and run
-`node artifacts/api-server/dist/index.mjs`. `.replit` holds the reference
-configuration. Never set `NODE_TLS_REJECT_UNAUTHORIZED=0` in production.
+**[`DEPLOY.md`](DEPLOY.md) is the full guide** — Docker Compose onto any Linux
+host, with DNS, TLS, backups and the caveats worth knowing before taking real
+traffic.
+
+```bash
+cp .env.example .env    # set APP_ORIGIN, POSTGRES_PASSWORD, TLS_EMAIL, ENCRYPTION_KEY
+docker compose up -d --build
+```
+
+That brings up PostgreSQL, applies the schema, starts the app, and puts Caddy
+in front for automatic Let's Encrypt TLS. The image is built on Microsoft's
+Playwright base so Chromium and its system libraries match the pinned
+Playwright version.
+
+`APP_ORIGIN` is a **build** argument as well as a runtime one: the frontend
+bakes it into canonical links, Open Graph tags, JSON-LD and the sitemap, so
+changing the domain means rebuilding the image.
+
+Deploying without Docker: build the front end and API, point
+`FRONTEND_STATIC_DIR` at `artifacts/vibescan/dist/public`, and run
+`node artifacts/api-server/dist/index.mjs` behind a TLS-terminating proxy.
+Never set `NODE_TLS_REJECT_UNAUTHORIZED=0` in production.
 
 ## License
 

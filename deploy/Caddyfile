@@ -1,0 +1,25 @@
+# Caddy obtains and renews the TLS certificate automatically. {$APP_ORIGIN}
+# carries the scheme, which Caddy accepts as a site address — https://secscan.us
+# tells it both the hostname and that TLS is wanted.
+
+{
+	email {$TLS_EMAIL}
+}
+
+{$APP_ORIGIN} {
+	encode zstd gzip
+
+	# The app sets its own CSP, HSTS and cross-origin isolation headers; Caddy
+	# must not add a second, conflicting set — browsers enforce the union of
+	# duplicate CSP headers, which silently breaks the page.
+	reverse_proxy app:8080 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+
+		# A deep scan can legitimately take minutes; the default 
+		# read timeout would cut the status long-poll short.
+		transport http {
+			read_timeout 300s
+		}
+	}
+}

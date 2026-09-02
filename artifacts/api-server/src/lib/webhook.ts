@@ -7,6 +7,7 @@
 
 import { logger } from "./logger";
 import { checkHostname } from "./ssrfGuard";
+import { APP_DOMAIN } from "./appOrigin";
 
 // ── SSRF guard ────────────────────────────────────────────────────────────────
 // Host rules live in ssrfGuard.ts, shared with the scan-target path so the two
@@ -106,7 +107,7 @@ function buildSlackBody(payload: WebhookPayload): Record<string, unknown> {
         color,
         fallback: `${label} for ${domain}`,
         fields: attachmentFields,
-        footer: "Seclayer · seclayer.io",
+        footer: `Seclayer · ${APP_DOMAIN}`,
         ts: Math.floor(Date.now() / 1000),
       },
     ],

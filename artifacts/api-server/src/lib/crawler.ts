@@ -106,7 +106,7 @@ async function fetchPage(url: string, timeoutMs: number): Promise<PageResult | n
       signal: controller.signal,
       redirect: "follow",
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; Seclayer-Security-Bot/1.0; +https://seclayer.io/bot)",
+        "User-Agent": SCANNER_USER_AGENT,
         "Accept": "text/html,application/xhtml+xml,*/*",
         "Cache-Control": "no-cache, no-store",
         "Pragma": "no-cache",
@@ -188,6 +188,9 @@ function snapshotHeaders(headers: Record<string, string>): HeaderSnapshot {
 
 
 import { type PathProbe, PATH_PROBES } from "./crawler-data";
+// appOrigin reads env only — no DB import chain, so this is safe here
+// (see replit.md on value imports from scanner.ts).
+import { SCANNER_USER_AGENT } from "./appOrigin";
 
 
 /**
