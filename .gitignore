@@ -53,3 +53,5 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+# Filled-in config for the Docker stack; .env.docker.example is the template.
+.env.docker
