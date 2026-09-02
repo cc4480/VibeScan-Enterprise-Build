@@ -160,6 +160,25 @@ second copy:
 - Not covered: DNS rebinding between check and connect. Closing that needs
   connection-level pinning of the resolved IP.
 
+## Rate limiting and client identity
+
+Client tokens are self-minted UUIDs (`authMiddleware` auto-creates a user from
+any valid v4), so per-user limits are unenforceable — anything that needs to
+resist abuse counts against the client address instead.
+
+- `clientIp.ts` owns address resolution. Never read `x-forwarded-for` directly:
+  clients set it. `configureTrustProxy()` applies `TRUST_PROXY` (hop count;
+  default 1 in production, 0 in dev) and everything else uses `req.ip`.
+- `rateLimit.ts` is a sliding-window limiter, in-process. Applied to
+  `POST /scans`, `POST /monitor/subscriptions` and the manual monitor rescan.
+  Blocked requests are deliberately not counted, or a caller hammering a blocked
+  endpoint would push their own retry time out indefinitely.
+- The guarantee holds only when the app is unreachable except through the proxy.
+  `compose.yaml` gives `app` no published port for exactly this reason, and
+  `deploy/Caddyfile` overwrites `X-Forwarded-For` rather than appending.
+- Adding a middleware to a route widens `req.params` to `string | string[]` in
+  Express's types — hence the `String(req.params.id)` in the monitor rescan route.
+
 ## Gotchas
 
 - **Shared libs must be built before typecheck on a fresh clone** — `lib/db`, `lib/api-zod`, `lib/api-client-react`, and `lib/replit-auth-web` all use TypeScript project references and must have their `dist/` emitted first. Each has a `build` script (`tsc -p tsconfig.json`). The `typecheck` workflow does this automatically.

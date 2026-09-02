@@ -10,6 +10,7 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { authMiddleware } from "./middlewares/authMiddleware";
 import { APP_ORIGIN } from "./lib/appOrigin";
+import { configureTrustProxy } from "./lib/clientIp";
 
 const __dirname = nodePath.dirname(fileURLToPath(import.meta.url));
 
@@ -51,6 +52,11 @@ const corsOptions: CorsOptions = {
 };
 
 const app: Express = express();
+
+// Must come before anything that reads req.ip: behind the compose stack's Caddy
+// the socket address is the proxy's, so without this every caller shares one
+// rate-limit bucket.
+configureTrustProxy(app);
 
 // Hide "X-Powered-By: Express" — no reason to advertise the server tech.
 app.disable("x-powered-by");

@@ -9,6 +9,7 @@ import { enqueueScan } from "../lib/queue";
 import { scansTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { checkScanTarget } from "../lib/ssrfGuard";
+import { rateLimitMiddleware, scanRateLimitRules } from "../lib/rateLimit";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -38,7 +39,13 @@ const CreateMonitorBody = z.object({
 // Create a new monitoring subscription for a URL.
 // With DISABLE_PAYMENTS=true this is granted immediately.
 
-router.post("/monitor/subscriptions", async (req, res): Promise<void> => {
+// A subscription schedules recurring scans, so it draws on the same budget.
+const monitorRateLimit = rateLimitMiddleware({
+  rules: scanRateLimitRules(),
+  name: "monitor-subscriptions",
+});
+
+router.post("/monitor/subscriptions", monitorRateLimit, async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) {
     res.status(401).json({ error: "Unauthorized" });
     return;
@@ -494,13 +501,16 @@ router.get("/monitor/subscriptions/:id/regressions", async (req, res): Promise<v
 // ── POST /api/monitor/subscriptions/:id/scan ─────────────────────────────────
 // Immediately enqueue a manual deep scan for a subscription.
 
-router.post("/monitor/subscriptions/:id/scan", async (req, res): Promise<void> => {
+router.post("/monitor/subscriptions/:id/scan", monitorRateLimit, async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
-  const subId = req.params.id;
+  // String(): with a middleware in the handler chain Express widens req.params
+  // to string | string[]. A route param cannot actually repeat, so this only
+  // restates what the router already guarantees.
+  const subId = String(req.params.id);
 
   const [sub] = await db
     .select()

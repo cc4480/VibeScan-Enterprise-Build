@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import * as client from "openid-client";
 import crypto from "crypto";
 import { GetCurrentAuthUserResponse } from "@workspace/api-zod";
+import { clientIp } from "../lib/clientIp";
 import {
   getOidcConfig,
   createSession,
@@ -36,9 +37,10 @@ function getCallbackUrl(req: Request): string {
 }
 
 router.get("/login", async (req: Request, res: Response): Promise<void> => {
-  const ip = String(
-    req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "unknown",
-  ).split(",")[0].trim();
+  // Was reading X-Forwarded-For directly, which the client sets — anyone could
+  // rotate the header and bypass this. clientIp() uses Express's resolution
+  // under the configured TRUST_PROXY instead.
+  const ip = clientIp(req);
   if (isLoginRateLimited(ip)) {
     res.status(429).send("Too many login attempts. Please try again later.");
     return;

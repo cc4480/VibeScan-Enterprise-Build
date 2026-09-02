@@ -8,6 +8,7 @@ import {
 } from "@workspace/api-zod";
 import { enqueueScan } from "../lib/queue";
 import { checkScanTarget } from "../lib/ssrfGuard";
+import { rateLimitMiddleware, scanRateLimitRules } from "../lib/rateLimit";
 
 const router: IRouter = Router();
 
@@ -74,7 +75,12 @@ router.get("/scans", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/scans", async (req, res): Promise<void> => {
+const scanRateLimit = rateLimitMiddleware({
+  rules: scanRateLimitRules(),
+  name: "scans",
+});
+
+router.post("/scans", scanRateLimit, async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) {
     res.status(401).json({ error: "Unauthorized" });
     return;

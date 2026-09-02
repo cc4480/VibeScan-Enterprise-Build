@@ -16,6 +16,12 @@
 		header_up X-Forwarded-Proto {scheme}
 		header_up X-Forwarded-Host {host}
 
+		# Overwrite rather than append. Caddy would otherwise preserve a
+		# client-supplied X-Forwarded-For and add the real peer after it, and the
+		# app's rate limiting keys on that address — a caller who sets the header
+		# themselves would get a fresh bucket per request.
+		header_up X-Forwarded-For {remote_host}
+
 		# A deep scan can legitimately take minutes; the default 
 		# read timeout would cut the status long-poll short.
 		transport http {

@@ -112,6 +112,19 @@ curl -s -X POST https://secscan.us/api/scans \
 # expected: {"error":"Target resolves to a private, loopback, or link-local address."}
 ```
 
+```bash
+# Rate limiting must survive a caller rotating both their token and a spoofed
+# X-Forwarded-For. With the defaults the 6th request in an hour is refused.
+for i in $(seq 1 6); do
+  curl -s -o /dev/null -w "%{http_code} " -X POST https://secscan.us/api/scans \
+    -H "Authorization: Bearer $(uuidgen)" -H 'Content-Type: application/json' \
+    -H "X-Forwarded-For: 198.51.100.$i" \
+    -d '{"targetUrl":"https://example.com/","tier":"basic"}'
+done; echo
+# expected: 201 201 201 201 201 429   — if every one is 201, the app is seeing
+# the spoofed header: check TRUST_PROXY and that app's port is not published.
+```
+
 Then open the site and run a scan against a domain you own, end to end.
 
 ## Operating it
@@ -143,11 +156,19 @@ in `.env` for more.
 
 ## Things to know before taking real traffic
 
-- **There is no rate limiting on scan creation.** Any client can queue
-  unlimited scans, and client tokens are self-minted UUIDs so per-user limits
-  wouldn't help. A deep scan is 300–500+ outbound requests, so an abuser can
-  point your server at a third party or exhaust a shared `DEEPSEEK_API_KEY`.
-  Put a limit in front of `POST /api/scans` before publicising the site.
+- **Scan creation is rate limited per client address** — 5/hour and 20/day by
+  default (`SCAN_LIMIT_PER_HOUR`, `SCAN_LIMIT_PER_DAY`). Client tokens are
+  self-minted UUIDs, so the address is the only identity worth counting.
+  Counters are in-process: they reset on restart, and running more than one app
+  container would need shared storage instead.
+
+  The limit depends on the app seeing the caller's real address, which is what
+  `TRUST_PROXY` configures. **Do not publish the app's port** — the shipped
+  compose stack deliberately gives the `app` service no `ports:` mapping, so it
+  is reachable only through Caddy, which overwrites `X-Forwarded-For` with the
+  real peer. Expose the app directly with `TRUST_PROXY=1` and callers can set
+  that header themselves for a fresh bucket per request, bypassing the limit
+  entirely.
 - **Bundled CVE/EOL data ages.** The app logs a warning past 90 days and
   refreshes daily from endoflife.date; if that fetch is blocked outbound, it
   silently keeps serving stale data.
