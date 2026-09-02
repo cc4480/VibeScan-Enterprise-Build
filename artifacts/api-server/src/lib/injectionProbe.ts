@@ -22,6 +22,7 @@
 
 import { randomUUID, randomBytes } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
+import { scanFetch } from "./http";
 
 const TIMEOUT_MS = 7_000;
 const MAX_CASES = 20;
@@ -66,21 +67,8 @@ interface Probed {
 }
 
 async function safeGet(url: string): Promise<Probed | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      redirect: "follow",
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; Seclayer-Security-Bot/1.0; +https://seclayer.io/bot)" },
-    });
-    const body = await res.text().catch(() => "");
-    return { status: res.status, body };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  const res = await scanFetch(url, { timeoutMs: TIMEOUT_MS });
+  return res ? { status: res.status, body: res.body } : null;
 }
 
 interface Case { path: string; param: string }

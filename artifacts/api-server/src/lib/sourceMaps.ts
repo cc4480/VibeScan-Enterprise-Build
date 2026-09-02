@@ -18,6 +18,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
+import { scanFetch } from "./http";
 
 const TIMEOUT_MS = 8_000;
 const MAX_JS_FILES = 8;
@@ -33,21 +34,13 @@ async function tryFetch(
   url: string,
   rangeHeader?: string,
 ): Promise<{ ok: boolean; body: string; ct: string } | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const headers: Record<string, string> = {};
-    if (rangeHeader) headers["Range"] = rangeHeader;
-    const res = await fetch(url, { signal: controller.signal, headers });
-    if (!res.ok && res.status !== 206) return null;
-    const body = await res.text().catch(() => "");
-    const ct = res.headers.get("content-type") ?? "";
-    return { ok: true, body, ct };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  const headers: Record<string, string> = {};
+  if (rangeHeader) headers["Range"] = rangeHeader;
+
+  const res = await scanFetch(url, { headers, timeoutMs: TIMEOUT_MS });
+  // 206 is expected when a Range header was sent, so it counts alongside 2xx.
+  if (!res || (res.status < 200 || res.status >= 300) && res.status !== 206) return null;
+  return { ok: true, body: res.body, ct: res.headers["content-type"] ?? "" };
 }
 
 function extractJsUrls(html: string, baseUrl: string): string[] {

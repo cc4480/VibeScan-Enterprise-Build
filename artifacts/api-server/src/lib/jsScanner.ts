@@ -24,33 +24,23 @@ function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { type SecretPattern, SECRET_PATTERNS } from "./secret-pattern-data";
+import { scanFetch } from "./http";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EXTRACT SCRIPT CONTENT
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function fetchScript(url: string): Promise<string> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), JS_FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        "Pragma": "no-cache",
-        "Expires": "0",
-      },
-    });
-    if (!res.ok) return "";
-    const ct = res.headers.get("content-type") ?? "";
-    if (!ct.includes("javascript") && !ct.includes("text/plain") && !ct.includes("application/")) return "";
-    const body = await res.text();
-    return body.slice(0, MAX_SCRIPT_SIZE_BYTES);
-  } catch {
-    return "";
-  } finally {
-    clearTimeout(timer);
-  }
+  const res = await scanFetch(url, {
+    headers: { Expires: "0" },
+    timeoutMs: JS_FETCH_TIMEOUT_MS,
+  });
+  if (!res || res.status < 200 || res.status >= 300) return "";
+
+  const ct = res.headers["content-type"] ?? "";
+  if (!ct.includes("javascript") && !ct.includes("text/plain") && !ct.includes("application/")) return "";
+
+  return res.body.slice(0, MAX_SCRIPT_SIZE_BYTES);
 }
 
 function extractInlineScripts(html: string): string {

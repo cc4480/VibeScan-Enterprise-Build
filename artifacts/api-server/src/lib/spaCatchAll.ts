@@ -13,6 +13,8 @@
  * a given response matches that same shell (by body size or <title>).
  */
 
+import { scanFetch } from "./http";
+
 const NONCE_TIMEOUT_MS = 8_000;
 
 export interface CatchAllFingerprint {
@@ -23,21 +25,8 @@ export interface CatchAllFingerprint {
 async function safeGetForFingerprint(
   url: string,
 ): Promise<{ status: number; body: string } | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), NONCE_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      redirect: "follow",
-      headers: { "User-Agent": "Mozilla/5.0 Seclayer Security Scanner" },
-    });
-    const body = await res.text().catch(() => "");
-    return { status: res.status, body };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  const res = await scanFetch(url, { timeoutMs: NONCE_TIMEOUT_MS });
+  return res ? { status: res.status, body: res.body } : null;
 }
 
 /**

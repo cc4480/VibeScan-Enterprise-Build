@@ -98,38 +98,22 @@ interface PageResult {
 }
 
 async function fetchPage(url: string, timeoutMs: number): Promise<PageResult | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, {
-      method: "GET",
-      signal: controller.signal,
-      redirect: "follow",
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; Seclayer-Security-Bot/1.0; +https://seclayer.io/bot)",
-        "Accept": "text/html,application/xhtml+xml,*/*",
-        "Cache-Control": "no-cache, no-store",
-        "Pragma": "no-cache",
-      },
-    });
-    const headers: Record<string, string> = {};
-    res.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });
-    const body = await res.text().catch(() => "");
+  // Set-Cookie headers arrive individually from the shared client, so a cookie
+  // whose Expires date contains a comma still parses correctly.
+  const res = await scanFetch(url, {
+    method: "GET",
+    headers: { Accept: "text/html,application/xhtml+xml,*/*" },
+    timeoutMs,
+  });
+  if (!res) return null;
 
-    // Use getSetCookie() to preserve each Set-Cookie header as a separate string,
-    // avoiding mis-parsing cookies that contain commas (e.g. Expires=Thu, 01 Jan …).
-    // Falls back to an empty array if the method is unavailable.
-    const setCookies: string[] =
-      typeof (res.headers as { getSetCookie?: () => string[] }).getSetCookie === "function"
-        ? (res.headers as { getSetCookie: () => string[] }).getSetCookie()
-        : [];
-
-    return { status: res.status, headers, setCookies, body, finalUrl: res.url };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  return {
+    status: res.status,
+    headers: res.headers,
+    setCookies: res.setCookies,
+    body: res.body,
+    finalUrl: res.finalUrl,
+  };
 }
 
 // Light probe — fetches a URL and returns status, headers, body, and final URL after redirects
@@ -137,27 +121,9 @@ async function probeUrl(
   url: string,
   timeoutMs: number,
 ): Promise<{ status: number; headers: Record<string, string>; body: string; finalUrl: string } | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      redirect: "follow",
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; Seclayer-Security-Bot/1.0)",
-        "Cache-Control": "no-cache, no-store",
-        "Pragma": "no-cache",
-      },
-    });
-    const headers: Record<string, string> = {};
-    res.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });
-    const body = await res.text().catch(() => "");
-    return { status: res.status, headers, body, finalUrl: res.url };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  const res = await scanFetch(url, { timeoutMs });
+  if (!res) return null;
+  return { status: res.status, headers: res.headers, body: res.body, finalUrl: res.finalUrl };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -188,6 +154,7 @@ function snapshotHeaders(headers: Record<string, string>): HeaderSnapshot {
 
 
 import { type PathProbe, PATH_PROBES } from "./crawler-data";
+import { scanFetch } from "./http";
 
 
 /**

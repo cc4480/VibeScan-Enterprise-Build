@@ -8,6 +8,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { scanFetch, type HttpResult } from "./http";
 import type { ScanVulnerability } from "./scanner";
 import { OPEN_REDIRECT_PROBE, OPEN_REDIRECT_PARAMS } from "./payloads";
 import { detectCatchAll, matchesCatchAll } from "./spaCatchAll";
@@ -18,32 +19,17 @@ function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
   return { id: randomUUID(), ...partial };
 }
 
+/**
+ * Thin alias over the shared scan client, kept so the 13 probes below read
+ * unchanged. Timeout default, no-cache headers and the null-on-failure contract
+ * all now come from lib/http.ts.
+ */
 async function safeGet(
   url: string,
   options: RequestInit = {},
   timeoutMs = PROBE_TIMEOUT_MS,
-): Promise<{ status: number; body: string; headers: Record<string, string>; finalUrl: string } | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-      headers: {
-        "Cache-Control": "no-cache, no-store",
-        "Pragma": "no-cache",
-        ...(options.headers as Record<string, string> | undefined),
-      },
-    });
-    const body = await res.text().catch(() => "");
-    const headers: Record<string, string> = {};
-    res.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });
-    return { status: res.status, body, headers, finalUrl: res.url };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+): Promise<HttpResult | null> {
+  return scanFetch(url, { ...options, timeoutMs });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -611,30 +597,21 @@ export async function checkDirectoryListing(
   const results = await Promise.allSettled(
     DIRECTORY_LISTING_DIRS.map(async (dir) => {
       const url = origin + dir;
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 6_000);
-      try {
-        const res = await fetch(url, { signal: controller.signal, redirect: "follow" });
-        if (!res.ok) return null;
-        const body = await res.text();
-        const matched = DIRECTORY_LISTING_PATTERNS.some((rx) => rx.test(body));
-        if (!matched) return null;
-        return vuln({
-          name: "Directory Listing Enabled",
-          severity: "medium",
-          category: "Information Disclosure",
-          description: `Directory listing is enabled at ${dir}. This exposes the complete file structure of that directory, allowing attackers to enumerate all files — including backup archives, configuration files, log files, and uploaded content that should not be public.`,
-          evidence: `GET ${url} → HTTP 200\nDirectory index page returned (autoindex enabled)`,
-          solution: "Disable directory listing at the web server. Nginx: remove the 'autoindex on' directive. Apache: add 'Options -Indexes' to the relevant directory block or .htaccess.",
-          cweId: "CWE-548",
-          cvssScore: 5.3,
-          wstgId: "WSTG-CONF-04",
-        });
-      } catch {
-        return null;
-      } finally {
-        clearTimeout(timer);
-      }
+      const res = await safeGet(url, { redirect: "follow" }, 6_000);
+      if (!res || res.status < 200 || res.status >= 300) return null;
+      const matched = DIRECTORY_LISTING_PATTERNS.some((rx) => rx.test(res.body));
+      if (!matched) return null;
+      return vuln({
+        name: "Directory Listing Enabled",
+        severity: "medium",
+        category: "Information Disclosure",
+        description: `Directory listing is enabled at ${dir}. This exposes the complete file structure of that directory, allowing attackers to enumerate all files — including backup archives, configuration files, log files, and uploaded content that should not be public.`,
+        evidence: `GET ${url} → HTTP 200\nDirectory index page returned (autoindex enabled)`,
+        solution: "Disable directory listing at the web server. Nginx: remove the 'autoindex on' directive. Apache: add 'Options -Indexes' to the relevant directory block or .htaccess.",
+        cweId: "CWE-548",
+        cvssScore: 5.3,
+        wstgId: "WSTG-CONF-04",
+      });
     }),
   );
 
@@ -657,16 +634,10 @@ export async function checkSecurityTxt(
 
   const paths = ["/.well-known/security.txt", "/security.txt"];
   for (const p of paths) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 6_000);
-    try {
-      const res = await fetch(origin + p, { signal: controller.signal, redirect: "follow" });
-      if (res.ok) {
-        const body = await res.text();
-        if (/Contact:|Expires:|Policy:/i.test(body)) return [];
-      }
-    } catch { /* network error = not present */ } finally {
-      clearTimeout(timer);
+    // null (network error) reads the same as absent, which is the intent here.
+    const res = await safeGet(origin + p, { redirect: "follow" }, 6_000);
+    if (res && res.status >= 200 && res.status < 300) {
+      if (/Contact:|Expires:|Policy:/i.test(res.body)) return [];
     }
   }
 

@@ -16,6 +16,7 @@
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 import { PATH_TRAVERSAL_TEMPLATES, classifyTraversalBody } from "./payloads";
+import { scanFetch } from "./http";
 
 const TIMEOUT_MS = 7_000;
 
@@ -45,18 +46,10 @@ const PROBE_PARAMS = ["file", "path", "doc", "page", "name"];
 // ─── HTTP helper ──────────────────────────────────────────────────────────────
 
 async function safeGet(url: string): Promise<{ status: number; body: string } | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, { signal: controller.signal, redirect: "follow" });
-    if (!res.ok && res.status !== 200) return null;
-    const body = await res.text().catch(() => "");
-    return { status: res.status, body };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  const res = await scanFetch(url, { timeoutMs: TIMEOUT_MS });
+  // Unchanged behaviour: only a 2xx counts as readable content here.
+  if (!res || res.status < 200 || res.status >= 300) return null;
+  return { status: res.status, body: res.body };
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────

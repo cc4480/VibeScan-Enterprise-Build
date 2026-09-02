@@ -21,6 +21,7 @@
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 import { detectCatchAll, matchesCatchAll } from "./spaCatchAll";
+import { scanFetch } from "./http";
 
 const TIMEOUT_MS = 7_000;
 const MIN_BODY_BYTES = 200; // Skip thin redirect/error pages
@@ -30,22 +31,9 @@ function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
 }
 
 async function safeGet(url: string): Promise<{ status: number; body: string; ct: string } | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      redirect: "follow",
-      headers: { "User-Agent": "Mozilla/5.0 Seclayer Security Scanner" },
-    });
-    const body = await res.text().catch(() => "");
-    const ct = res.headers.get("content-type") ?? "";
-    return { status: res.status, body, ct };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  const res = await scanFetch(url, { timeoutMs: TIMEOUT_MS });
+  if (!res) return null;
+  return { status: res.status, body: res.body, ct: res.headers["content-type"] ?? "" };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -13,6 +13,7 @@
  */
 
 import type { ScanVulnerability } from "./scanner";
+import { scanFetch } from "./http";
 
 const REPROBE_MIN = 50;
 const REPROBE_MAX = 70;
@@ -55,32 +56,21 @@ export async function reprobe(
   // ── Launch all probes in parallel under the shared 15s budget ────────────────
 
   // Probe 1: Passive GET — re-validates all header-based findings
-  const getProbe = fetch(targetUrl, {
+  const getProbe = scanFetch(targetUrl, {
     method: "GET",
     signal: globalCtrl.signal,
-    redirect: "follow",
-    headers: { "Cache-Control": "no-cache, no-store", "Pragma": "no-cache" },
-  }).then((res) => {
-    const raw: Record<string, string> = {};
-    res.headers.forEach((value, key) => { raw[key.toLowerCase()] = value; });
-    return raw;
-  }).catch(() => null as Record<string, string> | null);
+  }).then((res) => res?.headers ?? null);
 
   // Probe 2: Active OPTIONS — corroborates CORS wildcard findings
   const corsProbe = hasBorderlineCors
-    ? fetch(targetUrl, {
+    ? scanFetch(targetUrl, {
         method: "OPTIONS",
         headers: {
           "Origin": "https://cors-probe.seclayer.io",
           "Access-Control-Request-Method": "GET",
         },
         signal: globalCtrl.signal,
-        redirect: "follow",
-      }).then((res) => {
-        const raw: Record<string, string> = {};
-        res.headers.forEach((value, key) => { raw[key.toLowerCase()] = value; });
-        return raw;
-      }).catch(() => null as Record<string, string> | null)
+      }).then((res) => res?.headers ?? null)
     : Promise.resolve(null as Record<string, string> | null);
 
   // Probe 3: DNS TXT probe — corroborates SPF/DMARC/email-security findings

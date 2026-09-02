@@ -73,17 +73,13 @@ async function isHstsPreloaded(hostname: string): Promise<boolean> {
   // ── Behavioral fallback for natively preloaded domains ───────────────────
   // If http:// traffic automatically upgrades to https://, the domain is
   // enforcing HTTPS one way or another — suppress the HSTS finding.
-  try {
-    const ctrl2 = new AbortController();
-    const timer2 = setTimeout(() => ctrl2.abort(), 5_000);
-    const httpRes = await fetch(`http://${apex}/`, { redirect: "follow", signal: ctrl2.signal });
-    clearTimeout(timer2);
-    if (httpRes.url.startsWith("https://")) return true;
-  } catch { /* fall through */ }
+  const httpRes = await scanFetch(`http://${apex}/`, { timeoutMs: 5_000 });
+  if (httpRes?.finalUrl.startsWith("https://")) return true;
 
   return false;
 }
 
+import { runWithScanHttp, scanFetch, scanFetchOrThrow } from "./http";
 import { runAllProbes } from "./probes";
 import { checkDnsSecurity } from "./dnsChecks";
 import { scanJavaScriptForSecrets } from "./jsScanner";
@@ -330,41 +326,43 @@ function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[
   return findings;
 }
 
+/**
+ * Establishes the per-scan HTTP context (see lib/http.ts) and runs the scan
+ * inside it, so every probe below this call shares one client, one User-Agent,
+ * and one place where credentials are scoped to the target host.
+ *
+ * Split from the body only to avoid indenting the whole function.
+ */
 export async function runScan(targetUrl: string, tier: string): Promise<ScanResult> {
+  return runWithScanHttp({ targetUrl }, () => runScanInner(targetUrl, tier));
+}
+
+async function runScanInner(targetUrl: string, tier: string): Promise<ScanResult> {
   const startedAt = Date.now();
-  const controller = new AbortController();
-  const timeoutHandle = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
-  let response: Response;
-  let finalUrl = targetUrl;
-  let html = "";
-
+  // The only request whose failure ends the scan, so it is the only one that
+  // throws rather than returning null — the underlying reason is what the user
+  // needs to see when a target is unreachable.
+  let initial;
   try {
-    response = await fetch(targetUrl, {
-      signal: controller.signal,
-      redirect: "follow",
+    initial = await scanFetchOrThrow(targetUrl, {
+      timeoutMs: FETCH_TIMEOUT_MS,
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; Seclayer-Security-Bot/1.0; +https://seclayer.io/bot)",
         "Accept": "text/html,application/xhtml+xml,*/*",
         "Accept-Language": "en-US,en;q=0.9",
-        "Cache-Control": "no-cache, no-store",
-        "Pragma": "no-cache",
       },
     });
-    finalUrl = response.url || targetUrl;
-    try { html = await response.text(); } catch { html = ""; }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`Failed to reach target URL: ${msg}`);
-  } finally {
-    clearTimeout(timeoutHandle);
   }
 
-  const rawHeaders: Record<string, string> = {};
-  response.headers.forEach((val, key) => {
-    rawHeaders[key] = val;
-  });
+  let finalUrl = initial.finalUrl || targetUrl;
+  let html = initial.body;
+
+  // Keys arrive lowercased from the shared client. Every lookup already goes
+  // through the case-insensitive helper above, so this is a no-op for callers.
+  const rawHeaders: Record<string, string> = { ...initial.headers };
 
   // ── SPA detection + headless rendering (deep tier only) ───────────────────
   // If the server returned a JS-shell SPA (empty <div id="root"> etc.), re-fetch
@@ -837,7 +835,7 @@ export async function runScan(targetUrl: string, tier: string): Promise<ScanResu
   return {
     targetUrl,
     finalUrl,
-    statusCode: response.status,
+    statusCode: initial.status,
     server,
     tlsGrade,
     technologies,

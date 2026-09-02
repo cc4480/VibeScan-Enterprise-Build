@@ -17,6 +17,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
+import { scanFetch } from "./http";
 
 const TIMEOUT_MS = 8_000;
 
@@ -28,28 +29,17 @@ async function safePost(
   url: string,
   body: unknown,
 ): Promise<{ status: number; body: string; ct: string } | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 Seclayer Security Scanner",
-        Accept: "application/json, application/graphql+json",
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-      redirect: "follow",
-    });
-    const text = await res.text().catch(() => "");
-    const ct = res.headers.get("content-type") ?? "";
-    return { status: res.status, body: text, ct };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  const res = await scanFetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json, application/graphql+json",
+    },
+    body: JSON.stringify(body),
+    timeoutMs: TIMEOUT_MS,
+  });
+  if (!res) return null;
+  return { status: res.status, body: res.body, ct: res.headers["content-type"] ?? "" };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

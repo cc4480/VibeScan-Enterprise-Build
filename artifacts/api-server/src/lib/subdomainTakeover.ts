@@ -68,22 +68,16 @@ async function resolveCnameChain(hostname: string): Promise<string | null> {
 // ─── Service fingerprints ─────────────────────────────────────────────────────
 
 import { type ServiceFingerprint, SERVICES } from "./subdomain-service-data";
+import { scanFetch } from "./http";
 
 
 // ─── HTTP helper ──────────────────────────────────────────────────────────────
 
 async function safeGet(url: string): Promise<{ status: number; body: string } | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, { signal: controller.signal, redirect: "manual" });
-    const body = await res.text().catch(() => "");
-    return { status: res.status, body };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  // manual: a dangling CNAME is identified by the parked provider's own
+  // response, so a redirect must not be followed away from it.
+  const res = await scanFetch(url, { redirect: "manual", timeoutMs: TIMEOUT_MS });
+  return res ? { status: res.status, body: res.body } : null;
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
