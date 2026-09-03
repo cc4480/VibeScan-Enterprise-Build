@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, integer, timestamp, jsonb, real, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, integer, timestamp, jsonb, real, index, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -35,6 +35,43 @@ export const scansTable = pgTable("scans", {
   index("idx_scans_user_id").on(table.userId),
   index("idx_scans_status").on(table.status),
 ]);
+
+// ── Out-of-band interaction collector ────────────────────────────────────────
+// Powers SSRF and blind-vulnerability detection. A probe injects a URL back to
+// this app carrying a unique token; if the target's server fetches it, the hit
+// lands here and proves the vulnerability. Only registered, unexpired tokens
+// are recorded, so an internet-facing callback route cannot be turned into an
+// unbounded write by anyone spraying random paths.
+export const oobTokensTable = pgTable(
+  "oob_tokens",
+  {
+    token: varchar("token").primaryKey(),
+    scanId: uuid("scan_id").references(() => scansTable.id, { onDelete: "cascade" }),
+    // What the token was planted in, for the finding's evidence.
+    context: text("context"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [index("idx_oob_tokens_scan").on(table.scanId)],
+);
+
+export const oobInteractionsTable = pgTable(
+  "oob_interactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    token: varchar("token").notNull(),
+    method: varchar("method"),
+    path: text("path"),
+    // The address that made the callback — often the target's own egress IP,
+    // which is itself evidence of a server-side request.
+    sourceIp: varchar("source_ip"),
+    userAgent: text("user_agent"),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("idx_oob_interactions_token").on(table.token)],
+);
+
+export type OobInteraction = typeof oobInteractionsTable.$inferSelect;
 
 export const reportsTable = pgTable("reports", {
   id: uuid("id").primaryKey().defaultRandom(),

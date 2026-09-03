@@ -375,12 +375,41 @@ for.
 
 ---
 
+## Module 17 — Out-of-Band SSRF Detection ⚡ *Deep scans only, collector required*
+
+OWASP **A10**. Server-Side Request Forgery produces nothing in the target's own
+response — a server tricked into fetching an attacker URL simply does so — so a
+scan reading only that response is blind to the entire class.
+
+Detection is out-of-band. A URL pointing back at this application, carrying a
+token unique to one injection point, is planted in parameters whose name says
+they carry a URL (`url`, `uri`, `callback`, `webhook`, `redirect`, `image`,
+`feed`, `proxy`, …). If the target's server fetches it, the callback lands on
+the collector and proves the vulnerability. The token is random and appears
+nowhere else, so a callback carrying it can only have come from a server that
+received the injected URL — there is effectively no false positive, which is
+why the finding carries confidence 95.
+
+| # | Check | Severity |
+|---|---|---|
+| 114 | Server fetches a URL supplied in a request parameter (SSRF) | Critical |
+
+*Requires `OOB_BASE_URL` (or a public `APP_ORIGIN`) — the collector has to be
+reachable from the internet, because the target's server is what calls it. With
+neither configured the check is skipped rather than planting URLs no target
+could reach. Every planted value points only at our own collector, never at an
+internal range or a cloud metadata address, so the probe asks "does this server
+fetch a URL I gave it" and cannot be used to reach anything sensitive inside a
+target's network.*
+
+---
+
 ## Summary
 
 | Tier | Unique check types | Approximate HTTP requests |
 |---|---|---|
 | **Basic** | ~76 | ~100–150 |
-| **Deep** | ~113+ | ~350–600+ (crawl + JS fetches + path probes + API surface) |
+| **Deep** | ~114+ | ~350–650+ (crawl + JS fetches + path probes + API surface + OOB) |
 | **Deep, with credentials** | ~113+ across the authenticated surface | ~400–700+ |
 | **Deep, with two accounts** | + access-control comparison (#111–113) | ~450–800+ |
 

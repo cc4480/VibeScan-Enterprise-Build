@@ -18,6 +18,7 @@ import { sendRegressionAlertEmail } from "./mailer";
 import { fireWebhook } from "./webhook";
 import { getBoss, SCAN_QUEUE, type ScanJobData } from "./queue";
 import { runScan, computeRiskScore, computeGrade, type ScanVulnerability } from "./scanner";
+import { purgeExpiredOobTokens } from "./oobServer";
 import { decryptCredentials, toScanHttpCredentials, looksSignedOut } from "./scanCredentials";
 import { runWithScanHttp } from "./http";
 import { corroborateMerge } from "./scoring";
@@ -59,6 +60,8 @@ async function getCertExpiry(url: string): Promise<Date | null> {
     return null;
   }
 }
+
+const OOB_PURGE_QUEUE = "oob-purge";
 
 type ScanJob = Job<ScanJobData>;
 
@@ -178,6 +181,9 @@ async function processScanJob(job: ScanJob): Promise<void> {
               ...(reauthenticate ? { onSessionLost: reauthenticate } : {}),
             }
           : undefined,
+        // Threads the scan id through to the SSRF probe so its out-of-band
+        // callbacks correlate back to this scan.
+        scanId,
       ),
       scanTimeout,
     ]);
@@ -701,4 +707,12 @@ export async function startWorker(): Promise<void> {
   // Kick off a fresh fetch in the background to update the in-memory cache and DB.
   // Failures are logged at WARN; the DB-loaded or bundled fallback data stays active.
   void refreshEolData();
+
+  // Drop expired out-of-band tokens and their interactions on the same daily
+  // schedule, so a busy scanner does not accumulate them without bound.
+  await boss.createQueue(OOB_PURGE_QUEUE);
+  await boss.schedule(OOB_PURGE_QUEUE, "30 3 * * *", {});
+  await boss.work(OOB_PURGE_QUEUE, async () => {
+    await purgeExpiredOobTokens();
+  });
 }

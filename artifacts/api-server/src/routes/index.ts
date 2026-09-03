@@ -10,6 +10,7 @@ import dismissalsRouter from "./dismissals";
 import sharesRouter from "./shares";
 import settingsRouter from "./settings";
 import accountRouter from "./account";
+import oobRouter from "./oob";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(dismissalsRouter);
 router.use(sharesRouter);
 router.use(settingsRouter);
 router.use(accountRouter);
+router.use(oobRouter);
 
 export default router;

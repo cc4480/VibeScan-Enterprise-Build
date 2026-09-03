@@ -100,6 +100,8 @@ import { runNextjsProbe } from "./nextjsProbe";
 import { runStorageProbe } from "./storageProbe";
 import { runAccessControlProbes } from "./accessControlProbe";
 import { collectApiSurface, runApiProbes } from "./apiProbe";
+import { runSsrfProbes } from "./ssrfProbe";
+import type { ApiEndpoint } from "./apiSurface";
 import { isSpa, renderPage } from "./browser";
 
 export interface ScanVulnerability {
@@ -353,6 +355,10 @@ export async function runScan(
   targetUrl: string,
   tier: string,
   auth?: RunScanAuth,
+  // Correlates out-of-band callbacks back to this scan. Optional so a monitor
+  // rescan or a test can call runScan without one; SSRF detection is simply
+  // skipped when it and a callback host are both absent.
+  scanId?: string | null,
 ): Promise<ScanResult> {
   // Credentials go into the scan context, where lib/http.ts attaches them only
   // to in-scope requests and drops them on any redirect that leaves the target.
@@ -367,7 +373,7 @@ export async function runScan(
           }
         : {}),
     },
-    () => runScanInner(targetUrl, tier, auth),
+    () => runScanInner(targetUrl, tier, auth, scanId ?? null),
   );
 }
 
@@ -396,6 +402,7 @@ async function runScanInner(
   targetUrl: string,
   tier: string,
   auth?: RunScanAuth,
+  scanId: string | null = null,
 ): Promise<ScanResult> {
   const startedAt = Date.now();
 
@@ -896,9 +903,10 @@ async function runScanInner(
   // requests per endpoint. On an API-first SPA this is the only path that finds
   // anything at all — the HTML carries no forms, links or parameters to collect.
   if (tier === "deep") {
+    const origin = new URL(finalUrl).origin;
+    const endpoints = await collectApiSurface(origin, html).catch(() => [] as ApiEndpoint[]);
+
     const apiFindings = await (async () => {
-      const origin = new URL(finalUrl).origin;
-      const endpoints = await collectApiSurface(origin, html);
       if (endpoints.length === 0) return [] as ScanVulnerability[];
       return runApiProbes({
         endpoints,
@@ -907,6 +915,17 @@ async function runScanInner(
       });
     })().catch(() => [] as ScanVulnerability[]);
     vulnerabilities.push(...apiFindings);
+
+    // ── A10: SSRF via the out-of-band collector ─────────────────────────────
+    // Runs only when a public callback host is configured, since the target's
+    // server is what has to reach it. Reuses the discovered endpoints.
+    const ssrfFindings = await runSsrfProbes({
+      scanId,
+      targetUrl: finalUrl,
+      endpoints,
+      ...(auth?.credentials ? { credentials: auth.credentials } : {}),
+    }).catch(() => [] as ScanVulnerability[]);
+    vulnerabilities.push(...ssrfFindings);
   }
 
   // ── A01: broken access control ─────────────────────────────────────────────
