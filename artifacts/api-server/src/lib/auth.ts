@@ -2,7 +2,7 @@ import * as client from "openid-client";
 import crypto from "crypto";
 import { type Request, type Response } from "express";
 import { db, sessionsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { AuthUser } from "@workspace/api-zod";
 
 export const ISSUER_URL = process.env.ISSUER_URL ?? "https://replit.com/oidc";
@@ -67,6 +67,20 @@ export async function updateSession(
 
 export async function deleteSession(sid: string): Promise<void> {
   await db.delete(sessionsTable).where(eq(sessionsTable.sid, sid));
+}
+
+/**
+ * Revoke every session belonging to a user.
+ *
+ * Called after a password reset. Without it, resetting a password does not
+ * actually evict whoever prompted the reset: their existing session cookie
+ * keeps working until it expires, which defeats the point of resetting.
+ *
+ * Sessions store the user inside the `sess` JSON blob, so this filters on that
+ * rather than on a column.
+ */
+export async function deleteSessionsForUser(userId: string): Promise<void> {
+  await db.delete(sessionsTable).where(sql`${sessionsTable.sess}->'user'->>'id' = ${userId}`);
 }
 
 export async function clearSession(

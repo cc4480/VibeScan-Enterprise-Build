@@ -423,3 +423,80 @@ export async function sendMonitorScanQueuedEmail(opts: SendMonitorScanQueuedOpti
     console.error("[mailer] Failed to send monitor scan queued email:", err);
   }
 }
+
+// ── Account emails ────────────────────────────────────────────────────────────
+
+/**
+ * Plain, single-purpose account emails. Deliberately sparse next to the report
+ * templates above: a verification or reset message competing for attention with
+ * marketing chrome is how people learn to ignore them.
+ */
+function buildAccountHtml(heading: string, body: string, ctaLabel: string, ctaUrl: string, footnote: string): string {
+  return `<!DOCTYPE html>
+<html><body style="margin:0;padding:24px;background:#f4f7f5;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#121a17;">
+  <table role="presentation" width="100%" style="max-width:520px;margin:0 auto;background:#ffffff;border:1px solid #dbe4df;border-radius:8px;">
+    <tr><td style="padding:28px;">
+      <h1 style="margin:0 0 12px;font-size:20px;line-height:1.3;">${heading}</h1>
+      <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#3c4b45;">${body}</p>
+      <a href="${ctaUrl}" style="display:inline-block;padding:11px 20px;background:#0e9463;color:#ffffff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">${ctaLabel}</a>
+      <p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#64766e;">${footnote}</p>
+      <p style="margin:16px 0 0;font-size:12px;line-height:1.5;color:#64766e;word-break:break-all;">If the button doesn't work, paste this into your browser:<br>${ctaUrl}</p>
+    </td></tr>
+  </table>
+</body></html>`;
+}
+
+async function sendAccountEmail(to: string, subject: string, html: string, label: string): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    // Matches the rest of this module: a missing key degrades to a warning
+    // rather than failing the request that triggered it.
+    console.warn(`[mailer] RESEND_API_KEY is not set — skipping ${label}`);
+    return;
+  }
+
+  try {
+    const res = await fetch(RESEND_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ from: FROM_EMAIL, to: [to], subject, html }),
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Resend API ${res.status}: ${errText}`);
+    }
+    console.log(`[mailer] ${label} sent`, { to });
+  } catch (err) {
+    console.error(`[mailer] Failed to send ${label}:`, err);
+  }
+}
+
+export async function sendEmailVerification(toEmail: string, verifyUrl: string): Promise<void> {
+  await sendAccountEmail(
+    toEmail,
+    "Confirm your email for Seclayer",
+    buildAccountHtml(
+      "Confirm your email",
+      "Confirming your address lets us send you scan results and security alerts, and lets you get back into your account if you forget your password.",
+      "Confirm email",
+      verifyUrl,
+      "This link expires in 24 hours. If you didn't create a Seclayer account, you can ignore this email.",
+    ),
+    "email verification",
+  );
+}
+
+export async function sendPasswordReset(toEmail: string, resetUrl: string): Promise<void> {
+  await sendAccountEmail(
+    toEmail,
+    "Reset your Seclayer password",
+    buildAccountHtml(
+      "Reset your password",
+      "Use the link below to choose a new password. Signing in again will end any other sessions on your account.",
+      "Choose a new password",
+      resetUrl,
+      "This link expires in 1 hour and can only be used once. If you didn't ask to reset your password, you can ignore this email — your current password still works.",
+    ),
+    "password reset",
+  );
+}
