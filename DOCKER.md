@@ -50,9 +50,10 @@ their plain-English write-up — the thing the tier is sold on.
    the repo and create `.env.docker` with `APP_ORIGIN` and `CORS_EXTRA_ORIGINS`
    set to `https://your-domain`.
 
-3. **Start it** — run the same three commands as above. Leave `APP_PORT` bound
-   to localhost only (`127.0.0.1:8090:8080` in `docker-compose.yml`) so the app
-   is reachable exclusively through the proxy.
+3. **Start it** — run the same three commands as above. `docker-compose.yml`
+   already binds the published port to `127.0.0.1` only, so the app is
+   reachable exclusively through the proxy you set up in the next step — no
+   edit needed here.
 
 4. **TLS + reverse proxy** — terminate TLS in front of the app. Caddy is the
    least work because it obtains and renews certificates automatically:

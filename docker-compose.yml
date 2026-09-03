@@ -57,9 +57,18 @@ services:
       DISABLE_PAYMENTS: ${DISABLE_PAYMENTS:-false}
     ports:
       # Defaults to 8090 on the host: this machine already runs Apache on 8080,
-      # which silently competes for the port. Behind a reverse proxy in
-      # production, only this published port needs to change.
-      - "${APP_PORT:-8090}:8080"
+      # which silently competes for the port.
+      #
+      # Bound to loopback only. On a VPS with a public IP and no firewall,
+      # 0.0.0.0 would put the app directly on the internet on this port,
+      # reachable without going through Caddy/nginx at all — bypassing TLS and
+      # every header the proxy is meant to add. Reachable from this host via
+      # curl/browser at localhost either way; the difference only matters for
+      # another machine trying to reach it directly, which is exactly the case
+      # to block. If something genuinely needs a non-loopback bind (a
+      # container network sidecar, e.g.), set it explicitly rather than
+      # reverting to 0.0.0.0.
+      - "127.0.0.1:${APP_PORT:-8090}:8080"
 
   # One-shot schema apply. Uses the builder stage because drizzle-kit is a dev
   # dependency and deliberately absent from the runtime image.
