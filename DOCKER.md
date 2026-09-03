@@ -8,7 +8,7 @@ production, so there is no separate web container.
 
 ```bash
 cp .env.docker.example .env.docker      # fill it in — see the notes in the file
-docker compose --env-file .env.docker --profile setup run --rm db-push
+docker compose --env-file .env.docker --profile setup run --rm --build db-push
 docker compose --env-file .env.docker up -d --build
 ```
 
@@ -18,6 +18,13 @@ Then open `http://localhost:8090` (or whatever `APP_PORT` you set).
 and again after any schema change. It runs from the *builder* stage because
 `drizzle-kit` is a dev dependency and is deliberately absent from the slim
 runtime image.
+
+**`--build` on that first command is not optional.** `docker compose run`
+reuses an existing image rather than rebuilding it, so after a schema change it
+will happily apply the *previous* schema and report "Changes applied". The app
+then starts against a database missing its newest columns and fails at runtime
+with `column "…" does not exist` — a failure that looks like an application bug
+and is not one.
 
 ## Required configuration
 
@@ -75,16 +82,24 @@ their plain-English write-up — the thing the tier is sold on.
   `*.replit.app` / `vibescan.app` origins. Your domain only gets through via
   `CORS_EXTRA_ORIGINS`.
 
-- **There is no login.** Identity is an anonymous UUID the browser generates
-  and stores in `localStorage`, sent as `Authorization: Bearer <uuid>`; the API
-  auto-creates a user row for any well-formed UUID it has not seen. That means
-  scan history is per-browser — clearing site data or switching devices loses
-  it, and anyone who obtains the UUID has that account. The `/api/login` route
-  is Replit OIDC and **cannot work off Replit** — it is now only reachable from
-  an explicit "Sign in instead" link, since `ProtectedRoute` no longer
-  auto-redirects there on a failed auth check (it shows a retry instead). If
-  you want real accounts on your own domain, that route is what needs
-  replacing.
+- **Email is not configured until you set `RESEND_API_KEY`.** Accounts work
+  without it, but verification and password-reset links are minted and then
+  silently not delivered — the mailer logs a warning and returns. Nobody can
+  recover a forgotten password until this is set, so treat it as required
+  before real users arrive, along with a correct `APP_ORIGIN`, which is what
+  builds the link in those emails.
+
+- **Accounts are additive, not a gate.** Signing up is optional: an anonymous
+  visitor is a real user with real scans, identified by a UUID their browser
+  keeps in `localStorage`. Registering converts that identity in place, so the
+  scans they already ran come with them, and the browser token stops working
+  from that moment. This is deliberate — requiring a login before the first
+  scan costs conversions on a pay-per-scan product. If you would rather gate
+  it, that is a change to `ProtectedRoute`.
+
+- **`/api/login` is the old Replit OIDC route and cannot work off Replit.** It
+  is reachable only from an explicit "Sign in instead" link and answers 500.
+  Removing it is tidy-up, not a blocker.
 
 - **Payments** default to `DISABLE_PAYMENTS=true`, which queues scans without
   charging. Set it to `false` and supply the Stripe keys to actually bill.
@@ -99,7 +114,7 @@ docker compose --env-file .env.docker logs -f app
 git pull && docker compose --env-file .env.docker up -d --build
 
 # apply a schema change
-docker compose --env-file .env.docker --profile setup run --rm db-push
+docker compose --env-file .env.docker --profile setup run --rm --build db-push
 
 # back up the database
 docker compose --env-file .env.docker exec db \
