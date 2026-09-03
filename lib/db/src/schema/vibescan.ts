@@ -24,6 +24,9 @@ export const scansTable = pgTable("scans", {
   // table. Cleared when the scan finishes, so the window in which they exist at
   // all is one scan long.
   credentialsEncrypted: text("credentials_encrypted"),
+  // A second account, for broken access control testing. Same handling as the
+  // primary: encrypted, and cleared when the scan ends.
+  secondaryCredentialsEncrypted: text("secondary_credentials_encrypted"),
   // Recorded when the requester attested they may test this target with these
   // credentials — automated sign-in is a different legal posture from an
   // unauthenticated header check, and the claim should outlive the credentials.

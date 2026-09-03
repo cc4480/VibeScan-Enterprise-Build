@@ -98,6 +98,7 @@ import { runGraphqlProbe } from "./graphqlProbe";
 import { runApiDocsProbe } from "./apiDocsProbe";
 import { runNextjsProbe } from "./nextjsProbe";
 import { runStorageProbe } from "./storageProbe";
+import { runAccessControlProbes } from "./accessControlProbe";
 import { isSpa, renderPage } from "./browser";
 
 export interface ScanVulnerability {
@@ -335,6 +336,12 @@ function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[
  */
 export interface RunScanAuth {
   credentials: ScanHttpCredentials;
+  /**
+   * A second account. Present only when the user supplied one, and the sole
+   * trigger for access-control testing — the comparison needs two identities
+   * that own different data.
+   */
+  secondary?: ScanHttpCredentials;
   /** Recognises a signed-out response. */
   detectSignedOut?: (body: string, finalUrl: string) => boolean;
   /** Signs back in when the session expires mid-scan. */
@@ -359,7 +366,7 @@ export async function runScan(
           }
         : {}),
     },
-    () => runScanInner(targetUrl, tier),
+    () => runScanInner(targetUrl, tier, auth),
   );
 }
 
@@ -384,7 +391,11 @@ function sessionLostFinding(): ScanVulnerability {
   });
 }
 
-async function runScanInner(targetUrl: string, tier: string): Promise<ScanResult> {
+async function runScanInner(
+  targetUrl: string,
+  tier: string,
+  auth?: RunScanAuth,
+): Promise<ScanResult> {
   const startedAt = Date.now();
 
   // The only request whose failure ends the scan, so it is the only one that
@@ -877,6 +888,21 @@ async function runScanInner(targetUrl: string, tier: string): Promise<ScanResult
     if (result.status === "fulfilled") {
       vulnerabilities.push(...result.value);
     }
+  }
+
+  // ── A01: broken access control ─────────────────────────────────────────────
+  // Runs last because it needs the crawl's output: the URLs the signed-in
+  // account actually reached are the ones worth asking a second account for.
+  // Requires both accounts — one identity cannot demonstrate an authorisation
+  // boundary between users.
+  if (auth?.secondary) {
+    const candidateUrls = [finalUrl, ...crawlResult.pagesVisited];
+    const accessFindings = await runAccessControlProbes({
+      urls: candidateUrls,
+      primary: auth.credentials,
+      secondary: auth.secondary,
+    }).catch(() => [] as ScanVulnerability[]);
+    vulnerabilities.push(...accessFindings);
   }
 
   return {

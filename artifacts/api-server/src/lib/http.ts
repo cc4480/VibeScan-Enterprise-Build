@@ -225,10 +225,21 @@ async function throttle(ctx: ScanHttpContext | undefined, url: string): Promise<
 // Request
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Which identity a request should use.
+ *
+ * `undefined` means the scan's own credentials. An explicit value overrides
+ * them, and `null` means send none at all — access-control testing has to ask
+ * for the same URL as a second user and as nobody, and compare the answers.
+ */
+export type IdentityOverride = ScanCredentials | null | undefined;
+
 function buildHeaders(
   url: string,
   ctx: ScanHttpContext | undefined,
   caller: RequestInit["headers"],
+  identity: IdentityOverride,
+  identityGiven: boolean,
 ): Record<string, string> {
   const headers: Record<string, string> = {
     "User-Agent": SCANNER_USER_AGENT,
@@ -240,10 +251,13 @@ function buildHeaders(
   };
 
   // Credentials only ever go to the target. This is the whole point of the
-  // module, so it is checked here rather than assumed of the caller.
-  if (ctx?.credentials && ctx.scope.includes(url)) {
-    if (ctx.credentials.cookie) headers["Cookie"] = ctx.credentials.cookie;
-    Object.assign(headers, ctx.credentials.headers ?? {});
+  // module, so it is checked here rather than assumed of the caller — and the
+  // scope check applies to an overriding identity exactly as it does to the
+  // scan's own.
+  const effective = identityGiven ? identity : ctx?.credentials;
+  if (effective && ctx?.scope.includes(url)) {
+    if (effective.cookie) headers["Cookie"] = effective.cookie;
+    Object.assign(headers, effective.headers ?? {});
   }
 
   // Caller headers win, so an individual probe can still set Content-Type or
@@ -286,9 +300,19 @@ async function readResponse(res: Response, redirected: boolean): Promise<HttpRes
  * the chain here rather than delegating to fetch, so scope can be re-checked at
  * every hop: a redirect off the target host continues, but without credentials.
  */
+export type ScanFetchOptions = RequestInit & {
+  timeoutMs?: number;
+  /**
+   * Send as a specific identity instead of the scan's own. `null` sends none.
+   * Named `as` rather than `credentials` because RequestInit already has a
+   * `credentials` field meaning something entirely different.
+   */
+  as?: IdentityOverride;
+};
+
 export async function scanFetch(
   url: string,
-  options: RequestInit & { timeoutMs?: number } = {},
+  options: ScanFetchOptions = {},
 ): Promise<HttpResult | null> {
   const outcome = await perform(url, options);
   return outcome.ok ? outcome.result : null;
@@ -313,11 +337,16 @@ export async function scanFetchOrThrow(
 
 type Outcome = { ok: true; result: HttpResult } | { ok: false; error: string };
 
-async function perform(
-  url: string,
-  options: RequestInit & { timeoutMs?: number },
-): Promise<Outcome> {
-  const { timeoutMs = DEFAULT_TIMEOUT_MS, redirect = "follow", headers: callerHeaders, ...rest } = options;
+async function perform(url: string, options: ScanFetchOptions): Promise<Outcome> {
+  const {
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    redirect = "follow",
+    headers: callerHeaders,
+    as: identity,
+    ...rest
+  } = options;
+  // Distinguishes "no override" from an explicit null meaning "send anonymous".
+  const identityGiven = "as" in options;
   const ctx = storage.getStore();
 
   let current = url;
@@ -347,7 +376,7 @@ async function perform(
         // Always manual: following is done below so each hop is scope-checked.
         redirect: "manual",
         signal,
-        headers: buildHeaders(current, ctx, callerHeaders),
+        headers: buildHeaders(current, ctx, callerHeaders, identity, identityGiven),
       });
     } catch (err) {
       const reason =
@@ -379,6 +408,10 @@ async function perform(
       // once so the caller gets the authenticated response it expected.
       if (
         !reauthRetried &&
+        // An override identity is the caller's business — a deliberate
+        // anonymous probe looking signed out is the expected answer, not a
+        // reason to re-authenticate the scan.
+        !identityGiven &&
         ctx?.credentials &&
         ctx.scope.includes(current) &&
         ctx.detectSignedOut?.(result.body, result.finalUrl)

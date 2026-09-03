@@ -86,7 +86,7 @@ router.post("/scans", async (req, res): Promise<void> => {
     return;
   }
 
-  const { targetUrl, tier, credentials } = parsed.data;
+  const { targetUrl, tier, credentials, secondaryCredentials } = parsed.data;
 
   // Credit packs are not supported in the free tier
   if (tier === "pack_5" || tier === "pack_20") {
@@ -109,6 +109,7 @@ router.post("/scans", async (req, res): Promise<void> => {
   // than as a mysteriously empty report later. Encrypted immediately; the
   // plaintext never reaches the database or the job payload.
   let credentialsEncrypted: string | null = null;
+  let secondaryCredentialsEncrypted: string | null = null;
   let credentialsAuthorizedAt: Date | null = null;
 
   if (credentials) {
@@ -122,6 +123,24 @@ router.post("/scans", async (req, res): Promise<void> => {
     // Logged without the credentials themselves — see the redaction list in
     // lib/logger.ts.
     req.log.info({ mode: credentials.mode }, "Credentialed scan requested");
+
+    // A second account unlocks access-control testing. It is only meaningful
+    // alongside the first — comparing one account against nothing proves
+    // nothing about authorisation between users.
+    if (secondaryCredentials) {
+      const secondCheck = validateCredentials(secondaryCredentials);
+      if (!secondCheck.ok) {
+        res.status(400).json({ error: `Second account: ${secondCheck.error}` });
+        return;
+      }
+      secondaryCredentialsEncrypted = encryptCredentials(secondaryCredentials);
+      req.log.info("Access-control testing enabled — second account supplied");
+    }
+  } else if (secondaryCredentials) {
+    res.status(400).json({
+      error: "A second account only works alongside a first one. Add primary credentials too.",
+    });
+    return;
   }
 
   const [scan] = await db
@@ -133,6 +152,7 @@ router.post("/scans", async (req, res): Promise<void> => {
       tier,
       status: "paid",
       credentialsEncrypted,
+      secondaryCredentialsEncrypted,
       credentialsAuthorizedAt,
     })
     .returning();

@@ -110,6 +110,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
   // see the note at its call site.
   let httpCredentials: Awaited<ReturnType<typeof toScanHttpCredentials>> = null;
   let reauthenticate: (() => Promise<Awaited<ReturnType<typeof toScanHttpCredentials>>>) | null = null;
+  let secondaryCredentials: Awaited<ReturnType<typeof toScanHttpCredentials>> = null;
   try {
     const scanTimeout = new Promise<never>((_, reject) =>
       setTimeout(
@@ -123,7 +124,10 @@ async function processScanJob(job: ScanJob): Promise<void> {
     // fails the scan continues unauthenticated rather than aborting, and says
     // so in the log.
     const [scanRow] = await db
-      .select({ blob: scansTable.credentialsEncrypted })
+      .select({
+        blob: scansTable.credentialsEncrypted,
+        secondBlob: scansTable.secondaryCredentialsEncrypted,
+      })
       .from(scansTable)
       .where(eq(scansTable.id, scanId));
 
@@ -139,6 +143,20 @@ async function processScanJob(job: ScanJob): Promise<void> {
         );
         // Only a form login can be replayed. A pasted cookie or bearer token
         // has no renewal path, so its expiry is recorded but not recovered.
+        // The second account only matters when the first one worked — access
+        // control is a comparison, and there is nothing to compare against a
+        // session that never authenticated.
+        if (httpCredentials && scanRow.secondBlob) {
+          const secondStored = decryptCredentials(scanRow.secondBlob);
+          if (secondStored) {
+            secondaryCredentials = await toScanHttpCredentials(secondStored, log);
+            log.info(
+              { enabled: secondaryCredentials !== null },
+              "Access-control testing: second account session",
+            );
+          }
+        }
+
         if (stored.mode === "form") {
           reauthenticate = async () => {
             log.warn("Session appears to have expired — signing in again");
@@ -155,6 +173,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
         httpCredentials
           ? {
               credentials: httpCredentials,
+              ...(secondaryCredentials ? { secondary: secondaryCredentials } : {}),
               detectSignedOut: looksSignedOut,
               ...(reauthenticate ? { onSessionLost: reauthenticate } : {}),
             }
@@ -173,7 +192,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
       .update(scansTable)
       // Discard credentials on the failure path too — a scan that died holding
       // a customer's password is exactly the row that should not keep it.
-      .set({ status: "failed", error: errMsg, completedAt: new Date(), credentialsEncrypted: null })
+      .set({ status: "failed", error: errMsg, completedAt: new Date(), credentialsEncrypted: null, secondaryCredentialsEncrypted: null })
       .where(eq(scansTable.id, scanId));
     return;
   }
@@ -388,7 +407,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
     await db
       .update(scansTable)
       // Credentials live exactly as long as the scan that needed them.
-      .set({ status: "complete", completedAt, credentialsEncrypted: null })
+      .set({ status: "complete", completedAt, credentialsEncrypted: null, secondaryCredentialsEncrypted: null })
       .where(eq(scansTable.id, scanId));
 
     log.info({ reportId: report.id, grade, riskScore }, "Scan complete");

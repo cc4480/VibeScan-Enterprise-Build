@@ -12,4 +12,6 @@ export interface CreateScanRequest {
   targetUrl: string;
   tier: ScanTier;
   credentials?: ScanCredentials;
+  /** A second, separate account. Supplying one enables broken access control testing: the scan asks for the same records as both accounts and as an anonymous visitor, and reports when the second account is served the first account's data. Use two ordinary accounts that own different data, not an admin and a user. */
+  secondaryCredentials?: ScanCredentials;
 }

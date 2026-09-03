@@ -178,6 +178,40 @@ export const CreateScanBody = zod.object({
     .describe(
       "Optional credentials so the scan can test the authenticated surface. Encrypted at rest and discarded when the scan finishes. Requires `authorized` to be true, since logging into a system automatically is a different legal posture from an unauthenticated header check. Use a dedicated low-privilege test account, never an administrator login.",
     ),
+  secondaryCredentials: zod
+    .object({
+      mode: zod
+        .enum(["session", "form"])
+        .describe(
+          "`session` replays a cookie or bearer token you already hold. `form` signs in with a username and password on a login page.",
+        ),
+      authorized: zod
+        .boolean()
+        .describe(
+          "Attestation that the requester may test this target with these credentials.",
+        ),
+      cookie: zod
+        .string()
+        .nullish()
+        .describe("Cookie header value, for mode `session`."),
+      bearerToken: zod
+        .string()
+        .nullish()
+        .describe("Bearer token, for mode `session`."),
+      loginUrl: zod
+        .string()
+        .nullish()
+        .describe("URL of the sign-in page, for mode `form`."),
+      username: zod.string().nullish(),
+      password: zod.string().nullish(),
+    })
+    .describe(
+      "Optional credentials so the scan can test the authenticated surface. Encrypted at rest and discarded when the scan finishes. Requires `authorized` to be true, since logging into a system automatically is a different legal posture from an unauthenticated header check. Use a dedicated low-privilege test account, never an administrator login.",
+    )
+    .optional()
+    .describe(
+      "A second, separate account. Supplying one enables broken access control testing: the scan asks for the same records as both accounts and as an anonymous visitor, and reports when the second account is served the first account's data. Use two ordinary accounts that own different data, not an admin and a user.",
+    ),
 });
 
 /**

@@ -6,7 +6,10 @@ import {
   ScanCredentialsFields,
   emptyCredentials,
   credentialsReady,
+  emptySecondAccount,
+  secondAccountReady,
   type ScanCredentialsValue,
+  type SecondAccountValue,
 } from "@/components/scan-credentials-fields";
 import { Shield, Zap, Globe, Lock, CheckCircle2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -52,6 +55,7 @@ export default function ScanFormPage() {
   const [url, setUrl] = useState("");
   const [tier, setTier] = useState<ScanTier>("deep");
   const [credentials, setCredentials] = useState<ScanCredentialsValue>(emptyCredentials);
+  const [secondAccount, setSecondAccount] = useState<SecondAccountValue>(emptySecondAccount);
   const [, setLocation] = useLocation();
 
   const createScan = useCreateScan();
@@ -87,8 +91,27 @@ export default function ScanFormPage() {
         }
       : undefined;
 
+    // A second account only travels with a first one — the server rejects it
+    // alone, and access control is a comparison between two identities.
+    const secondCreds =
+      creds && secondAccountReady(secondAccount)
+        ? {
+            mode: "session" as const,
+            authorized: true,
+            cookie: secondAccount.cookie.trim() || null,
+            bearerToken: secondAccount.bearerToken.trim() || null,
+          }
+        : undefined;
+
     createScan.mutate(
-      { data: { targetUrl, tier, ...(creds ? { credentials: creds } : {}) } },
+      {
+        data: {
+          targetUrl,
+          tier,
+          ...(creds ? { credentials: creds } : {}),
+          ...(secondCreds ? { secondaryCredentials: secondCreds } : {}),
+        },
+      },
       {
         onSuccess: (data) => {
           setLocation(`/scan/${data.scanId}?tier=${tier}`);
@@ -196,7 +219,12 @@ export default function ScanFormPage() {
             </div>
           </div>
 
-          <ScanCredentialsFields value={credentials} onChange={setCredentials} />
+          <ScanCredentialsFields
+            value={credentials}
+            onChange={setCredentials}
+            second={secondAccount}
+            onSecondChange={setSecondAccount}
+          />
 
           {/* Submit */}
           <div className="pt-6 border-t border-white/5 flex flex-col items-center gap-4">

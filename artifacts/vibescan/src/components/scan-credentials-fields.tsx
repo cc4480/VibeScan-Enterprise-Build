@@ -21,6 +21,23 @@ export interface ScanCredentialsValue {
   password: string;
 }
 
+export interface SecondAccountValue {
+  enabled: boolean;
+  cookie: string;
+  bearerToken: string;
+}
+
+export const emptySecondAccount: SecondAccountValue = {
+  enabled: false,
+  cookie: "",
+  bearerToken: "",
+};
+
+/** A second account is usable once it carries a session of its own. */
+export function secondAccountReady(v: SecondAccountValue): boolean {
+  return v.enabled && (v.cookie.trim() !== "" || v.bearerToken.trim() !== "");
+}
+
 export const emptyCredentials: ScanCredentialsValue = {
   mode: "session",
   authorized: false,
@@ -60,9 +77,13 @@ const inputClass =
 export function ScanCredentialsFields({
   value,
   onChange,
+  second,
+  onSecondChange,
 }: {
   value: ScanCredentialsValue;
   onChange: (next: ScanCredentialsValue) => void;
+  second: SecondAccountValue;
+  onSecondChange: (next: SecondAccountValue) => void;
 }) {
   const [open, setOpen] = useState(false);
   const set = <K extends keyof ScanCredentialsValue>(key: K, v: ScanCredentialsValue[K]) =>
@@ -188,6 +209,56 @@ export function ScanCredentialsFields({
               </label>
             </>
           )}
+
+          {/* Second account — the whole basis of access-control testing */}
+          <div className="flex flex-col gap-3 pt-1 border-t border-white/5">
+            <label className="flex items-start gap-2.5 cursor-pointer pt-3">
+              <input
+                type="checkbox"
+                checked={second.enabled}
+                onChange={(e) => onSecondChange({ ...second, enabled: e.target.checked })}
+                className="mt-0.5 w-4 h-4 accent-[var(--primary)]"
+              />
+              <span className="text-sm leading-relaxed">
+                Also check whether one account can read another's data
+                <span className="block text-xs text-muted-foreground mt-0.5">
+                  Add a second account and we'll request the same records as both, and as a
+                  visitor with no session. Broken access control is the most exploited flaw on
+                  the web, and it can only be found by comparing two users.
+                </span>
+              </span>
+            </label>
+
+            {second.enabled ? (
+              <div className="flex flex-col gap-3 pl-6">
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-sm font-medium">Second account cookie</span>
+                  <input
+                    className={inputClass}
+                    placeholder="session=def456"
+                    value={second.cookie}
+                    onChange={(e) => onSecondChange({ ...second, cookie: e.target.value })}
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-sm font-medium">Second account bearer token</span>
+                  <input
+                    className={inputClass}
+                    value={second.bearerToken}
+                    onChange={(e) => onSecondChange({ ...second, bearerToken: e.target.value })}
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </label>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Use two ordinary accounts that own different data — not an administrator and a
+                  user, which are <em>supposed</em> to see different things.
+                </p>
+              </div>
+            ) : null}
+          </div>
 
           <div className="flex items-start gap-2.5 p-3 rounded-lg bg-secondary/60 border border-white/10">
             <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
