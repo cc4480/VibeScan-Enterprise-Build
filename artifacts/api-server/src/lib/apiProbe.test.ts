@@ -2,7 +2,13 @@ import { describe, it, expect, afterEach } from "vitest";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { runWithScanHttp } from "./http.js";
-import { runApiProbes, isReadShaped, concreteUrl } from "./apiProbe.js";
+import {
+  runApiProbes,
+  isReadShaped,
+  concreteUrl,
+  exposedSensitiveFields,
+  privilegeFieldsAccepted,
+} from "./apiProbe.js";
 import type { ApiEndpoint } from "./apiSurface.js";
 
 const servers: http.Server[] = [];
@@ -104,7 +110,9 @@ describe("missing authentication", () => {
         credentials: SESSION,
       }),
     );
-    expect(findings).toEqual([]);
+    // Scoped to the check under test: these stub servers have no rate
+    // limiter either, which the probe is right to notice.
+    expect(findings.some((f) => /Without Authentication/i.test(f.name))).toBe(false);
   });
 
   it("stays quiet when a 200 actually carries a refusal", async () => {
@@ -121,7 +129,9 @@ describe("missing authentication", () => {
         credentials: SESSION,
       }),
     );
-    expect(findings).toEqual([]);
+    // Scoped to the check under test: these stub servers have no rate
+    // limiter either, which the probe is right to notice.
+    expect(findings.some((f) => /Without Authentication/i.test(f.name))).toBe(false);
   });
 
   it("does not treat an empty collection as an exposure", async () => {
@@ -136,7 +146,9 @@ describe("missing authentication", () => {
         credentials: SESSION,
       }),
     );
-    expect(findings).toEqual([]);
+    // Scoped to the check under test: these stub servers have no rate
+    // limiter either, which the probe is right to notice.
+    expect(findings.some((f) => /Without Authentication/i.test(f.name))).toBe(false);
   });
 
   it("skips the check entirely without a session to contrast against", async () => {
@@ -149,7 +161,9 @@ describe("missing authentication", () => {
     const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
       runApiProbes({ endpoints: [ep({ url: `http://localhost:${port}/api/orders` })] }),
     );
-    expect(findings).toEqual([]);
+    // Scoped to the check under test: these stub servers have no rate
+    // limiter either, which the probe is right to notice.
+    expect(findings.some((f) => /Without Authentication/i.test(f.name))).toBe(false);
   });
 });
 
@@ -313,5 +327,192 @@ describe("safety", () => {
       }),
     );
     expect(seen).toEqual([]);
+  });
+});
+
+describe("excessive data exposure", () => {
+  it("names sensitive fields anywhere in the response", () => {
+    const body = JSON.stringify({
+      items: [{ id: 1, email: "a@b.c", password_hash: "x", profile: { ssn: "1" } }],
+    });
+    expect(exposedSensitiveFields(body).sort()).toEqual(["password_hash", "ssn"]);
+  });
+
+  it("says nothing about an ordinary response", () => {
+    expect(exposedSensitiveFields(JSON.stringify({ id: 1, name: "Ada", total: 5040 }))).toEqual([]);
+  });
+
+  it("ignores a body that is not JSON", () => {
+    expect(exposedSensitiveFields("<html><body>password</body></html>")).toEqual([]);
+  });
+
+  it("reports it end to end", async () => {
+    const port = await serve((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ user: { id: 1, email: "ada@example.com", passwordHash: "$2b$x" } }));
+    });
+
+    const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+      runApiProbes({
+        endpoints: [ep({ url: `http://localhost:${port}/api/me` })],
+        credentials: SESSION,
+      }),
+    );
+    expect(findings.some((f) => /Sensitive Fields/i.test(f.name))).toBe(true);
+  });
+});
+
+describe("mass assignment", () => {
+  it("flags privilege-bearing body fields the contract declares", () => {
+    const endpoint = ep({
+      url: "https://a.example/api/users",
+      method: "POST",
+      params: [
+        { name: "email", location: "body" },
+        { name: "role", location: "body" },
+        { name: "is_admin", location: "body" },
+      ],
+    });
+    expect(privilegeFieldsAccepted(endpoint).sort()).toEqual(["is_admin", "role"]);
+  });
+
+  it("ignores ordinary fields and query parameters", () => {
+    expect(
+      privilegeFieldsAccepted(
+        ep({
+          url: "https://a.example/api/users",
+          params: [
+            { name: "email", location: "body" },
+            { name: "role", location: "query" },
+          ],
+        }),
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("write-verb authorisation", () => {
+  it("reports a handler that looks the record up before checking the caller", async () => {
+    const seen: string[] = [];
+    const port = await serve((req, res) => {
+      seen.push(`${req.method} ${req.url}`);
+      // The bug: no auth check, so a missing record answers 404 rather than 401.
+      res.writeHead(404, { "content-type": "application/json" });
+      res.end('{"error":"not found"}');
+    });
+
+    const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+      runApiProbes({
+        endpoints: [ep({ url: `http://localhost:${port}/api/orders/{id}` })],
+        credentials: SESSION,
+      }),
+    );
+
+    expect(findings.some((f) => /Write Endpoints Reachable/i.test(f.name))).toBe(true);
+    // Aimed only at an identifier nothing can exist at.
+    expect(seen.filter((s) => s.startsWith("DELETE"))).toEqual([
+      "DELETE /api/orders/999999997",
+    ]);
+    expect(seen.some((s) => s.startsWith("PUT"))).toBe(false);
+  });
+
+  it("stays quiet when the write verb is properly refused", async () => {
+    const port = await serve((req, res) => {
+      if (req.method === "DELETE" || req.method === "PATCH") {
+        res.writeHead(401);
+        res.end('{"error":"unauthorized"}');
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(DATA);
+    });
+
+    const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+      runApiProbes({
+        endpoints: [ep({ url: `http://localhost:${port}/api/orders/{id}` })],
+        credentials: SESSION,
+      }),
+    );
+    expect(findings.some((f) => /Write Endpoints Reachable/i.test(f.name))).toBe(false);
+  });
+});
+
+describe("rate limiting", () => {
+  it("reports an endpoint that never throttles a burst", async () => {
+    const port = await serve((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(DATA);
+    });
+
+    const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+      runApiProbes({ endpoints: [ep({ url: `http://localhost:${port}/api/orders` })] }),
+    );
+    expect(findings.some((f) => /Rate Limiting/i.test(f.name))).toBe(true);
+  });
+
+  it("stays quiet when the endpoint answers 429", async () => {
+    let n = 0;
+    const port = await serve((_req, res) => {
+      n += 1;
+      if (n > 3) {
+        res.writeHead(429);
+        res.end('{"error":"too many requests"}');
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(DATA);
+    });
+
+    const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+      runApiProbes({ endpoints: [ep({ url: `http://localhost:${port}/api/orders` })] }),
+    );
+    expect(findings.some((f) => /Rate Limiting/i.test(f.name))).toBe(false);
+  });
+});
+
+describe("API-level IDOR", () => {
+  it("reports a record endpoint serving identical data to a second account", async () => {
+    const port = await serve((req, res) => {
+      const c = req.headers.cookie ?? "";
+      if (!c.includes("sid=")) {
+        res.writeHead(401);
+        res.end('{"error":"unauthorized"}');
+        return;
+      }
+      // The bug: any signed-in caller gets the same record.
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(DATA);
+    });
+
+    const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+      runApiProbes({
+        endpoints: [ep({ url: `http://localhost:${port}/api/orders/{id}` })],
+        credentials: SESSION,
+        secondary: { cookie: "sid=other" },
+      }),
+    );
+    expect(findings.some((f) => /Readable by Another Account/i.test(f.name))).toBe(true);
+  });
+
+  it("stays quiet when each account sees its own record", async () => {
+    const port = await serve((req, res) => {
+      const c = req.headers.cookie ?? "";
+      if (!c.includes("sid=")) {
+        res.writeHead(401);
+        res.end('{"error":"unauthorized"}');
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ owner: c.includes("valid") ? "ada" : "grace", items: [1, 2, 3] }));
+    });
+
+    const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+      runApiProbes({
+        endpoints: [ep({ url: `http://localhost:${port}/api/orders/{id}` })],
+        credentials: SESSION,
+        secondary: { cookie: "sid=other" },
+      }),
+    );
+    expect(findings.some((f) => /Readable by Another Account/i.test(f.name))).toBe(false);
   });
 });

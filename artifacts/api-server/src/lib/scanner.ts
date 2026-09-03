@@ -903,6 +903,7 @@ async function runScanInner(
       return runApiProbes({
         endpoints,
         ...(auth?.credentials ? { credentials: auth.credentials } : {}),
+        ...(auth?.secondary ? { secondary: auth.secondary } : {}),
       });
     })().catch(() => [] as ScanVulnerability[]);
     vulnerabilities.push(...apiFindings);

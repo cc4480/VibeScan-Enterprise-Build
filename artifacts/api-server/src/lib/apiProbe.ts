@@ -45,6 +45,9 @@ import { collectJavaScript } from "./jsScanner";
 const TIMEOUT_MS = 8_000;
 const MAX_ENDPOINTS_TESTED = 25;
 const MAX_PARAMS_PER_ENDPOINT = 4;
+// Small enough not to be load against a customer, large enough that any real
+// limiter would have engaged.
+const RATE_LIMIT_BURST = 12;
 
 /** Paths whose POST is a query rather than a write. */
 const READ_SHAPED = /\b(search|query|filter|lookup|find|list|report|graphql|validate|preview|check)\b/i;
@@ -91,10 +94,77 @@ function isRefusal(status: number, body: string): boolean {
   );
 }
 
+/**
+ * An identifier chosen so that nothing can possibly exist at it.
+ *
+ * This is what makes write-verb authorisation testable without risk. DELETE on
+ * a record that does not exist destroys nothing, but the status code still says
+ * whether authorisation ran: a refusal means the check happens before the
+ * lookup, while a 404 means an unauthenticated caller reached the database.
+ *
+ * PUT is deliberately never sent — many APIs treat it as an upsert, so a PUT to
+ * a nonexistent id creates the record instead of missing it.
+ */
+const IMPLAUSIBLE_ID = "999999997";
+
+/** Response fields that should not be leaving the server at all. */
+const SENSITIVE_FIELD_RE =
+  /^(password|passwd|pwd|password_?hash|hash|salt|secret|api_?key|apikey|private_?key|access_?token|refresh_?token|session_?token|token|ssn|social_?security|card_?number|cardnumber|cvv|cvc|iban|routing_?number|tax_?id)$/i;
+
+/** Fields that let a caller grant themselves something by including them. */
+const PRIVILEGE_FIELD_RE =
+  /^(role|roles|is_?admin|admin|is_?staff|permissions?|scopes?|plan|tier|credits?|balance|verified|is_?verified|email_?verified|owner_?id|user_?id|account_?id)$/i;
+
 export interface ApiProbeInput {
   endpoints: ApiEndpoint[];
   /** The scan's session. Without one, missing-auth cannot be distinguished. */
   credentials?: ScanCredentials;
+  /** A second account, enabling API-level IDOR comparison. */
+  secondary?: ScanCredentials;
+}
+
+/** Collect every field name in a JSON document, however deeply nested. */
+export function jsonFieldNames(body: string, limit = 400): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return [];
+  }
+
+  const names = new Set<string>();
+  const walk = (node: unknown, depth: number) => {
+    if (names.size >= limit || depth > 6 || !node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      // One element is enough: collection members share a shape.
+      if (node.length > 0) walk(node[0], depth + 1);
+      return;
+    }
+    for (const [key, value] of Object.entries(node)) {
+      names.add(key);
+      walk(value, depth + 1);
+    }
+  };
+  walk(parsed, 0);
+  return [...names];
+}
+
+/**
+ * Sensitive fields present in a response body.
+ *
+ * A read, so entirely safe to perform, and it catches the case where an API
+ * returns the whole database row and lets the front end pick fields — the
+ * password hash is still on the wire, and still in the browser's memory.
+ */
+export function exposedSensitiveFields(body: string): string[] {
+  return jsonFieldNames(body).filter((n) => SENSITIVE_FIELD_RE.test(n));
+}
+
+/** Privilege-bearing fields a write endpoint declares it will accept. */
+export function privilegeFieldsAccepted(endpoint: ApiEndpoint): string[] {
+  return endpoint.params
+    .filter((p) => p.location === "body" && PRIVILEGE_FIELD_RE.test(p.name))
+    .map((p) => p.name);
 }
 
 export async function runApiProbes(input: ApiProbeInput): Promise<ScanVulnerability[]> {
@@ -107,6 +177,11 @@ export async function runApiProbes(input: ApiProbeInput): Promise<ScanVulnerabil
 
   const unauthenticated: string[] = [];
   const injectable: Array<{ endpoint: string; param: string; where: string }> = [];
+  const overExposed: Array<{ endpoint: string; fields: string[] }> = [];
+  const unratelimited: string[] = [];
+  const crossAccount: string[] = [];
+  const massAssignable: Array<{ endpoint: string; fields: string[] }> = [];
+  const unauthorizedWrites: string[] = [];
 
   for (const endpoint of testable) {
     const url = concreteUrl(endpoint);
@@ -129,6 +204,92 @@ export async function runApiProbes(input: ApiProbeInput): Promise<ScanVulnerabil
       ) {
         unauthenticated.push(`${endpoint.method} ${new URL(url).pathname}`);
       }
+    }
+
+    // ── 1b. Excessive data exposure ─────────────────────────────────────────
+    // Pure read. Catches an API that returns the whole database row and lets
+    // the front end choose what to display — the password hash still crossed
+    // the wire and still sits in the browser's memory.
+    if (endpoint.method === "GET" || endpoint.method === "HEAD") {
+      const res = await scanFetch(url, {
+        ...(input.credentials ? { as: input.credentials } : {}),
+        timeoutMs: TIMEOUT_MS,
+      });
+      if (res && looksLikeData(res.status, res.body) && !isRefusal(res.status, res.body)) {
+        const fields = exposedSensitiveFields(res.body);
+        if (fields.length > 0) {
+          overExposed.push({ endpoint: `${endpoint.method} ${new URL(url).pathname}`, fields });
+        }
+
+        // ── 1c. API-level IDOR ────────────────────────────────────────────
+        // The phase-04 comparison applied per endpoint: if a second account is
+        // served byte-comparable data from a URL naming a record, one of them
+        // is reading data that is not theirs.
+        if (input.secondary && /\/\d+(?:\/|$)/.test(new URL(url).pathname)) {
+          const asOther = await scanFetch(url, { as: input.secondary, timeoutMs: TIMEOUT_MS });
+          if (
+            asOther &&
+            !isRefusal(asOther.status, asOther.body) &&
+            looksLikeData(asOther.status, asOther.body) &&
+            asOther.body === res.body
+          ) {
+            crossAccount.push(`${endpoint.method} ${new URL(url).pathname}`);
+          }
+        }
+      }
+    }
+
+    // ── 1d. Rate limiting ───────────────────────────────────────────────────
+    // Reads only, and a small burst — enough to show no limiter exists without
+    // becoming load against a customer's server.
+    if (endpoint.method === "GET" && unratelimited.length < 3) {
+      const burst = await Promise.all(
+        Array.from({ length: RATE_LIMIT_BURST }, () =>
+          scanFetch(url, {
+            ...(input.credentials ? { as: input.credentials } : {}),
+            timeoutMs: TIMEOUT_MS,
+          }),
+        ),
+      );
+      const answered = burst.filter((r) => r !== null);
+      const throttled = answered.some((r) => r!.status === 429);
+      if (!throttled && answered.length === RATE_LIMIT_BURST && answered.every((r) => r!.status < 400)) {
+        unratelimited.push(`${endpoint.method} ${new URL(url).pathname}`);
+      }
+    }
+
+    // ── 1e. Write-verb authorisation (BFLA) ─────────────────────────────────
+    // Aimed at an identifier nothing can exist at, so a successful DELETE
+    // destroys nothing — but the status still reveals whether authorisation
+    // runs before the lookup. PUT is never sent: many APIs upsert.
+    if (
+      input.credentials &&
+      /\{[^}]+\}/.test(endpoint.url) &&
+      (endpoint.method === "GET" || endpoint.method === "DELETE" || endpoint.method === "PATCH")
+    ) {
+      const target = endpoint.url.replace(/\{[^}]+\}/g, IMPLAUSIBLE_ID);
+      if (!isDestructiveUrl(target)) {
+        for (const verb of ["DELETE", "PATCH"] as const) {
+          const res = await scanFetch(target, { method: verb, as: null, timeoutMs: TIMEOUT_MS });
+          // 404 means the handler looked for the record before checking who was
+          // asking. 405 means the verb is not routed at all, which is fine.
+          if (res && res.status === 404) {
+            unauthorizedWrites.push(`${verb} ${new URL(target).pathname}`);
+            break;
+          }
+        }
+      }
+    }
+
+    // ── 1f. Mass assignment ─────────────────────────────────────────────────
+    // Read from the declared contract rather than probed: sending a role field
+    // to find out whether it sticks means granting somebody a role.
+    const privileged = privilegeFieldsAccepted(endpoint);
+    if (privileged.length > 0) {
+      massAssignable.push({
+        endpoint: `${endpoint.method} ${new URL(url).pathname}`,
+        fields: privileged,
+      });
     }
 
     // ── 2. SQL injection ────────────────────────────────────────────────────
@@ -187,6 +348,152 @@ export async function runApiProbes(input: ApiProbeInput): Promise<ScanVulnerabil
         cvssScore: 7.5,
         wstgId: "WSTG-ATHZ-01",
         confidence: 85,
+      }),
+    );
+  }
+
+  if (crossAccount.length > 0) {
+    findings.push(
+      vuln({
+        name: "API Records Readable by Another Account",
+        severity: "critical",
+        category: "Broken Access Control",
+        description:
+          `A second, unrelated account received byte-identical data from ${crossAccount.length} API ` +
+          `endpoint${crossAccount.length > 1 ? "s" : ""} that name a specific record. The API confirms someone ` +
+          `is signed in but not that the record is theirs, so any user can read another user's data by ` +
+          `changing the identifier. Two separate accounts cannot both own one record.`,
+        evidence:
+          `Requested as two separate accounts; both received identical responses:
+
+` +
+          crossAccount.map((e) => `  ${e}`).join("\n") +
+          `
+
+If these two accounts share an organisation, sharing the record may be intended.`,
+        solution:
+          "Scope the query to the caller: load the record with a WHERE clause bound to the current user or " +
+          "tenant id, rather than fetching by id and returning it. Apply it in one place — a repository " +
+          "layer or middleware — so a new endpoint inherits the check instead of needing to remember it.",
+        cweId: "CWE-639",
+        cvssScore: 8.1,
+        wstgId: "WSTG-ATHZ-04",
+        confidence: 85,
+      }),
+    );
+  }
+
+  if (unauthorizedWrites.length > 0) {
+    findings.push(
+      vuln({
+        name: "Write Endpoints Reachable Without Authentication",
+        severity: "critical",
+        category: "Broken Access Control",
+        description:
+          `${unauthorizedWrites.length} write endpoint${unauthorizedWrites.length > 1 ? "s" : ""} answered an ` +
+          `unauthenticated request with "not found" rather than "not allowed". The handler looked the record ` +
+          `up before checking who was asking, which means authorisation runs after the database does — or ` +
+          `not at all. Aimed at a real identifier instead of a nonexistent one, the same request would have ` +
+          `modified or deleted the record.`,
+        evidence:
+          `Sent with no session, against an identifier chosen so nothing could exist at it, so nothing was ` +
+          `modified:
+
+` +
+          unauthorizedWrites.map((e) => `  ${e}`).join("\n") +
+          `
+
+A protected endpoint answers 401 or 403 here; these answered 404.`,
+        solution:
+          "Check authentication and authorisation before touching the database, in middleware rather than " +
+          "inside each handler. Returning 404 to an unauthenticated caller is only correct if the check ran " +
+          "first and 404 was chosen deliberately to avoid confirming the record exists.",
+        cweId: "CWE-862",
+        cvssScore: 9.1,
+        wstgId: "WSTG-ATHZ-02",
+        confidence: 75,
+      }),
+    );
+  }
+
+  if (overExposed.length > 0) {
+    const allFields = [...new Set(overExposed.flatMap((e) => e.fields))];
+    findings.push(
+      vuln({
+        name: "Sensitive Fields Returned by the API",
+        severity: "high",
+        category: "Information Disclosure",
+        description:
+          `API responses include field${allFields.length > 1 ? "s" : ""} named ${allFields.join(", ")}. This is ` +
+          `the signature of an endpoint returning a whole database row and letting the front end pick what to ` +
+          `display: the values still crossed the network, still sit in the browser's memory, and are visible ` +
+          `to anyone who opens the network tab. Hiding a field in the interface does not remove it from the ` +
+          `response.`,
+        evidence: overExposed.map((e) => `  ${e.endpoint}   ${e.fields.join(", ")}`).join("\n"),
+        solution:
+          "Serialise responses through an explicit shape that names the fields to include, rather than " +
+          "returning the model and removing fields you remember to remove. A field added to the table later " +
+          "then stays out of the API by default instead of leaking on the next deploy.",
+        cweId: "CWE-213",
+        cvssScore: 7.5,
+        wstgId: "WSTG-ATHZ-04",
+        confidence: 80,
+      }),
+    );
+  }
+
+  if (massAssignable.length > 0) {
+    findings.push(
+      vuln({
+        name: "Privilege Fields Accepted in Request Bodies",
+        severity: "medium",
+        category: "Broken Access Control",
+        description:
+          `The API contract declares that these endpoints accept fields that decide privilege or ownership. ` +
+          `If any is bound straight onto the stored record, a caller can grant themselves a role, change a ` +
+          `plan, or reassign a record to another owner simply by including the field. This is read from the ` +
+          `declared schema, not confirmed by sending one — testing it for real would mean granting somebody ` +
+          `a role.`,
+        evidence:
+          massAssignable.map((e) => `  ${e.endpoint}   ${e.fields.join(", ")}`).join("\n") +
+          `
+
+Verify by hand whether each field is actually bound to the model.`,
+        solution:
+          "Bind request bodies to an explicit allowlist of writable fields per endpoint. Never pass a parsed " +
+          "body into a model constructor or update call wholesale — that is what turns an extra JSON key into " +
+          "a privilege escalation.",
+        cweId: "CWE-915",
+        cvssScore: 6.5,
+        wstgId: "WSTG-BUSL-01",
+        confidence: 55,
+      }),
+    );
+  }
+
+  if (unratelimited.length > 0) {
+    findings.push(
+      vuln({
+        name: "API Endpoints Without Rate Limiting",
+        severity: "medium",
+        category: "Security Misconfiguration",
+        description:
+          `${unratelimited.length} endpoint${unratelimited.length > 1 ? "s" : ""} answered a rapid burst of ` +
+          `requests without once throttling. Unlimited requests make credential stuffing, identifier ` +
+          `enumeration and scraping cheap, and turn any expensive endpoint into a way to exhaust the server.`,
+        evidence:
+          `${RATE_LIMIT_BURST} requests in immediate succession, none answered with 429:
+
+` +
+          unratelimited.map((e) => `  ${e}`).join("\n"),
+        solution:
+          "Rate limit at the edge — reverse proxy, CDN or API gateway — so it applies to every route by " +
+          "default. Apply a tighter limit to authentication and anything that reads by identifier, which are " +
+          "the endpoints worth attacking in bulk.",
+        cweId: "CWE-770",
+        cvssScore: 5.3,
+        wstgId: "WSTG-ATHN-04",
+        confidence: 70,
       }),
     );
   }
