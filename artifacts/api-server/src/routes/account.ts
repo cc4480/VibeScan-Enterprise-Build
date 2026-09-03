@@ -1,0 +1,221 @@
+/**
+ * Email + password accounts.
+ *
+ * Phase 01 of moving off the anonymous-identity model. Until now a user was a
+ * UUID their browser generated and stored in localStorage, sent as a bearer
+ * token — which meant scan history died with the browser profile, and there was
+ * nowhere safe to keep anything sensitive on a user's behalf.
+ *
+ * Registering while holding one of those anonymous tokens converts that same
+ * row into an account in place. The id never changes, so every scan, report,
+ * credit and monitor subscription already pointing at it comes along without
+ * migrating a single row — and the bearer token stops working the moment the
+ * row has a password (see middlewares/authMiddleware.ts).
+ */
+
+import { Router, type IRouter, type Request } from "express";
+import { z } from "zod";
+import { db, usersTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
+import { hashPassword, verifyPassword, needsRehash } from "../lib/password";
+import {
+  createSession,
+  clearSession,
+  getSessionId,
+  SESSION_COOKIE,
+  SESSION_TTL,
+} from "../lib/auth";
+
+const router: IRouter = Router();
+
+// Deliberately no composition rules (no "must contain a symbol"). Length is
+// what actually resists guessing, and the rest mostly pushes people toward
+// Password1! and a sticky note.
+const MIN_PASSWORD_LENGTH = 10;
+const MAX_PASSWORD_LENGTH = 200;
+
+const RegisterBody = z.object({
+  email: z.string().trim().toLowerCase().email("Enter a valid email address"),
+  password: z
+    .string()
+    .min(MIN_PASSWORD_LENGTH, `Use at least ${MIN_PASSWORD_LENGTH} characters`)
+    .max(MAX_PASSWORD_LENGTH, "That password is too long"),
+});
+
+const LoginBody = z.object({
+  email: z.string().trim().toLowerCase().email("Enter a valid email address"),
+  password: z.string().min(1, "Enter your password"),
+});
+
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+// ── Rate limiting ────────────────────────────────────────────────────────────
+// Same shape as the limiter already in routes/auth.ts. In-memory, so it resets
+// on deploy and is per-instance; adequate against online guessing, and not a
+// substitute for the scrypt cost that protects a stolen table.
+const attempts = new Map<string, number[]>();
+const WINDOW_MS = 15 * 60_000;
+const MAX_ATTEMPTS = 10;
+
+function clientIp(req: Request): string {
+  return String(
+    req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "unknown",
+  ).split(",")[0]!.trim();
+}
+
+function isRateLimited(key: string): boolean {
+  const now = Date.now();
+  const recent = (attempts.get(key) ?? []).filter((t) => now - t < WINDOW_MS);
+  recent.push(now);
+  attempts.set(key, recent);
+  return recent.length > MAX_ATTEMPTS;
+}
+
+function publicUser(row: typeof usersTable.$inferSelect) {
+  return {
+    id: row.id,
+    email: row.email,
+    firstName: row.firstName,
+    lastName: row.lastName,
+    profileImageUrl: row.profileImageUrl,
+  };
+}
+
+async function startSession(req: Request, res: Parameters<Parameters<IRouter["post"]>[1]>[1], row: typeof usersTable.$inferSelect) {
+  const sid = await createSession({
+    user: publicUser(row),
+    // The OIDC path stores a provider access token here. Password sessions have
+    // no upstream token, so this field is unused for them.
+    access_token: "",
+  });
+
+  res.cookie(SESSION_COOKIE, sid, {
+    httpOnly: true,
+    sameSite: "lax",
+    maxAge: SESSION_TTL,
+    // req.protocol reflects X-Forwarded-Proto only when TRUST_PROXY is set —
+    // see the note in app.ts.
+    secure: req.protocol === "https",
+    path: "/",
+  });
+}
+
+// ── Register ─────────────────────────────────────────────────────────────────
+
+router.post("/account/register", async (req, res): Promise<void> => {
+  if (isRateLimited(`register:${clientIp(req)}`)) {
+    res.status(429).json({ error: "Too many attempts. Try again in a few minutes." });
+    return;
+  }
+
+  const parsed = RegisterBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues.map((i) => i.message).join(", ") });
+    return;
+  }
+  const { email, password } = parsed.data;
+
+  try {
+    const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+    if (existing) {
+      res.status(409).json({ error: "An account with that email already exists" });
+      return;
+    }
+
+    const passwordHash = await hashPassword(password);
+
+    // If the caller is holding an anonymous identity, promote that row rather
+    // than creating a second one — otherwise their existing scans are stranded
+    // on an id they can no longer authenticate as.
+    const bearer = req.headers["authorization"]?.startsWith("Bearer ")
+      ? req.headers["authorization"].slice(7).trim()
+      : undefined;
+
+    let row: typeof usersTable.$inferSelect | undefined;
+
+    if (bearer && UUID_V4.test(bearer)) {
+      const [anon] = await db.select().from(usersTable).where(eq(usersTable.id, bearer));
+      // Only claim a row that is genuinely anonymous: no password and no email.
+      if (anon && !anon.passwordHash && !anon.email) {
+        [row] = await db
+          .update(usersTable)
+          .set({ email, passwordHash })
+          .where(eq(usersTable.id, anon.id))
+          .returning();
+      }
+    }
+
+    if (!row) {
+      [row] = await db.insert(usersTable).values({ email, passwordHash }).returning();
+    }
+
+    if (!row) {
+      res.status(500).json({ error: "Could not create the account" });
+      return;
+    }
+
+    await startSession(req, res, row);
+    res.status(201).json({ user: publicUser(row) });
+  } catch (err) {
+    req.log.error({ err }, "Registration failed");
+    res.status(500).json({ error: "Could not create the account" });
+  }
+});
+
+// ── Log in ───────────────────────────────────────────────────────────────────
+
+router.post("/account/login", async (req, res): Promise<void> => {
+  if (isRateLimited(`login:${clientIp(req)}`)) {
+    res.status(429).json({ error: "Too many attempts. Try again in a few minutes." });
+    return;
+  }
+
+  const parsed = LoginBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues.map((i) => i.message).join(", ") });
+    return;
+  }
+  const { email, password } = parsed.data;
+
+  // One message for every failure below — a distinct "no such account" reply
+  // would turn this endpoint into a way to test whether an address is
+  // registered.
+  const reject = () => res.status(401).json({ error: "Email or password is incorrect" });
+
+  try {
+    const [row] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+    if (!row?.passwordHash) {
+      reject();
+      return;
+    }
+
+    if (!(await verifyPassword(password, row.passwordHash))) {
+      reject();
+      return;
+    }
+
+    // Upgrade a hash written under weaker parameters, now that the password is
+    // in hand and known correct.
+    if (needsRehash(row.passwordHash)) {
+      const upgraded = await hashPassword(password);
+      await db.update(usersTable).set({ passwordHash: upgraded }).where(eq(usersTable.id, row.id));
+    }
+
+    await startSession(req, res, row);
+    res.json({ user: publicUser(row) });
+  } catch (err) {
+    req.log.error({ err }, "Login failed");
+    res.status(500).json({ error: "Could not sign you in" });
+  }
+});
+
+// ── Log out ──────────────────────────────────────────────────────────────────
+
+router.post("/account/logout", async (req, res): Promise<void> => {
+  // Deleting the session row is what actually revokes it; clearing the cookie
+  // alone would leave a stolen copy working until it expired.
+  await clearSession(res, getSessionId(req));
+  res.json({ ok: true });
+});
+
+export default router;

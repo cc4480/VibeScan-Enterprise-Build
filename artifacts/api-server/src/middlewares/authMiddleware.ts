@@ -77,6 +77,16 @@ export async function authMiddleware(
       .from(usersTable)
       .where(eq(usersTable.id, token));
 
+    // Registering converts an anonymous row into an account in place, keeping
+    // the same id. Without this check the original UUID would keep working as a
+    // bearer token for that account forever — a password-equivalent credential
+    // that survives every password change and cannot be revoked. Once a row has
+    // a password, the only way in is a session cookie.
+    if (dbUser?.passwordHash) {
+      next();
+      return;
+    }
+
     if (dbUser) {
       req.user = {
         id: dbUser.id,

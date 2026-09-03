@@ -9,6 +9,7 @@ import monitorRouter from "./monitor";
 import dismissalsRouter from "./dismissals";
 import sharesRouter from "./shares";
 import settingsRouter from "./settings";
+import accountRouter from "./account";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(monitorRouter);
 router.use(dismissalsRouter);
 router.use(sharesRouter);
 router.use(settingsRouter);
+router.use(accountRouter);
 
 export default router;
