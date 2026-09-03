@@ -2,6 +2,12 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { useSeo } from "@/lib/seo";
 import { useCreateScan } from "@workspace/api-client-react";
+import {
+  ScanCredentialsFields,
+  emptyCredentials,
+  credentialsReady,
+  type ScanCredentialsValue,
+} from "@/components/scan-credentials-fields";
 import { Shield, Zap, Globe, Lock, CheckCircle2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ScanTier } from "@workspace/api-client-react";
@@ -45,6 +51,7 @@ export default function ScanFormPage() {
   useSeo({ title: "New Scan — Seclayer", noindex: true });
   const [url, setUrl] = useState("");
   const [tier, setTier] = useState<ScanTier>("deep");
+  const [credentials, setCredentials] = useState<ScanCredentialsValue>(emptyCredentials);
   const [, setLocation] = useLocation();
 
   const createScan = useCreateScan();
@@ -60,8 +67,28 @@ export default function ScanFormPage() {
       targetUrl = "https://" + targetUrl;
     }
 
+    // Only send credentials when the section was actually filled in and
+    // attested — a half-completed form should run a normal scan, not a failed
+    // authenticated one.
+    const creds = credentialsReady(credentials)
+      ? {
+          mode: credentials.mode,
+          authorized: credentials.authorized,
+          ...(credentials.mode === "session"
+            ? {
+                cookie: credentials.cookie.trim() || null,
+                bearerToken: credentials.bearerToken.trim() || null,
+              }
+            : {
+                loginUrl: credentials.loginUrl.trim(),
+                username: credentials.username.trim(),
+                password: credentials.password,
+              }),
+        }
+      : undefined;
+
     createScan.mutate(
-      { data: { targetUrl, tier } },
+      { data: { targetUrl, tier, ...(creds ? { credentials: creds } : {}) } },
       {
         onSuccess: (data) => {
           setLocation(`/scan/${data.scanId}?tier=${tier}`);
@@ -168,6 +195,8 @@ export default function ScanFormPage() {
               ))}
             </div>
           </div>
+
+          <ScanCredentialsFields value={credentials} onChange={setCredentials} />
 
           {/* Submit */}
           <div className="pt-6 border-t border-white/5 flex flex-col items-center gap-4">

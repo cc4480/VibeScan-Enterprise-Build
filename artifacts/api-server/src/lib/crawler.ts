@@ -17,8 +17,10 @@ import type { ScanVulnerability } from "./scanner";
 const PAGE_TIMEOUT_MS = 8_000;
 const CRAWL_TIMEOUT_MS = 30_000;
 
-// Paths that could trigger destructive actions — skip these
-const DANGEROUS_PATH_PATTERNS = /logout|signout|delete|remove|destroy|unsubscribe|reset|drop/i;
+// Destructive-action filtering moved to lib/destructive.ts, which covers more
+// verbs and also inspects the query string. It is shared with the injection and
+// traversal probes, which fire payloads at discovered paths and had no such
+// guard — a far bigger risk than crawling once a session is attached.
 
 /**
  * Curated high-value paths probed on every deep scan regardless of whether
@@ -67,7 +69,7 @@ export function extractInternalLinks(html: string, baseUrl: string): string[] {
     try {
       const u = new URL(raw, baseUrl);
       if (u.hostname !== base.hostname) return;
-      if (DANGEROUS_PATH_PATTERNS.test(u.pathname)) return;
+      if (isDestructiveUrl(u.toString())) return;
       // Only keep paths (ignore hash, query string for dedup)
       const path = u.pathname;
       if (path === "/" || path === base.pathname) return;
@@ -155,6 +157,7 @@ function snapshotHeaders(headers: Record<string, string>): HeaderSnapshot {
 
 import { type PathProbe, PATH_PROBES } from "./crawler-data";
 import { scanFetch } from "./http";
+import { isDestructiveUrl } from "./destructive";
 
 
 /**
@@ -500,9 +503,9 @@ export async function crawlAndCheck(
   );
 
   const probedUrls: string[] = HIGH_VALUE_PROBE_PATHS
-    .filter((p) => !DANGEROUS_PATH_PATTERNS.test(p))
-    .filter((p) => !linkedPathnames.has(p))
-    .map((p) => `${origin}${p}`);
+    .map((p) => `${origin}${p}`)
+    .filter((u) => !isDestructiveUrl(u))
+    .filter((u) => { try { return !linkedPathnames.has(new URL(u).pathname); } catch { return false; } });
 
   // Set of probed URLs for labelling findings — checked with full URL equality
   const probedSet = new Set<string>(probedUrls);

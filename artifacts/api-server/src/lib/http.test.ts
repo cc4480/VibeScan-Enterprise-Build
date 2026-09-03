@@ -1,7 +1,13 @@
 import { describe, it, expect, afterEach } from "vitest";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import { ScanScope, scanFetch, runWithScanHttp, SCANNER_USER_AGENT } from "./http.js";
+import {
+  ScanScope,
+  scanFetch,
+  runWithScanHttp,
+  sessionWasLost,
+  SCANNER_USER_AGENT,
+} from "./http.js";
 
 // Real servers rather than a mocked fetch: the behaviour under test is redirect
 // handling and what gets put on the wire, which a mock would only restate.
@@ -245,5 +251,139 @@ describe("scanFetch transport", () => {
     expect(result).toMatchObject({ status: 201, body: "body text" });
     expect(result?.headers["x-custom"]).toBe("Value");
     expect(result?.finalUrl).toContain("/x");
+  });
+});
+
+describe("session expiry mid-scan", () => {
+  // A target whose session dies after N authenticated requests, standing in for
+  // a real session timing out partway through a long scan.
+  async function expiringTarget(validFor: number) {
+    // Budget is per session version, so signing in again genuinely yields a
+    // working session. A single global counter would make every replacement
+    // session born already expired — modelling a login that can never succeed.
+    const servedPerSession = new Map<string, number>();
+    return serve((req, res) => {
+      const cookie = req.headers.cookie ?? "";
+      const version = /sid=v(\d+)/.exec(cookie)?.[1];
+      const used = version === undefined ? 0 : servedPerSession.get(version) ?? 0;
+      const stillValid = version !== undefined && used < validFor;
+      if (stillValid) servedPerSession.set(version!, used + 1);
+
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end(
+        stillValid
+          ? "<h1>Members area</h1>"
+          : `<h1>Please log in</h1><form><input type="password" name="p"></form>`,
+      );
+    });
+  }
+
+  const detectSignedOut = (body: string) =>
+    /<input[^>]+type=["']password["']/i.test(body) && /log in/i.test(body);
+
+  it("signs back in and retries, so the caller gets the authenticated page", async () => {
+    const { port } = await expiringTarget(1);
+    let logins = 0;
+
+    const body = await runWithScanHttp(
+      {
+        targetUrl: `http://localhost:${port}/`,
+        credentials: { cookie: "sid=v1" },
+        detectSignedOut,
+        onSessionLost: async () => {
+          logins++;
+          return { cookie: `sid=v${logins + 1}` };
+        },
+      },
+      async () => {
+        await scanFetch(`http://localhost:${port}/a`); // consumes the first session
+        const second = await scanFetch(`http://localhost:${port}/b`); // sees expiry, re-auths
+        return second?.body ?? "";
+      },
+    );
+
+    expect(logins).toBe(1);
+    expect(body).toContain("Members area");
+  });
+
+  it("records the loss even when re-authentication is impossible", async () => {
+    // A pasted cookie has no renewal path, so onSessionLost is absent.
+    const { port } = await expiringTarget(0);
+
+    const lost = await runWithScanHttp(
+      {
+        targetUrl: `http://localhost:${port}/`,
+        credentials: { cookie: "sid=v1" },
+        detectSignedOut,
+      },
+      async () => {
+        await scanFetch(`http://localhost:${port}/a`);
+        return sessionWasLost();
+      },
+    );
+
+    expect(lost).toBe(true);
+  });
+
+  it("gives up rather than looping when every attempt still looks signed out", async () => {
+    const { port } = await expiringTarget(0);
+    let logins = 0;
+
+    await runWithScanHttp(
+      {
+        targetUrl: `http://localhost:${port}/`,
+        credentials: { cookie: "sid=v1" },
+        detectSignedOut,
+        onSessionLost: async () => {
+          logins++;
+          return { cookie: "sid=v9" }; // never actually works
+        },
+      },
+      async () => {
+        for (let i = 0; i < 6; i++) await scanFetch(`http://localhost:${port}/p${i}`);
+      },
+    );
+
+    // Capped per scan, so a permanently broken login cannot spawn one sign-in
+    // per request for the rest of the scan.
+    expect(logins).toBeLessThanOrEqual(2);
+  });
+
+  it("signs in once when several probes hit the expiry together", async () => {
+    const { port } = await expiringTarget(0);
+    let logins = 0;
+
+    await runWithScanHttp(
+      {
+        targetUrl: `http://localhost:${port}/`,
+        credentials: { cookie: "sid=v1" },
+        detectSignedOut,
+        onSessionLost: async () => {
+          logins++;
+          await new Promise((r) => setTimeout(r, 20));
+          return { cookie: "sid=v2" };
+        },
+      },
+      async () => {
+        await Promise.all(
+          Array.from({ length: 8 }, (_, i) => scanFetch(`http://localhost:${port}/c${i}`)),
+        );
+      },
+    );
+
+    expect(logins).toBe(1);
+  });
+
+  it("leaves an unauthenticated scan alone", async () => {
+    const { port } = await expiringTarget(0);
+    const lost = await runWithScanHttp(
+      { targetUrl: `http://localhost:${port}/`, detectSignedOut },
+      async () => {
+        await scanFetch(`http://localhost:${port}/a`);
+        return sessionWasLost();
+      },
+    );
+    // No credentials were supplied, so there was no session to lose.
+    expect(lost).toBe(false);
   });
 });

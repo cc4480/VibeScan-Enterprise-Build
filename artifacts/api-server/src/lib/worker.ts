@@ -18,7 +18,7 @@ import { sendRegressionAlertEmail } from "./mailer";
 import { fireWebhook } from "./webhook";
 import { getBoss, SCAN_QUEUE, type ScanJobData } from "./queue";
 import { runScan, computeRiskScore, computeGrade, type ScanVulnerability } from "./scanner";
-import { decryptCredentials, toScanHttpCredentials } from "./scanCredentials";
+import { decryptCredentials, toScanHttpCredentials, looksSignedOut } from "./scanCredentials";
 import { runWithScanHttp } from "./http";
 import { corroborateMerge } from "./scoring";
 import { findingFingerprint, normalizeEvidenceKey, canonicalizeTargetUrl } from "./fingerprint";
@@ -109,6 +109,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
   // Declared out here so the re-probe below runs under the same credentials —
   // see the note at its call site.
   let httpCredentials: Awaited<ReturnType<typeof toScanHttpCredentials>> = null;
+  let reauthenticate: (() => Promise<Awaited<ReturnType<typeof toScanHttpCredentials>>>) | null = null;
   try {
     const scanTimeout = new Promise<never>((_, reject) =>
       setTimeout(
@@ -136,11 +137,29 @@ async function processScanJob(job: ScanJob): Promise<void> {
           { mode: stored.mode, authenticated: httpCredentials !== null },
           "Credentialed scan requested",
         );
+        // Only a form login can be replayed. A pasted cookie or bearer token
+        // has no renewal path, so its expiry is recorded but not recovered.
+        if (stored.mode === "form") {
+          reauthenticate = async () => {
+            log.warn("Session appears to have expired — signing in again");
+            return toScanHttpCredentials(stored, log);
+          };
+        }
       }
     }
 
     scanResult = await Promise.race([
-      runScan(targetUrl, tier, httpCredentials ?? undefined),
+      runScan(
+        targetUrl,
+        tier,
+        httpCredentials
+          ? {
+              credentials: httpCredentials,
+              detectSignedOut: looksSignedOut,
+              ...(reauthenticate ? { onSessionLost: reauthenticate } : {}),
+            }
+          : undefined,
+      ),
       scanTimeout,
     ]);
     log.info(

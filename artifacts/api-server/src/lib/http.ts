@@ -63,7 +63,21 @@ export interface ScanHttpInit {
   credentials?: ScanCredentials;
   /** Minimum gap between requests to the same host. 0 disables throttling. */
   minRequestIntervalMs?: number;
+  /**
+   * Recognise a response as "you are signed out". Injected rather than imported
+   * so this module stays free of scanner dependencies.
+   */
+  detectSignedOut?: (body: string, finalUrl: string) => boolean;
+  /**
+   * Obtain a fresh session after the current one stops working. Returning null
+   * means re-authentication is not possible — a pasted cookie cannot be renewed
+   * — and the scan continues signed out.
+   */
+  onSessionLost?: () => Promise<ScanCredentials | null>;
 }
+
+/** How many times one scan will try to sign back in before giving up. */
+const MAX_REAUTH_ATTEMPTS = 2;
 
 export interface ScanHttpContext {
   scope: ScanScope;
@@ -71,6 +85,16 @@ export interface ScanHttpContext {
   minRequestIntervalMs: number;
   /** Last request time per host, for throttling. */
   lastRequestAt: Map<string, number>;
+  detectSignedOut?: (body: string, finalUrl: string) => boolean;
+  onSessionLost?: () => Promise<ScanCredentials | null>;
+  reauthAttempts: number;
+  /**
+   * Shared across concurrent probes so twenty parallel requests noticing the
+   * same dead session trigger one sign-in, not twenty.
+   */
+  reauthInFlight: Promise<ScanCredentials | null> | null;
+  /** True once a session was lost, whether or not re-authentication worked. */
+  sessionWasLost: boolean;
 }
 
 const storage = new AsyncLocalStorage<ScanHttpContext>();
@@ -120,8 +144,54 @@ export function runWithScanHttp<T>(init: ScanHttpInit, fn: () => Promise<T>): Pr
     ...(init.credentials ? { credentials: init.credentials } : {}),
     minRequestIntervalMs: init.minRequestIntervalMs ?? 0,
     lastRequestAt: new Map(),
+    ...(init.detectSignedOut ? { detectSignedOut: init.detectSignedOut } : {}),
+    ...(init.onSessionLost ? { onSessionLost: init.onSessionLost } : {}),
+    reauthAttempts: 0,
+    reauthInFlight: null,
+    sessionWasLost: false,
   };
   return storage.run(ctx, fn);
+}
+
+/**
+ * Whether the session dropped at any point during the scan.
+ *
+ * Worth reporting: a scan that silently lost its session covers less of the app
+ * than the user asked for, and every "no finding" after that point means "not
+ * looked at" rather than "looked at and clean".
+ */
+export function sessionWasLost(): boolean {
+  return storage.getStore()?.sessionWasLost ?? false;
+}
+
+/**
+ * Sign back in, at most once at a time and a few times per scan.
+ *
+ * Returns true when fresh credentials are now in place.
+ */
+async function tryReauthenticate(ctx: ScanHttpContext): Promise<boolean> {
+  if (!ctx.onSessionLost) return false;
+
+  if (ctx.reauthInFlight) {
+    // Another probe is already signing in — wait for that rather than piling on.
+    const creds = await ctx.reauthInFlight;
+    return creds !== null;
+  }
+
+  if (ctx.reauthAttempts >= MAX_REAUTH_ATTEMPTS) return false;
+  ctx.reauthAttempts += 1;
+
+  ctx.reauthInFlight = ctx.onSessionLost().catch(() => null);
+  try {
+    const fresh = await ctx.reauthInFlight;
+    if (fresh) {
+      ctx.credentials = fresh;
+      return true;
+    }
+    return false;
+  } finally {
+    ctx.reauthInFlight = null;
+  }
 }
 
 export function getScanHttpContext(): ScanHttpContext | undefined {
@@ -252,6 +322,9 @@ async function perform(
 
   let current = url;
   let redirected = false;
+  // Guards the re-authentication retry so a target that always looks signed
+  // out cannot bounce one request around the loop indefinitely.
+  let reauthRetried = false;
 
   for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
     await throttle(ctx, current);
@@ -298,6 +371,25 @@ async function perform(
       // res.url is empty on a manual-mode response in some runtimes; fall back
       // to the URL actually requested so callers always get a usable value.
       if (!result.finalUrl) result.finalUrl = current;
+
+      // ── Session expiry mid-scan ──────────────────────────────────────────
+      // A session that dies partway through is worse than never having one:
+      // every later probe reports "nothing found" for pages it was silently
+      // bounced off. Detect it, sign back in if we can, and retry this request
+      // once so the caller gets the authenticated response it expected.
+      if (
+        !reauthRetried &&
+        ctx?.credentials &&
+        ctx.scope.includes(current) &&
+        ctx.detectSignedOut?.(result.body, result.finalUrl)
+      ) {
+        ctx.sessionWasLost = true;
+        if (await tryReauthenticate(ctx)) {
+          reauthRetried = true;
+          continue;
+        }
+      }
+
       return { ok: true, result };
     }
 

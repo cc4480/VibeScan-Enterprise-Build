@@ -79,7 +79,7 @@ async function isHstsPreloaded(hostname: string): Promise<boolean> {
   return false;
 }
 
-import { runWithScanHttp, scanFetch, scanFetchOrThrow, type ScanCredentials as ScanHttpCredentials } from "./http";
+import { runWithScanHttp, scanFetch, scanFetchOrThrow, sessionWasLost, type ScanCredentials as ScanHttpCredentials } from "./http";
 import { runAllProbes } from "./probes";
 import { checkDnsSecurity } from "./dnsChecks";
 import { scanJavaScriptForSecrets } from "./jsScanner";
@@ -333,17 +333,55 @@ function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[
  *
  * Split from the body only to avoid indenting the whole function.
  */
+export interface RunScanAuth {
+  credentials: ScanHttpCredentials;
+  /** Recognises a signed-out response. */
+  detectSignedOut?: (body: string, finalUrl: string) => boolean;
+  /** Signs back in when the session expires mid-scan. */
+  onSessionLost?: () => Promise<ScanHttpCredentials | null>;
+}
+
 export async function runScan(
   targetUrl: string,
   tier: string,
-  credentials?: ScanHttpCredentials,
+  auth?: RunScanAuth,
 ): Promise<ScanResult> {
   // Credentials go into the scan context, where lib/http.ts attaches them only
   // to in-scope requests and drops them on any redirect that leaves the target.
   return runWithScanHttp(
-    { targetUrl, ...(credentials ? { credentials } : {}) },
+    {
+      targetUrl,
+      ...(auth
+        ? {
+            credentials: auth.credentials,
+            ...(auth.detectSignedOut ? { detectSignedOut: auth.detectSignedOut } : {}),
+            ...(auth.onSessionLost ? { onSessionLost: auth.onSessionLost } : {}),
+          }
+        : {}),
+    },
     () => runScanInner(targetUrl, tier),
   );
+}
+
+/**
+ * Finding raised when the scan's session expired partway through.
+ *
+ * Not a vulnerability in the target, but the user has to know: after the
+ * session dropped, every "nothing found" means "not looked at" rather than
+ * "looked at and clean", and a report that hid that would be misleading.
+ */
+function sessionLostFinding(): ScanVulnerability {
+  return vuln({
+    name: "Scan session expired before the scan finished",
+    severity: "info",
+    category: "Scan Coverage",
+    description:
+      "The credentials you supplied stopped working partway through this scan — the target began returning its sign-in page. Pages checked after that point were seen signed out, so results for the authenticated part of the app are incomplete. This is a limitation of the scan, not a vulnerability in your site.",
+    evidence: "One or more responses matched the target's signed-out page while credentials were in use.",
+    solution:
+      "Re-run the scan with a longer-lived session. A sign-in with a username and password can renew itself automatically; a pasted cookie or token cannot, so prefer form login for long scans, or supply a token with a longer expiry.",
+    confidence: 95,
+  });
 }
 
 async function runScanInner(targetUrl: string, tier: string): Promise<ScanResult> {
@@ -848,7 +886,10 @@ async function runScanInner(targetUrl: string, tier: string): Promise<ScanResult
     server,
     tlsGrade,
     technologies,
-    vulnerabilities: autoEnrichConfidence(vulnerabilities, technologies),
+    vulnerabilities: autoEnrichConfidence(
+      sessionWasLost() ? [...vulnerabilities, sessionLostFinding()] : vulnerabilities,
+      technologies,
+    ),
     requestDurationMs,
     rawHeaders,
     pagesScanned: crawlResult.pagesVisited,

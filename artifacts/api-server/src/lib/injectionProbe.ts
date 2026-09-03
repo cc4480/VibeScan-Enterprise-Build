@@ -23,6 +23,7 @@
 import { randomUUID, randomBytes } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 import { scanFetch } from "./http";
+import { isDestructiveUrl } from "./destructive";
 
 const TIMEOUT_MS = 7_000;
 const MAX_CASES = 20;
@@ -140,6 +141,11 @@ export async function runInjectionProbes(
   const sqliFindings: Array<{ param: string; path: string; signature: string }> = [];
 
   for (const { path, param } of cases) {
+    // Never fire payloads at an endpoint whose name says it performs an action.
+    // Unauthenticated this mostly bounced; with a session attached, injecting
+    // into /account/delete does the deleting.
+    if (isDestructiveUrl(`${origin}${path}`)) continue;
+
     // ── Reflected XSS: unique canary wrapped in HTML metacharacters ───────────
     // A random token means an accidental match is astronomically unlikely, and
     // requiring the literal "<token>" (angle brackets intact) confirms the input

@@ -17,6 +17,7 @@ import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 import { PATH_TRAVERSAL_TEMPLATES, classifyTraversalBody } from "./payloads";
 import { scanFetch } from "./http";
+import { isDestructiveUrl } from "./destructive";
 
 const TIMEOUT_MS = 7_000;
 
@@ -114,6 +115,10 @@ export async function checkPathTraversal(
   // Run all cases concurrently but resolve on the first confirmed hit.
 
   for (const { path, param } of cases.slice(0, 40)) {
+    // Same guard as the injection probe: a traversal payload aimed at an action
+    // endpoint still triggers the action on the way through.
+    if (isDestructiveUrl(`${origin}${path}`)) continue;
+
     for (const payload of PATH_TRAVERSAL_TEMPLATES) {
       const testUrl = new URL(`${origin}${path}`);
       testUrl.searchParams.set(param, payload);
