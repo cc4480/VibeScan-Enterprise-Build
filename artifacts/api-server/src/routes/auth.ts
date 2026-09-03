@@ -13,6 +13,20 @@ import {
 
 const router: IRouter = Router();
 
+/**
+ * Whether Replit OIDC can actually work here.
+ *
+ * REPL_ID is injected by Replit's own runtime and is not something an operator
+ * can set to a meaningful value elsewhere: the OIDC client it names has to be
+ * registered with the issuer. Off Replit the routes below therefore cannot
+ * complete, and until now they answered 500 — a broken sign-in offered to
+ * anyone who found the link.
+ *
+ * Registering them only when the configuration exists means a self-hosted
+ * deployment has no dead route, while a Replit deployment is unchanged.
+ */
+const oidcConfigured = Boolean(process.env["REPL_ID"]);
+
 const PKCE_COOKIE = "oidc_pkce";
 
 // Simple in-memory rate limiter for the /login redirect (prevents OIDC redirect spam).
@@ -22,7 +36,9 @@ const LOGIN_MAX = 10;
 
 function isLoginRateLimited(ip: string): boolean {
   const now = Date.now();
-  const times = (_loginAttempts.get(ip) ?? []).filter((t) => now - t < LOGIN_WINDOW_MS);
+  const times = (_loginAttempts.get(ip) ?? []).filter(
+    (t) => now - t < LOGIN_WINDOW_MS,
+  );
   times.push(now);
   _loginAttempts.set(ip, times);
   return times.length > LOGIN_MAX;
@@ -35,164 +51,197 @@ function getCallbackUrl(req: Request): string {
   return `${proto}://${host}/api/callback`;
 }
 
-router.get("/login", async (req: Request, res: Response): Promise<void> => {
-  const ip = String(
-    req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "unknown",
-  ).split(",")[0].trim();
-  if (isLoginRateLimited(ip)) {
-    res.status(429).send("Too many login attempts. Please try again later.");
-    return;
-  }
-
-  try {
-    const config = await getOidcConfig();
-    const returnTo = typeof req.query["returnTo"] === "string" ? req.query["returnTo"] : "/";
-
-    const codeVerifier = client.randomPKCECodeVerifier();
-    const codeChallenge = await client.calculatePKCECodeChallenge(codeVerifier);
-    const state = client.randomState();
-
-    const pkcePayload = JSON.stringify({ codeVerifier, state, returnTo });
-    const pkceToken = Buffer.from(pkcePayload).toString("base64url");
-
-    res.cookie(PKCE_COOKIE, pkceToken, {
-      httpOnly: true,
-      sameSite: "lax",
-      maxAge: PKCE_TTL_MS,
-      secure: req.protocol === "https",
-    });
-
-    const callbackUrl = getCallbackUrl(req);
-
-    const authUrl = client.buildAuthorizationUrl(config, {
-      redirect_uri: callbackUrl,
-      response_type: "code",
-      scope: "openid profile email",
-      state,
-      code_challenge: codeChallenge,
-      code_challenge_method: "S256",
-    });
-
-    res.redirect(authUrl.href);
-  } catch (err) {
-    req.log.error({ err }, "Failed to initiate OIDC login");
-    res.status(500).send("Login unavailable. Please try again.");
-  }
-});
-
-router.get("/callback", async (req: Request, res: Response): Promise<void> => {
-  try {
-    const pkceToken = req.cookies?.[PKCE_COOKIE];
-    if (!pkceToken) {
-      res.status(400).send("Login session expired. Please try again.");
+if (oidcConfigured) {
+  router.get("/login", async (req: Request, res: Response): Promise<void> => {
+    const ip = String(
+      req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "unknown",
+    )
+      .split(",")[0]
+      .trim();
+    if (isLoginRateLimited(ip)) {
+      res.status(429).send("Too many login attempts. Please try again later.");
       return;
     }
 
-    let codeVerifier: string;
-    let expectedState: string;
-    let returnTo: string;
     try {
-      const parsed = JSON.parse(Buffer.from(pkceToken, "base64url").toString("utf-8")) as {
-        codeVerifier: string;
-        state: string;
-        returnTo: string;
-      };
-      codeVerifier = parsed.codeVerifier;
-      expectedState = parsed.state;
-      returnTo = parsed.returnTo ?? "/";
-    } catch {
-      res.status(400).send("Invalid login session. Please try again.");
-      return;
-    }
+      const config = await getOidcConfig();
+      const returnTo =
+        typeof req.query["returnTo"] === "string" ? req.query["returnTo"] : "/";
 
-    res.clearCookie(PKCE_COOKIE);
+      const codeVerifier = client.randomPKCECodeVerifier();
+      const codeChallenge =
+        await client.calculatePKCECodeChallenge(codeVerifier);
+      const state = client.randomState();
 
-    const config = await getOidcConfig();
-    const callbackUrl = getCallbackUrl(req);
+      const pkcePayload = JSON.stringify({ codeVerifier, state, returnTo });
+      const pkceToken = Buffer.from(pkcePayload).toString("base64url");
 
-    const currentUrl = new URL(req.url, `${req.protocol}://${req.headers["host"]}`);
-
-    const tokens = await client.authorizationCodeGrant(config, currentUrl, {
-      pkceCodeVerifier: codeVerifier,
-      expectedState,
-    });
-
-    const claims = tokens.claims();
-    if (!claims?.sub) {
-      res.status(400).send("Invalid token response from identity provider.");
-      return;
-    }
-
-    const profile = tokens.claims() as {
-      sub: string;
-      email?: string;
-      name?: string;
-      given_name?: string;
-      family_name?: string;
-      profile_image_url?: string;
-      picture?: string;
-    };
-
-    const { db, usersTable } = await import("@workspace/db");
-    const { eq } = await import("drizzle-orm");
-
-    await db
-      .insert(usersTable)
-      .values({
-        id: profile.sub,
-        email: profile.email ?? null,
-        firstName: profile.given_name ?? profile.name?.split(" ")[0] ?? null,
-        lastName: profile.family_name ?? profile.name?.split(" ").slice(1).join(" ") ?? null,
-        profileImageUrl: profile.profile_image_url ?? profile.picture ?? null,
-      })
-      .onConflictDoUpdate({
-        target: usersTable.id,
-        set: {
-          email: profile.email ?? null,
-          firstName: profile.given_name ?? profile.name?.split(" ")[0] ?? null,
-          lastName: profile.family_name ?? profile.name?.split(" ").slice(1).join(" ") ?? null,
-          profileImageUrl: profile.profile_image_url ?? profile.picture ?? null,
-        },
+      res.cookie(PKCE_COOKIE, pkceToken, {
+        httpOnly: true,
+        sameSite: "lax",
+        maxAge: PKCE_TTL_MS,
+        secure: req.protocol === "https",
       });
 
-    const [dbUser] = await db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.id, profile.sub));
+      const callbackUrl = getCallbackUrl(req);
 
-    if (!dbUser) {
-      res.status(500).send("Failed to create user record.");
-      return;
+      const authUrl = client.buildAuthorizationUrl(config, {
+        redirect_uri: callbackUrl,
+        response_type: "code",
+        scope: "openid profile email",
+        state,
+        code_challenge: codeChallenge,
+        code_challenge_method: "S256",
+      });
+
+      res.redirect(authUrl.href);
+    } catch (err) {
+      req.log.error({ err }, "Failed to initiate OIDC login");
+      res.status(500).send("Login unavailable. Please try again.");
     }
+  });
 
-    const sid = await createSession({
-      user: {
-        id: dbUser.id,
-        email: dbUser.email,
-        firstName: dbUser.firstName,
-        lastName: dbUser.lastName,
-        profileImageUrl: dbUser.profileImageUrl,
-      },
-      access_token: tokens.access_token ?? crypto.randomBytes(16).toString("hex"),
-      refresh_token: typeof tokens.refresh_token === "string" ? tokens.refresh_token : undefined,
-      expires_at: tokens.expires_in ? Date.now() + tokens.expires_in * 1000 : undefined,
-    });
+  router.get(
+    "/callback",
+    async (req: Request, res: Response): Promise<void> => {
+      try {
+        const pkceToken = req.cookies?.[PKCE_COOKIE];
+        if (!pkceToken) {
+          res.status(400).send("Login session expired. Please try again.");
+          return;
+        }
 
-    res.cookie(SESSION_COOKIE, sid, {
-      httpOnly: true,
-      sameSite: "lax",
-      maxAge: SESSION_TTL,
-      secure: req.protocol === "https",
-    });
+        let codeVerifier: string;
+        let expectedState: string;
+        let returnTo: string;
+        try {
+          const parsed = JSON.parse(
+            Buffer.from(pkceToken, "base64url").toString("utf-8"),
+          ) as {
+            codeVerifier: string;
+            state: string;
+            returnTo: string;
+          };
+          codeVerifier = parsed.codeVerifier;
+          expectedState = parsed.state;
+          returnTo = parsed.returnTo ?? "/";
+        } catch {
+          res.status(400).send("Invalid login session. Please try again.");
+          return;
+        }
 
-    const safeReturnTo = returnTo.startsWith("/") ? returnTo : "/";
-    res.redirect(safeReturnTo);
-  } catch (err) {
-    req.log.error({ err }, "OIDC callback failed");
-    res.status(500).send("Authentication failed. Please try again.");
-  }
-});
+        res.clearCookie(PKCE_COOKIE);
 
+        const config = await getOidcConfig();
+        const callbackUrl = getCallbackUrl(req);
+
+        const currentUrl = new URL(
+          req.url,
+          `${req.protocol}://${req.headers["host"]}`,
+        );
+
+        const tokens = await client.authorizationCodeGrant(config, currentUrl, {
+          pkceCodeVerifier: codeVerifier,
+          expectedState,
+        });
+
+        const claims = tokens.claims();
+        if (!claims?.sub) {
+          res
+            .status(400)
+            .send("Invalid token response from identity provider.");
+          return;
+        }
+
+        const profile = tokens.claims() as {
+          sub: string;
+          email?: string;
+          name?: string;
+          given_name?: string;
+          family_name?: string;
+          profile_image_url?: string;
+          picture?: string;
+        };
+
+        const { db, usersTable } = await import("@workspace/db");
+        const { eq } = await import("drizzle-orm");
+
+        await db
+          .insert(usersTable)
+          .values({
+            id: profile.sub,
+            email: profile.email ?? null,
+            firstName:
+              profile.given_name ?? profile.name?.split(" ")[0] ?? null,
+            lastName:
+              profile.family_name ??
+              profile.name?.split(" ").slice(1).join(" ") ??
+              null,
+            profileImageUrl:
+              profile.profile_image_url ?? profile.picture ?? null,
+          })
+          .onConflictDoUpdate({
+            target: usersTable.id,
+            set: {
+              email: profile.email ?? null,
+              firstName:
+                profile.given_name ?? profile.name?.split(" ")[0] ?? null,
+              lastName:
+                profile.family_name ??
+                profile.name?.split(" ").slice(1).join(" ") ??
+                null,
+              profileImageUrl:
+                profile.profile_image_url ?? profile.picture ?? null,
+            },
+          });
+
+        const [dbUser] = await db
+          .select()
+          .from(usersTable)
+          .where(eq(usersTable.id, profile.sub));
+
+        if (!dbUser) {
+          res.status(500).send("Failed to create user record.");
+          return;
+        }
+
+        const sid = await createSession({
+          user: {
+            id: dbUser.id,
+            email: dbUser.email,
+            firstName: dbUser.firstName,
+            lastName: dbUser.lastName,
+            profileImageUrl: dbUser.profileImageUrl,
+          },
+          access_token:
+            tokens.access_token ?? crypto.randomBytes(16).toString("hex"),
+          refresh_token:
+            typeof tokens.refresh_token === "string"
+              ? tokens.refresh_token
+              : undefined,
+          expires_at: tokens.expires_in
+            ? Date.now() + tokens.expires_in * 1000
+            : undefined,
+        });
+
+        res.cookie(SESSION_COOKIE, sid, {
+          httpOnly: true,
+          sameSite: "lax",
+          maxAge: SESSION_TTL,
+          secure: req.protocol === "https",
+        });
+
+        const safeReturnTo = returnTo.startsWith("/") ? returnTo : "/";
+        res.redirect(safeReturnTo);
+      } catch (err) {
+        req.log.error({ err }, "OIDC callback failed");
+        res.status(500).send("Authentication failed. Please try again.");
+      }
+    },
+  );
+} // end oidcConfigured
+
+// Always available: clears the session cookie, which password accounts use too.
 router.get("/logout", async (req: Request, res: Response): Promise<void> => {
   const sid = getSessionId(req);
   await clearSession(res, sid);

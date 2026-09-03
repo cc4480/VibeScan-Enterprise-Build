@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation, Link } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, Component, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/toaster";
@@ -95,10 +95,13 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
           >
             {isFetching ? "Retrying…" : "Try again"}
           </button>
+          {/* Points at the real accounts route. It used to link to /api/login,
+              which is Replit OIDC and answers 500 anywhere else — offering a
+              sign-in that cannot work. */}
           <p className="mt-6 text-xs text-muted-foreground">
-            <a href="/api/login" className="underline underline-offset-4">
+            <Link href="/sign-in" className="underline underline-offset-4">
               Sign in instead
-            </a>
+            </Link>
           </p>
         </div>
       </div>
