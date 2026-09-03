@@ -15,6 +15,7 @@
  */
 
 import { logger } from "./logger";
+import { getScanHttpContext } from "./http";
 
 // ── Chromium executable resolution ──────────────────────────────────────────
 //
@@ -172,17 +173,36 @@ export async function renderPage(url: string): Promise<RenderedPage | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let context: any | null = null;
   try {
+    // Carry the scan's credentials into the browser context.
+    //
+    // Without this an authenticated scan renders the *logged-out* page: the
+    // browser context is isolated from the HTTP client's session, so an SPA
+    // target would be analysed as its sign-in screen while every other probe
+    // saw the real application. That failure is silent, which makes it worse
+    // than an error — the report would look clean because nothing was seen.
+    const ctx = getScanHttpContext();
+    const credentials = ctx?.credentials;
+    const inScope = ctx?.scope.includes(url) ?? false;
+
+    const extraHTTPHeaders: Record<string, string> = {};
+    if (credentials && inScope) {
+      if (credentials.cookie) extraHTTPHeaders["Cookie"] = credentials.cookie;
+      Object.assign(extraHTTPHeaders, credentials.headers ?? {});
+    }
+
     context = await (_browser as {
       newContext(opts: {
         userAgent: string;
         ignoreHTTPSErrors: boolean;
         javaScriptEnabled: boolean;
+        extraHTTPHeaders?: Record<string, string>;
       }): Promise<unknown>;
     }).newContext({
       userAgent:
         "Mozilla/5.0 (compatible; VibeScan-Security-Bot/1.0; +https://vibescan.app/bot)",
       ignoreHTTPSErrors: false,
       javaScriptEnabled: true,
+      ...(Object.keys(extraHTTPHeaders).length > 0 ? { extraHTTPHeaders } : {}),
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -118,9 +118,50 @@ export interface ScanStatus {
   grade?: string | null;
 }
 
+/**
+ * `session` replays a cookie or bearer token you already hold. `form` signs in with a username and password on a login page.
+ */
+export type ScanCredentialsMode =
+  (typeof ScanCredentialsMode)[keyof typeof ScanCredentialsMode];
+
+export const ScanCredentialsMode = {
+  session: "session",
+  form: "form",
+} as const;
+
+/**
+ * Optional credentials so the scan can test the authenticated surface. Encrypted at rest and discarded when the scan finishes. Requires `authorized` to be true, since logging into a system automatically is a different legal posture from an unauthenticated header check. Use a dedicated low-privilege test account, never an administrator login.
+ */
+export interface ScanCredentials {
+  /** `session` replays a cookie or bearer token you already hold. `form` signs in with a username and password on a login page. */
+  mode: ScanCredentialsMode;
+  /** Attestation that the requester may test this target with these credentials. */
+  authorized: boolean;
+  /**
+   * Cookie header value, for mode `session`.
+   * @nullable
+   */
+  cookie?: string | null;
+  /**
+   * Bearer token, for mode `session`.
+   * @nullable
+   */
+  bearerToken?: string | null;
+  /**
+   * URL of the sign-in page, for mode `form`.
+   * @nullable
+   */
+  loginUrl?: string | null;
+  /** @nullable */
+  username?: string | null;
+  /** @nullable */
+  password?: string | null;
+}
+
 export interface CreateScanRequest {
   targetUrl: string;
   tier: ScanTier;
+  credentials?: ScanCredentials;
 }
 
 export interface CreateScanResponse {

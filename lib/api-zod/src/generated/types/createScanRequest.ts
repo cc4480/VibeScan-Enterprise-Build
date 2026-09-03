@@ -5,9 +5,11 @@
  * VibeScan API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ScanCredentials } from "./scanCredentials";
 import type { ScanTier } from "./scanTier";
 
 export interface CreateScanRequest {
   targetUrl: string;
   tier: ScanTier;
+  credentials?: ScanCredentials;
 }

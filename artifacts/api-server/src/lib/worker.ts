@@ -18,6 +18,8 @@ import { sendRegressionAlertEmail } from "./mailer";
 import { fireWebhook } from "./webhook";
 import { getBoss, SCAN_QUEUE, type ScanJobData } from "./queue";
 import { runScan, computeRiskScore, computeGrade, type ScanVulnerability } from "./scanner";
+import { decryptCredentials, toScanHttpCredentials } from "./scanCredentials";
+import { runWithScanHttp } from "./http";
 import { corroborateMerge } from "./scoring";
 import { findingFingerprint, normalizeEvidenceKey, canonicalizeTargetUrl } from "./fingerprint";
 import { runRecon } from "./recon";
@@ -104,6 +106,9 @@ async function processScanJob(job: ScanJob): Promise<void> {
   const SCAN_HTTP_TIMEOUT_MS = 3 * 60 * 1_000;
 
   let scanResult;
+  // Declared out here so the re-probe below runs under the same credentials —
+  // see the note at its call site.
+  let httpCredentials: Awaited<ReturnType<typeof toScanHttpCredentials>> = null;
   try {
     const scanTimeout = new Promise<never>((_, reject) =>
       setTimeout(
@@ -111,7 +116,33 @@ async function processScanJob(job: ScanJob): Promise<void> {
         SCAN_HTTP_TIMEOUT_MS,
       ),
     );
-    scanResult = await Promise.race([runScan(targetUrl, tier), scanTimeout]);
+    // ── Credentials for an authenticated scan ────────────────────────────────
+    // Loaded from the scan row rather than the job payload, decrypted here and
+    // held only for this scan. A form login runs a real browser sign-in; if it
+    // fails the scan continues unauthenticated rather than aborting, and says
+    // so in the log.
+    const [scanRow] = await db
+      .select({ blob: scansTable.credentialsEncrypted })
+      .from(scansTable)
+      .where(eq(scansTable.id, scanId));
+
+    if (scanRow?.blob) {
+      const stored = decryptCredentials(scanRow.blob);
+      if (!stored) {
+        log.warn("Stored credentials could not be decrypted — scanning unauthenticated");
+      } else {
+        httpCredentials = await toScanHttpCredentials(stored, log);
+        log.info(
+          { mode: stored.mode, authenticated: httpCredentials !== null },
+          "Credentialed scan requested",
+        );
+      }
+    }
+
+    scanResult = await Promise.race([
+      runScan(targetUrl, tier, httpCredentials ?? undefined),
+      scanTimeout,
+    ]);
     log.info(
       { vulnCount: scanResult.vulnerabilities.length, durationMs: scanResult.requestDurationMs },
       "HTTP scan complete",
@@ -121,7 +152,9 @@ async function processScanJob(job: ScanJob): Promise<void> {
     log.error({ err: scanErr }, "Scan failed during HTTP fetch");
     await db
       .update(scansTable)
-      .set({ status: "failed", error: errMsg, completedAt: new Date() })
+      // Discard credentials on the failure path too — a scan that died holding
+      // a customer's password is exactly the row that should not keep it.
+      .set({ status: "failed", error: errMsg, completedAt: new Date(), credentialsEncrypted: null })
       .where(eq(scansTable.id, scanId));
     return;
   }
@@ -180,7 +213,14 @@ async function processScanJob(job: ScanJob): Promise<void> {
   );
 
   // ── 2d. Differential re-probe — re-verify borderline findings ────────
-  scanResult.vulnerabilities = await reprobe(targetUrl, scanResult.vulnerabilities, log);
+  // Runs inside the same credential context as the scan. Re-probing a
+  // credentialed scan anonymously would re-check every finding against the
+  // signed-out page and then *delete* the ones it could not see — silently
+  // discarding real findings from the authenticated surface.
+  scanResult.vulnerabilities = await runWithScanHttp(
+    { targetUrl, ...(httpCredentials ? { credentials: httpCredentials } : {}) },
+    () => reprobe(targetUrl, scanResult.vulnerabilities, log),
+  );
 
   // ── 2e. Filter previously dismissed false positives ───────────────────
   // Use the same canonicalized URL as the dismissals route so DB keys always match.
@@ -328,7 +368,8 @@ async function processScanJob(job: ScanJob): Promise<void> {
     // ── 7. Mark scan complete ─────────────────────────────────────────
     await db
       .update(scansTable)
-      .set({ status: "complete", completedAt })
+      // Credentials live exactly as long as the scan that needed them.
+      .set({ status: "complete", completedAt, credentialsEncrypted: null })
       .where(eq(scansTable.id, scanId));
 
     log.info({ reportId: report.id, grade, riskScore }, "Scan complete");

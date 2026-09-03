@@ -79,7 +79,7 @@ async function isHstsPreloaded(hostname: string): Promise<boolean> {
   return false;
 }
 
-import { runWithScanHttp, scanFetch, scanFetchOrThrow } from "./http";
+import { runWithScanHttp, scanFetch, scanFetchOrThrow, type ScanCredentials as ScanHttpCredentials } from "./http";
 import { runAllProbes } from "./probes";
 import { checkDnsSecurity } from "./dnsChecks";
 import { scanJavaScriptForSecrets } from "./jsScanner";
@@ -333,8 +333,17 @@ function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[
  *
  * Split from the body only to avoid indenting the whole function.
  */
-export async function runScan(targetUrl: string, tier: string): Promise<ScanResult> {
-  return runWithScanHttp({ targetUrl }, () => runScanInner(targetUrl, tier));
+export async function runScan(
+  targetUrl: string,
+  tier: string,
+  credentials?: ScanHttpCredentials,
+): Promise<ScanResult> {
+  // Credentials go into the scan context, where lib/http.ts attaches them only
+  // to in-scope requests and drops them on any redirect that leaves the target.
+  return runWithScanHttp(
+    { targetUrl, ...(credentials ? { credentials } : {}) },
+    () => runScanInner(targetUrl, tier),
+  );
 }
 
 async function runScanInner(targetUrl: string, tier: string): Promise<ScanResult> {

@@ -17,6 +17,17 @@ export const scansTable = pgTable("scans", {
   startedAt: timestamp("started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   error: text("error"),
+
+  // Credentials for an authenticated scan, AES-256-GCM encrypted with
+  // ENCRYPTION_KEY (see api-server/src/lib/crypto.ts). Deliberately stored here
+  // rather than in the pg-boss job payload, which is plaintext in the queue
+  // table. Cleared when the scan finishes, so the window in which they exist at
+  // all is one scan long.
+  credentialsEncrypted: text("credentials_encrypted"),
+  // Recorded when the requester attested they may test this target with these
+  // credentials — automated sign-in is a different legal posture from an
+  // unauthenticated header check, and the claim should outlive the credentials.
+  credentialsAuthorizedAt: timestamp("credentials_authorized_at", { withTimezone: true }),
 }, (table) => [
   index("idx_scans_user_id").on(table.userId),
   index("idx_scans_status").on(table.status),

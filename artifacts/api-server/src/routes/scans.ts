@@ -7,6 +7,7 @@ import {
   GetScanStatusResponse,
 } from "@workspace/api-zod";
 import { enqueueScan } from "../lib/queue";
+import { validateCredentials, encryptCredentials } from "../lib/scanCredentials";
 
 const router: IRouter = Router();
 
@@ -85,7 +86,7 @@ router.post("/scans", async (req, res): Promise<void> => {
     return;
   }
 
-  const { targetUrl, tier } = parsed.data;
+  const { targetUrl, tier, credentials } = parsed.data;
 
   // Credit packs are not supported in the free tier
   if (tier === "pack_5" || tier === "pack_20") {
@@ -103,6 +104,26 @@ router.post("/scans", async (req, res): Promise<void> => {
     return;
   }
 
+  // ── Credentials for an authenticated scan ──────────────────────────────────
+  // Validated before the scan is queued so a bad login is reported now rather
+  // than as a mysteriously empty report later. Encrypted immediately; the
+  // plaintext never reaches the database or the job payload.
+  let credentialsEncrypted: string | null = null;
+  let credentialsAuthorizedAt: Date | null = null;
+
+  if (credentials) {
+    const check = validateCredentials(credentials);
+    if (!check.ok) {
+      res.status(400).json({ error: check.error });
+      return;
+    }
+    credentialsEncrypted = encryptCredentials(credentials);
+    credentialsAuthorizedAt = new Date();
+    // Logged without the credentials themselves — see the redaction list in
+    // lib/logger.ts.
+    req.log.info({ mode: credentials.mode }, "Credentialed scan requested");
+  }
+
   const [scan] = await db
     .insert(scansTable)
     .values({
@@ -111,6 +132,8 @@ router.post("/scans", async (req, res): Promise<void> => {
       targetUrl,
       tier,
       status: "paid",
+      credentialsEncrypted,
+      credentialsAuthorizedAt,
     })
     .returning();
 

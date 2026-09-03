@@ -8,6 +8,27 @@ export const logger = pino({
     "req.headers.authorization",
     "req.headers.cookie",
     "res.headers['set-cookie']",
+
+    // Scan credentials. These arrive in a request body and are carried through
+    // the worker, so a stray log of the object — or of an error holding it —
+    // would otherwise write a customer's password to disk. Wildcards cover the
+    // nesting depths the value actually appears at.
+    "credentials",
+    "*.credentials",
+    "*.*.credentials",
+    "password",
+    "*.password",
+    "*.*.password",
+    "currentPassword",
+    "*.currentPassword",
+    "newPassword",
+    "*.newPassword",
+    "bearerToken",
+    "*.bearerToken",
+    "cookie",
+    "*.cookie",
+    "credentialsEncrypted",
+    "*.credentialsEncrypted",
   ],
   ...(isProduction
     ? {}

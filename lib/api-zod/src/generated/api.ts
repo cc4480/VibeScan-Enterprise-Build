@@ -147,6 +147,37 @@ export const CreateScanHeader = zod.object({
 export const CreateScanBody = zod.object({
   targetUrl: zod.string(),
   tier: zod.enum(["basic", "deep", "pack_5", "pack_20"]),
+  credentials: zod
+    .object({
+      mode: zod
+        .enum(["session", "form"])
+        .describe(
+          "`session` replays a cookie or bearer token you already hold. `form` signs in with a username and password on a login page.",
+        ),
+      authorized: zod
+        .boolean()
+        .describe(
+          "Attestation that the requester may test this target with these credentials.",
+        ),
+      cookie: zod
+        .string()
+        .nullish()
+        .describe("Cookie header value, for mode `session`."),
+      bearerToken: zod
+        .string()
+        .nullish()
+        .describe("Bearer token, for mode `session`."),
+      loginUrl: zod
+        .string()
+        .nullish()
+        .describe("URL of the sign-in page, for mode `form`."),
+      username: zod.string().nullish(),
+      password: zod.string().nullish(),
+    })
+    .optional()
+    .describe(
+      "Optional credentials so the scan can test the authenticated surface. Encrypted at rest and discarded when the scan finishes. Requires `authorized` to be true, since logging into a system automatically is a different legal posture from an unauthenticated header check. Use a dedicated low-privilege test account, never an administrator login.",
+    ),
 });
 
 /**
