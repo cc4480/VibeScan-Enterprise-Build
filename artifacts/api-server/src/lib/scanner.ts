@@ -924,6 +924,18 @@ async function runScanInner(
     vulnerabilities.push(...accessFindings);
   }
 
+  // Two rate-limit checks can fire on one scan: a header heuristic in
+  // probes.ts, and the behavioural burst in apiProbe.ts. When both appear they
+  // describe the same problem, and the behavioural one has actually
+  // demonstrated it — the header check itself says infrastructure often
+  // throttles without advertising it. Keep the evidence, drop the inference.
+  const hasBehaviouralRateLimitFinding = vulnerabilities.some(
+    (v) => v.name === "API Endpoints Without Rate Limiting",
+  );
+  const deduped = hasBehaviouralRateLimitFinding
+    ? vulnerabilities.filter((v) => v.name !== "No Rate Limiting Detected")
+    : vulnerabilities;
+
   return {
     targetUrl,
     finalUrl,
@@ -932,7 +944,7 @@ async function runScanInner(
     tlsGrade,
     technologies,
     vulnerabilities: autoEnrichConfidence(
-      sessionWasLost() ? [...vulnerabilities, sessionLostFinding()] : vulnerabilities,
+      sessionWasLost() ? [...deduped, sessionLostFinding()] : deduped,
       technologies,
     ),
     requestDurationMs,

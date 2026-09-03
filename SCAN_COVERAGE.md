@@ -271,12 +271,118 @@ flagged. Both are behaviourally confirmed — confidence 90.*
 
 ---
 
+## Module 13 — TLS Assessment
+*Delegated to Qualys SSL Labs; cached results reused where available.*
+
+| # | Check | Severity if failing |
+|---|---|---|
+| 100 | SSL Labs grade C or below (weak ciphers, outdated protocols, certificate problems) | Critical (F) → Medium (C) |
+
+---
+
+## Module 14 — Object Storage Exposure
+*Extracts bucket references from HTML/JS, then performs read-only list requests.*
+
+| # | Check | Severity |
+|---|---|---|
+| 101 | Public S3 bucket listing | High |
+| 102 | Public Google Cloud Storage bucket listing | High |
+| 103 | Public Azure Blob container listing | High |
+
+---
+
+## Module 15 — API Surface Discovery and Testing ⚡ *Deep scans only*
+
+Every other module discovers parameters the way a server-rendered site exposes
+them: query strings, `<form>` inputs, `<a href>` links. A single-page app ships
+an empty shell and none of those exist, so on the stack this product targets
+those sources yield nothing.
+
+Endpoints are recovered instead from where they actually live:
+
+- **An OpenAPI/Swagger document**, when one is exposed. Authoritative: declared
+  paths, methods, query/path parameters, and request-body fields resolved
+  through `$ref`. Swagger 2 `basePath` and OpenAPI `servers[]` are both honoured;
+  YAML specs fall back to pattern extraction.
+- **The JavaScript bundle** otherwise. Every endpoint the front end calls is a
+  string literal because it has to be. Template placeholders normalise to
+  `{id}`; other origins are dropped; assets are excluded.
+
+| # | Check | Severity |
+|---|---|---|
+| 104 | API endpoint returns data with no session at all | High |
+| 105 | SQL injection in an API query, path or JSON body parameter | Critical |
+| 106 | Record endpoint serves identical data to a second account (API-level IDOR) | Critical |
+| 107 | Write verb answers an unauthenticated caller with 404 rather than 401 (BFLA) | Critical |
+| 108 | Response carries password hashes, tokens, keys or card data | High |
+| 109 | Endpoint never throttles a burst of requests | Medium |
+| 110 | Request body declares privilege-bearing fields (mass assignment) | Medium |
+
+*Safety: no request is sent whose success would change customer data. Auth
+coverage uses GET and HEAD only — an unauthenticated POST sent to see whether it
+is rejected performs the write when the answer is "no". Body injection is
+limited to read-shaped endpoints (search, query, filter, report, graphql).
+Write-verb authorisation is probed against an identifier nothing can exist at,
+so a successful DELETE destroys nothing while the status code still reveals
+whether the check ran; PUT is never sent, because many APIs upsert. Mass
+assignment is read from the declared contract rather than probed, since sending
+a `role` field to learn whether it sticks means granting somebody a role.*
+
+---
+
+## Module 16 — Broken Access Control ⚡ *Deep scans only, two accounts required*
+
+OWASP **A01**, the highest-ranked risk category, and untestable without
+credentials: the question is not whether a page is reachable but whether the
+wrong person can reach it.
+
+For a URL naming a specific record, the same URL is requested three ways — as
+the primary account, as a second separate account, and as nobody — and the
+responses compared.
+
+| # | Check | Severity |
+|---|---|---|
+| 111 | Second account served the first account's record, anonymous refused | Critical |
+| 112 | Records reachable by altering the identifier, that nothing linked to | Critical |
+| 113 | Record served in full with no session at all | High |
+
+*Comparison uses token-overlap similarity over a normalised body rather than
+byte equality, because real pages carry CSRF tokens and timestamps that differ
+on every render. The anonymous leg is what keeps public pages out of the report:
+a product page returns the same bytes to everyone, which without that check is
+indistinguishable from a leak. Identifier mutation deliberately leaves UUIDs
+alone — guessing one is infeasible, which is precisely why they are half the
+recommended fix.*
+
+---
+
+## Authenticated Scanning
+
+Supplying credentials lets the scan reach the surface behind a login, which on
+most applications is nearly all of it. Two modes: replaying a session cookie or
+bearer token, or signing in through a login page with a headless browser.
+
+Credentials are encrypted at rest, decrypted only inside the worker for the life
+of one scan, discarded when it ends, attached only to requests aimed at the scan
+target, and dropped on any redirect leaving it. A destructive-action guard keeps
+the crawler and the injection probes away from anything whose URL reads as
+delete, cancel, revoke or log out.
+
+If the session expires mid-scan the scanner signs back in where it can — a form
+login renews itself, a pasted cookie cannot — and the report says so either way,
+because a scan that silently lost its session covers less than the user asked
+for.
+
+---
+
 ## Summary
 
 | Tier | Unique check types | Approximate HTTP requests |
 |---|---|---|
-| **Basic** | ~73 | ~100–150 |
-| **Deep** | ~97+ | ~300–500+ (crawl + JS fetches + path probes) |
+| **Basic** | ~76 | ~100–150 |
+| **Deep** | ~113+ | ~350–600+ (crawl + JS fetches + path probes + API surface) |
+| **Deep, with credentials** | ~113+ across the authenticated surface | ~400–700+ |
+| **Deep, with two accounts** | + access-control comparison (#111–113) | ~450–800+ |
 
 ## Grading Formula
 
