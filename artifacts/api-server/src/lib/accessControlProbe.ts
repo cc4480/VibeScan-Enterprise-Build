@@ -36,6 +36,8 @@ import { isDestructiveUrl } from "./destructive";
 
 // Each candidate costs three requests, so the budget is deliberately small.
 const MAX_CANDIDATES = 12;
+// Mutation is budgeted separately so it cannot crowd out the direct checks.
+const MAX_MUTATIONS = 10;
 const TIMEOUT_MS = 8_000;
 
 // Two responses count as "the same content" above this token overlap. Not exact
@@ -91,6 +93,65 @@ export function namesARecord(url: string): boolean {
   }
 
   return false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Identifier mutation
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Neighbours tried for a numeric id. Small, and deliberately not a sweep. */
+const NUMERIC_OFFSETS = [1, -1, 2];
+
+/**
+ * Records an attacker would find by editing the address bar.
+ *
+ * Testing only the URLs the crawl reached answers "can another user read what
+ * this user was shown". It misses the other half, which is where real breaches
+ * come from: records nobody linked to, found by changing 1042 to 1043.
+ *
+ * UUIDs are deliberately not mutated. Guessing one is infeasible, and that is
+ * precisely why they are the recommended fix — enumerating them would burn the
+ * request budget to prove nothing.
+ */
+export function mutateIdentifiers(url: string): string[] {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return [];
+  }
+
+  const out = new Set<string>();
+
+  const segments = parsed.pathname.split("/");
+  segments.forEach((segment, index) => {
+    if (!NUMERIC_ID_RE.test(segment)) return;
+    const value = Number(segment);
+    // Below 1 stops being an id and starts being a different route.
+    for (const offset of NUMERIC_OFFSETS) {
+      const next = value + offset;
+      if (next < 1 || next === value) continue;
+      const copy = [...segments];
+      copy[index] = String(next);
+      const mutated = new URL(parsed.toString());
+      mutated.pathname = copy.join("/");
+      out.add(mutated.toString());
+    }
+  });
+
+  for (const [key, value] of parsed.searchParams) {
+    if (!ID_PARAM_RE.test(key) || !NUMERIC_ID_RE.test(value)) continue;
+    for (const offset of NUMERIC_OFFSETS) {
+      const next = Number(value) + offset;
+      if (next < 1) continue;
+      const mutated = new URL(parsed.toString());
+      mutated.searchParams.set(key, String(next));
+      out.add(mutated.toString());
+    }
+  }
+
+  out.delete(url);
+  return [...out];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -169,8 +230,17 @@ export async function runAccessControlProbes(
 
   const idorHits: string[] = [];
   const anonHits: string[] = [];
+  const enumeratedHits: string[] = [];
 
-  for (const url of candidates) {
+  // Records reachable by editing the identifier, discovered from the crawled
+  // ones. Budgeted separately so mutation cannot crowd out the direct checks.
+  const mutated = [...new Set(candidates.flatMap(mutateIdentifiers))]
+    .filter((u) => !candidates.includes(u))
+    .filter((u) => !isDestructiveUrl(u))
+    .slice(0, MAX_MUTATIONS);
+
+  for (const url of [...candidates, ...mutated]) {
+    const isMutation = mutated.includes(url);
     const asOwner = await scanFetch(url, { as: input.primary, timeoutMs: TIMEOUT_MS });
     // Nothing to leak unless the owner themselves gets real content.
     if (!asOwner || asOwner.status < 200 || asOwner.status >= 300) continue;
@@ -205,7 +275,13 @@ export async function runAccessControlProbes(
     const otherDiffersFromAnon =
       contentSimilarity(asOther.body, asNobody.body) < DIFFERENT_CONTENT_THRESHOLD;
 
-    if (otherSame && otherDiffersFromAnon) idorHits.push(url);
+    if (otherSame && otherDiffersFromAnon) {
+      // Two separate accounts cannot both own one record, so identical content
+      // for both means at least one of them is reading data that is not theirs.
+      // For a mutated identifier it also proves the records are enumerable —
+      // an attacker does not need to be shown a link to reach them.
+      (isMutation ? enumeratedHits : idorHits).push(url);
+    }
   }
 
   const findings: ScanVulnerability[] = [];
@@ -235,6 +311,38 @@ export async function runAccessControlProbes(
         cvssScore: 8.1,
         wstgId: "WSTG-ATHZ-04",
         confidence: 90,
+      }),
+    );
+  }
+
+  if (enumeratedHits.length > 0) {
+    findings.push(
+      vuln({
+        name: "Records Enumerable by Editing the Identifier",
+        severity: "critical",
+        category: "Broken Access Control",
+        description:
+          `Changing the identifier in the URL reached ${enumeratedHits.length} record` +
+          `${enumeratedHits.length > 1 ? "s" : ""} that neither account was ever linked to, and both ` +
+          `accounts were served the same content. Two separate accounts cannot both own one record, so ` +
+          `at least one of them is reading data that is not theirs — and because the identifiers are ` +
+          `sequential, an attacker does not need to guess: they can walk the whole table by counting. ` +
+          `This is how bulk data breaches usually happen, rather than through any single clever exploit.`,
+        evidence:
+          `Reached by altering the identifier of a record the scan was legitimately shown.\n` +
+          `Both accounts received matching content; the anonymous request was refused.\n\n` +
+          enumeratedHits.map((u) => `  ${u}`).join("\n"),
+        solution:
+          "Two fixes, and you want both. First, authorise the object: confirm the record belongs to the " +
+          "caller before returning it — a WHERE clause scoped to the current user id. Second, stop using " +
+          "sequential integers as public identifiers; a UUID does not prevent an authorisation bug but it " +
+          "does stop an attacker enumerating every record once they find one.",
+        cweId: "CWE-639",
+        cvssScore: 8.6,
+        wstgId: "WSTG-ATHZ-04",
+        // A shade below the direct case: two accounts in one organisation may
+        // legitimately share a record, which looks identical from outside.
+        confidence: 80,
       }),
     );
   }
