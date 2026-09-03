@@ -99,6 +99,7 @@ import { runApiDocsProbe } from "./apiDocsProbe";
 import { runNextjsProbe } from "./nextjsProbe";
 import { runStorageProbe } from "./storageProbe";
 import { runAccessControlProbes } from "./accessControlProbe";
+import { collectApiSurface, runApiProbes } from "./apiProbe";
 import { isSpa, renderPage } from "./browser";
 
 export interface ScanVulnerability {
@@ -888,6 +889,23 @@ async function runScanInner(
     if (result.status === "fulfilled") {
       vulnerabilities.push(...result.value);
     }
+  }
+
+  // ── API surface testing ────────────────────────────────────────────────────
+  // Deep tier only: discovery reads the JS bundles, and the probes spend a few
+  // requests per endpoint. On an API-first SPA this is the only path that finds
+  // anything at all — the HTML carries no forms, links or parameters to collect.
+  if (tier === "deep") {
+    const apiFindings = await (async () => {
+      const origin = new URL(finalUrl).origin;
+      const endpoints = await collectApiSurface(origin, html);
+      if (endpoints.length === 0) return [] as ScanVulnerability[];
+      return runApiProbes({
+        endpoints,
+        ...(auth?.credentials ? { credentials: auth.credentials } : {}),
+      });
+    })().catch(() => [] as ScanVulnerability[]);
+    vulnerabilities.push(...apiFindings);
   }
 
   // ── A01: broken access control ─────────────────────────────────────────────

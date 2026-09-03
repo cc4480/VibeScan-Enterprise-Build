@@ -106,6 +106,23 @@ function scanContent(content: string): Array<{ pattern: SecretPattern; match: st
 // ORCHESTRATOR
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Fetch the page's inline and external JavaScript, concatenated.
+ *
+ * Exported so API discovery can read the same bundles this module already
+ * downloads, instead of fetching every script a second time.
+ */
+export async function collectJavaScript(html: string, baseUrl: string): Promise<string> {
+  const inline = extractInlineScripts(html);
+  const external = await Promise.allSettled(
+    extractExternalScriptUrls(html, baseUrl).map((url) => fetchScript(url)),
+  );
+  return [
+    inline,
+    ...external.map((r) => (r.status === "fulfilled" ? r.value : "")),
+  ].join("\n");
+}
+
 export async function scanJavaScriptForSecrets(
   html: string,
   baseUrl: string,

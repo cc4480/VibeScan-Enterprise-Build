@@ -40,7 +40,7 @@ const COMMON_PARAMS = ["q", "s", "search", "query", "keyword", "term", "id", "na
 // that its appearance in a response — absent from the benign baseline — is strong
 // evidence the injected quote reached a SQL parser. Kept deliberately narrow to
 // avoid matching the words "sql"/"database" in ordinary page copy.
-const SQL_ERROR_SIGNATURES: RegExp[] = [
+export const SQL_ERROR_SIGNATURES: RegExp[] = [
   /you have an error in your sql syntax/i,
   /warning:\s*mysqli?_/i,
   /mysql_fetch_(?:array|assoc|row|object)/i,
