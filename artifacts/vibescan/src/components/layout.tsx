@@ -1,7 +1,66 @@
 import { Link, useLocation } from "wouter";
-import { Shield, LayoutDashboard, Menu, X, Plus, BookOpen, Bell, Settings } from "lucide-react";
+import { Shield, LayoutDashboard, Menu, X, Plus, BookOpen, Bell, Settings, LogOut } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useGetCurrentAuthUser } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
+import { signOut } from "@/lib/account-api";
+
+/**
+ * Sign-in control.
+ *
+ * Accounts are additive here, not a gate: an anonymous visitor is still a real
+ * user with real scans, so this offers to preserve that history rather than
+ * demanding a login. A signed-in account is the one with an email — anonymous
+ * identities have none.
+ */
+function AccountNav() {
+  const { data } = useGetCurrentAuthUser();
+  const queryClient = useQueryClient();
+  const [signingOut, setSigningOut] = useState(false);
+  const email = data?.user?.email ?? null;
+
+  if (!email) {
+    return (
+      <Link
+        href="/sign-in"
+        className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+      >
+        Sign in
+      </Link>
+    );
+  }
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      await signOut();
+    } finally {
+      // Refetch regardless: on success the identity changed, and on failure the
+      // displayed state should still be re-read from the server rather than
+      // guessed at.
+      await queryClient.invalidateQueries();
+      setSigningOut(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-sm text-muted-foreground max-w-[14rem] truncate" title={email}>
+        {email}
+      </span>
+      <button
+        type="button"
+        onClick={handleSignOut}
+        disabled={signingOut}
+        className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground disabled:opacity-60 transition-colors"
+      >
+        <LogOut className="w-3.5 h-3.5" />
+        {signingOut ? "Signing out…" : "Sign out"}
+      </button>
+    </div>
+  );
+}
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -89,6 +148,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </Link>
 
             <div className="w-px h-6 bg-border" />
+
+            <AccountNav />
 
             <Link
               href="/scan"

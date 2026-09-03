@@ -16,6 +16,11 @@ import MonitorPage from "@/pages/monitor";
 import SharedReport from "@/pages/shared-report";
 import LearnPage from "@/pages/learn";
 import SettingsPage from "@/pages/settings";
+import SignInPage from "@/pages/sign-in";
+import RegisterPage from "@/pages/register";
+import ForgotPasswordPage from "@/pages/forgot-password";
+import ResetPasswordPage from "@/pages/reset-password";
+import VerifyEmailPage from "@/pages/verify-email";
 
 // ── ErrorBoundary ────────────────────────────────────────────────────────────
 
@@ -137,6 +142,15 @@ function Router() {
     <Switch>
       {/* Public share page — rendered without the app Layout (no nav/auth required) */}
       <Route path="/share/:token" component={SharedReport} />
+
+      {/* Account screens sit outside ProtectedRoute deliberately: a reset or
+          confirmation link arrives by email and has to work whatever the
+          session state is, including none at all. */}
+      <Route path="/sign-in" component={SignInPage} />
+      <Route path="/register" component={RegisterPage} />
+      <Route path="/forgot-password" component={ForgotPasswordPage} />
+      <Route path="/reset-password" component={ResetPasswordPage} />
+      <Route path="/verify-email" component={VerifyEmailPage} />
 
       {/* All other routes wrapped in the authenticated Layout */}
       <Route>
