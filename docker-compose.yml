@@ -70,6 +70,9 @@ services:
       # Identify callers by CF-Connecting-IP rather than a header the client
       # controls. Only correct when the origin is reachable only via Cloudflare.
       BEHIND_CLOUDFLARE: ${BEHIND_CLOUDFLARE:-false}
+      # Only needed on a platform whose origin stays publicly reachable; on a
+      # firewalled server, arriving at the origin is itself the proof.
+      CLOUDFLARE_ORIGIN_SECRET: ${CLOUDFLARE_ORIGIN_SECRET:-}
       # Serves the Google Search Console HTML verification file when set.
       GOOGLE_SITE_VERIFICATION: ${GOOGLE_SITE_VERIFICATION:-}
     ports:

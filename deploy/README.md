@@ -1,5 +1,11 @@
 # Deploying secscan.us on IONOS behind Cloudflare
 
+> **Using Railway instead?** Follow [`railway/README.md`](railway/README.md).
+> It differs in more than the hosting steps: a managed platform keeps a publicly
+> reachable hostname, so the origin cannot be firewalled to Cloudflare and
+> caller identity needs a shared secret instead. This document assumes a server
+> you control.
+
 The order below is not arbitrary. Two steps are easy to do early and painful to
 undo: pointing DNS at a server that is not serving yet, and switching Cloudflare
 to strict TLS before the origin has a certificate it will accept.

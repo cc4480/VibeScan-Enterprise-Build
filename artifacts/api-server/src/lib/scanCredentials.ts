@@ -19,6 +19,7 @@
 import { encryptSecret, decryptSecret, isEncryptionConfigured } from "./crypto";
 import type { ScanCredentials as HttpCredentials } from "./http";
 import { logger } from "./logger";
+import { CHROMIUM_ARGS } from "./browserArgs";
 
 export type CredentialMode = "session" | "form";
 
@@ -141,7 +142,10 @@ async function formLogin(
     // and encryptCredentials from this module; a static import would put Chromium
     // in the web bundle for the sake of a function only secscan ever calls.
     const { chromium } = await import("playwright");
-    browser = await chromium.launch({ headless: true });
+    // Same flags as the scanner's browser. Launching without them fails inside
+    // the container, and the failure is swallowed below — leaving the scan to
+    // continue unauthenticated against an app we were given credentials for.
+    browser = await chromium.launch({ headless: true, args: [...CHROMIUM_ARGS] });
   } catch (err) {
     log.warn({ err }, "[auth] Headless browser unavailable — cannot perform form login");
     return null;

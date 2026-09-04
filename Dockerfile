@@ -47,6 +47,18 @@ WORKDIR /app
 # identical between the two images, which is worth more than trimming it.
 COPY --from=builder /app/artifacts/api-server/dist ./artifacts/api-server/dist
 
+# The frontend lives in the shared base rather than only in the seclayer stage.
+# It costs the scanner image a couple of megabytes of static files it will never
+# serve, and buys the ability to run either entrypoint from either image — which
+# is what lets a platform that builds a Dockerfile without choosing a target
+# (Railway, for one) run both services from one build.
+COPY --from=builder /app/artifacts/vibescan/dist/public ./artifacts/vibescan/dist/public
+
+# In production app.ts serves the SPA itself. It resolves the static directory
+# relative to dist/index.mjs, which makes the copied layout load-bearing; set
+# the path explicitly so a future layout change cannot silently 404 the frontend.
+ENV FRONTEND_STATIC_DIR=/app/artifacts/vibescan/dist/public
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # seclayer — the web tier
@@ -59,13 +71,6 @@ COPY --from=builder /app/artifacts/api-server/dist ./artifacts/api-server/dist
 FROM runtime-base AS seclayer
 
 ENV PORT=8080
-
-COPY --from=builder /app/artifacts/vibescan/dist/public ./artifacts/vibescan/dist/public
-
-# In production app.ts serves the SPA itself. It resolves the static directory
-# relative to dist/index.mjs, which makes the copied layout load-bearing; set
-# the path explicitly so a future layout change cannot silently 404 the frontend.
-ENV FRONTEND_STATIC_DIR=/app/artifacts/vibescan/dist/public
 
 USER node
 

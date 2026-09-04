@@ -15,6 +15,7 @@
  */
 
 import { logger } from "./logger";
+import { CHROMIUM_ARGS } from "./browserArgs";
 import { getScanHttpContext } from "./http";
 
 // ── Chromium executable resolution ──────────────────────────────────────────
@@ -64,21 +65,7 @@ export async function initBrowser(): Promise<void> {
     _browser = await chromium.launch({
       headless: true,
       proxy,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--disable-background-networking",
-        "--disable-sync",
-        "--no-first-run",
-        "--disable-extensions",
-        "--disable-default-apps",
-        "--disable-component-update",
-        "--disable-client-side-phishing-detection",
-        "--disable-popup-blocking",
-        "--no-zygote",
-      ],
+      args: [...CHROMIUM_ARGS],
     });
     logger.info(
       { proxy: proxy?.server ?? "none" },
