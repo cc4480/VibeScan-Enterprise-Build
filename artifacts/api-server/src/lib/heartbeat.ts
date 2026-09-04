@@ -30,7 +30,15 @@ let timer: NodeJS.Timeout | null = null;
 async function touch(): Promise<void> {
   const file = heartbeatPath();
   try {
-    await fsp.writeFile(file, String(Date.now()), "utf8");
+    // Written to a sibling and renamed rather than written in place. The
+    // healthcheck is a separate process and can read at any moment, including
+    // the moment between a file being created and its bytes arriving — an
+    // in-place write leaves a window where the reader sees an empty file and
+    // reports a healthy worker as dead. rename() is atomic within a
+    // filesystem, so a reader sees either the old timestamp or the new one.
+    const tmp = `${file}.tmp`;
+    await fsp.writeFile(tmp, String(Date.now()), "utf8");
+    await fsp.rename(tmp, file);
   } catch (err) {
     // A failure here must not take the worker down: the scanner losing its
     // liveness file is a monitoring problem, not a reason to stop scanning.
@@ -60,8 +68,13 @@ export function stopHeartbeat(): void {
 export function isHeartbeatFresh(maxAgeMs: number, now: number = Date.now()): boolean {
   try {
     const raw = fs.readFileSync(heartbeatPath(), "utf8").trim();
+    // Number("") is 0, which is finite — so an empty file would otherwise read
+    // as a timestamp from 1970 rather than as no timestamp at all. Same answer
+    // here (not fresh), but for a reason that survives someone changing the
+    // comparison below.
+    if (!raw) return false;
     const at = Number(raw);
-    if (!Number.isFinite(at)) return false;
+    if (!Number.isFinite(at) || at <= 0) return false;
     return now - at <= maxAgeMs;
   } catch {
     // Missing file means the worker has not started yet, or has never written.
