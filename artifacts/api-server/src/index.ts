@@ -11,6 +11,8 @@ import { logger } from "./lib/logger";
 import { getBoss } from "./lib/queue";
 import { installCrashHandlers } from "./lib/crashHandlers";
 import { warnIfPaymentsMisconfigured } from "./lib/stripe";
+import { refreshCloudflareIps } from "./lib/cloudflareIps";
+import { behindCloudflare } from "./lib/clientIp";
 
 installCrashHandlers("seclayer");
 warnIfPaymentsMisconfigured(logger);
@@ -27,6 +29,17 @@ const port = Number(rawPort);
 
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
+}
+
+// Keep Cloudflare's edge ranges current. They decide whether a request really
+// came through Cloudflare, which decides whose address the rate limiters count
+// against — so a stale list quietly degrades attribution rather than failing
+// loudly. Bundled values cover a failed refresh; only the web tier needs this,
+// since the scanner has no callers to identify.
+if (behindCloudflare()) {
+  void refreshCloudflareIps();
+  const DAILY_MS = 24 * 60 * 60_000;
+  setInterval(() => void refreshCloudflareIps(), DAILY_MS).unref();
 }
 
 // Warm the pg-boss connection at startup so the first user-triggered scan does

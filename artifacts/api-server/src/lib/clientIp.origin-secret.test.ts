@@ -74,11 +74,32 @@ describe("origin secret", () => {
     expect(clientIp(req)).toBe("198.51.100.20");
   });
 
-  it("keeps trusting Cloudflare when no secret is configured", () => {
-    // The firewalled-origin deployment: reaching the origin is itself the proof,
-    // so requiring a header there would break a working setup.
+  it("does not trust CF-Connecting-IP on its own when nothing proves the hop", () => {
+    // No secret and no Cloudflare-range hop: there is nothing establishing that
+    // Cloudflare was in front, so fall back to req.ip rather than believing a
+    // header any client can send.
     const req = makeReq({ "cf-connecting-ip": "198.51.100.20" });
+    expect(clientIp(req)).toBe("203.0.113.9");
+  });
+
+  it("trusts CF-Connecting-IP when the last hop is a Cloudflare address", () => {
+    // The proof that needs no configuration: 172.68.x is Cloudflare, and the
+    // platform router — not the client — wrote that final entry.
+    const req = makeReq({
+      "cf-connecting-ip": "198.51.100.20",
+      "x-forwarded-for": "198.51.100.20, 172.68.14.1",
+    });
     expect(clientIp(req)).toBe("198.51.100.20");
+  });
+
+  it("ignores a Cloudflare address the client merely prepended", () => {
+    // Forging the header does not help: only the final entry is consulted, and
+    // that one the client cannot write.
+    const req = makeReq({
+      "cf-connecting-ip": "1.2.3.4",
+      "x-forwarded-for": "172.68.14.1, 9.9.9.9",
+    });
+    expect(clientIp(req)).toBe("203.0.113.9");
   });
 
   it("does not consult the secret at all when Cloudflare is not in front", () => {

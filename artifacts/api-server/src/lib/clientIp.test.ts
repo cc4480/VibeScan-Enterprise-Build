@@ -55,9 +55,15 @@ describe("clientIp", () => {
   describe("behind Cloudflare", () => {
     it("prefers CF-Connecting-IP once opted in", () => {
       process.env["BEHIND_CLOUDFLARE"] = "true";
+      // Shaped like a real proxied request: the platform router appended the
+      // Cloudflare edge address it saw, and that final entry is what proves
+      // Cloudflare was in front.
       const req = makeReq({
-        ip: "172.71.0.1", // a Cloudflare edge address
-        headers: { "cf-connecting-ip": "203.0.113.55" },
+        ip: "203.0.113.55",
+        headers: {
+          "cf-connecting-ip": "203.0.113.55",
+          "x-forwarded-for": "203.0.113.55, 172.71.0.1",
+        },
       });
       expect(clientIp(req)).toBe("203.0.113.55");
     });

@@ -25,6 +25,7 @@
 
 import { timingSafeEqual } from "node:crypto";
 import type { Request } from "express";
+import { isCloudflareIp } from "./cloudflareIps";
 
 /** True when the deployment is fronted by Cloudflare. */
 export function behindCloudflare(): boolean {
@@ -36,25 +37,46 @@ export function behindCloudflare(): boolean {
  * directly.
  *
  * On a server you control, the origin is firewalled to Cloudflare's ranges and
- * arriving at all is the proof. On a platform like Railway, Fly or Render there
- * is no such firewall: the service keeps a public hostname that anyone can
- * reach, and a request sent straight to it can carry any CF-Connecting-IP the
- * sender likes. Trusting the header there would hand an attacker a fresh
- * identity per request — the exact hole this module exists to close.
+ * arriving at all is the proof. A managed platform — Railway, Fly, Render —
+ * keeps a public hostname that cannot be closed off, so a request sent straight
+ * to it can carry any CF-Connecting-IP the sender likes. Trusting the header
+ * there would hand an attacker a fresh identity per request, which is the exact
+ * hole this module exists to close.
  *
- * So on those platforms, Cloudflare is configured to add a secret header to
- * every request it forwards, and only requests carrying it are treated as
- * having come through Cloudflare. Set the same value here.
+ * Two independent proofs, either of which suffices.
  *
- * Compared in constant time: a byte-by-byte comparison against a secret is
- * measurable over enough requests, and there is no reason to leave that open.
+ * The first needs no configuration anywhere. Each hop appends the address it
+ * saw to X-Forwarded-For, so the *last* entry is the address the platform's
+ * router observed — the Cloudflare edge, for a proxied request. A client can
+ * prepend anything it likes to that header but cannot control its final entry,
+ * because the platform writes it. Checking that entry against Cloudflare's
+ * published ranges therefore settles the question on its own.
+ *
+ * The second is a shared secret Cloudflare attaches with a Transform Rule. It
+ * is kept because it is a stronger claim where it is available — but it is not
+ * available on every Cloudflare plan, which is why it is no longer the only
+ * mechanism.
  */
 function cameThroughCloudflare(req: Request): boolean {
+  // ── Proof 1: the hop that reached us belongs to Cloudflare ────────────────
+  const xff = req.headers["x-forwarded-for"];
+  const chain = (Array.isArray(xff) ? xff.join(",") : xff ?? "")
+    .split(",")
+    .map((e) => e.trim())
+    .filter(Boolean);
+  const lastHop = chain[chain.length - 1];
+  if (lastHop && isCloudflareIp(lastHop)) return true;
+
+  // ── Proof 2: a secret only Cloudflare could have attached ─────────────────
   const expected = process.env["CLOUDFLARE_ORIGIN_SECRET"];
 
-  // No secret configured: this is the firewalled-origin deployment, where
-  // reaching the origin at all is the proof.
-  if (!expected) return true;
+  // Nothing else to check. Falling through to false is safe in every topology
+  // this runs in: the caller then uses req.ip, which Express derives from the
+  // same X-Forwarded-For honouring the trust proxy hop count, and which is the
+  // real client address wherever TRUST_PROXY matches reality. Refusing to guess
+  // costs accurate attribution only when Cloudflare adds a range we have not
+  // refreshed yet.
+  if (!expected) return false;
 
   const header = req.headers["x-origin-secret"];
   const provided = Array.isArray(header) ? header[0] : header;
