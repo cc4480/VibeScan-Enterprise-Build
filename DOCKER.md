@@ -106,6 +106,11 @@ Two consequences worth knowing before you debug either one:
 
 ## Deploying to a VPS (IONOS)
 
+> For the live secscan.us deployment specifically — Cloudflare in front, origin
+> firewalled to Cloudflare only, Resend and Google Search Console — follow
+> [`deploy/README.md`](deploy/README.md), which covers the ordering that matters.
+> The section below is the general case.
+
 1. **DNS** — point an `A` record for your domain at the server's IPv4 address
    (and `AAAA` for IPv6 if you have one).
 

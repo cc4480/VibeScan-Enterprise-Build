@@ -1,0 +1,47 @@
+# Caddy in front of seclayer, with Cloudflare in front of Caddy.
+#
+#   browser → Cloudflare (TLS) → Caddy (TLS) → seclayer on 127.0.0.1:8090
+#
+# Install to /etc/caddy/Caddyfile, then: sudo systemctl reload caddy
+#
+# ── Why an Origin Certificate rather than Let's Encrypt ──────────────────────
+# Caddy's default is to obtain and renew a Let's Encrypt certificate itself,
+# which works behind Cloudflare but ties every renewal to the ACME challenge
+# surviving the proxy. A Cloudflare Origin Certificate is issued for fifteen
+# years, is trusted by Cloudflare and nobody else — which is exactly right for
+# a hop the public never speaks to directly — and removes renewal from the list
+# of things that can quietly break a Sunday.
+#
+# Create one in Cloudflare: SSL/TLS → Origin Server → Create Certificate.
+# Save the certificate and key to the paths below, then:
+#   sudo chown root:caddy /etc/caddy/origin.* && sudo chmod 640 /etc/caddy/origin.*
+#
+# Set the Cloudflare SSL/TLS mode to "Full (strict)". "Flexible" would leave
+# Cloudflare talking plain HTTP to this server while showing visitors a padlock,
+# which is worse than no TLS because it looks fine.
+
+secscan.us {
+	tls /etc/caddy/origin.pem /etc/caddy/origin.key
+
+	encode zstd gzip
+
+	# The app already sets its own security headers, including a CSP tuned to
+	# the frontend bundle. Adding a second set here would either duplicate them
+	# or silently disagree with them, so this proxy stays out of that business.
+	reverse_proxy 127.0.0.1:8090
+
+	log {
+		output file /var/log/caddy/secscan.log {
+			roll_size 50MiB
+			roll_keep 10
+		}
+	}
+}
+
+# www redirects to the apex rather than serving a second copy. Two hostnames
+# serving identical content splits search ranking and doubles the surface that
+# has to agree about cookies and CORS.
+www.secscan.us {
+	tls /etc/caddy/origin.pem /etc/caddy/origin.key
+	redir https://secscan.us{uri} permanent
+}
