@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import {
@@ -7,6 +7,7 @@ import {
   runWithScanHttp,
   sessionWasLost,
   SCANNER_USER_AGENT,
+  scanFetchOrThrow,
 } from "./http.js";
 
 // Real servers rather than a mocked fetch: the behaviour under test is redirect
@@ -417,5 +418,56 @@ describe("session expiry mid-scan", () => {
     );
     // No credentials were supplied, so there was no session to lose.
     expect(lost).toBe(false);
+  });
+});
+
+describe("blocked target addresses", () => {
+  // The rest of this file drives loopback servers and relies on the self-hosted
+  // opt-out being on (vitest.config.ts). These cases turn it off, which is the
+  // shipping default and what a hosted deployment runs.
+  const optOut = process.env["ALLOW_PRIVATE_SCAN_TARGETS"];
+  beforeEach(() => { delete process.env["ALLOW_PRIVATE_SCAN_TARGETS"]; });
+  afterEach(() => {
+    if (optOut === undefined) delete process.env["ALLOW_PRIVATE_SCAN_TARGETS"];
+    else process.env["ALLOW_PRIVATE_SCAN_TARGETS"] = optOut;
+  });
+
+  it("refuses a request aimed straight at cloud metadata", async () => {
+    await expect(
+      scanFetchOrThrow("http://169.254.169.254/latest/meta-data/"),
+    ).rejects.toThrow(/blocked target address/);
+  });
+
+  it("returns null rather than throwing on the non-throwing entry point", async () => {
+    expect(await scanFetch("http://10.0.0.1/admin")).toBeNull();
+  });
+
+  it("refuses to follow a redirect that points at an internal address", async () => {
+    // This is why the check sits in the request loop and not only at scan
+    // creation: the submitted URL is acceptable and the target supplies the
+    // dangerous one. The opt-out is switched off partway through the first hop,
+    // so hop 0 is permitted to reach a loopback stand-in and hop 1 is judged
+    // under the shipping default.
+    const attempted: string[] = [];
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      attempted.push(String(input));
+      delete process.env["ALLOW_PRIVATE_SCAN_TARGETS"];
+      return new Response(null, {
+        status: 302,
+        headers: { location: "http://169.254.169.254/latest/meta-data/" },
+      });
+    }) as typeof fetch;
+
+    process.env["ALLOW_PRIVATE_SCAN_TARGETS"] = "true";
+    try {
+      expect(await scanFetch("http://127.0.0.1:9/")).toBeNull();
+    } finally {
+      globalThis.fetch = original;
+    }
+
+    // The metadata address was never put on the wire.
+    expect(attempted).toHaveLength(1);
+    expect(attempted[0]).toContain("127.0.0.1");
   });
 });

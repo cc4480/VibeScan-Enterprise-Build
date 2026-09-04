@@ -27,6 +27,7 @@
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
+import { checkUrlSafe } from "./ssrfGuard";
 
 /** One canonical identity, replacing the three strings that were in use. */
 export const SCANNER_USER_AGENT =
@@ -356,6 +357,15 @@ async function perform(url: string, options: ScanFetchOptions): Promise<Outcome>
   let reauthRetried = false;
 
   for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
+    // Checked per hop, not once up front. The URL submitted to /api/scans is
+    // validated there too, but a target can redirect us to an internal address,
+    // or re-answer DNS with one between the two checks — so the last word has
+    // to belong to the code that is about to open the socket.
+    const safety = await checkUrlSafe(current, { allowOptOut: true });
+    if (!safety.ok) {
+      return { ok: false, error: `blocked target address: ${safety.reason}` };
+    }
+
     await throttle(ctx, current);
 
     const controller = new AbortController();

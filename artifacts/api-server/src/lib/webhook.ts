@@ -6,78 +6,17 @@
  */
 
 import { logger } from "./logger";
-import * as net from "node:net";
-import * as dns from "node:dns/promises";
+import { checkUrlSafe } from "./ssrfGuard";
 
 // ── SSRF guard ────────────────────────────────────────────────────────────────
+// The address rules live in ssrfGuard.ts, shared with the scanner's target
+// check. They were duplicated here first; keeping one copy means a range added
+// for one caller protects the other automatically. Webhooks additionally
+// require https, because unlike a scan target they carry our payload outward.
 
-const PRIVATE_IP_PATTERNS = [
-  /^127\./,           // loopback
-  /^0\.0\.0\.0$/,
-  /^10\./,            // RFC 1918
-  /^172\.(1[6-9]|2\d|3[01])\./,  // RFC 1918
-  /^192\.168\./,      // RFC 1918
-  /^169\.254\./,      // link-local / AWS metadata
-  /^100\.6[4-9]\.|^100\.[7-9]\d\.|^100\.1[01]\d\.|^100\.12[0-7]\./,  // CGNAT
-  /^::1$/,
-  /^fc[0-9a-f]{2}:/i,
-  /^fd[0-9a-f]{2}:/i,
-];
-
-const BLOCKED_HOSTNAMES = new Set([
-  "localhost",
-  "metadata.google.internal",
-  "169.254.169.254",
-  "metadata.internal",
-  "metadata",
-]);
-
-/**
- * Synchronous pre-check: rejects obviously blocked hostnames and literal private IPs
- * before we spend a DNS round-trip.
- */
-function isHostnameSafeSync(hostname: string): boolean {
-  if (BLOCKED_HOSTNAMES.has(hostname)) return false;
-  if (hostname.endsWith(".local") || hostname.endsWith(".internal")) return false;
-  // Reject literal private IPs immediately
-  if (net.isIP(hostname)) {
-    return !PRIVATE_IP_PATTERNS.some((r) => r.test(hostname));
-  }
-  return true;
-}
-
-/**
- * Full SSRF guard: rejects private/internal addresses including public hostnames
- * that resolve via DNS to a private or loopback IP (DNS-rebinding / SSRF bypass).
- * Requires https protocol only.
- */
 async function isWebhookUrlSafe(rawUrl: string): Promise<boolean> {
-  try {
-    const url = new URL(rawUrl);
-    // Only allow HTTPS to prevent cleartext token leakage
-    if (url.protocol !== "https:") return false;
-    const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
-    if (!isHostnameSafeSync(hostname)) return false;
-    // For non-IP hostnames, resolve DNS and validate the resulting addresses
-    if (!net.isIP(hostname)) {
-      let addresses: string[];
-      try {
-        // Resolve all A/AAAA records; any single private result blocks the request
-        const results = await dns.resolve(hostname);
-        addresses = results;
-      } catch {
-        // DNS resolution failure → block (fail closed)
-        return false;
-      }
-      for (const addr of addresses) {
-        if (PRIVATE_IP_PATTERNS.some((r) => r.test(addr))) return false;
-        if (BLOCKED_HOSTNAMES.has(addr)) return false;
-      }
-    }
-    return true;
-  } catch {
-    return false;
-  }
+  const { ok } = await checkUrlSafe(rawUrl, { requireHttps: true });
+  return ok;
 }
 
 export type WebhookEventType =
