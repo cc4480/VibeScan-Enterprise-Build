@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSeo } from "@/lib/seo";
 import { AuthShell, AuthForm, Field } from "@/components/auth-shell";
 import { signIn, accountErrorMessage } from "@/lib/account-api";
+import { GoogleButton, AuthDivider } from "@/components/google-button";
 
 export default function SignInPage() {
   useSeo({ title: "Sign in — Seclayer", noindex: true });
@@ -45,6 +46,9 @@ export default function SignInPage() {
         </>
       }
     >
+      <GoogleButton returnTo="/dashboard" />
+      <AuthDivider />
+
       <AuthForm
         onSubmit={handleSubmit}
         error={error}

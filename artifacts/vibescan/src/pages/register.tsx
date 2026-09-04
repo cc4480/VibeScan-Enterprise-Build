@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSeo } from "@/lib/seo";
 import { AuthShell, AuthForm, Field } from "@/components/auth-shell";
 import { register, accountErrorMessage } from "@/lib/account-api";
+import { GoogleButton, AuthDivider } from "@/components/google-button";
 
 const MIN_PASSWORD_LENGTH = 10;
 
@@ -47,6 +48,9 @@ export default function RegisterPage() {
         </>
       }
     >
+      <GoogleButton returnTo="/dashboard" label="Sign up with Google" />
+      <AuthDivider />
+
       <AuthForm
         onSubmit={handleSubmit}
         error={error}

@@ -8,6 +8,13 @@
       "when": 1788499034515,
       "tag": "0000_glossy_shiva",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788540608286,
+      "tag": "0001_nosy_the_twelve",
+      "breakpoints": true
     }
   ]
 }

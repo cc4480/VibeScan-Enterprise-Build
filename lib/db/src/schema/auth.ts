@@ -38,6 +38,16 @@ export const usersTable = pgTable("users", {
   passwordHash: varchar("password_hash"),
   emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
 
+  // Google's subject claim, for accounts that sign in with Google. Stored
+  // rather than matching on email alone because a Google account's email can
+  // change while `sub` never does — matching only on email would silently
+  // follow the address to whoever holds it next.
+  //
+  // Note that a Google-only account has no password, so passwordHash cannot be
+  // the thing that closes the bearer path for it. authMiddleware treats any row
+  // with an email as a real account for that purpose.
+  googleSub: varchar("google_sub").unique(),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

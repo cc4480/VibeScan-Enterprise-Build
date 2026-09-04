@@ -75,6 +75,9 @@ services:
       CLOUDFLARE_ORIGIN_SECRET: ${CLOUDFLARE_ORIGIN_SECRET:-}
       # Serves the Google Search Console HTML verification file when set.
       GOOGLE_SITE_VERIFICATION: ${GOOGLE_SITE_VERIFICATION:-}
+      # Sign in with Google. Both must be set for the routes to work at all.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     ports:
       # Defaults to 8090 on the host: this machine already runs Apache on 8080,
       # which silently competes for the port.

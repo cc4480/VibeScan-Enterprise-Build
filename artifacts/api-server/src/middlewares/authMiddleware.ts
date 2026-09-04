@@ -80,9 +80,15 @@ export async function authMiddleware(
     // Registering converts an anonymous row into an account in place, keeping
     // the same id. Without this check the original UUID would keep working as a
     // bearer token for that account forever — a password-equivalent credential
-    // that survives every password change and cannot be revoked. Once a row has
-    // a password, the only way in is a session cookie.
-    if (dbUser?.passwordHash) {
+    // that survives every password change and cannot be revoked. Once a row is
+    // a real account, the only way in is a session cookie.
+    //
+    // The test is "has an email", not "has a password". A Google account has no
+    // password, so keying on passwordHash alone would leave every
+    // Google-only account reachable through its original UUID — reopening
+    // exactly the hole this check exists to close. Anonymous rows are created
+    // with a null email and never gain one except by registering.
+    if (dbUser?.passwordHash || dbUser?.email) {
       next();
       return;
     }
