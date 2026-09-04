@@ -30,6 +30,12 @@ see [Deploying prebuilt images](#deploying-prebuilt-images-instead) at the end.
 
 ---
 
+> **Read [`NOTES.md`](NOTES.md) first.** It records what actually happened
+> running this against a real account, including three things that cost time:
+> the start command is not picked up from `railway.json` via
+> `RAILWAY_CONFIG_PATH`, `railway redeploy` does not apply a config change, and
+> migrations have to run before the services first boot.
+
 ## Config as code
 
 `seclayer.json` and `secscan.json` in this directory carry each service's build
