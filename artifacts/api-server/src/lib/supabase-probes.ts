@@ -353,9 +353,12 @@ export async function runSupabaseProbes(
     if (r.value.result === "empty") emptyOpenTables.push(r.value.table);
   }
 
-  // Test write access on open tables (Deep tier only — more invasive)
+  // Test write access on open tables. This is the most invasive thing the
+  // scanner does — it attempts an actual insert against the target's database
+  // — and it used to be reserved for the deep tier. With one tier it runs on
+  // every scan.
   const openWriteTables: string[] = [];
-  if (tier === "deep") {
+  {
     const writeTargets = [...openReadTables, ...emptyOpenTables];
     if (writeTargets.length > 0) {
       const writeResults = await Promise.allSettled(

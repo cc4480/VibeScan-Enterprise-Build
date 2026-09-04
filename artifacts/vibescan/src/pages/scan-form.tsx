@@ -13,7 +13,6 @@ import {
 } from "@/components/scan-credentials-fields";
 import { Shield, Zap, Globe, Lock, CheckCircle2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ScanTier } from "@workspace/api-client-react";
 
 function getFriendlyError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err ?? "");
@@ -26,41 +25,35 @@ function getFriendlyError(err: unknown): string {
   return clean.length > 120 ? clean.slice(0, 120) + "…" : clean;
 }
 
-type TierConfig = {
-  id: ScanTier;
-  name: string;
-  desc: string;
-  features: string[];
-  popular?: boolean;
-};
-
-const TIERS: TierConfig[] = [
+// Every scan is a full scan. This is what one covers — shown rather than
+// chosen, so nobody has to guess which depth they need.
+const COVERAGE: { title: string; items: string[] }[] = [
   {
-    id: "basic",
-    name: "Basic Scan",
-    desc: "Core OWASP checks and headers",
-    features: ["Header analysis", "SSL/TLS grading", "Tech fingerprint"],
+    title: "Configuration",
+    items: ["Security headers and CSP", "TLS and certificate grading", "DNS and exposed files"],
   },
   {
-    id: "deep",
-    name: "Deep Scan",
-    desc: "Full analysis + AI-powered report",
-    features: ["Everything in Basic", "AI security analysis", "Remediation guide"],
-    popular: true,
+    title: "Active testing",
+    items: ["Injection and XSS probing", "Path traversal", "API surface discovery"],
+  },
+  {
+    title: "Access control",
+    items: ["Broken access control and IDOR", "Out-of-band SSRF", "Backend storage rules"],
+  },
+  {
+    title: "Reporting",
+    items: ["AI security analysis", "Remediation guide", "Re-scan comparison"],
   },
 ];
 
 export default function ScanFormPage() {
   useSeo({ title: "New Scan — Seclayer", noindex: true });
   const [url, setUrl] = useState("");
-  const [tier, setTier] = useState<ScanTier>("deep");
   const [credentials, setCredentials] = useState<ScanCredentialsValue>(emptyCredentials);
   const [secondAccount, setSecondAccount] = useState<SecondAccountValue>(emptySecondAccount);
   const [, setLocation] = useLocation();
 
   const createScan = useCreateScan();
-
-  const selectedTier = TIERS.find((t) => t.id === tier);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,14 +100,13 @@ export default function ScanFormPage() {
       {
         data: {
           targetUrl,
-          tier,
           ...(creds ? { credentials: creds } : {}),
           ...(secondCreds ? { secondaryCredentials: secondCreds } : {}),
         },
       },
       {
         onSuccess: (data) => {
-          setLocation(`/scan/${data.scanId}?tier=${tier}`);
+          setLocation(`/scan/${data.scanId}`);
         },
       },
     );
@@ -160,63 +152,40 @@ export default function ScanFormPage() {
             </p>
           </div>
 
-          {/* Tier Selection */}
+          {/* What a scan covers — informational, not a choice */}
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <label className="text-sm font-semibold flex items-center gap-2">
-                <Zap className="w-4 h-4 text-primary" /> Scan Depth
+                <Zap className="w-4 h-4 text-primary" /> What this scan covers
               </label>
+              <span className="text-xs text-muted-foreground">Every check, every scan</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {TIERS.map((t) => (
-                <label
-                  key={t.id}
-                  className={cn(
-                    "relative flex flex-col p-5 rounded-2xl cursor-pointer transition-all border-2",
-                    tier === t.id
-                      ? "bg-primary/5 border-primary shadow-[0_0_20px_rgba(20,184,120,0.15)]"
-                      : "bg-secondary/50 border-white/5 hover:bg-secondary hover:border-white/10",
-                  )}
+              {COVERAGE.map((group) => (
+                <div
+                  key={group.title}
+                  className="flex flex-col p-5 rounded-2xl border-2 border-white/5 bg-secondary/50"
                 >
-                  <input
-                    type="radio"
-                    name="tier"
-                    value={t.id}
-                    checked={tier === t.id}
-                    onChange={() => setTier(t.id)}
-                    className="sr-only"
-                  />
-                  {t.popular && (
-                    <span className="absolute -top-3 right-4 px-2 py-0.5 bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-wider rounded-full">
-                      Recommended
-                    </span>
-                  )}
-                  <div className="mb-2">
-                    <div className="font-bold text-lg">{t.name}</div>
-                    <div className="text-sm text-muted-foreground">{t.desc}</div>
-                  </div>
-                  <ul className="mt-4 flex flex-col gap-1.5 flex-1">
-                    {t.features.map((f, i) => (
-                      <li key={i} className="text-xs flex items-center gap-1.5 text-muted-foreground">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-primary/70 shrink-0" /> {f}
+                  <div className="font-bold text-sm mb-3">{group.title}</div>
+                  <ul className="flex flex-col gap-1.5">
+                    {group.items.map((item) => (
+                      <li
+                        key={item}
+                        className="text-xs flex items-center gap-1.5 text-muted-foreground"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 text-primary/70 shrink-0" /> {item}
                       </li>
                     ))}
                   </ul>
-
-                  <div
-                    className={cn(
-                      "mt-5 w-full py-2 rounded-lg text-center text-sm font-semibold transition-colors",
-                      tier === t.id
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-white/5 text-muted-foreground",
-                    )}
-                  >
-                    {tier === t.id ? "Selected" : "Select"}
-                  </div>
-                </label>
+                </div>
               ))}
             </div>
+
+            <p className="text-xs text-muted-foreground">
+              This scan sends real probe traffic to the target, including injection payloads and
+              a port scan. Only scan applications you own or are authorised to test.
+            </p>
           </div>
 
           <ScanCredentialsFields
@@ -239,7 +208,7 @@ export default function ScanFormPage() {
                 </>
               ) : (
                 <>
-                  <Zap className="w-5 h-5" /> {selectedTier?.id === "deep" ? "Run Deep Scan" : "Run Basic Scan"}
+                  <Zap className="w-5 h-5" /> Run Scan
                 </>
               )}
             </button>

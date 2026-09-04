@@ -48,6 +48,7 @@ export * from "./reportShare";
 export * from "./scan";
 export * from "./scanCredentials";
 export * from "./scanCredentialsMode";
+export * from "./scanRequestTier";
 export * from "./scanStatus";
 export * from "./scanStatusEnum";
 export * from "./scanSummary";

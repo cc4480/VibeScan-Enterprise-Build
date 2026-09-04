@@ -2,59 +2,104 @@
 
 > Automated black-box security scanning for web applications — built for vibe coders who ship fast.
 
-Seclayer is a pay-per-scan SaaS that performs automated black-box security scans on any public URL. Users paste a URL, choose a scan tier, pay, and receive a plain-English security report powered by DeepSeek AI — in under 10 minutes, with no installs or agents required. It is an automated scanner, not a manual penetration test: it does not log in to your app or actively exploit vulnerabilities.
+Seclayer performs automated black-box security scans on web applications you own or are
+authorised to test. Paste a URL and receive a plain-English security report powered by DeepSeek
+AI, usually within ten minutes, with no installs or agents required.
+
+Every scan is a full scan. There are no tiers to choose between.
+
+Seclayer is an automated scanner, not a manual penetration test. It is not passive: it sends
+real probe traffic to the target, including injection payloads and a port scan. Scan only what
+you own or have permission to test.
 
 ## What Seclayer does
 
-- Performs automated black-box security scans on any publicly accessible web application
-- Aligned with the OWASP Top 10 categories testable from outside an app: strongest on security misconfiguration (A05), cryptographic/transport failures (A02), and vulnerable components (A06); partial on broken access control (A01) via exposed routes, directory listing and BaaS data exposure. It does NOT do authenticated testing; injection (A03) coverage is unauthenticated black-box only — reflected XSS, error-based SQL injection, and path traversal/LFI on exposed parameters — while SSRF (A10), logging (A09) and insecure design (A04) are out of scope for black-box scanning
-- Detects 15+ security issues including missing security headers (CSP, HSTS, X-Frame-Options), weak TLS configuration, cookie flag violations, CORS misconfigurations, server version disclosure, and Supabase RLS exposure
-- Assigns a letter-grade security score (A through F) with a numeric risk score (0–100)
-- Generates AI-powered plain-English reports via DeepSeek that explain findings and prioritize fixes
-- Provides per-agent fix prompts tailored to Cursor, Claude Code, Lovable, Bolt, and Replit AI users
+- Runs automated black-box security scans against a publicly reachable web application
+- Aligned with the OWASP Top 10. Strongest on security misconfiguration (A05), cryptographic
+  and transport failures (A02), and vulnerable components (A06). Covers broken access control
+  (A01) with a two-account comparison and identifier mutation, injection (A03) through active
+  probing, and SSRF (A10) through an out-of-band callback collector when one is configured
+- Scans as a logged-in user when you supply credentials: paste a session cookie or bearer
+  token, or hand it a login form. It notices when a session dies mid-scan and signs back in
+  rather than quietly finishing the scan logged out
+- Discovers the API surface from an OpenAPI spec or, when none exists, from the JavaScript
+  bundle, then tests each endpoint for missing authentication, IDOR, BFLA, injection, excessive
+  data exposure, rate limiting and mass assignment
+- Assigns a letter grade (A through F) with a numeric risk score (0–100)
+- Generates plain-English reports via DeepSeek that explain findings and prioritise fixes
+- Provides per-agent fix prompts tailored to Cursor, Claude Code, Lovable, Bolt and Replit AI
 - Offers continuous monitoring with weekly rescans and daily CVE feed matching
 
 ## Who Seclayer is for
 
-Vibe coders, solo founders, indie developers, and dev agencies who build with AI code generation tools (Cursor, Lovable, Bolt, Replit) and need to verify security before launching — or after every coding session.
+Vibe coders, solo founders, indie developers and dev agencies who build with AI code generation
+tools (Cursor, Lovable, Bolt, Replit) and need to verify security before launching — or after
+every coding session.
 
 ## Pricing
 
-- Basic Scan: $9 — headers, SSL/TLS grading, tech fingerprint, Supabase RLS check
-- Deep Scan: $19 — full deep scan with DeepSeek AI analysis and per-agent fix prompts
-- 5-Scan Pack: $79 — 5 Deep Scan credits, never expire (saves $16 vs singles)
-- 20-Scan Pack: $199 — 20 Deep Scan credits for agencies (saves $181 vs singles)
-- Monitor: $49/month — weekly deep rescans + daily CVE feed monitoring with instant alerts
+Free during early access. Every scan and continuous monitoring are free while the platform is
+being fine-tuned. There is no checkout and no paid tier at present.
 
 ## Security checks performed
 
-Headers: Content-Security-Policy (including unsafe-inline/unsafe-eval detection), Strict-Transport-Security, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, X-XSS-Protection
+Headers: Content-Security-Policy (including unsafe-inline/unsafe-eval detection),
+Strict-Transport-Security, X-Frame-Options, X-Content-Type-Options, Referrer-Policy,
+Permissions-Policy, X-XSS-Protection
 
-Transport: HTTPS enforcement, TLS version and cipher strength, certificate validity
+Transport: HTTPS enforcement, TLS version and cipher strength, certificate validity and expiry
 
 Cookies: Secure flag, HttpOnly flag, SameSite attribute
 
-CORS: Wildcard origin detection (Access-Control-Allow-Origin: *)
+CORS: wildcard and reflected-origin detection
 
-Disclosure: Server header, X-Powered-By, technology fingerprinting
+Disclosure: Server header, X-Powered-By, technology fingerprinting, source maps, exposed
+configuration files
 
-Supabase: Row Level Security (RLS) probe — detects exposed tables, missing policies
+Injection: reflected XSS, error-based SQL injection, path traversal and LFI on discovered
+parameters
+
+Access control: two-account comparison for IDOR and BFLA, plus identifier mutation to find
+records nothing linked to
+
+API: endpoint discovery followed by missing-authentication, injection, data-exposure,
+rate-limiting and mass-assignment testing
+
+Backend services: Supabase and Firebase rules probing, including a single self-cleaning write
+probe against tables that are already open
+
+Reconnaissance: TCP connect scan across common ports, subdomain enumeration, DNS and email
+security records, subdomain takeover detection
+
+Components: known-CVE matching and end-of-life version detection
 
 ## How it works
 
-1. Paste any public URL into the scan form
-2. Choose Basic ($9) or Deep ($19) scan tier
-3. Pay once — no subscription required
-4. The scanner fetches the target, analyzes all HTTP responses, runs probes, and calls DeepSeek AI
-5. Receive a plain-English report with grade, risk score, findings, and fix prompts within 10 minutes
+1. Paste a URL for an application you own or are authorised to test
+2. Optionally supply credentials so the scan can test the authenticated surface, and a second
+   account so it can test access control between users
+3. The scanner fetches the target, renders it if it is a single-page app, discovers its API
+   surface, runs its probes, and calls DeepSeek for analysis
+4. Receive a report with grade, risk score, findings and fix prompts
+
+## Scope and safety
+
+- Scans send active traffic. Injection payloads, path traversal attempts and a port scan are
+  part of a normal scan
+- Targets that resolve to private, loopback or link-local addresses are refused, on the first
+  request and on every redirect
+- Storing login credentials for a scan requires a registered, verified account
+- Write testing is limited to a single self-cleaning probe against a backend table that is
+  already publicly writable, to demonstrate the exposure
+- No credential brute-forcing, no destructive requests, no denial-of-service testing
 
 ## Technical details
 
 - Built on: Node.js / Express, React / Vite, PostgreSQL, pg-boss queue
+- Deployed as two services: a web tier and a separate scanner tier that consumes a job queue
 - AI: DeepSeek (deepseek-chat model)
-- Auth: Replit OIDC
-- Scans are read-only by default; a few active checks send bounded, non-destructive test requests (e.g. a single self-cleaning write probe against an exposed Supabase/Firebase backend). No destructive requests, credential brute-forcing, or exploitation are ever performed
-- No agents, browser extensions, or code changes required
+- Auth: email and password with verified email; anonymous scanning is also supported
+- No agents, browser extensions or code changes required
 
 ## Contact
 

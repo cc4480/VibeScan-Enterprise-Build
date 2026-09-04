@@ -146,7 +146,7 @@ export const CreateScanHeader = zod.object({
 
 export const CreateScanBody = zod.object({
   targetUrl: zod.string(),
-  tier: zod.enum(["basic", "deep", "pack_5", "pack_20"]),
+  tier: zod.enum(["deep"]).optional(),
   credentials: zod
     .object({
       mode: zod

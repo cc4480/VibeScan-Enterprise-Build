@@ -939,9 +939,19 @@ components:
         error:
           type: string
 
+    # The tier recorded on a scan. "basic" is retained because scans that ran
+    # before the tier was retired are still in the database and still readable;
+    # it cannot be requested. See ScanRequestTier.
     ScanTier:
       type: string
       enum: [basic, deep, pack_5, pack_20]
+
+    # What a caller may ask for. Every scan is now a full scan, so there is
+    # nothing to choose. Kept as an enum rather than dropped from the request so
+    # existing clients that send "deep" keep working unchanged.
+    ScanRequestTier:
+      type: string
+      enum: [deep]
 
     ScanStatusEnum:
       type: string
@@ -1015,12 +1025,13 @@ components:
 
     CreateScanRequest:
       type: object
-      required: [targetUrl, tier]
+      required: [targetUrl]
       properties:
         targetUrl:
           type: string
+        # Optional: omitted means a full scan, which is the only kind there is.
         tier:
-          $ref: '#/components/schemas/ScanTier'
+          $ref: '#/components/schemas/ScanRequestTier'
         credentials:
           $ref: '#/components/schemas/ScanCredentials'
         secondaryCredentials:

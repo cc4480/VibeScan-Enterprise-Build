@@ -430,12 +430,12 @@ async function runScanInner(
   // through the case-insensitive helper above, so this is a no-op for callers.
   const rawHeaders: Record<string, string> = { ...initial.headers };
 
-  // ── SPA detection + headless rendering (deep tier only) ───────────────────
+  // ── SPA detection + headless rendering ────────────────────────────────────
   // If the server returned a JS-shell SPA (empty <div id="root"> etc.), re-fetch
   // via headless browser so content analysis operates on the fully-rendered DOM.
   // HTTP security headers stay from the raw fetch above — they're identical.
   let renderedWithBrowser = false;
-  if (tier === "deep" && isSpa(html)) {
+  if (isSpa(html)) {
     const rendered = await renderPage(finalUrl).catch(() => null);
     if (rendered) {
       html = rendered.html;
@@ -842,13 +842,17 @@ async function runScanInner(
     }));
   }
 
+  // Pages the crawler will visit. Was 20 for deep scans and 0 (no crawl) for
+  // basic ones; with one tier there is one budget.
+  const CRAWL_PAGE_BUDGET = 20;
+
   // ── Run all parallel probes ───────────────────────────────────────────
   // All checks run concurrently — active HTTP probes, DNS checks, site crawl,
-  // CVE lookup, JWT analysis, subdomain takeover, and (deep only) JS secret
-  // scanning and path traversal.
+  // CVE lookup, JWT analysis, subdomain takeover, JS secret scanning and path
+  // traversal.
   // Run crawl separately to capture pagesVisited alongside findings
   const crawlPromise = crawlAndCheck(
-    finalUrl, html, rawHeaders, tier === "deep" ? 20 : 0,
+    finalUrl, html, rawHeaders, CRAWL_PAGE_BUDGET,
   ).catch(() => ({ vulnerabilities: [], pagesVisited: [], probedNotFound: [] }));
 
   const probePromises: Promise<ScanVulnerability[]>[] = [
@@ -875,15 +879,13 @@ async function runScanInner(
     runStorageProbe(finalUrl, html).catch(() => []),
   ];
 
-  if (tier === "deep") {
-    probePromises.push(
-      scanJavaScriptForSecrets(html, finalUrl).catch(() => []),
-      // Active path traversal probing — multiple HTTP requests
-      checkPathTraversal(finalUrl, html).catch(() => []),
-      // A03 Injection — reflected XSS + error-based SQLi active probing
-      runInjectionProbes(finalUrl, html).catch(() => []),
-    );
-  }
+  probePromises.push(
+    scanJavaScriptForSecrets(html, finalUrl).catch(() => []),
+    // Active path traversal probing — multiple HTTP requests
+    checkPathTraversal(finalUrl, html).catch(() => []),
+    // A03 Injection — reflected XSS + error-based SQLi active probing
+    runInjectionProbes(finalUrl, html).catch(() => []),
+  );
 
   const [crawlResult, ...probeResults] = await Promise.all([
     crawlPromise,
@@ -899,10 +901,10 @@ async function runScanInner(
   }
 
   // ── API surface testing ────────────────────────────────────────────────────
-  // Deep tier only: discovery reads the JS bundles, and the probes spend a few
-  // requests per endpoint. On an API-first SPA this is the only path that finds
-  // anything at all — the HTML carries no forms, links or parameters to collect.
-  if (tier === "deep") {
+  // Discovery reads the JS bundles, and the probes spend a few requests per
+  // endpoint. On an API-first SPA this is the only path that finds anything at
+  // all — the HTML carries no forms, links or parameters to collect.
+  {
     const origin = new URL(finalUrl).origin;
     const endpoints = await collectApiSurface(origin, html).catch(() => [] as ApiEndpoint[]);
 

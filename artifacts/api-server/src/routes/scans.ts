@@ -143,13 +143,13 @@ router.post("/scans", async (req, res): Promise<void> => {
     return;
   }
 
-  const { targetUrl, tier, credentials, secondaryCredentials } = parsed.data;
+  const { targetUrl, credentials, secondaryCredentials } = parsed.data;
 
-  // Credit packs are not supported in the free tier
-  if (tier === "pack_5" || tier === "pack_20") {
-    res.status(400).json({ error: "Credit packs are not available." });
-    return;
-  }
+  // There is one kind of scan now: the full one. The request schema still
+  // accepts "deep" so existing clients keep working, and ignores it either way.
+  // Scans recorded before the tier was retired keep whatever they ran as,
+  // because a stored record should say what actually happened.
+  const tier = "deep" as const;
 
   try {
     const parsedUrl = new URL(targetUrl);

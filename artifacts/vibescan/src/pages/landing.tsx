@@ -2,7 +2,7 @@ import { Link } from "wouter";
 import { motion } from "framer-motion";
 import {
   ShieldAlert, Key, Globe, CheckCircle2, ArrowRight, Activity,
-  Code2, Zap, Bell, Mail, Search, Bot, FileKey, Database, Network,
+  Code2, Zap, Bell, Mail, Bot, FileKey, Database, Network,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -298,25 +298,20 @@ export default function LandingPage() {
           <p className="text-muted-foreground max-w-2xl mx-auto">We're in early access. All scans and continuous monitoring are free while we fine-tune the platform.</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
           {[
             {
-              icon: Search,
-              title: "Basic Scan",
-              desc: "Core OWASP checks in minutes.",
-              features: ["Security headers audit", "SSL/TLS grading", "Tech fingerprinting", "Letter grade A–F"],
-              cta: "Run Basic Scan",
-              href: "/scan",
-              color: "text-primary",
-              bg: "bg-primary/10",
-              border: "",
-            },
-            {
               icon: Bot,
-              title: "Deep Scan",
-              desc: "Full analysis + AI remediation guide.",
-              features: ["Everything in Basic", "Active path probing", "DNS & email security", "DeepSeek AI analysis", "Step-by-step fix guides"],
-              cta: "Run Deep Scan",
+              title: "Security Scan",
+              desc: "Every check we have, on every scan.",
+              features: [
+                "Headers, TLS and DNS",
+                "Injection, XSS and path traversal",
+                "API surface and access control",
+                "DeepSeek AI analysis",
+                "Step-by-step fix guides",
+              ],
+              cta: "Run a Scan",
               href: "/scan",
               color: "text-primary",
               bg: "bg-primary/10",

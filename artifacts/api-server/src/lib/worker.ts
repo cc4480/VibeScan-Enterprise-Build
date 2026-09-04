@@ -299,11 +299,9 @@ async function processScanJob(job: ScanJob): Promise<void> {
     .set({ status: "analyzing" })
     .where(eq(scansTable.id, scanId));
 
-  // ── 4. AI analysis (deep tier only) ──────────────────────────────────
-  // Note: pack_5/pack_20 are credit-purchase tiers — scan records are always
-  // created with "basic" or "deep", so only "deep" needs to be checked here.
+  // ── 4. AI analysis ───────────────────────────────────────────────────
   let aiAnalysis = null;
-  if (tier === "deep") {
+  {
     log.info("Calling DeepSeek AI analysis");
     // Confidence gate: only pass high-confidence findings to the AI to reduce noise
     const AI_CONFIDENCE_GATE = 65;
@@ -584,8 +582,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
     }
 
     // ── 9. Send report-ready email ────────────────────────────────────
-    // Deep scans and monitor-triggered scans always send email.
-    if (tier === "deep") {
+    {
       const [scan] = await db
         .select({ userEmail: scansTable.userEmail })
         .from(scansTable)

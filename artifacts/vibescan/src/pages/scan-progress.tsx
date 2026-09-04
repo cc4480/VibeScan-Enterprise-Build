@@ -42,8 +42,10 @@ const ALL_STEPS: ScanStep[] = [
 
 type StepStatus = "pending" | "running" | "done";
 
-function getVisibleSteps(tier: string): ScanStep[] {
-  return ALL_STEPS.filter((s) => tier === "deep" || !s.deepOnly);
+// Every scan runs every step now, so there is nothing to filter. Kept as a
+// function because the steps list is still the thing the progress view walks.
+function getVisibleSteps(): ScanStep[] {
+  return ALL_STEPS;
 }
 
 function computeStepStatuses(
@@ -394,8 +396,6 @@ export default function ScanProgressPage() {
   const search = useSearch();
   const [, setLocation] = useLocation();
 
-  const tier = new URLSearchParams(search).get("tier") ?? "deep";
-
   const analyzingStartRef = useRef<number | null>(null);
   const redirectedRef = useRef(false);
 
@@ -440,7 +440,7 @@ export default function ScanProgressPage() {
     ? Math.max(0, Date.now() - analyzingStartRef.current)
     : 0;
 
-  const steps = useMemo(() => getVisibleSteps(tier), [tier]);
+  const steps = useMemo(() => getVisibleSteps(), []);
   const domain = useMemo(() => getDomain(data?.targetUrl ?? ""), [data?.targetUrl]);
 
   const statuses = useMemo(
@@ -476,7 +476,7 @@ export default function ScanProgressPage() {
       `VibeScan Enterprise Security Scanner v2.0`,
       `────────────────────────────────────────────────────`,
       `Target  : https://${domain}`,
-      `Tier    : ${tier === "deep" ? `Deep Scan (${scanCount} checks)` : `Basic Scan (${scanCount} checks)`}`,
+      `Checks  : ${scanCount}`,
       `Session : ${data.id}`,
       `────────────────────────────────────────────────────`,
     ];
@@ -489,7 +489,7 @@ export default function ScanProgressPage() {
       }, j * 40);
       timeoutsRef.current.push(tid);
     });
-  }, [data?.id, domain, tier, steps.length]);
+  }, [data?.id, domain, steps.length]);
 
   // Emit log lines when steps become active
   useEffect(() => {
@@ -595,16 +595,6 @@ export default function ScanProgressPage() {
                 ? "Scan Failed"
                 : domain || "Security Scan"}
           </h1>
-          <span
-            className={cn(
-              "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border",
-              tier === "deep"
-                ? "bg-primary/10 border-primary/20 text-primary"
-                : "bg-white/5 border-white/10 text-muted-foreground",
-            )}
-          >
-            {tier === "deep" ? "Deep" : "Basic"}
-          </span>
         </div>
 
         <p className="text-sm text-muted-foreground">
