@@ -1,6 +1,6 @@
-import { Router, type IRouter } from "express";
-import { db, scansTable, reportsTable } from "@workspace/db";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { Router, type IRouter, type Request } from "express";
+import { db, scansTable, reportsTable, usersTable } from "@workspace/db";
+import { eq, and, desc, inArray, gte, count } from "drizzle-orm";
 import {
   CreateScanBody,
   ListScansResponseItem,
@@ -8,6 +8,56 @@ import {
 } from "@workspace/api-zod";
 import { enqueueScan } from "../lib/queue";
 import { validateCredentials, encryptCredentials } from "../lib/scanCredentials";
+import { checkUrlSafe } from "../lib/ssrfGuard";
+
+// ── Abuse and cost control ───────────────────────────────────────────────────
+// A scan is expensive in a way an API request normally is not: it launches a
+// browser and runs sustained outbound traffic for minutes. Before this, the
+// only limit was worker concurrency, which throttles how fast the queue drains
+// rather than how much anyone may put on it.
+//
+// Two limits, because they stop different things. The burst limiter is
+// in-memory and per-instance, matching the limiter in routes/auth.ts — enough
+// to stop a hot loop, and it resets on deploy. The daily quota is counted in
+// Postgres, so it holds across replicas and restarts, which is what actually
+// bounds cost.
+
+const BURST_WINDOW_MS = 60_000;
+const BURST_MAX = Number(process.env["SCAN_BURST_LIMIT"] ?? 5);
+const DAILY_MAX_ANON = Number(process.env["SCAN_DAILY_LIMIT_ANON"] ?? 10);
+const DAILY_MAX_ACCOUNT = Number(process.env["SCAN_DAILY_LIMIT_ACCOUNT"] ?? 50);
+
+const burst = new Map<string, number[]>();
+
+function clientIp(req: Request): string {
+  return String(
+    req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "unknown",
+  ).split(",")[0]!.trim();
+}
+
+function isBurstLimited(key: string): boolean {
+  const now = Date.now();
+  const recent = (burst.get(key) ?? []).filter((t) => now - t < BURST_WINDOW_MS);
+  recent.push(now);
+  burst.set(key, recent);
+  // Keep the map from growing without bound on a long-lived process.
+  if (burst.size > 10_000) {
+    for (const [k, times] of burst) {
+      if (times.every((t) => now - t >= BURST_WINDOW_MS)) burst.delete(k);
+    }
+  }
+  return recent.length > BURST_MAX;
+}
+
+/** Scans this user has started in the last 24 hours. */
+async function scansToday(userId: string): Promise<number> {
+  const since = new Date(Date.now() - 24 * 60 * 60_000);
+  const [row] = await db
+    .select({ n: count() })
+    .from(scansTable)
+    .where(and(eq(scansTable.userId, userId), gte(scansTable.createdAt, since)));
+  return row?.n ?? 0;
+}
 
 const router: IRouter = Router();
 
@@ -80,6 +130,13 @@ router.post("/scans", async (req, res): Promise<void> => {
     return;
   }
 
+  if (isBurstLimited(`scan:${clientIp(req)}`)) {
+    res.status(429).json({
+      error: "Too many scans started at once. Wait a minute and try again.",
+    });
+    return;
+  }
+
   const parsed = CreateScanBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -104,6 +161,22 @@ router.post("/scans", async (req, res): Promise<void> => {
     return;
   }
 
+  // Refuse targets that point back at our own network before anything is
+  // stored or queued. The scanner enforces this again on every request it
+  // makes — this check exists so the person gets a straight answer now rather
+  // than an empty report later, and so an abusive target never reaches the
+  // queue at all.
+  const addressCheck = await checkUrlSafe(targetUrl, { allowOptOut: true });
+  if (!addressCheck.ok) {
+    req.log.warn({ targetUrl, reason: addressCheck.reason }, "Blocked scan target");
+    res.status(400).json({
+      error:
+        "That address cannot be scanned: it is a private, local or link-local " +
+        "address. Scan a publicly reachable URL instead.",
+    });
+    return;
+  }
+
   // ── Credentials for an authenticated scan ──────────────────────────────────
   // Validated before the scan is queued so a bad login is reported now rather
   // than as a mysteriously empty report later. Encrypted immediately; the
@@ -113,6 +186,39 @@ router.post("/scans", async (req, res): Promise<void> => {
   let credentialsAuthorizedAt: Date | null = null;
 
   if (credentials) {
+    // A credentialed scan means holding a customer's live login. An anonymous
+    // identity is a UUID in localStorage, auto-accepted on sight — no password,
+    // no second factor, nothing to revoke — so anyone who copies that string
+    // becomes the user and inherits the stored credential. Storing a production
+    // password against that is not a risk worth taking for the convenience of
+    // skipping registration, so credentials require a real, verified account.
+    // Anonymous users keep full access to unauthenticated scanning.
+    const [account] = await db
+      .select({
+        passwordHash: usersTable.passwordHash,
+        emailVerifiedAt: usersTable.emailVerifiedAt,
+      })
+      .from(usersTable)
+      .where(eq(usersTable.id, req.user.id))
+      .limit(1);
+
+    if (!account?.passwordHash) {
+      res.status(403).json({
+        error:
+          "Authenticated scanning needs a registered account. Create one to " +
+          "store login details for a scan — your existing scans stay with you.",
+      });
+      return;
+    }
+
+    if (!account.emailVerifiedAt) {
+      res.status(403).json({
+        error:
+          "Verify your email address before storing login details for a scan.",
+      });
+      return;
+    }
+
     const check = validateCredentials(credentials);
     if (!check.ok) {
       res.status(400).json({ error: check.error });
@@ -139,6 +245,24 @@ router.post("/scans", async (req, res): Promise<void> => {
   } else if (secondaryCredentials) {
     res.status(400).json({
       error: "A second account only works alongside a first one. Add primary credentials too.",
+    });
+    return;
+  }
+
+  // Registered accounts get the higher allowance: they are attributable and
+  // recoverable in a way an anonymous UUID is not.
+  const [quotaRow] = await db
+    .select({ passwordHash: usersTable.passwordHash })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.user.id))
+    .limit(1);
+  const dailyMax = quotaRow?.passwordHash ? DAILY_MAX_ACCOUNT : DAILY_MAX_ANON;
+
+  if ((await scansToday(req.user.id)) >= dailyMax) {
+    res.status(429).json({
+      error: quotaRow?.passwordHash
+        ? `Daily scan limit reached (${dailyMax}). It resets 24 hours after each scan.`
+        : `Daily scan limit reached (${dailyMax}). Create an account for a higher limit.`,
     });
     return;
   }
