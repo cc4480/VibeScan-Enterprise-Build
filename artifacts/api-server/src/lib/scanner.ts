@@ -346,7 +346,7 @@ export interface RunScanAuth {
    */
   secondary?: ScanHttpCredentials;
   /** Recognises a signed-out response. */
-  detectSignedOut?: (body: string, finalUrl: string) => boolean;
+  detectSignedOut?: (body: string, finalUrl: string, requestedUrl: string) => boolean;
   /** Signs back in when the session expires mid-scan. */
   onSessionLost?: () => Promise<ScanHttpCredentials | null>;
 }

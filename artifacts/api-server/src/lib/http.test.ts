@@ -281,6 +281,38 @@ describe("session expiry mid-scan", () => {
   const detectSignedOut = (body: string) =>
     /<input[^>]+type=["']password["']/i.test(body) && /log in/i.test(body);
 
+  // The URL the scan asked for has to reach the callback, not just the URL it
+  // ended up at. Without it the callback cannot tell "I requested /login and
+  // got a login page" (expected) from "I requested /account and was bounced to
+  // one" (a dead session) — which is what made every authenticated scan report
+  // a spurious expiry. looksSignedOut's own handling is covered in
+  // scanCredentials.test.ts; this pins the wiring that feeds it.
+  it("passes the requested URL, not just the final one, to detectSignedOut", async () => {
+    const { port } = await serve((_req, res) => {
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end("<h1>ok</h1>");
+    });
+
+    const seen: Array<{ finalUrl: string; requestedUrl: string }> = [];
+
+    await runWithScanHttp(
+      {
+        targetUrl: `http://localhost:${port}/`,
+        credentials: { cookie: "sid=1" },
+        detectSignedOut: (_body, finalUrl, requestedUrl) => {
+          seen.push({ finalUrl, requestedUrl });
+          return false;
+        },
+      },
+      async () => {
+        await scanFetch(`http://localhost:${port}/login`);
+      },
+    );
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.requestedUrl).toBe(`http://localhost:${port}/login`);
+  });
+
   it("signs back in and retries, so the caller gets the authenticated page", async () => {
     const { port } = await expiringTarget(1);
     let logins = 0;

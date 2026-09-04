@@ -141,4 +141,29 @@ describe("looksSignedOut", () => {
     // A password field alone, or the words alone, are not enough.
     expect(looksSignedOut("<p>You were logged in at 10am</p>", "https://app.example/audit")).toBe(false);
   });
+
+  // Regression: the scan probes /login, /auth and /signin itself during
+  // discovery. Treating the sign-in page it asked for as proof the session
+  // died stamped "results are incomplete" on every authenticated scan of a
+  // target that answers 200 there instead of redirecting a signed-in visitor
+  // away — which is most of them. Caught by an end-to-end scan, not by the
+  // unit tests above, because it needs the discovery probes to be running.
+  it("does not fire when the scan asked for the login page itself", () => {
+    const loginPage = `<h1>Sign in</h1><form><input type="password" name="p"></form>`;
+    expect(looksSignedOut(loginPage, "https://app.example/login", "https://app.example/login"))
+      .toBe(false);
+    expect(looksSignedOut("<html></html>", "https://app.example/auth", "https://app.example/auth"))
+      .toBe(false);
+  });
+
+  it("still fires when a non-login URL lands on the login page", () => {
+    // The genuine signal: we asked for something else and were bounced.
+    expect(looksSignedOut("<html></html>", "https://app.example/login", "https://app.example/account"))
+      .toBe(true);
+  });
+
+  it("requires a path segment, not a substring, to count as an auth route", () => {
+    expect(looksSignedOut("<html></html>", "https://app.example/loginality", "https://app.example/x"))
+      .toBe(false);
+  });
 });

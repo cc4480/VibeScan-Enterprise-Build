@@ -187,6 +187,9 @@ async function formLogin(
   }
 }
 
+/** A URL that is itself a sign-in surface, rather than one bounced to it. */
+const AUTH_SHAPED_URL = /\/(login|signin|sign-in|auth)(\b|\/|\?)/i;
+
 /**
  * Heuristic check that a response still looks signed in.
  *
@@ -194,8 +197,20 @@ async function formLogin(
  * half of the scan runs logged out and reports a clean bill of health for pages
  * it never actually saw.
  */
-export function looksSignedOut(body: string, finalUrl: string): boolean {
-  if (/\/(login|signin|sign-in|auth)(\b|\/|\?)/i.test(finalUrl)) return true;
+export function looksSignedOut(
+  body: string,
+  finalUrl: string,
+  requestedUrl?: string,
+): boolean {
+  // The scan deliberately probes /login, /auth and /signin during discovery.
+  // Being served a sign-in page at a URL we asked a sign-in page for is the
+  // expected answer, not evidence the session died — only being *bounced* to
+  // one from somewhere else is. Without this the check fires on essentially
+  // every authenticated scan of a real app (any target answering 200 on
+  // /login rather than redirecting a signed-in visitor away) and stamps a
+  // spurious "results are incomplete" notice on a complete report.
+  if (requestedUrl && AUTH_SHAPED_URL.test(requestedUrl)) return false;
+  if (AUTH_SHAPED_URL.test(finalUrl)) return true;
   const head = body.slice(0, 4_000);
   return (
     /<input[^>]+type=["']password["']/i.test(head) &&

@@ -67,7 +67,7 @@ export interface ScanHttpInit {
    * Recognise a response as "you are signed out". Injected rather than imported
    * so this module stays free of scanner dependencies.
    */
-  detectSignedOut?: (body: string, finalUrl: string) => boolean;
+  detectSignedOut?: (body: string, finalUrl: string, requestedUrl: string) => boolean;
   /**
    * Obtain a fresh session after the current one stops working. Returning null
    * means re-authentication is not possible — a pasted cookie cannot be renewed
@@ -85,7 +85,7 @@ export interface ScanHttpContext {
   minRequestIntervalMs: number;
   /** Last request time per host, for throttling. */
   lastRequestAt: Map<string, number>;
-  detectSignedOut?: (body: string, finalUrl: string) => boolean;
+  detectSignedOut?: (body: string, finalUrl: string, requestedUrl: string) => boolean;
   onSessionLost?: () => Promise<ScanCredentials | null>;
   reauthAttempts: number;
   /**
@@ -414,7 +414,7 @@ async function perform(url: string, options: ScanFetchOptions): Promise<Outcome>
         !identityGiven &&
         ctx?.credentials &&
         ctx.scope.includes(current) &&
-        ctx.detectSignedOut?.(result.body, result.finalUrl)
+        ctx.detectSignedOut?.(result.body, result.finalUrl, url)
       ) {
         ctx.sessionWasLost = true;
         if (await tryReauthenticate(ctx)) {

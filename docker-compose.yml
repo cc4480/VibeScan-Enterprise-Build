@@ -54,6 +54,12 @@ services:
       # app.ts hardcodes an allowlist of the old Replit/vibescan origins; your
       # own domain has to be added here or browser calls are rejected.
       CORS_EXTRA_ORIGINS: ${CORS_EXTRA_ORIGINS:-}
+      # Where a scanned target calls back to when the scanner plants a URL —
+      # this is how SSRF is detected. Must be publicly reachable by the targets
+      # you scan. Unset falls back to APP_ORIGIN, and a localhost APP_ORIGIN is
+      # rejected rather than planted as a callback that can only fail, so
+      # SSRF detection is simply skipped until one of these is a real hostname.
+      OOB_BASE_URL: ${OOB_BASE_URL:-}
       DISABLE_PAYMENTS: ${DISABLE_PAYMENTS:-false}
     ports:
       # Defaults to 8090 on the host: this machine already runs Apache on 8080,

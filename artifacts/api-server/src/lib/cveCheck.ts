@@ -298,41 +298,77 @@ const LOCAL_VULN_DATA_UPDATED = "2026-05-05";
 const LOCAL_DATA_STALE_DAYS = 90;
 
 /**
- * Logs a warning at startup when the bundled local CVE / EOL data is older
- * than LOCAL_DATA_STALE_DAYS days. Call this once from startWorker().
+ * Logs a warning at startup for whichever local data set has gone stale.
+ * Call this once from startWorker().
  *
- * The warning reminds developers that PHP_EOL, NGINX_VULN_RANGES,
- * APACHE_VULN_RANGES, and IIS_EOL_MAJOR may need refreshing against
- * current vendor advisories and EOL schedules.
+ * Two independent signals, because the data has two maintenance paths: the
+ * hand-maintained CVE range tables (NGINX_VULN_RANGES, APACHE_VULN_RANGES,
+ * IIS_EOL_MAJOR), which only move when someone reviews vendor advisories and
+ * bumps LOCAL_VULN_DATA_UPDATED; and the EOL cycles, which eolFetcher.ts
+ * refreshes nightly on its own. Judging them together let a healthy nightly
+ * fetch hide stale hand-maintained tables indefinitely.
  */
 export function warnIfLocalDataStale(): void {
-  // Prefer the live EOL refresh timestamp (updated by eolFetcher.ts after each
-  // successful daily fetch) over the static bundled date.  At initial startup
-  // the live timestamp is null and we fall back to the bundled date.
-  const liveDate = getEolDataFetchedAt();
+  // The two data sets have separate maintenance paths and must be judged
+  // separately. eolFetcher.ts refreshes the EOL cycles from endoflife.date
+  // daily and automatically; the CVE range tables below (NGINX_VULN_RANGES,
+  // APACHE_VULN_RANGES, IIS_EOL_MAJOR) are hand-maintained and only change
+  // when a person reviews vendor advisories and bumps
+  // LOCAL_VULN_DATA_UPDATED.
+  //
+  // Folding both into one "effective date" meant a successful nightly EOL
+  // fetch reset the clock on the hand-maintained tables too, so the warning
+  // that exists precisely to nag about them could never fire while the daily
+  // job was healthy — which is exactly when nobody is looking.
   const bundledDate = new Date(LOCAL_VULN_DATA_UPDATED);
-  const effectiveDate = liveDate && liveDate > bundledDate ? liveDate : bundledDate;
-  const source = liveDate && liveDate > bundledDate ? "live EOL refresh" : "bundled tables";
-  const ageDays = Math.floor((Date.now() - effectiveDate.getTime()) / (1000 * 60 * 60 * 24));
+  const bundledAgeDays = Math.floor((Date.now() - bundledDate.getTime()) / 86_400_000);
 
-  if (ageDays > LOCAL_DATA_STALE_DAYS) {
+  if (bundledAgeDays > LOCAL_DATA_STALE_DAYS) {
     logger.warn(
       {
-        effectiveDate: effectiveDate.toISOString(),
-        source,
-        ageDays,
+        bundledDate: bundledDate.toISOString(),
+        ageDays: bundledAgeDays,
+        staleThresholdDays: LOCAL_DATA_STALE_DAYS,
+        action:
+          "Review NGINX_VULN_RANGES, APACHE_VULN_RANGES and IIS_EOL_MAJOR against " +
+          "current vendor advisories, then bump LOCAL_VULN_DATA_UPDATED in cveCheck.ts",
+      },
+      `[cveCheck] Hand-maintained CVE tables are ${bundledAgeDays} days old ` +
+      `(threshold: ${LOCAL_DATA_STALE_DAYS} days). These are not refreshed by the ` +
+      `nightly EOL job and require manual review against vendor advisories.`,
+    );
+  }
+
+  // EOL data has its own freshness signal: the live refresh timestamp when the
+  // nightly job has run, falling back to the bundled date before its first run.
+  const liveDate = getEolDataFetchedAt();
+  const eolDate = liveDate && liveDate > bundledDate ? liveDate : bundledDate;
+  const eolSource = liveDate && liveDate > bundledDate ? "live EOL refresh" : "bundled tables";
+  const eolAgeDays = Math.floor((Date.now() - eolDate.getTime()) / 86_400_000);
+
+  if (eolAgeDays > LOCAL_DATA_STALE_DAYS) {
+    logger.warn(
+      {
+        effectiveDate: eolDate.toISOString(),
+        source: eolSource,
+        ageDays: eolAgeDays,
         staleThresholdDays: LOCAL_DATA_STALE_DAYS,
         action: liveDate
           ? "Check EOL refresh schedule — daily pg-boss job may be failing"
-          : "Review and update LOCAL_VULN_DATA_UPDATED and the local vuln tables in cveCheck.ts",
+          : "Daily EOL refresh has not completed since startup",
       },
-      `[cveCheck] CVE/EOL data is ${ageDays} days old (threshold: ${LOCAL_DATA_STALE_DAYS} days). ` +
-      `Source: ${source}. IIS_EOL_MAJOR and NGINX_VULN_RANGES / APACHE_VULN_RANGES CVE entries ` +
-      `still require manual review — check current vendor advisories.`,
+      `[cveCheck] EOL data is ${eolAgeDays} days old (threshold: ` +
+      `${LOCAL_DATA_STALE_DAYS} days). Source: ${eolSource}.`,
     );
-  } else {
+  }
+
+  if (bundledAgeDays <= LOCAL_DATA_STALE_DAYS && eolAgeDays <= LOCAL_DATA_STALE_DAYS) {
     logger.debug(
-      { effectiveDate: effectiveDate.toISOString(), source, ageDays },
+      {
+        bundledDate: bundledDate.toISOString(),
+        eolDate: eolDate.toISOString(),
+        eolSource,
+      },
       "[cveCheck] CVE/EOL data freshness OK",
     );
   }

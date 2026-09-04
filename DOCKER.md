@@ -102,6 +102,17 @@ their plain-English write-up — the thing the tier is sold on.
   is reachable only from an explicit "Sign in instead" link and answers 500.
   Removing it is tidy-up, not a blocker.
 
+- **SSRF detection is off until a target can call back to you.** The scanner
+  finds SSRF by planting a URL and waiting for the target's *server* to fetch
+  it, so it needs an address reachable from the internet. It uses
+  `OOB_BASE_URL`, falling back to `APP_ORIGIN`. A localhost value is rejected
+  rather than planted as a callback that could only fail, so on a dev box the
+  check is simply skipped and no SSRF finding can ever be reported. Once
+  `APP_ORIGIN` is your real domain this works with no extra configuration; set
+  `OOB_BASE_URL` only if callbacks should land somewhere other than the app's
+  own origin. Nothing warns you that the check was skipped, so if SSRF
+  findings never appear, check this first.
+
 - **Payments** default to `DISABLE_PAYMENTS=true`, which queues scans without
   charging. Set it to `false` and supply the Stripe keys to actually bill.
 
