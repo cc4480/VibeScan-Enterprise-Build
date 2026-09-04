@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
+    "dev:secscan": "export NODE_ENV=development && pnpm run build && pnpm run start:secscan",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
+    "start:secscan": "node --enable-source-maps ./dist/secscan.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

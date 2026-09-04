@@ -1,4 +1,4 @@
-# Local/production stack for Seclayer (VibeScan).
+# Local/production stack for Seclayer.
 #
 #   cp .env.docker.example .env.docker    # then fill it in
 #   docker compose --env-file .env.docker --profile setup run --rm db-push
@@ -7,6 +7,16 @@
 # A dedicated --env-file is used rather than the default .env because the repo's
 # .env is the *host* dev config (it points DATABASE_URL at localhost, which is
 # meaningless inside a container).
+#
+# Two apps, one database:
+#   seclayer  — web + API. Holds no Chromium; enqueues scans.
+#   secscan   — the scanner. Consumes the pg-boss `scan-job` queue.
+# They share nothing at runtime except Postgres, so either can be restarted,
+# scaled or redeployed without the other.
+
+# Connection string shared by all three services that talk to Postgres.
+x-database-url: &database-url
+  DATABASE_URL: postgresql://${POSTGRES_USER:-vibescan}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-vibescan}
 
 services:
   db:
@@ -30,23 +40,26 @@ services:
       timeout: 5s
       retries: 20
 
-  app:
+  # ── seclayer — web tier ────────────────────────────────────────────────────
+  # The only service with a published port. Every variable below is one that
+  # dist/index.mjs actually reads; DEEPSEEK_API_KEY and OOB_BASE_URL are
+  # deliberately absent because only the scanner reads them.
+  seclayer:
     build:
       context: .
-      target: runtime
+      target: seclayer
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
     environment:
+      <<: *database-url
       PORT: 8080
       # Hops of reverse proxy in front of the app, so Express honours
       # X-Forwarded-Proto and issues the session cookie as Secure. 1 = a single
       # nginx/Caddy. Raise it only if you genuinely add another proxy layer.
       TRUST_PROXY: ${TRUST_PROXY:-1}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-vibescan}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-vibescan}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set}
-      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
@@ -54,13 +67,6 @@ services:
       # app.ts hardcodes an allowlist of the old Replit/vibescan origins; your
       # own domain has to be added here or browser calls are rejected.
       CORS_EXTRA_ORIGINS: ${CORS_EXTRA_ORIGINS:-}
-      # Where a scanned target calls back to when the scanner plants a URL —
-      # this is how SSRF is detected. Must be publicly reachable by the targets
-      # you scan. Unset falls back to APP_ORIGIN, and a localhost APP_ORIGIN is
-      # rejected rather than planted as a callback that can only fail, so
-      # SSRF detection is simply skipped until one of these is a real hostname.
-      OOB_BASE_URL: ${OOB_BASE_URL:-}
-      DISABLE_PAYMENTS: ${DISABLE_PAYMENTS:-false}
     ports:
       # Defaults to 8090 on the host: this machine already runs Apache on 8080,
       # which silently competes for the port.
@@ -76,8 +82,43 @@ services:
       # reverting to 0.0.0.0.
       - "127.0.0.1:${APP_PORT:-8090}:8080"
 
+  # ── secscan — scanner tier ─────────────────────────────────────────────────
+  # No published port: work arrives only through the queue. Scale it with
+  #   docker compose --env-file .env.docker up -d --scale secscan=3
+  # pg-boss hands each job to exactly one worker, so replicas need no further
+  # coordination.
+  secscan:
+    build:
+      context: .
+      target: secscan
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *database-url
+      # Must match seclayer's value: credentials are encrypted by the web tier
+      # when a scan is created and decrypted here when it runs. A mismatch fails
+      # at scan time, not at startup.
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      # Used to build links in the report/regression emails this tier sends.
+      APP_ORIGIN: ${APP_ORIGIN:?APP_ORIGIN must be set, e.g. https://your-domain}
+      # Where a scanned target calls back to when the scanner plants a URL —
+      # this is how SSRF is detected. It must point at *seclayer*, which serves
+      # the /api/oob callback route, and must be publicly reachable by the
+      # targets you scan. Unset falls back to APP_ORIGIN, and a localhost
+      # APP_ORIGIN is rejected rather than planted as a callback that can only
+      # fail, so SSRF detection is simply skipped until one of these is a real
+      # hostname.
+      OOB_BASE_URL: ${OOB_BASE_URL:-}
+    # Chromium needs more shared memory than Docker's 64 MB default; below that
+    # it crashes on content-heavy pages rather than failing cleanly.
+    shm_size: "1gb"
+
   # One-shot schema apply. Uses the builder stage because drizzle-kit is a dev
-  # dependency and deliberately absent from the runtime image.
+  # dependency and deliberately absent from the runtime images.
   #   docker compose --env-file .env.docker --profile setup run --rm db-push
   db-push:
     profiles: ["setup"]
@@ -88,7 +129,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-vibescan}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-vibescan}
+      <<: *database-url
     command: ["pnpm", "--filter", "@workspace/db", "run", "db:push"]
 
 volumes:

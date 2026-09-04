@@ -1,3 +1,11 @@
+/**
+ * seclayer — the web process.
+ *
+ * Serves the API and the built frontend. Scan work is handed to secscan through
+ * the `scan-job` pg-boss queue rather than executed here, so this process holds
+ * no Chromium and stays cheap to scale horizontally.
+ */
+
 import app from "./app";
 import { logger } from "./lib/logger";
 import { getBoss } from "./lib/queue";
@@ -16,34 +24,25 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-// Initialize pg-boss and start the scan worker + monitor scheduler
+// Warm the pg-boss connection at startup so the first user-triggered scan does
+// not pay the connection cost. Enqueueing is all this process does with the
+// queue — the worker and the monitor scheduler run in secscan.
 getBoss()
-  .then(async () => {
+  .then(() => {
     logger.info("Job queue ready");
-
-    const { startWorker } = await import("./lib/worker");
-    await startWorker();
-
-    const { startMonitorScheduler } = await import("./lib/monitorScheduler");
-    await startMonitorScheduler();
   })
   .catch((err: unknown) => {
-    logger.error({ err }, "Failed to initialize job queue — scans will not be processed");
+    logger.error({ err }, "Failed to initialize job queue — scans cannot be queued");
   });
 
-// Graceful shutdown — stop pg-boss before exiting so in-flight scan jobs can
-// complete rather than being abandoned mid-execution (which leaves scans stuck
-// in "scanning" state).  Replit sends SIGTERM when deploying a new version;
-// giving the old process 90 s to drain is enough for most scans to finish.
+// Stop accepting new work before exiting. The web tier holds no in-flight scans,
+// so there is nothing to drain beyond closing the queue connection.
 process.on("SIGTERM", () => {
-  logger.info("SIGTERM received — draining in-flight scan jobs before exit");
+  logger.info("SIGTERM received — shutting down");
   getBoss()
-    .then(async (boss) => {
-      await boss.stop({ graceful: true, timeout: 90_000 });
-      logger.info("pg-boss drained — exiting cleanly");
-    })
+    .then((boss) => boss.stop({ graceful: true, timeout: 10_000 }))
     .catch((err: unknown) => {
-      logger.error({ err }, "Error draining pg-boss on shutdown");
+      logger.error({ err }, "Error closing queue connection on shutdown");
     })
     .finally(() => {
       process.exit(0);

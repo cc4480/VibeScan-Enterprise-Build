@@ -15,7 +15,14 @@ async function buildAll() {
   await rm(distDir, { recursive: true, force: true });
 
   await esbuild({
-    entryPoints: [path.resolve(artifactDir, "src/index.ts")],
+    // Two entrypoints, two deployables: index.mjs is seclayer (web/API) and
+    // secscan.mjs is the scanner worker. They share this bundle config because
+    // they still share a package; esbuild tree-shakes each one independently, so
+    // Playwright and the probe modules end up only in secscan.mjs.
+    entryPoints: [
+      path.resolve(artifactDir, "src/index.ts"),
+      path.resolve(artifactDir, "src/secscan.ts"),
+    ],
     platform: "node",
     bundle: true,
     format: "esm",

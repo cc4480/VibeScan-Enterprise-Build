@@ -30,22 +30,71 @@ RUN pnpm -r --if-present --filter '!@workspace/mockup-sandbox' run build
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Runtime
+# Runtime base — everything both apps need, and nothing either one does not.
+#
+# seclayer and secscan are built from the same workspace but deploy as two
+# separate images. They share this base so a change to the Node version or the
+# bundle layout cannot drift between them.
 # ─────────────────────────────────────────────────────────────────────────────
-FROM node:24-bookworm-slim AS runtime
+FROM node:24-bookworm-slim AS runtime-base
 
-ENV NODE_ENV=production \
-    PORT=8080 \
-    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+ENV NODE_ENV=production
 
 WORKDIR /app
 
-# esbuild bundles the entire API server into dist/index.mjs with one exception:
+# Both entrypoints (index.mjs and secscan.mjs) live in this directory; each image
+# runs only its own. The unused bundle costs a couple of MB and keeps this layer
+# identical between the two images, which is worth more than trimming it.
+COPY --from=builder /app/artifacts/api-server/dist ./artifacts/api-server/dist
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# seclayer — the web tier
+#
+# No Playwright and no Chromium: nothing reachable from src/index.ts imports
+# them. That is enforced by the bundle, not by convention — `grep playwright
+# dist/index.mjs` returns nothing, and the lazy import in scanCredentials.ts is
+# what keeps it that way.
+# ─────────────────────────────────────────────────────────────────────────────
+FROM runtime-base AS seclayer
+
+ENV PORT=8080
+
+COPY --from=builder /app/artifacts/vibescan/dist/public ./artifacts/vibescan/dist/public
+
+# In production app.ts serves the SPA itself. It resolves the static directory
+# relative to dist/index.mjs, which makes the copied layout load-bearing; set
+# the path explicitly so a future layout change cannot silently 404 the frontend.
+ENV FRONTEND_STATIC_DIR=/app/artifacts/vibescan/dist/public
+
+USER node
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/api/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+# index.ts throws unless PORT is set; ENV PORT above satisfies it.
+CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# secscan — the scanner tier
+#
+# This is the image that carries Chromium. It has no HTTP listener: work arrives
+# only through the pg-boss `scan-job` queue, so there is no port to expose and
+# no endpoint to health-check.
+# ─────────────────────────────────────────────────────────────────────────────
+FROM runtime-base AS secscan
+
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+# esbuild bundles the scanner into dist/secscan.mjs with one exception:
 # `playwright` is listed in build.mjs `external`, so it must be a real package
 # at runtime, alongside a Chromium build matching the library version. Keep this
 # version in step with the `playwright` dependency in artifacts/api-server.
 #
-# Without this the server still starts, but logs "Failed to launch headless
+# Without this the worker still starts, but logs "Failed to launch headless
 # browser — SPA rendering disabled" and silently skips JS rendering during
 # scans, which is a core capability for scanning single-page apps.
 #
@@ -64,20 +113,6 @@ RUN npm install --no-save --omit=dev playwright@1.62.1 \
  && npm cache clean --force \
  && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/artifacts/api-server/dist ./artifacts/api-server/dist
-COPY --from=builder /app/artifacts/vibescan/dist/public ./artifacts/vibescan/dist/public
-
-# In production app.ts serves the SPA itself. It resolves the static directory
-# relative to dist/index.mjs, which makes the copied layout load-bearing; set
-# the path explicitly so a future layout change cannot silently 404 the frontend.
-ENV FRONTEND_STATIC_DIR=/app/artifacts/vibescan/dist/public
-
 USER node
 
-EXPOSE 8080
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/api/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-
-# index.ts throws unless PORT is set; ENV PORT above satisfies it.
-CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
+CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/secscan.mjs"]

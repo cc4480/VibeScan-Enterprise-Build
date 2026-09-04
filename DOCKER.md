@@ -1,8 +1,25 @@
 # Running Seclayer with Docker
 
-The stack is two containers: `app` (Express API + the pre-built SPA, one
-process) and `db` (Postgres 16). The API server serves the frontend itself in
-production, so there is no separate web container.
+The stack is three containers:
+
+| Service | What it is | Port | Chromium |
+| --- | --- | --- | --- |
+| `seclayer` | Express API + the pre-built SPA | published | no |
+| `secscan` | the scanner worker | none | yes |
+| `db` | Postgres 16 | none | — |
+
+`seclayer` serves the frontend itself in production, so there is no separate web
+container. It never runs a scan: it writes the job to the pg-boss `scan-job`
+queue in Postgres and `secscan` picks it up. That queue is the only runtime
+coupling between the two, so either can be restarted or redeployed alone, and
+`secscan` can be scaled independently:
+
+```bash
+docker compose --env-file .env.docker up -d --scale secscan=3
+```
+
+Because nothing reachable from the web entrypoint imports Playwright, only the
+`secscan` image carries Chromium.
 
 ## Quick start
 
@@ -40,6 +57,27 @@ no safe default:
 `DEEPSEEK_API_KEY` is not strictly required to boot, but without it Deep scans
 complete while their AI analysis fails with a 401, so reports arrive missing
 their plain-English write-up — the thing the tier is sold on.
+
+### Which service reads what
+
+`docker-compose.yml` passes each service only the variables its own bundle
+reads, so a value set on the wrong one is silently ignored:
+
+| Variable | seclayer | secscan |
+| --- | :---: | :---: |
+| `DATABASE_URL`, `ENCRYPTION_KEY`, `APP_ORIGIN`, `RESEND_API_KEY` | ✓ | ✓ |
+| `PORT`, `TRUST_PROXY`, `CORS_EXTRA_ORIGINS`, `STRIPE_*` | ✓ | |
+| `DEEPSEEK_API_KEY`, `OOB_BASE_URL` | | ✓ |
+
+Two consequences worth knowing before you debug either one:
+
+- **`ENCRYPTION_KEY` must be identical on both.** The web tier encrypts scan
+  credentials when the scan is created; the scanner decrypts them when it runs.
+  A mismatch does not fail at startup — it fails at scan time, on the
+  authenticated scans that need it most.
+- **`OOB_BASE_URL` is set on `secscan` but must point at `seclayer`.** The
+  scanner plants the callback URL; the web tier serves the `/api/oob` route the
+  target calls back to.
 
 ## Deploying to a VPS (IONOS)
 
@@ -119,8 +157,9 @@ their plain-English write-up — the thing the tier is sold on.
 ## Operations
 
 ```bash
-# logs
-docker compose --env-file .env.docker logs -f app
+# logs — one service at a time, or omit the name for all three
+docker compose --env-file .env.docker logs -f seclayer
+docker compose --env-file .env.docker logs -f secscan
 
 # redeploy after a code change
 git pull && docker compose --env-file .env.docker up -d --build
@@ -142,10 +181,19 @@ deletes the volume and every scan and report with it.
 - The base is Debian (`bookworm`), not Alpine. `pnpm-workspace.yaml` strips
   every `*-musl` native variant through `overrides`, so the frontend build
   cannot resolve its platform binaries on a musl base.
-- esbuild bundles the whole API server into one `dist/index.mjs`, with
-  `playwright` as the sole external. The runtime stage therefore installs
-  `playwright` plus a matching Chromium. **Keep the pinned version in the
-  `Dockerfile` in step with the `playwright` dependency in
-  `artifacts/api-server/package.json`** — if they drift, Chromium fails to
-  launch and scans silently skip JS rendering rather than erroring.
-- The container runs as the unprivileged `node` user.
+- esbuild produces two bundles from one package: `dist/index.mjs` (seclayer)
+  and `dist/secscan.mjs` (secscan), with `playwright` as the sole external.
+  Both images are built from a shared `runtime-base` stage and diverge only
+  after it.
+- Only the `secscan` stage installs `playwright` plus a matching Chromium.
+  **Keep the pinned version in the `Dockerfile` in step with the `playwright`
+  dependency in `artifacts/api-server/package.json`** — if they drift, Chromium
+  fails to launch and scans silently skip JS rendering rather than erroring.
+- `scanCredentials.ts` imports Playwright lazily, inside the one function that
+  needs a browser. That is what keeps Chromium out of the web image even though
+  the web tier imports that module for its credential-encryption helpers. A
+  static import at the top of that file would silently undo it; `grep playwright
+  artifacts/api-server/dist/index.mjs` should return nothing.
+- `secscan` gets `shm_size: 1gb`. Chromium crashes on content-heavy pages with
+  Docker's 64 MB default.
+- Both containers run as the unprivileged `node` user.

@@ -16,7 +16,6 @@
  * password itself never leaves this module.
  */
 
-import { chromium } from "playwright";
 import { encryptSecret, decryptSecret, isEncryptionConfigured } from "./crypto";
 import type { ScanCredentials as HttpCredentials } from "./http";
 import { logger } from "./logger";
@@ -137,6 +136,11 @@ async function formLogin(
 
   let browser;
   try {
+    // Imported here rather than at module scope so that requiring this file does
+    // not pull Playwright in. seclayer (the web tier) imports validateCredentials
+    // and encryptCredentials from this module; a static import would put Chromium
+    // in the web bundle for the sake of a function only secscan ever calls.
+    const { chromium } = await import("playwright");
     browser = await chromium.launch({ headless: true });
   } catch (err) {
     log.warn({ err }, "[auth] Headless browser unavailable — cannot perform form login");
