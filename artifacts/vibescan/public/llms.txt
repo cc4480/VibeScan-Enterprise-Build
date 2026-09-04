@@ -103,5 +103,5 @@ Components: known-CVE matching and end-of-life version detection
 
 ## Contact
 
-Website: https://seclayer.io
-Reports email: reports@seclayer.io
+Website: https://secscan.us
+Reports email: reports@secscan.us

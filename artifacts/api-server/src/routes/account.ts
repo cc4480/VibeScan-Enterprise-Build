@@ -28,6 +28,7 @@ import {
 } from "../lib/auth";
 import { issueToken, redeemToken } from "../lib/authTokens";
 import { sendEmailVerification, sendPasswordReset } from "../lib/mailer";
+import { clientIp } from "../lib/clientIp";
 
 const router: IRouter = Router();
 
@@ -59,12 +60,6 @@ const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 const attempts = new Map<string, number[]>();
 const WINDOW_MS = 15 * 60_000;
 const MAX_ATTEMPTS = 10;
-
-function clientIp(req: Request): string {
-  return String(
-    req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "unknown",
-  ).split(",")[0]!.trim();
-}
 
 function isRateLimited(key: string): boolean {
   const now = Date.now();

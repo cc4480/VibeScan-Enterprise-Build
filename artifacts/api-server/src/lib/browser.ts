@@ -199,7 +199,7 @@ export async function renderPage(url: string): Promise<RenderedPage | null> {
       }): Promise<unknown>;
     }).newContext({
       userAgent:
-        "Mozilla/5.0 (compatible; VibeScan-Security-Bot/1.0; +https://vibescan.app/bot)",
+        "Mozilla/5.0 (compatible; VibeScan-Security-Bot/1.0; +https://secscan.us/bot)",
       ignoreHTTPSErrors: false,
       javaScriptEnabled: true,
       ...(Object.keys(extraHTTPHeaders).length > 0 ? { extraHTTPHeaders } : {}),

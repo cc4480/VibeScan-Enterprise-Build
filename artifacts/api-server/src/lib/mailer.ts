@@ -6,7 +6,7 @@
  */
 
 const RESEND_API = "https://api.resend.com/emails";
-const FROM_EMAIL = "Seclayer <reports@seclayer.io>";
+const FROM_EMAIL = "Seclayer <reports@secscan.us>";
 
 interface SendReportEmailOptions {
   toEmail: string;

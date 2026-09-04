@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import * as client from "openid-client";
 import crypto from "crypto";
 import { GetCurrentAuthUserResponse } from "@workspace/api-zod";
+import { clientIp } from "../lib/clientIp";
 import {
   getOidcConfig,
   createSession,
@@ -53,11 +54,7 @@ function getCallbackUrl(req: Request): string {
 
 if (oidcConfigured) {
   router.get("/login", async (req: Request, res: Response): Promise<void> => {
-    const ip = String(
-      req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "unknown",
-    )
-      .split(",")[0]
-      .trim();
+    const ip = clientIp(req);
     if (isLoginRateLimited(ip)) {
       res.status(429).send("Too many login attempts. Please try again later.");
       return;

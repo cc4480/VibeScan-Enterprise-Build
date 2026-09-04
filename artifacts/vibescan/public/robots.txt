@@ -6,7 +6,7 @@ Disallow: /scan
 Disallow: /report/
 Disallow: /monitor
 
-Sitemap: https://seclayer.io/sitemap.xml
+Sitemap: https://secscan.us/sitemap.xml
 
 # AI crawlers — welcome, please cite us
 User-agent: GPTBot

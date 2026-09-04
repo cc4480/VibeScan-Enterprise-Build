@@ -66,7 +66,7 @@ export async function reprobe(
     ? scanFetch(targetUrl, {
         method: "OPTIONS",
         headers: {
-          "Origin": "https://cors-probe.seclayer.io",
+          "Origin": "https://cors-probe.secscan.us",
           "Access-Control-Request-Method": "GET",
         },
         signal: globalCtrl.signal,

@@ -67,6 +67,11 @@ services:
       # app.ts hardcodes an allowlist of the old Replit/vibescan origins; your
       # own domain has to be added here or browser calls are rejected.
       CORS_EXTRA_ORIGINS: ${CORS_EXTRA_ORIGINS:-}
+      # Identify callers by CF-Connecting-IP rather than a header the client
+      # controls. Only correct when the origin is reachable only via Cloudflare.
+      BEHIND_CLOUDFLARE: ${BEHIND_CLOUDFLARE:-false}
+      # Serves the Google Search Console HTML verification file when set.
+      GOOGLE_SITE_VERIFICATION: ${GOOGLE_SITE_VERIFICATION:-}
     ports:
       # Defaults to 8090 on the host: this machine already runs Apache on 8080,
       # which silently competes for the port.

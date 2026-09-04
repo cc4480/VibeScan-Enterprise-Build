@@ -9,6 +9,7 @@ import {
 import { enqueueScan } from "../lib/queue";
 import { validateCredentials, encryptCredentials } from "../lib/scanCredentials";
 import { checkUrlSafe } from "../lib/ssrfGuard";
+import { clientIp } from "../lib/clientIp";
 
 // ── Abuse and cost control ───────────────────────────────────────────────────
 // A scan is expensive in a way an API request normally is not: it launches a
@@ -28,12 +29,6 @@ const DAILY_MAX_ANON = Number(process.env["SCAN_DAILY_LIMIT_ANON"] ?? 10);
 const DAILY_MAX_ACCOUNT = Number(process.env["SCAN_DAILY_LIMIT_ACCOUNT"] ?? 50);
 
 const burst = new Map<string, number[]>();
-
-function clientIp(req: Request): string {
-  return String(
-    req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "unknown",
-  ).split(",")[0]!.trim();
-}
 
 function isBurstLimited(key: string): boolean {
   const now = Date.now();

@@ -146,7 +146,7 @@ Sends `OPTIONS` to the target, then actively tests `TRACE` and `PUT`.
 
 ### 2.3 Active CORS Testing
 
-Sends a request with `Origin: https://evil-attacker-seclayer.io` and checks whether the server reflects it.
+Sends a request with `Origin: https://evil-attacker-secscan.us` and checks whether the server reflects it.
 
 | Scenario | Trigger | Severity |
 |----------|---------|----------|
@@ -155,7 +155,7 @@ Sends a request with `Origin: https://evil-attacker-seclayer.io` and checks whet
 
 ### 2.4 Open Redirect
 
-Tests common redirect params (`url`, `redirect`, `next`, `return`, `goto`, `redir`, `target`, `destination`, `continue`, `forward`, `r`, `u`, `to`) with `https://evil-attacker-seclayer.io` as the value. Confirmed only when `Location` header matches the injected URL.
+Tests common redirect params (`url`, `redirect`, `next`, `return`, `goto`, `redir`, `target`, `destination`, `continue`, `forward`, `r`, `u`, `to`) with `https://evil-attacker-secscan.us` as the value. Confirmed only when `Location` header matches the injected URL.
 
 | Severity | Trigger |
 |----------|---------|

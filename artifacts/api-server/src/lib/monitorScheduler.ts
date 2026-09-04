@@ -153,7 +153,7 @@ async function runSweep(): Promise<void> {
 
   log.info({ total: subscriptions.length, due: due.length }, "Subscriptions due for rescan");
 
-  const appOrigin = process.env.APP_ORIGIN ?? "https://seclayer.io";
+  const appOrigin = process.env.APP_ORIGIN ?? "https://secscan.us";
 
   for (const sub of due) {
     // Advance nextScanAt to a sentinel (minimum cadence = 3 days) before enqueueing
@@ -209,7 +209,7 @@ async function runCveCheck(): Promise<void> {
   const validSubs = activeSubscriptions.filter((s) => s.expiresAt > now);
   log.info({ subscriptions: validSubs.length }, "Checking active subscriptions against CVEs");
 
-  const appOrigin = process.env.APP_ORIGIN ?? "https://seclayer.io";
+  const appOrigin = process.env.APP_ORIGIN ?? "https://secscan.us";
 
   for (const sub of validSubs) {
     try {
@@ -334,7 +334,7 @@ async function runCertExpiryCheck(): Promise<void> {
   const validSubs = activeSubscriptions.filter((s) => s.expiresAt > now);
   log.info({ subscriptions: validSubs.length }, "Checking cert expiry for active subscriptions");
 
-  const appOrigin = process.env.APP_ORIGIN ?? "https://seclayer.io";
+  const appOrigin = process.env.APP_ORIGIN ?? "https://secscan.us";
 
   for (const sub of validSubs) {
     try {

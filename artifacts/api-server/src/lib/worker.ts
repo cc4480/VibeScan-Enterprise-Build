@@ -519,7 +519,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
                 })),
               ).onConflictDoNothing();
 
-              const appOrigin = process.env.APP_ORIGIN ?? "https://seclayer.io";
+              const appOrigin = process.env.APP_ORIGIN ?? "https://secscan.us";
 
               if (sub?.userEmail) {
                 await sendRegressionAlertEmail({
@@ -561,7 +561,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
 
         // ── Fire scan_complete webhook ──────────────────────────────────
         if (sub?.webhookUrl) {
-          const appOrigin = process.env.APP_ORIGIN ?? "https://seclayer.io";
+          const appOrigin = process.env.APP_ORIGIN ?? "https://secscan.us";
           await fireWebhook(
             sub.webhookUrl,
             "scan_complete",
@@ -589,7 +589,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
         .where(eq(scansTable.id, scanId));
 
       if (scan?.userEmail) {
-        const appOrigin = process.env.APP_ORIGIN ?? "https://seclayer.io";
+        const appOrigin = process.env.APP_ORIGIN ?? "https://secscan.us";
         await sendReportReadyEmail({
           toEmail: scan.userEmail,
           targetUrl: scanResult.finalUrl || targetUrl,

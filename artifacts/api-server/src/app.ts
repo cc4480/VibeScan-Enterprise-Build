@@ -39,12 +39,31 @@ const FRONTEND_CSP = [
 ].join("; ");
 
 // Explicit CORS allowlist — never reflect the incoming Origin blindly.
-// In dev, also allow *.replit.dev preview domains.
+//
+// The production origin is derived from APP_ORIGIN rather than hardcoded, so
+// moving the site to a new domain is a configuration change rather than a code
+// change. The old Replit and vibescan.app origins are gone; anything else that
+// still needs access goes in CORS_EXTRA_ORIGINS.
+//
+// www is included alongside the bare domain because a redirect from www to
+// apex happens at the CDN, and a browser that resolves www first would
+// otherwise have its preflight rejected before the redirect is followed.
+const APP_ORIGIN = process.env.APP_ORIGIN?.replace(/\/$/, "");
+
+function withWww(origin: string): string[] {
+  try {
+    const url = new URL(origin);
+    if (url.hostname.startsWith("www.")) return [origin];
+    return [origin, `${url.protocol}//www.${url.hostname}`];
+  } catch {
+    return [origin];
+  }
+}
+
 const CORS_ALLOWLIST: (string | RegExp)[] = [
-  "https://vibe-scan.replit.app",
-  "https://vibescan.app",
+  ...(APP_ORIGIN ? withWww(APP_ORIGIN) : []),
   ...(process.env.CORS_EXTRA_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? []),
-  ...(process.env.NODE_ENV !== "production" ? [/\.replit\.dev$/] : []),
+  ...(process.env.NODE_ENV !== "production" ? [/\.replit\.dev$/, /^http:\/\/localhost(:\d+)?$/] : []),
 ];
 
 const corsOptions: CorsOptions = {
@@ -178,6 +197,31 @@ app.use(express.urlencoded({ extended: true }));
 app.use(authMiddleware);
 
 app.use("/api", router);
+
+// ── Google Search Console: file verification ─────────────────────────────────
+// Google offers three proofs. DNS TXT is the one to prefer — it survives a
+// redeploy, a host move and a change of static bundle, and it is a one-line
+// change when DNS lives at Cloudflare.
+//
+// This covers the file method for when DNS is not convenient. Google asks for
+// googleXXXX.html at the site root containing one line naming itself; set
+// GOOGLE_SITE_VERIFICATION to the token (the part after "google", without the
+// .html) and this answers it. Serving it from configuration rather than
+// committing a file means the token is not in the repository and does not need
+// a frontend rebuild to change.
+//
+// Registered before the SPA fallback, which would otherwise return index.html
+// for this path and fail verification with a confusing "content not found".
+const GSC_TOKEN = process.env["GOOGLE_SITE_VERIFICATION"]?.trim();
+if (GSC_TOKEN) {
+  // Google only ever requests the exact filename it issued.
+  const filename = GSC_TOKEN.startsWith("google") ? GSC_TOKEN : `google${GSC_TOKEN}`;
+  const path = `/${filename.replace(/\.html$/, "")}.html`;
+  app.get(path, (_req, res) => {
+    res.type("text/html").send(`google-site-verification: ${path.slice(1)}`);
+  });
+  logger.info({ path }, "Google Search Console verification file enabled");
+}
 
 // ── Frontend serving ──────────────────────────────────────────────────────────
 // Development:  forward all non-API traffic to the Vite dev server (port 18425)

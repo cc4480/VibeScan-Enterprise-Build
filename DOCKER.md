@@ -143,7 +143,7 @@ Two consequences worth knowing before you debug either one:
   marked `Secure`.
 
 - **CORS** — `app.ts` carries a hardcoded allowlist of the original
-  `*.replit.app` / `vibescan.app` origins. Your domain only gets through via
+  `*.replit.app` / `secscan.us` origins. Your domain only gets through via
   `CORS_EXTRA_ORIGINS`.
 
 - **Email is not configured until you set `RESEND_API_KEY`.** Accounts work

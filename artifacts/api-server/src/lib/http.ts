@@ -31,7 +31,7 @@ import { checkUrlSafe } from "./ssrfGuard";
 
 /** One canonical identity, replacing the three strings that were in use. */
 export const SCANNER_USER_AGENT =
-  "Mozilla/5.0 (compatible; Seclayer-Security-Bot/1.0; +https://seclayer.io/bot)";
+  "Mozilla/5.0 (compatible; Seclayer-Security-Bot/1.0; +https://secscan.us/bot)";
 
 export const DEFAULT_TIMEOUT_MS = 8_000;
 const MAX_REDIRECT_HOPS = 5;
