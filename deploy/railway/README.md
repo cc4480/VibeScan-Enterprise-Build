@@ -30,6 +30,25 @@ see [Deploying prebuilt images](#deploying-prebuilt-images-instead) at the end.
 
 ---
 
+## Config as code
+
+`seclayer.json` and `secscan.json` in this directory carry each service's build
+and deploy settings, so the start commands and health check are versioned rather
+than typed into the dashboard and forgotten. Point each service at its file:
+
+    Service → Settings → Config-as-code → Path:  deploy/railway/seclayer.json
+
+Two things Railway does differently from the compose deployment, both harmless
+once known:
+
+- **Railway ignores the Dockerfile `HEALTHCHECK`.** It runs its own HTTP probe
+  against `healthcheckPath` instead. So `seclayer` is health-checked on
+  `/api/healthz`, and the heartbeat probe built for `secscan` does not apply
+  there — Railway watches the process rather than the file. The heartbeat still
+  works, and still matters, under compose.
+- **`secscan` declares no health check path**, because it has no HTTP listener.
+  Do not add one; Railway would mark a perfectly healthy worker as failing.
+
 ## 1. Create the project and database
 
 Railway → New Project → **Deploy PostgreSQL**. Rename it `postgres`.
