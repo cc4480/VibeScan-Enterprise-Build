@@ -52,8 +52,27 @@ EOF
 fi
 
 # ── Project ─────────────────────────────────────────────────────────────────
-if [[ -f .railway/config.json ]] || railway status >/dev/null 2>&1; then
-  echo "Already linked to a project — reusing it."
+# The CLI remembers a project link per directory in ~/.railway/config.json, and
+# `railway add` targets whatever is linked. Treating "something is linked" as
+# "the right thing is linked" is how resources end up attached to an unrelated
+# project that happens to be live — so the link is checked by name, and a
+# mismatch stops rather than guesses.
+LINKED="$(railway status --json 2>/dev/null | node -e "
+  let s='';
+  process.stdin.on('data', d => s += d).on('end', () => {
+    try { console.log(JSON.parse(s).name ?? ''); } catch { console.log(''); }
+  });
+" 2>/dev/null || true)"
+
+if [[ -n "$LINKED" && "$LINKED" != "$PROJECT" ]]; then
+  echo "This directory is linked to the Railway project '${LINKED}', not '${PROJECT}'." >&2
+  echo "Refusing to add resources to it. Run 'railway unlink' first, or set" >&2
+  echo "PROJECT='${LINKED}' if that really is where these services belong." >&2
+  exit 1
+fi
+
+if [[ "$LINKED" == "$PROJECT" ]]; then
+  echo "Already linked to '${PROJECT}' — reusing it."
 else
   echo "Creating project '${PROJECT}'…"
   railway init --name "${PROJECT}"
