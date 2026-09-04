@@ -1,7 +1,7 @@
 # Local/production stack for Seclayer.
 #
 #   cp .env.docker.example .env.docker    # then fill it in
-#   docker compose --env-file .env.docker --profile setup run --rm db-push
+#   docker compose --env-file .env.docker --profile setup run --rm db-migrate
 #   docker compose --env-file .env.docker up -d --build
 #
 # A dedicated --env-file is used rather than the default .env because the repo's
@@ -81,6 +81,9 @@ services:
       # container network sidecar, e.g.), set it explicitly rather than
       # reverting to 0.0.0.0.
       - "127.0.0.1:${APP_PORT:-8090}:8080"
+    # Node's default heap plus request buffers; generous for a web tier that
+    # holds no browser.
+    mem_limit: ${SECLAYER_MEM_LIMIT:-768m}
 
   # ── secscan — scanner tier ─────────────────────────────────────────────────
   # No published port: work arrives only through the queue. Scale it with
@@ -116,11 +119,17 @@ services:
     # Chromium needs more shared memory than Docker's 64 MB default; below that
     # it crashes on content-heavy pages rather than failing cleanly.
     shm_size: "1gb"
+    # Chromium against a hostile page is the workload most likely to balloon.
+    # Capping it means the scanner is killed and restarted rather than taking
+    # the host — and therefore seclayer and Postgres — down with it. Raise this
+    # if scans of heavy sites start dying; do not remove it.
+    mem_limit: ${SECSCAN_MEM_LIMIT:-3g}
 
-  # One-shot schema apply. Uses the builder stage because drizzle-kit is a dev
-  # dependency and deliberately absent from the runtime images.
-  #   docker compose --env-file .env.docker --profile setup run --rm db-push
-  db-push:
+  # Applies committed migrations, in order, exactly once each. Safe to re-run:
+  # applying nothing is the normal outcome. Uses the builder stage because the
+  # migration tooling is a dev dependency and absent from the runtime images.
+  #   docker compose --env-file .env.docker --profile setup run --rm db-migrate
+  db-migrate:
     profiles: ["setup"]
     build:
       context: .
@@ -130,7 +139,62 @@ services:
         condition: service_healthy
     environment:
       <<: *database-url
-    command: ["pnpm", "--filter", "@workspace/db", "run", "db:push"]
+    command: ["pnpm", "--filter", "@workspace/db", "run", "db:migrate"]
+
+  # One-time only, and only for a database whose schema was built by the old
+  # `db:push` flow: records migration 0000 as applied without running it, so the
+  # migrator does not fail on tables that already exist. Skip on a fresh database.
+  #   docker compose --env-file .env.docker --profile baseline run --rm db-baseline
+  db-baseline:
+    profiles: ["baseline"]
+    build:
+      context: .
+      target: builder
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *database-url
+    command: ["pnpm", "--filter", "@workspace/db", "run", "db:baseline"]
+
+  # ── backups ────────────────────────────────────────────────────────────────
+  # Every scan, report and account lives in the pgdata volume. A dump written
+  # beside it is not off-site backup, but it survives the far likelier failures:
+  # a bad migration, a mistaken delete, a corrupted table. Copy the backups
+  # volume somewhere else on a schedule you control.
+  backup:
+    image: postgres:16
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_USER: ${POSTGRES_USER:-vibescan}
+      POSTGRES_DB: ${POSTGRES_DB:-vibescan}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - backups:/backups
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        while true; do
+          out="/backups/$${POSTGRES_DB}-$$(date +%Y%m%d-%H%M%S).sql.gz"
+          if pg_dump -h db -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" | gzip > "$${out}.partial"; then
+            mv "$${out}.partial" "$${out}"
+            echo "[backup] wrote $${out}"
+          else
+            # Leave the .partial behind as evidence rather than a truncated file
+            # that looks like a usable backup.
+            echo "[backup] FAILED at $$(date -Is)" >&2
+          fi
+          find /backups -name '*.sql.gz' -type f -mtime +$${BACKUP_KEEP_DAYS} -delete || true
+          sleep "$${BACKUP_INTERVAL_SECONDS}"
+        done
 
 volumes:
   pgdata:
+  backups:

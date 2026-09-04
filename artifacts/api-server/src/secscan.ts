@@ -14,6 +14,12 @@
 
 import { logger } from "./lib/logger";
 import { getBoss } from "./lib/queue";
+import { startHeartbeat, stopHeartbeat } from "./lib/heartbeat";
+import { installCrashHandlers } from "./lib/crashHandlers";
+
+// Stop advertising health before the process goes down, so an orchestrator
+// replaces this worker rather than leaving jobs with a dead one.
+installCrashHandlers("secscan", stopHeartbeat);
 
 async function main(): Promise<void> {
   await getBoss();
@@ -24,6 +30,10 @@ async function main(): Promise<void> {
 
   const { startMonitorScheduler } = await import("./lib/monitorScheduler");
   await startMonitorScheduler();
+
+  // Only now: the heartbeat means "this worker is able to take jobs", so it
+  // must not start before the worker is registered.
+  startHeartbeat();
 
   logger.info("secscan ready — waiting for scan jobs");
 }
@@ -41,6 +51,9 @@ main().catch((err: unknown) => {
 // it does for the web tier.
 process.on("SIGTERM", () => {
   logger.info("SIGTERM received — draining in-flight scan jobs before exit");
+  // Stop claiming to be healthy the moment we begin shutting down, so an
+  // orchestrator stops routing work here while the drain finishes.
+  stopHeartbeat();
   getBoss()
     .then(async (boss) => {
       await boss.stop({ graceful: true, timeout: 90_000 });

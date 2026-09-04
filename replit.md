@@ -17,7 +17,7 @@ Required env vars (secrets):
 - `DEEPSEEK_API_KEY` — fallback AI analysis key for Deep scan reports, used when a user hasn't set their own key in Settings
 - `ENCRYPTION_KEY` — 32-byte base64 AES-256 key, encrypts user-supplied secrets (BYO DeepSeek key) at rest. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. Without it, the Settings → DeepSeek key feature returns 503.
 - `RESEND_API_KEY` — Email notifications (report ready, CVE alerts)
-- `STRIPE_SECRET_KEY` — Payments (set `DISABLE_PAYMENTS=true` in dev to skip)
+- `STRIPE_SECRET_KEY` — Stripe client for the webhook half of payments; no checkout flow exists yet
 
 ### Local (non-Replit) development
 
@@ -57,7 +57,7 @@ lib/
 - **Artifact router handles external routing**: The Replit artifact router (`REPLIT_ARTIFACT_ROUTER`) proxies `/api` to Express (port 8080) and `/` to Vite (port 18425). The `Start application` webview workflow runs Vite on port 5000 for the Replit preview pane.
 - **No login required**: Auth is a UUID token auto-generated in `localStorage` (`vibescan_client_token`). The `authMiddleware` reads it from the `Authorization: Bearer` header.
 - **Graceful degradation**: All three external services (DeepSeek, Resend, Stripe) check for their env var and skip with a warning if not set — the app remains fully functional.
-- **Payments gated**: `DISABLE_PAYMENTS=true` disables Stripe in development. Set to `false` in production after configuring `STRIPE_SECRET_KEY`.
+- **Payments not implemented**: the Stripe webhook exists but no Checkout Session is ever created, so scans are always free. `DISABLE_PAYMENTS` is read only to warn when it is set to `false`, which misdescribes the behaviour.
 - **Job queue**: pg-boss runs inside the API server process, handling async scan jobs and the EOL/CVE refresh scheduler.
 
 ## Product

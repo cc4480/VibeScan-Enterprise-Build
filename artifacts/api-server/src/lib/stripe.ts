@@ -41,3 +41,37 @@ export function getOrigin(req: { headers: Record<string, string | string[] | und
   const host = req.headers["x-forwarded-host"] || req.headers["host"] || "localhost";
   return `${proto}://${host}`;
 }
+
+/**
+ * Whether the deployment believes it is charging for scans.
+ *
+ * It is not, and cannot be yet. The receiving half of payments exists — the
+ * Stripe webhook in routes/stripe.ts credits an account and queues the scan it
+ * paid for — but nothing creates a Checkout Session, so there is no way for a
+ * customer to reach that webhook. POST /api/scans returns
+ * `checkoutUrl: null, creditUsed: false` unconditionally and queues the scan.
+ *
+ * DISABLE_PAYMENTS was documented as the switch that turns charging on, and
+ * .env.production.example told operators to set it to "false" in production.
+ * Nothing read it. That combination is worse than having no flag: it reads like
+ * a gate that is closed while every scan is free.
+ *
+ * This does not invent a pricing decision — it makes the configuration honest,
+ * loudly, at startup, until checkout is either built or the flag is retired.
+ */
+export function warnIfPaymentsMisconfigured(
+  log: { warn: (obj: object, msg: string) => void },
+): void {
+  if (process.env["DISABLE_PAYMENTS"] === "false") {
+    log.warn(
+      {
+        setting: "DISABLE_PAYMENTS=false",
+        actual: "every scan is free",
+        missing: "Checkout Session creation",
+      },
+      "DISABLE_PAYMENTS=false implies scans are charged for, but no checkout " +
+      "flow exists — scans are queued free of charge. Set DISABLE_PAYMENTS=true " +
+      "to match reality, or build checkout before relying on this.",
+    );
+  }
+}

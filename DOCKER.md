@@ -25,16 +25,41 @@ Because nothing reachable from the web entrypoint imports Playwright, only the
 
 ```bash
 cp .env.docker.example .env.docker      # fill it in — see the notes in the file
-docker compose --env-file .env.docker --profile setup run --rm --build db-push
+docker compose --env-file .env.docker --profile setup run --rm --build db-migrate
 docker compose --env-file .env.docker up -d --build
 ```
 
 Then open `http://localhost:8090` (or whatever `APP_PORT` you set).
 
-`db-push` applies the Drizzle schema and must be run once before first boot,
-and again after any schema change. It runs from the *builder* stage because
-`drizzle-kit` is a dev dependency and is deliberately absent from the slim
-runtime image.
+`db-migrate` applies the committed migrations in `lib/db/migrations`, in order,
+exactly once each. Run it before first boot and again after any schema change.
+It is safe to re-run — applying nothing is the normal outcome. It runs from the
+*builder* stage because the migration tooling is a dev dependency and is
+deliberately absent from the slim runtime images.
+
+**Upgrading a database that was built with the old `db:push` flow** — it already
+has the tables migration `0000` creates, so the migrator would stop on
+`relation "auth_tokens" already exists`. Record the migration as applied without
+running it, once, and only when the live schema matches the current schema files:
+
+```bash
+docker compose --env-file .env.docker --profile baseline run --rm --build db-baseline
+```
+
+Then `db-migrate` behaves normally from that point on. On a fresh database, skip
+this entirely.
+
+### Changing the schema
+
+Edit the schema files, then generate the SQL and commit it alongside the change:
+
+```bash
+DATABASE_URL=... pnpm --filter @workspace/db run db:generate
+```
+
+Read the generated file before committing it. `db:push` still exists for local
+iteration, but it diffs against the live database and applies what it infers —
+including drops — so it must not be pointed at production.
 
 **`--build` on that first command is not optional.** `docker compose run`
 reuses an existing image rather than rebuilding it, so after a schema change it
@@ -151,8 +176,11 @@ Two consequences worth knowing before you debug either one:
   own origin. Nothing warns you that the check was skipped, so if SSRF
   findings never appear, check this first.
 
-- **Payments** default to `DISABLE_PAYMENTS=true`, which queues scans without
-  charging. Set it to `false` and supply the Stripe keys to actually bill.
+- **Payments are not implemented.** Every scan is queued free of charge, and
+  `DISABLE_PAYMENTS` does not change that — the Stripe webhook that credits an
+  account exists, but nothing creates a Checkout Session for a customer to pay
+  through. Setting it to `false` only logs a warning at startup. Build checkout
+  before advertising a paid tier.
 
 ## Operations
 
@@ -165,11 +193,14 @@ docker compose --env-file .env.docker logs -f secscan
 git pull && docker compose --env-file .env.docker up -d --build
 
 # apply a schema change
-docker compose --env-file .env.docker --profile setup run --rm --build db-push
+docker compose --env-file .env.docker --profile setup run --rm --build db-migrate
 
-# back up the database
+# back up the database on demand (the backup service also runs on a timer)
 docker compose --env-file .env.docker exec db \
   pg_dump -U vibescan vibescan > backup-$(date +%F).sql
+
+# list the automatic backups
+docker compose --env-file .env.docker exec backup ls -lh /backups
 ```
 
 Postgres data lives in the named volume `pgdata` and survives

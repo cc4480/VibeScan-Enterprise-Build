@@ -115,4 +115,11 @@ RUN npm install --no-save --omit=dev playwright@1.62.1 \
 
 USER node
 
+# secscan has no port, so liveness comes from the heartbeat the worker writes
+# once it is registered and able to take jobs. start-period covers the browser
+# install and first queue connection; an idle scanner is healthy, a silent one
+# is not.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD ["node", "artifacts/api-server/dist/healthcheck-secscan.mjs"]
+
 CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/secscan.mjs"]

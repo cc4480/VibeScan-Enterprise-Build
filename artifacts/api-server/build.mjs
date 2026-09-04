@@ -22,6 +22,7 @@ async function buildAll() {
     entryPoints: [
       path.resolve(artifactDir, "src/index.ts"),
       path.resolve(artifactDir, "src/secscan.ts"),
+      path.resolve(artifactDir, "src/healthcheck-secscan.ts"),
     ],
     platform: "node",
     bundle: true,

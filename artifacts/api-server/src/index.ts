@@ -9,6 +9,11 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { getBoss } from "./lib/queue";
+import { installCrashHandlers } from "./lib/crashHandlers";
+import { warnIfPaymentsMisconfigured } from "./lib/stripe";
+
+installCrashHandlers("seclayer");
+warnIfPaymentsMisconfigured(logger);
 
 const rawPort = process.env["PORT"];
 
