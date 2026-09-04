@@ -177,44 +177,57 @@ showing visitors a padlock, which is worse than no TLS because it looks fine.
 
 ## 6. Caller identity on a platform
 
+Nothing to configure. This section explains why, because the mechanism is not
+obvious and someone will otherwise "simplify" it away.
+
 On a server you own, the origin is firewalled to Cloudflare's IP ranges, so a
 request arriving at all proves it came through Cloudflare. **Railway has no such
 firewall** — the `*.up.railway.app` hostname stays publicly reachable, and a
 request sent straight to it can carry any `CF-Connecting-IP` its sender likes.
+Believing that header would hand an attacker a fresh identity per request and
+defeat every per-IP limit in the app, including the one on `/login`.
 
-Without something to distinguish the two, `BEHIND_CLOUDFLARE=true` would hand an
-attacker a fresh identity per request and defeat every per-IP limit in the app,
-including the one on `/login`.
+The app settles it without help from Cloudflare. The chain is:
 
-So Cloudflare adds a secret header to everything it forwards, and only requests
-carrying it are treated as having come through Cloudflare:
-
-1. Cloudflare → **Rules → Transform Rules → Modify Request Header** → Create
-2. Rule name: `origin secret`; apply to **All incoming requests**
-3. **Set static** — header `X-Origin-Secret`, value: the same string you put in
-   `CLOUDFLARE_ORIGIN_SECRET` on the seclayer service
-4. Deploy
-
-The app compares it in constant time and falls back to `req.ip` when it is
-absent or wrong. Nothing is rejected on the strength of it, so Railway's own
-health checks keep working.
-
-Verify it is actually in force:
-
-```bash
-# Through Cloudflare — normal behaviour.
-curl -sI https://secscan.us/api/healthz | head -3
-
-# Straight at Railway with a forged client address. Rate limits must still
-# apply to the real caller, not to 1.2.3.4.
-curl -s -o /dev/null -w "%{http_code}\n" \
-  -H "CF-Connecting-IP: 1.2.3.4" \
-  https://<your-service>.up.railway.app/api/healthz
+```
+client → Cloudflare → Railway's router → seclayer
 ```
 
-If you would rather not have the Railway hostname reachable at all, Railway can
-remove the generated domain once the custom domain works — do that and the
-secret becomes belt-and-braces rather than the only control.
+Each hop appends the address it saw to `X-Forwarded-For`, so the **last** entry
+is written by Railway, not by the client — it is the address Railway's router
+observed, which for a proxied request is a Cloudflare edge. A client can prepend
+anything it likes to that header and still cannot control its final entry. The
+app checks that entry against Cloudflare's published ranges, which it refreshes
+daily and falls back to a bundled copy for.
+
+Failing to prove it is safe rather than fatal: the app falls back to `req.ip`,
+which Express derives from the same header honouring `TRUST_PROXY`. Nothing is
+rejected on this basis, so Railway's health checks keep working.
+
+`CLOUDFLARE_ORIGIN_SECRET` still works as a second, stronger proof — Cloudflare
+attaches it with a Request Header Transform Rule and the app compares it in
+constant time. It is optional, and it is **not available on the Free plan**,
+whose Rules section offers only Redirect Rules, Cache Rules, Page Rules, Bulk
+Redirects and Snippets. Skip it unless you are on a plan that has it.
+
+### Verify it
+
+```bash
+# Straight at Railway, each request claiming a different client address.
+# They must all count against ONE identity: five 400s, then 429s.
+# Eight distinct 400s would mean the forged header is being believed.
+for i in $(seq 1 8); do
+  curl -s -o /dev/null -w "%{http_code}\n" -X POST \
+    -H "Authorization: Bearer $(uuidgen)" \
+    -H "Content-Type: application/json" \
+    -H "CF-Connecting-IP: 203.0.113.$i" \
+    -d '{"targetUrl":"http://10.0.0.1/"}' \
+    https://<your-service>.up.railway.app/api/scans
+done
+```
+
+Removing Railway's generated domain once the custom domain works closes the door
+further, and costs nothing but the ability to reach the service without DNS.
 
 ## 7. Verify
 

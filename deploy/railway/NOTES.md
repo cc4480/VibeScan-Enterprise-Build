@@ -101,6 +101,23 @@ means no automatic deploy on push. Install the app at
 <https://github.com/apps/railway/installations/new>, grant it that repository,
 and the configured source starts working.
 
+## Transform Rules are not on the Free plan
+
+The origin-secret design assumed Cloudflare could attach a header. On this
+account the Rules section offers only Redirect Rules, Cache Rules, Page Rules,
+Bulk Redirects and Snippets — there is no Request Header Transform Rule, so the
+secret could never be set in the first place.
+
+The app now proves the hop itself, by checking the last X-Forwarded-For entry
+against Cloudflare's published ranges. That entry is written by Railway rather
+than the client, so it cannot be forged. Verified against the live deployment:
+eight requests sent straight to the Railway hostname, each claiming a different
+CF-Connecting-IP, all counted against one identity — five 400s then 429s, rather
+than eight separate 400s.
+
+The secret remains supported as a second proof for accounts that do have
+Transform Rules, but it is optional.
+
 ## The CLI echoes variable values
 
 `railway add --variables "K=V"` prints each pair back as it runs, so anything
