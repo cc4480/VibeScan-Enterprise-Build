@@ -1,0 +1,30 @@
+# What `railway up` must not upload.
+#
+# Railway falls back to .gitignore when this file is absent, which already
+# covers the env files — but "already covered by something else" is a poor
+# reason to leave secrets depending on an inherited default. The Docker build
+# context has its own explicit list in .dockerignore for the same reason.
+
+# Secrets. .env and .env.docker hold a real ENCRYPTION_KEY and API keys; the
+# deployed services get their configuration from Railway variables instead.
+.env
+.env.*
+!.env.example
+!.env.production.example
+!.env.docker.example
+
+# Rebuilt inside the image.
+node_modules
+**/node_modules
+dist
+**/dist
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# Local state and editor noise.
+.git
+.railway
+.claude
+.vscode
+.idea
+*.log
