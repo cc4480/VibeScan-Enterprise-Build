@@ -28,7 +28,19 @@ secscan.us {
 	# The app already sets its own security headers, including a CSP tuned to
 	# the frontend bundle. Adding a second set here would either duplicate them
 	# or silently disagree with them, so this proxy stays out of that business.
-	reverse_proxy 127.0.0.1:8090
+	reverse_proxy 127.0.0.1:8090 {
+		# Overwrite rather than append. Caddy would otherwise preserve a
+		# client-supplied X-Forwarded-For and add the real peer after it, and the
+		# rate limiting keys on that address — a caller who sets the header
+		# themselves would get a fresh bucket per request.
+		header_up X-Forwarded-For {remote_host}
+
+		# A deep scan legitimately takes minutes; the default read timeout cuts
+		# the status long-poll short.
+		transport http {
+			read_timeout 300s
+		}
+	}
 
 	log {
 		output file /var/log/caddy/secscan.log {

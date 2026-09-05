@@ -3,6 +3,7 @@ import {
   isPrivateAddress,
   isHostnameSafeSync,
   checkUrlSafe,
+  checkScanTarget,
   _clearResolveCache,
 } from "./ssrfGuard";
 
@@ -158,5 +159,55 @@ describe("checkUrlSafe", () => {
     await checkUrlSafe("http://example.com/a");
     await checkUrlSafe("http://example.com/b");
     expect(lookup).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Cases carried over from the parallel implementation that was merged into this
+ * one. They cover ground the original suite did not, and one of them describes a
+ * bug this module actually had: URL.hostname wraps an IPv6 literal in brackets,
+ * net.isIP does not recognise that form, and every IPv6-literal target was
+ * therefore refused — public ones included.
+ */
+describe("IPv6 literals (regression: brackets)", () => {
+  beforeEach(() => {
+    _clearResolveCache();
+    lookup.mockReset();
+  });
+
+  it("accepts a public IPv6 literal target", async () => {
+    // No DNS: an address literal is judged directly.
+    expect((await checkUrlSafe("http://[2606:4700::1]/")).ok).toBe(true);
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it("still refuses a private IPv6 literal target", async () => {
+    expect((await checkUrlSafe("http://[::1]/")).ok).toBe(false);
+    expect((await checkUrlSafe("http://[fd00::1]/")).ok).toBe(false);
+  });
+
+  it("treats the bracketed and bare forms alike", () => {
+    expect(isHostnameSafeSync("[2606:4700::1]")).toBe(isHostnameSafeSync("2606:4700::1"));
+    expect(isHostnameSafeSync("[::1]")).toBe(isHostnameSafeSync("::1"));
+  });
+});
+
+describe("checkScanTarget", () => {
+  beforeEach(() => {
+    _clearResolveCache();
+    lookup.mockReset();
+  });
+
+  it("refuses a non-http scheme", async () => {
+    expect((await checkScanTarget("file:///etc/passwd")).ok).toBe(false);
+  });
+
+  it("refuses an internal address", async () => {
+    expect((await checkScanTarget("http://169.254.169.254/")).ok).toBe(false);
+  });
+
+  it("accepts a public target over plain http", async () => {
+    lookup.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    expect((await checkScanTarget("http://example.com/")).ok).toBe(true);
   });
 });

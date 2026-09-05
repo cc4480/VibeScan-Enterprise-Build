@@ -71,7 +71,14 @@ export function isPrivateAddress(addr: string): boolean {
  * true here still needs resolvesPublicly() for anything that is not an IP.
  */
 export function isHostnameSafeSync(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/\.$/, "");
+  // URL.hostname keeps the brackets on an IPv6 literal ("[::1]"), which
+  // net.isIP does not recognise. Without stripping them, every IPv6-literal
+  // target — including perfectly public ones — fell through to the bare-label
+  // rule below and was refused.
+  const host = hostname
+    .toLowerCase()
+    .replace(/\.$/, "")
+    .replace(/^\[(.+)\]$/, "$1");
   if (!host) return false;
   if (BLOCKED_HOSTNAMES.has(host)) return false;
   if (BLOCKED_SUFFIXES.some((s) => host.endsWith(s))) return false;
@@ -162,7 +169,10 @@ export async function checkUrlSafe(
 
   if (allowOptOut && privateTargetsAllowed()) return { ok: true };
 
-  const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
+  const hostname = url.hostname
+    .toLowerCase()
+    .replace(/\.$/, "")
+    .replace(/^\[(.+)\]$/, "$1");
 
   if (!isHostnameSafeSync(hostname)) {
     return { ok: false, reason: "resolves to a private or local address" };
@@ -172,5 +182,37 @@ export async function checkUrlSafe(
     return { ok: false, reason: "resolves to a private or local address" };
   }
 
+  return { ok: true };
+}
+
+/**
+ * Validate a scan target: http/https only, host publicly routable.
+ *
+ * Kept as a named entry point because it reads better at the call site than
+ * checkUrlSafe with options, and because it is the shape the route already
+ * used before the two implementations of this module were reconciled.
+ */
+export async function checkScanTarget(rawUrl: string): Promise<UrlCheck> {
+  return checkUrlSafe(rawUrl, { allowOptOut: true });
+}
+
+/**
+ * Hostname-only check, for callers that have already dealt with the scheme.
+ *
+ * webhook.ts enforces https itself (a token must not go out in cleartext) and
+ * only needs to know whether the host is safe to talk to.
+ */
+export async function checkHostname(rawHostname: string): Promise<UrlCheck> {
+  const host = rawHostname
+    .toLowerCase()
+    .replace(/\.$/, "")
+    .replace(/^\[(.+)\]$/, "$1");
+
+  if (!isHostnameSafeSync(host)) {
+    return { ok: false, reason: "resolves to a private or local address" };
+  }
+  if (!net.isIP(host) && !(await resolvesPublicly(host))) {
+    return { ok: false, reason: "resolves to a private or local address" };
+  }
   return { ok: true };
 }

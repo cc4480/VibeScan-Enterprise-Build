@@ -1,31 +1,76 @@
 /**
- * Who is making this request, for rate-limiting purposes.
+ * Caller identity for rate limiting.
  *
- * This used to be `X-Forwarded-For.split(",")[0]` in three places, which takes
- * the *first* entry of a header the client fully controls. Anyone could send
- * `X-Forwarded-For: <random>` and appear as a new address on every request,
- * which defeats a per-IP limiter completely — including the one on /login.
+ * Client tokens are self-minted UUIDs (see authMiddleware) — a caller can mint
+ * a fresh identity per request, so per-user limits are unenforceable and the
+ * address is the only thing worth counting against.
  *
- * Two rules fix it:
+ * That makes trusting the right address load-bearing. Two ways to get it wrong:
  *
- *   1. Prefer CF-Connecting-IP when the request demonstrably came through
- *      Cloudflare. Cloudflare sets that header and strips any copy the client
- *      tried to send, so it cannot be forged *by a client speaking to
- *      Cloudflare*. It is worthless against a client speaking to the origin
- *      directly, which is what CLOUDFLARE_ORIGIN_SECRET below is for.
+ *   - Trust X-Forwarded-For blindly, and any client sets their own header to
+ *     whatever they like and bypasses the limit entirely. This is how the
+ *     original login limiter in auth.ts read the header.
+ *   - Trust nothing, and behind a reverse proxy every request appears to come
+ *     from the proxy, so one bucket holds every user on the internet.
  *
- *   2. Otherwise use `req.ip`, which Express derives from X-Forwarded-For
- *      honouring the `trust proxy` hop count. With TRUST_PROXY set correctly it
- *      takes the entry the outermost trusted proxy observed and ignores
- *      anything the client prepended.
+ * The deployment answers this with TRUST_PROXY (see configureTrustProxy): the
+ * number of reverse proxies actually in front of the app. Express then resolves
+ * req.ip by discarding exactly that many hops, and everything here uses req.ip
+ * rather than reading headers directly. deploy/Caddyfile additionally overwrites
+ * X-Forwarded-For with the real peer, so a spoofed header never survives the
+ * proxy on the VPS deployment.
  *
- * Getting this wrong is quiet: the limiter still appears to work, still logs,
- * still returns 429 to honest traffic, and does nothing at all to an attacker.
+ * ── Cloudflare, and why req.ip is not the whole story ──
+ * The hosted deployment puts Cloudflare in front of a managed platform, where
+ * there is no Caddy to sanitise the header and no firewall to stop anyone
+ * reaching the origin directly. There CF-Connecting-IP is the accurate answer,
+ * but only for requests that genuinely came through Cloudflare — which is what
+ * cameThroughCloudflare establishes. Everything else falls back to req.ip.
  */
 
 import { timingSafeEqual } from "node:crypto";
-import type { Request } from "express";
+import type { Express, Request } from "express";
+import { logger } from "./logger";
 import { isCloudflareIp } from "./cloudflareIps";
+
+/**
+ * Apply the deployment's proxy topology to Express.
+ *
+ * TRUST_PROXY accepts a hop count ("1"), "true"/"false", or a comma-separated
+ * list of trusted addresses/CIDRs, matching Express's own `trust proxy` values.
+ * Defaults to 1 in production — the shipped compose stack puts Caddy in front —
+ * and 0 in development, where the API is reached directly.
+ *
+ * `true` is deliberately not the default: it trusts the leftmost X-Forwarded-For
+ * entry, which is entirely attacker-controlled.
+ */
+export function configureTrustProxy(app: Express): void {
+  const raw = process.env["TRUST_PROXY"];
+  const isProd = process.env["NODE_ENV"] === "production";
+
+  let value: number | boolean | string[];
+  if (raw === undefined || raw === "") {
+    value = isProd ? 1 : 0;
+  } else if (raw === "true") {
+    value = true;
+  } else if (raw === "false") {
+    value = false;
+  } else if (/^\d+$/.test(raw)) {
+    value = Number(raw);
+  } else {
+    value = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  }
+
+  app.set("trust proxy", value);
+
+  if (value === true) {
+    logger.warn(
+      "TRUST_PROXY=true trusts the leftmost X-Forwarded-For entry, which clients control — " +
+        "rate limits can be bypassed. Prefer a hop count.",
+    );
+  }
+  logger.info({ trustProxy: value }, "Proxy trust configured");
+}
 
 /** True when the deployment is fronted by Cloudflare. */
 export function behindCloudflare(): boolean {
@@ -37,11 +82,9 @@ export function behindCloudflare(): boolean {
  * directly.
  *
  * On a server you control, the origin is firewalled to Cloudflare's ranges and
- * arriving at all is the proof. A managed platform — Railway, Fly, Render —
- * keeps a public hostname that cannot be closed off, so a request sent straight
- * to it can carry any CF-Connecting-IP the sender likes. Trusting the header
- * there would hand an attacker a fresh identity per request, which is the exact
- * hole this module exists to close.
+ * arriving at all is the proof. A managed platform keeps a public hostname that
+ * cannot be closed off, so a request sent straight to it can carry any
+ * CF-Connecting-IP the sender likes.
  *
  * Two independent proofs, either of which suffices.
  *
@@ -49,13 +92,11 @@ export function behindCloudflare(): boolean {
  * saw to X-Forwarded-For, so the *last* entry is the address the platform's
  * router observed — the Cloudflare edge, for a proxied request. A client can
  * prepend anything it likes to that header but cannot control its final entry,
- * because the platform writes it. Checking that entry against Cloudflare's
- * published ranges therefore settles the question on its own.
+ * because the platform writes it.
  *
- * The second is a shared secret Cloudflare attaches with a Transform Rule. It
- * is kept because it is a stronger claim where it is available — but it is not
- * available on every Cloudflare plan, which is why it is no longer the only
- * mechanism.
+ * The second is a shared secret Cloudflare attaches with a Transform Rule. It is
+ * a stronger claim where available, but Transform Rules are not on every
+ * Cloudflare plan, which is why it is not the only mechanism.
  */
 function cameThroughCloudflare(req: Request): boolean {
   // ── Proof 1: the hop that reached us belongs to Cloudflare ────────────────
@@ -71,11 +112,9 @@ function cameThroughCloudflare(req: Request): boolean {
   const expected = process.env["CLOUDFLARE_ORIGIN_SECRET"];
 
   // Nothing else to check. Falling through to false is safe in every topology
-  // this runs in: the caller then uses req.ip, which Express derives from the
-  // same X-Forwarded-For honouring the trust proxy hop count, and which is the
-  // real client address wherever TRUST_PROXY matches reality. Refusing to guess
-  // costs accurate attribution only when Cloudflare adds a range we have not
-  // refreshed yet.
+  // this runs in: the caller then uses req.ip, which Express derives honouring
+  // the trust proxy hop count. Refusing to guess costs accurate attribution
+  // only when Cloudflare adds a range we have not refreshed yet.
   if (!expected) return false;
 
   const header = req.headers["x-origin-secret"];
@@ -90,13 +129,14 @@ function cameThroughCloudflare(req: Request): boolean {
   return timingSafeEqual(a, b);
 }
 
+/** The caller's address, as resolved by Express under the configured trust. */
 export function clientIp(req: Request): string {
   if (behindCloudflare() && cameThroughCloudflare(req)) {
     const cf = req.headers["cf-connecting-ip"];
     if (typeof cf === "string" && cf.trim()) return cf.trim();
-    // Falling through here is deliberate. A request that reaches a
-    // Cloudflare-fronted origin without this header did not come through
-    // Cloudflare, and req.ip is the honest answer for it.
+    // Falling through is deliberate: a request reaching a Cloudflare-fronted
+    // origin without this header did not come through Cloudflare, and req.ip is
+    // the honest answer for it.
   }
 
   return req.ip ?? req.socket.remoteAddress ?? "unknown";

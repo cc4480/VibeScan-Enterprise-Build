@@ -13,6 +13,8 @@ A website and vulnerability scanning SaaS that runs black-box security scans and
 | `pnpm --filter @workspace/db run build && pnpm --filter @workspace/api-zod run build && pnpm --filter @workspace/api-client-react run build && pnpm --filter @workspace/replit-auth-web run build` | Build shared lib `.d.ts` files (required before full typecheck on fresh clone) |
 
 Required env vars (secrets):
+- `PORT` — the API server throws at boot without it (`8080` locally; the Vite
+  dev server proxies `/api` there). Injected by the artifact router on Replit.
 - `DATABASE_URL` — auto-provisioned by Replit PostgreSQL
 - `DEEPSEEK_API_KEY` — fallback AI analysis key for Deep scan reports, used when a user hasn't set their own key in Settings
 - `ENCRYPTION_KEY` — 32-byte base64 AES-256 key, encrypts user-supplied secrets (BYO DeepSeek key) at rest. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. Without it, the Settings → DeepSeek key feature returns 503.
@@ -24,11 +26,26 @@ Required env vars (secrets):
 Replit injects the above as real environment variables; running elsewhere
 (e.g. a local Windows/Mac/Linux machine) needs its own PostgreSQL 16 instance
 and a `.env` file (see `.env.example`) — `.env` is gitignored, never commit
-it. Verified working on Windows as of 2026-08; `lib/db/drizzle.config.ts` and
+it. The API server's `start` script loads it with Node's
+`--env-file-if-exists=../../.env`; real environment variables take precedence,
+so the file is inert on Replit. Nothing else reads it — `db:push` shells out to
+drizzle-kit, which sees only the shell environment, so export `DATABASE_URL`
+for that command. Verified working on Windows as of 2026-08; `lib/db/drizzle.config.ts` and
 `pnpm-workspace.yaml`'s `overrides` needed fixes for Windows path separators
 and previously-stripped `win32-*-msvc` optional binaries (`rollup`,
 `@tailwindcss/oxide`, `lightningcss`) respectively — both now resolve
 correctly cross-platform.
+
+## Deploying (non-Replit)
+
+Production runs on Docker Compose — see `DEPLOY.md`. `Dockerfile`,
+`docker-compose.yml` and `deploy/Caddyfile` are the deployment surface; `.replit` and
+the `.replit-artifact/` configs are for Replit **development** only and are not
+used in production.
+
+Note `APP_ORIGIN` is a build arg, not just an env var: `vite.config.ts` bakes it
+into index.html, the sitemap and robots.txt at build time, so a domain change
+needs a rebuilt image.
 
 ## Stack
 
@@ -62,8 +79,13 @@ lib/
 
 ## Product
 
-- **Free tier**: Basic black-box scan (headers, SSL/TLS, tech fingerprint)
-- **Paid tiers**: Deep scan with DeepSeek AI report, scan credit packs (5 or 20)
+Everything is free during early access — `POST /scans` queues immediately and
+returns `checkoutUrl: null`; the `pack_5`/`pack_20` tiers are rejected at the
+route. The tier column and Stripe plumbing remain for a future revival.
+
+- **Basic scan**: headers, SSL/TLS, DNS, tech fingerprint
+- **Deep scan**: adds JS secret scanning, path traversal, and the site crawler,
+  with a DeepSeek AI report
 - **Monitor**: Continuous monitoring with weekly rescans and CVE-triggered alerts via email
 - **Reports**: Graded A–F with CVSS scores, remediation steps, and paste-ready AI fix prompt
 - **Settings**: users can add their own DeepSeek API key (`/settings`) to use their own account's credits for Deep scan AI analysis instead of the shared server key — encrypted at rest, never re-displayed after saving
@@ -112,6 +134,48 @@ probe or pattern added to the scanner:
   appearing on the page (a GitHub org page for the real phpMyAdmin project
   mentions "phpMyAdmin" too). `crossdomain.xml` is only flagged for genuine
   wildcard access, not mere presence of the file.
+
+## SSRF guard (scan targets and webhooks)
+
+The scanner fetches user-supplied URLs from inside our own network and quotes
+responses back in report `evidence`, so an unguarded target is an open proxy
+into the deployment. `ssrfGuard.ts` is the single implementation — do not add a
+second copy:
+
+- `checkScanTarget(url)` — http/https + public-host check, called by
+  `POST /scans` and `POST /monitor/subscriptions` before a job is queued, and
+  again at the top of `runScan()` so no internal caller bypasses it.
+- `checkHostname(host)` — host-only check. `webhook.ts` layers its https-only
+  rule on top (a token must not leave in cleartext); scan targets allow http
+  because a plaintext target is itself a finding.
+- Blocks loopback, RFC 1918, link-local/IMDS (169.254.169.254), CGNAT,
+  IPv6 ULA/link-local, IPv4-mapped IPv6, `.local`/`.internal`, and public
+  hostnames whose A/AAAA records point anywhere internal. **Fails closed** on
+  DNS failure.
+- `runScan()` re-checks after redirects: `redirect: "follow"` means a public
+  host can bounce the scanner to an internal one, and every probe downstream
+  runs against `finalUrl`.
+- Not covered: DNS rebinding between check and connect. Closing that needs
+  connection-level pinning of the resolved IP.
+
+## Rate limiting and client identity
+
+Client tokens are self-minted UUIDs (`authMiddleware` auto-creates a user from
+any valid v4), so per-user limits are unenforceable — anything that needs to
+resist abuse counts against the client address instead.
+
+- `clientIp.ts` owns address resolution. Never read `x-forwarded-for` directly:
+  clients set it. `configureTrustProxy()` applies `TRUST_PROXY` (hop count;
+  default 1 in production, 0 in dev) and everything else uses `req.ip`.
+- `rateLimit.ts` is a sliding-window limiter, in-process. Applied to
+  `POST /scans`, `POST /monitor/subscriptions` and the manual monitor rescan.
+  Blocked requests are deliberately not counted, or a caller hammering a blocked
+  endpoint would push their own retry time out indefinitely.
+- The guarantee holds only when the app is unreachable except through the proxy.
+  `docker-compose.yml` gives `app` no published port for exactly this reason, and
+  `deploy/Caddyfile` overwrites `X-Forwarded-For` rather than appending.
+- Adding a middleware to a route widens `req.params` to `string | string[]` in
+  Express's types — hence the `String(req.params.id)` in the monitor rescan route.
 
 ## Gotchas
 

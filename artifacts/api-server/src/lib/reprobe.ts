@@ -13,6 +13,7 @@
  */
 
 import type { ScanVulnerability } from "./scanner";
+import { APP_DOMAIN } from "./appOrigin";
 import { scanFetch } from "./http";
 
 const REPROBE_MIN = 50;
@@ -66,7 +67,7 @@ export async function reprobe(
     ? scanFetch(targetUrl, {
         method: "OPTIONS",
         headers: {
-          "Origin": "https://cors-probe.secscan.us",
+          "Origin": `https://cors-probe.${APP_DOMAIN}`,
           "Access-Control-Request-Method": "GET",
         },
         signal: globalCtrl.signal,

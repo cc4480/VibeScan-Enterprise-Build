@@ -22,7 +22,7 @@
 
 import { randomUUID, randomBytes } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
-import { scanFetch } from "./http";
+import { SCANNER_USER_AGENT } from "./appOrigin";
 import { isDestructiveUrl } from "./destructive";
 
 const TIMEOUT_MS = 7_000;
@@ -68,8 +68,21 @@ interface Probed {
 }
 
 async function safeGet(url: string): Promise<Probed | null> {
-  const res = await scanFetch(url, { timeoutMs: TIMEOUT_MS });
-  return res ? { status: res.status, body: res.body } : null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      redirect: "follow",
+      headers: { "User-Agent": SCANNER_USER_AGENT },
+    });
+    const body = await res.text().catch(() => "");
+    return { status: res.status, body };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 interface Case { path: string; param: string }

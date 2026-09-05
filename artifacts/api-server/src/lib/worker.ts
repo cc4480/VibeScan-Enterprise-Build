@@ -68,6 +68,7 @@ type ScanJob = Job<ScanJobData>;
 // ─── Differential re-probe ────────────────────────────────────────────────────
 
 import { reprobe } from "./reprobe";
+import { APP_ORIGIN } from "./appOrigin";
 
 /**
  * For borderline findings (50 ≤ confidence < 70), makes a second HTTP request
@@ -519,7 +520,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
                 })),
               ).onConflictDoNothing();
 
-              const appOrigin = process.env.APP_ORIGIN ?? "https://secscan.us";
+              const appOrigin = APP_ORIGIN;
 
               if (sub?.userEmail) {
                 await sendRegressionAlertEmail({
@@ -561,7 +562,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
 
         // ── Fire scan_complete webhook ──────────────────────────────────
         if (sub?.webhookUrl) {
-          const appOrigin = process.env.APP_ORIGIN ?? "https://secscan.us";
+          const appOrigin = APP_ORIGIN;
           await fireWebhook(
             sub.webhookUrl,
             "scan_complete",
@@ -589,7 +590,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
         .where(eq(scansTable.id, scanId));
 
       if (scan?.userEmail) {
-        const appOrigin = process.env.APP_ORIGIN ?? "https://secscan.us";
+        const appOrigin = APP_ORIGIN;
         await sendReportReadyEmail({
           toEmail: scan.userEmail,
           targetUrl: scanResult.finalUrl || targetUrl,

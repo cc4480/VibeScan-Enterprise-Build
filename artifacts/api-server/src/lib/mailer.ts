@@ -5,8 +5,9 @@
  * Requires RESEND_API_KEY environment variable.
  */
 
+import { FROM_EMAIL } from "./appOrigin";
+
 const RESEND_API = "https://api.resend.com/emails";
-const FROM_EMAIL = "Seclayer <reports@secscan.us>";
 
 interface SendReportEmailOptions {
   toEmail: string;

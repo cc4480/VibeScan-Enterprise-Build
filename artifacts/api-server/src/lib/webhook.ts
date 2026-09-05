@@ -6,17 +6,23 @@
  */
 
 import { logger } from "./logger";
-import { checkUrlSafe } from "./ssrfGuard";
+import { checkHostname } from "./ssrfGuard";
+import { APP_DOMAIN } from "./appOrigin";
 
 // ── SSRF guard ────────────────────────────────────────────────────────────────
-// The address rules live in ssrfGuard.ts, shared with the scanner's target
-// check. They were duplicated here first; keeping one copy means a range added
-// for one caller protects the other automatically. Webhooks additionally
-// require https, because unlike a scan target they carry our payload outward.
+// Host rules live in ssrfGuard.ts, shared with the scan-target path so the two
+// copies of this control can't drift. The https-only rule stays here: it is a
+// webhook concern (an auth token must not leave in cleartext), not a host one.
 
 async function isWebhookUrlSafe(rawUrl: string): Promise<boolean> {
-  const { ok } = await checkUrlSafe(rawUrl, { requireHttps: true });
-  return ok;
+  try {
+    const url = new URL(rawUrl);
+    if (url.protocol !== "https:") return false;
+    const { ok: safe } = await checkHostname(url.hostname);
+    return safe;
+  } catch {
+    return false;
+  }
 }
 
 export type WebhookEventType =
@@ -101,7 +107,7 @@ function buildSlackBody(payload: WebhookPayload): Record<string, unknown> {
         color,
         fallback: `${label} for ${domain}`,
         fields: attachmentFields,
-        footer: "Seclayer · secscan.us",
+        footer: `Seclayer · ${APP_DOMAIN}`,
         ts: Math.floor(Date.now() / 1000),
       },
     ],

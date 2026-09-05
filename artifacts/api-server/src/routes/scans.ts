@@ -8,41 +8,26 @@ import {
 } from "@workspace/api-zod";
 import { enqueueScan } from "../lib/queue";
 import { validateCredentials, encryptCredentials } from "../lib/scanCredentials";
-import { checkUrlSafe } from "../lib/ssrfGuard";
-import { clientIp } from "../lib/clientIp";
+import { checkScanTarget } from "../lib/ssrfGuard";
+import { rateLimitMiddleware, scanRateLimitRules } from "../lib/rateLimit";
 
 // ── Abuse and cost control ───────────────────────────────────────────────────
 // A scan is expensive in a way an API request normally is not: it launches a
-// browser and runs sustained outbound traffic for minutes. Before this, the
-// only limit was worker concurrency, which throttles how fast the queue drains
-// rather than how much anyone may put on it.
+// browser and runs sustained outbound traffic for minutes. Worker concurrency
+// throttles how fast the queue drains, not how much anyone may put on it.
 //
-// Two limits, because they stop different things. The burst limiter is
-// in-memory and per-instance, matching the limiter in routes/auth.ts — enough
-// to stop a hot loop, and it resets on deploy. The daily quota is counted in
-// Postgres, so it holds across replicas and restarts, which is what actually
-// bounds cost.
+// Two limits, because they stop different things.
+//
+// The sliding window in lib/rateLimit.ts stops a burst. It is in-process, so it
+// resets on deploy and each replica counts separately — fine for the thing it
+// is for, which is a hot loop rather than a patient attacker.
+//
+// The daily quota below is counted in Postgres, so it survives restarts and
+// holds across replicas. That is what actually bounds cost, and it is why the
+// two coexist rather than one replacing the other.
 
-const BURST_WINDOW_MS = 60_000;
-const BURST_MAX = Number(process.env["SCAN_BURST_LIMIT"] ?? 5);
 const DAILY_MAX_ANON = Number(process.env["SCAN_DAILY_LIMIT_ANON"] ?? 10);
 const DAILY_MAX_ACCOUNT = Number(process.env["SCAN_DAILY_LIMIT_ACCOUNT"] ?? 50);
-
-const burst = new Map<string, number[]>();
-
-function isBurstLimited(key: string): boolean {
-  const now = Date.now();
-  const recent = (burst.get(key) ?? []).filter((t) => now - t < BURST_WINDOW_MS);
-  recent.push(now);
-  burst.set(key, recent);
-  // Keep the map from growing without bound on a long-lived process.
-  if (burst.size > 10_000) {
-    for (const [k, times] of burst) {
-      if (times.every((t) => now - t >= BURST_WINDOW_MS)) burst.delete(k);
-    }
-  }
-  return recent.length > BURST_MAX;
-}
 
 /** Scans this user has started in the last 24 hours. */
 async function scansToday(userId: string): Promise<number> {
@@ -119,16 +104,14 @@ router.get("/scans", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/scans", async (req, res): Promise<void> => {
+const scanRateLimit = rateLimitMiddleware({
+  rules: scanRateLimitRules(),
+  name: "scans",
+});
+
+router.post("/scans", scanRateLimit, async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) {
     res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-
-  if (isBurstLimited(`scan:${clientIp(req)}`)) {
-    res.status(429).json({
-      error: "Too many scans started at once. Wait a minute and try again.",
-    });
     return;
   }
 
@@ -146,13 +129,12 @@ router.post("/scans", async (req, res): Promise<void> => {
   // because a stored record should say what actually happened.
   const tier = "deep" as const;
 
-  try {
-    const parsedUrl = new URL(targetUrl);
-    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-      throw new Error("bad protocol");
-    }
-  } catch {
-    res.status(400).json({ error: "Invalid URL. Must start with http:// or https://" });
+  // Rejects internal targets before a job is ever queued — the scanner runs
+  // inside our network and quotes responses back in the report, so an
+  // unguarded target URL is an open proxy into it.
+  const targetCheck = await checkScanTarget(targetUrl);
+  if (!targetCheck.ok) {
+    res.status(400).json({ error: targetCheck.reason ?? "Invalid URL." });
     return;
   }
 
@@ -161,7 +143,7 @@ router.post("/scans", async (req, res): Promise<void> => {
   // makes — this check exists so the person gets a straight answer now rather
   // than an empty report later, and so an abusive target never reaches the
   // queue at all.
-  const addressCheck = await checkUrlSafe(targetUrl, { allowOptOut: true });
+  const addressCheck = await checkScanTarget(targetUrl);
   if (!addressCheck.ok) {
     req.log.warn({ targetUrl, reason: addressCheck.reason }, "Blocked scan target");
     res.status(400).json({

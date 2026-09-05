@@ -9,6 +9,8 @@ import { createProxyMiddleware } from "http-proxy-middleware";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { authMiddleware } from "./middlewares/authMiddleware";
+import { APP_ORIGIN } from "./lib/appOrigin";
+import { configureTrustProxy } from "./lib/clientIp";
 
 const __dirname = nodePath.dirname(fileURLToPath(import.meta.url));
 
@@ -48,8 +50,6 @@ const FRONTEND_CSP = [
 // www is included alongside the bare domain because a redirect from www to
 // apex happens at the CDN, and a browser that resolves www first would
 // otherwise have its preflight rejected before the redirect is followed.
-const APP_ORIGIN = process.env.APP_ORIGIN?.replace(/\/$/, "");
-
 function withWww(origin: string): string[] {
   try {
     const url = new URL(origin);
@@ -61,7 +61,7 @@ function withWww(origin: string): string[] {
 }
 
 const CORS_ALLOWLIST: (string | RegExp)[] = [
-  ...(APP_ORIGIN ? withWww(APP_ORIGIN) : []),
+  ...withWww(APP_ORIGIN),
   ...(process.env.CORS_EXTRA_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? []),
   ...(process.env.NODE_ENV !== "production" ? [/\.replit\.dev$/, /^http:\/\/localhost(:\d+)?$/] : []),
 ];
@@ -79,6 +79,11 @@ const corsOptions: CorsOptions = {
 };
 
 const app: Express = express();
+
+// Must come before anything that reads req.ip: behind the compose stack's Caddy
+// the socket address is the proxy's, so without this every caller shares one
+// rate-limit bucket.
+configureTrustProxy(app);
 
 // Hide "X-Powered-By: Express" — no reason to advertise the server tech.
 app.disable("x-powered-by");
