@@ -31,7 +31,24 @@ interface NextDataSecretPattern {
   description: string;
   solution: string;
   cweId: string;
+  // Optional second gate, run on the regex's full match text. Use for patterns
+  // whose format alone isn't enough — a well-known example/placeholder value
+  // that legitimately appears in onboarding UIs and docs snippets rendered
+  // into page props, not just in real code. Return true to SUPPRESS the finding.
+  isPlaceholder?: (matchedText: string) => boolean;
 }
+
+// Common placeholder passwords used in setup wizards, "connect your database"
+// onboarding steps, and documentation examples — not real credentials.
+const PLACEHOLDER_DB_PASSWORDS = new Set([
+  "password", "changeme", "yourpassword", "your_password", "example",
+  "secret", "placeholder", "dummy", "testpass", "test123", "admin123",
+  "letmein", "123456", "xxxxxx", "yourpasswordhere",
+]);
+
+// The AWS SDK's own documented example secret key — appears verbatim across
+// AWS docs, SDK READMEs, and countless "how to configure AWS" tutorials.
+const AWS_EXAMPLE_SECRET_KEY = "wjalrxutnfemi/k7mdeng/bpxrficyexamplekey";
 
 const NEXT_DATA_SECRET_PATTERNS: NextDataSecretPattern[] = [
   {
@@ -95,6 +112,7 @@ const NEXT_DATA_SECRET_PATTERNS: NextDataSecretPattern[] = [
     solution:
       "Revoke the key immediately in AWS IAM. Remove AWS credentials from all Next.js props. " +
       "Use server-side IAM roles instead of static credentials.",
+    isPlaceholder: (text) => text.toLowerCase().includes(AWS_EXAMPLE_SECRET_KEY),
   },
   {
     name: "GitHub Token in __NEXT_DATA__",
@@ -131,8 +149,8 @@ const NEXT_DATA_SECRET_PATTERNS: NextDataSecretPattern[] = [
   },
   {
     name: "Hardcoded Database Connection String in __NEXT_DATA__",
-    // Require password segment to have ≥6 non-placeholder chars before @
-    pattern: /(?:postgres|mysql|mongodb|redis):\/\/[^:@\s"']{1,64}:[^@\s"']{6,}@[^@\s"']{4,}/i,
+    // Require password segment to have ≥6 chars before @ (further filtered below)
+    pattern: /(?:postgres|mysql|mongodb|redis):\/\/[^:@\s"']{1,64}:([^@\s"']{6,})@[^@\s"']{4,}/i,
     severity: "critical", cvssScore: 9.8, cweId: "CWE-312",
     description:
       "A database connection string (including credentials) was found in the __NEXT_DATA__ " +
@@ -141,6 +159,16 @@ const NEXT_DATA_SECRET_PATTERNS: NextDataSecretPattern[] = [
       "EMERGENCY: Change the database password immediately. Remove the connection string from " +
       "all Next.js props. Connection strings belong in server-only environment variables, never " +
       "in data returned from getServerSideProps.",
+    // Setup wizards ("connect your database") and docs snippets rendered into
+    // page props commonly show a connection-string example with a literal
+    // word like "password" or "changeme" standing in for the real value —
+    // not a leaked credential. A genuine leaked password essentially never
+    // matches a known placeholder verbatim.
+    isPlaceholder: (text) => {
+      const m = /:\/\/[^:@\s"']{1,64}:([^@\s"']{6,})@/i.exec(text);
+      const pw = m?.[1]?.toLowerCase() ?? "";
+      return PLACEHOLDER_DB_PASSWORDS.has(pw);
+    },
   },
 ];
 
@@ -190,11 +218,13 @@ export async function runNextjsProbe(
 
   const found: ScanVulnerability[] = [];
 
-  for (const { name, pattern, severity, cvssScore, cweId, description, solution } of NEXT_DATA_SECRET_PATTERNS) {
+  for (const { name, pattern, severity, cvssScore, cweId, description, solution, isPlaceholder } of NEXT_DATA_SECRET_PATTERNS) {
     const match = pattern.exec(nextDataStr);
     if (!match) continue;
 
     const matchedText = match[0];
+    if (isPlaceholder?.(matchedText)) continue;
+
     const redacted = redactSecret(matchedText);
 
     found.push(vuln({

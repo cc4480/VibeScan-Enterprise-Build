@@ -373,6 +373,19 @@ export async function checkErrorDisclosure(baseUrl: string): Promise<ScanVulnera
 
   const body = result.body;
 
+  // Baseline against the real homepage before trusting any match. There is no
+  // status-code shortcut here: a genuine PHP leak is frequently a Warning: or
+  // Notice: printed inline into an otherwise-200 response, so requiring a 4xx
+  // or 5xx would create false negatives on the exact case this exists to
+  // catch. And two of the patterns below — "Warning:" and "Notice:" bare — are
+  // short enough to appear as ordinary UI copy (an age gate, a shipping
+  // notice), which an SPA catch-all would then return with status 200 for
+  // this deliberately-nonexistent path exactly as it would for any other
+  // unmatched route. The baseline is what tells those two apart: content the
+  // homepage already carries is not a leak specific to this path.
+  const homepage = await safeGet(origin);
+  const baselineBody = homepage?.body ?? "";
+
   const leakPatterns: Array<{ rx: RegExp; name: string }> = [
     { rx: /at\s+\w[\w.]+\s+\((?:\/[\w./\\-]+|[A-Z]:\\[\w./\\-]+):\d+:\d+\)/m, name: "JavaScript/Node.js stack trace with file paths" },
     { rx: /Traceback \(most recent call last\)[\s\S]{0,200}File "\/[^"]+"/m, name: "Python traceback with system file paths" },
@@ -387,7 +400,7 @@ export async function checkErrorDisclosure(baseUrl: string): Promise<ScanVulnera
     { rx: /Django.*DEBUG.*True|django\.core\.exceptions/m, name: "Django debug page (DEBUG=True in production)" },
   ];
 
-  const matched = leakPatterns.find((p) => p.rx.test(body));
+  const matched = leakPatterns.find((p) => p.rx.test(body) && !p.rx.test(baselineBody));
   if (!matched) return [];
 
   const isFlaskDebugger = /werkzeug\.debug|Debugger caught/.test(body);
@@ -580,8 +593,14 @@ const DIRECTORY_LISTING_PATTERNS = [
   /<title>Directory listing/i,
   /\[To Parent Directory\]/i,
   /httpd\s+Directory\s+Listing/i,
-  /<hr>\s*<pre>/i,
   /\?C=N&amp;O=D/,
+  // "<hr><pre>" deliberately removed: it is Apache/nginx autoindex's actual
+  // layout, but it is also what a markdown renderer produces for "---"
+  // followed by a code block — extremely common on documentation pages,
+  // changelogs and blog posts. The remaining five patterns are all specific
+  // to a real autoindex page (the sort-link query string, the exact
+  // "[To Parent Directory]" text, the httpd-specific title) and stay
+  // sufficient on their own.
 ];
 
 export async function checkDirectoryListing(

@@ -139,9 +139,20 @@ async function testRealtimeDatabaseOpen(databaseURL: string): Promise<boolean> {
 
   try {
     const body = JSON.parse(result.body) as unknown;
-    // null → rules are restrictive (null is the returned value for a denied read in some configs)
-    // object with data → open
-    return body !== null && typeof body === "object";
+    // null → rules are restrictive (null is what Firebase returns for a denied
+    // read, and also for a path with genuinely no data — so this direction is
+    // safe to under-report on, never to over-report).
+    //
+    // A bare {} is not realistic for the RTDB REST API in practice — a path
+    // with data returns an object of its children, one with none returns null
+    // — but requiring at least one key rather than trusting `typeof === "object"`
+    // costs nothing and matches how probeFirestoreCollection above already
+    // treats an empty collection as not a finding rather than as "open".
+    return (
+      body !== null &&
+      typeof body === "object" &&
+      Object.keys(body as Record<string, unknown>).length > 0
+    );
   } catch {
     return false;
   }

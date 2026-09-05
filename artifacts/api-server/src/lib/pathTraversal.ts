@@ -119,6 +119,22 @@ export async function checkPathTraversal(
     // endpoint still triggers the action on the way through.
     if (isDestructiveUrl(`${origin}${path}`)) continue;
 
+    // Baseline the case once before trying payloads: the Windows signatures
+    // ([fonts], [extensions], [files]) are short, plain-English bracketed
+    // words, not vendor error strings, and can legitimately appear in a
+    // page's normal content — a markdown link, a settings section, a nav
+    // item. Without ruling out "the response already said this before any
+    // payload was sent," any path that renders that content for every
+    // parameter value — an SPA catch-all, most obviously — would confirm
+    // path traversal at the maximum severity this scanner assigns, on a
+    // page that never read a file it was not supposed to. The Linux
+    // signature (root:x:0:0:) does not realistically need this, but the
+    // check is cheap enough to apply uniformly rather than special-case it.
+    const baselineUrl = new URL(`${origin}${path}`);
+    baselineUrl.searchParams.set(param, "baseline-" + Math.random().toString(36).slice(2, 8));
+    const baseline = await safeGet(baselineUrl.toString());
+    const baselineOs = baseline ? classifyTraversalBody(baseline.body) : null;
+
     for (const payload of PATH_TRAVERSAL_TEMPLATES) {
       const testUrl = new URL(`${origin}${path}`);
       testUrl.searchParams.set(param, payload);
@@ -127,7 +143,7 @@ export async function checkPathTraversal(
       if (!result) continue;
 
       const os = classifyTraversalBody(result.body);
-      if (!os) continue;
+      if (!os || os === baselineOs) continue;
 
       const target = os === "linux" ? "/etc/passwd" : "windows/win.ini";
       return [
