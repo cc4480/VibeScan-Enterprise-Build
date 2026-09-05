@@ -84,6 +84,20 @@ export default function RegisterPage() {
           }
         />
       </AuthForm>
+
+      {/* Both sign-up paths are covered: the Google button above creates an
+          account too, so this sits outside the form rather than inside it. */}
+      <p className="mt-6 text-xs text-muted-foreground text-center leading-relaxed">
+        By creating an account you agree to our{" "}
+        <Link href="/terms" className="text-primary hover:underline underline-offset-4">
+          Terms of Service
+        </Link>{" "}
+        and{" "}
+        <Link href="/privacy" className="text-primary hover:underline underline-offset-4">
+          Privacy Policy
+        </Link>
+        . You may only scan sites you own or have permission to test.
+      </p>
     </AuthShell>
   );
 }

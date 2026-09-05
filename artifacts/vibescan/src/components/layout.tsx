@@ -244,9 +244,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <Shield className="w-5 h-5 text-foreground" />
             <span className="font-display font-bold tracking-tight text-foreground">SecScan</span>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Your app is live. Is it safe? © {new Date().getFullYear()} SecScan
-          </p>
+          <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+            <nav className="flex items-center gap-5">
+              <Link href="/privacy" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Privacy
+              </Link>
+              <Link href="/terms" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Terms
+              </Link>
+            </nav>
+            <p className="text-sm text-muted-foreground">
+              Your app is live. Is it safe? © {new Date().getFullYear()} SecScan
+            </p>
+          </div>
         </div>
       </footer>
     </div>
