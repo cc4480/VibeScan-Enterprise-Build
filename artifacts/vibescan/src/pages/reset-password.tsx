@@ -12,7 +12,7 @@ function tokenFromUrl(): string {
 }
 
 export default function ResetPasswordPage() {
-  useSeo({ title: "Choose a new password — Seclayer", noindex: true });
+  useSeo({ title: "Choose a new password — SecScan", noindex: true });
 
   const [, setLocation] = useLocation();
   // Read once on mount: the value comes from the emailed link and does not

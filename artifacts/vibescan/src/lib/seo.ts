@@ -12,7 +12,7 @@ export function useSeo({ title, description, noindex, canonical }: SeoOptions) {
     const prev = document.title;
 
     if (title) {
-      document.title = title.includes("Seclayer") ? title : `${title} — Seclayer`;
+      document.title = title.includes("SecScan") ? title : `${title} — SecScan`;
     }
 
     let metaRobots = document.querySelector<HTMLMetaElement>('meta[name="robots"]');

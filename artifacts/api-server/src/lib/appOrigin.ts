@@ -22,8 +22,8 @@ export const APP_DOMAIN: string = APP_ORIGIN.replace(/^https?:\/\//, "");
  */
 export const SCANNER_USER_AGENT: string =
   process.env.SCANNER_USER_AGENT ??
-  `Mozilla/5.0 (compatible; Seclayer-Security-Bot/1.0; +${APP_ORIGIN}/bot)`;
+  `Mozilla/5.0 (compatible; SecScan-Security-Bot/1.0; +${APP_ORIGIN}/bot)`;
 
 /** From address for notification email. Must be a domain verified with Resend. */
 export const FROM_EMAIL: string =
-  process.env.FROM_EMAIL ?? `Seclayer <reports@${APP_DOMAIN}>`;
+  process.env.FROM_EMAIL ?? `SecScan <reports@${APP_DOMAIN}>`;

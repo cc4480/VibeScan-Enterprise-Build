@@ -1,4 +1,4 @@
-# Local/production stack for Seclayer.
+# Local/production stack for SecScan.
 #
 #   cp .env.docker.example .env.docker    # then fill it in
 #   docker compose --env-file .env.docker --profile setup run --rm db-migrate

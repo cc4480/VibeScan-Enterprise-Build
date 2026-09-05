@@ -6,7 +6,7 @@ import { verifyEmail, accountErrorMessage } from "@/lib/account-api";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 
 export default function VerifyEmailPage() {
-  useSeo({ title: "Confirming your email — Seclayer", noindex: true });
+  useSeo({ title: "Confirming your email — SecScan", noindex: true });
 
   const [state, setState] = useState<"working" | "done" | "failed">("working");
   const [error, setError] = useState<string | null>(null);

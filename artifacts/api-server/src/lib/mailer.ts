@@ -61,8 +61,8 @@ function buildHtml(opts: SendReportEmailOptions): string {
 
         <!-- Footer -->
         <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
-          <p style="margin:0;">You received this because you ran a Seclayer deep scan.</p>
-          <p style="margin:4px 0 0;">© 2026 Seclayer</p>
+          <p style="margin:0;">You received this because you ran a SecScan deep scan.</p>
+          <p style="margin:4px 0 0;">© 2026 SecScan</p>
         </td></tr>
       </table>
     </td></tr>
@@ -88,7 +88,7 @@ export async function sendReportReadyEmail(opts: SendReportEmailOptions): Promis
       body: JSON.stringify({
         from: FROM_EMAIL,
         to: [opts.toEmail],
-        subject: `Your Seclayer report is ready — Grade ${opts.grade} for ${opts.targetUrl}`,
+        subject: `Your SecScan report is ready — Grade ${opts.grade} for ${opts.targetUrl}`,
         html: buildHtml(opts),
       }),
     });
@@ -191,8 +191,8 @@ export async function sendMonitorCveAlertEmail(opts: SendMonitorCveAlertOptions)
         </td></tr>
 
         <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
-          <p style="margin:0;">You received this because you have a Seclayer continuous monitor active for ${targetUrl}.</p>
-          <p style="margin:4px 0 0;">© 2026 Seclayer · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
+          <p style="margin:0;">You received this because you have a SecScan continuous monitor active for ${targetUrl}.</p>
+          <p style="margin:4px 0 0;">© 2026 SecScan · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
         </td></tr>
       </table>
     </td></tr>
@@ -280,7 +280,7 @@ export async function sendRegressionAlertEmail(opts: SendRegressionAlertOptions)
           </div>
         </td></tr>
         <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
-          <p style="margin:0;">© 2026 Seclayer · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
+          <p style="margin:0;">© 2026 SecScan · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
         </td></tr>
       </table>
     </td></tr>
@@ -343,7 +343,7 @@ export async function sendCertExpiryEmail(opts: SendCertExpiryOptions): Promise<
           <a href="${dashboardUrl}" style="display:inline-block;background:#6366f1;color:#fff;font-weight:700;font-size:15px;padding:14px 32px;border-radius:10px;text-decoration:none;">View Monitor Dashboard →</a>
         </td></tr>
         <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
-          <p style="margin:0;">© 2026 Seclayer · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
+          <p style="margin:0;">© 2026 SecScan · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
         </td></tr>
       </table>
     </td></tr>
@@ -401,7 +401,7 @@ export async function sendMonitorScanQueuedEmail(opts: SendMonitorScanQueuedOpti
           <a href="${dashboardUrl}" style="display:inline-block;background:#6366f1;color:#fff;font-weight:700;font-size:15px;padding:14px 32px;border-radius:10px;text-decoration:none;">View Monitor Dashboard →</a>
         </td></tr>
         <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
-          <p style="margin:0;">© 2026 Seclayer · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
+          <p style="margin:0;">© 2026 SecScan · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
         </td></tr>
       </table>
     </td></tr>
@@ -476,13 +476,13 @@ async function sendAccountEmail(to: string, subject: string, html: string, label
 export async function sendEmailVerification(toEmail: string, verifyUrl: string): Promise<void> {
   await sendAccountEmail(
     toEmail,
-    "Confirm your email for Seclayer",
+    "Confirm your email for SecScan",
     buildAccountHtml(
       "Confirm your email",
       "Confirming your address lets us send you scan results and security alerts, and lets you get back into your account if you forget your password.",
       "Confirm email",
       verifyUrl,
-      "This link expires in 24 hours. If you didn't create a Seclayer account, you can ignore this email.",
+      "This link expires in 24 hours. If you didn't create a SecScan account, you can ignore this email.",
     ),
     "email verification",
   );
@@ -491,7 +491,7 @@ export async function sendEmailVerification(toEmail: string, verifyUrl: string):
 export async function sendPasswordReset(toEmail: string, resetUrl: string): Promise<void> {
   await sendAccountEmail(
     toEmail,
-    "Reset your Seclayer password",
+    "Reset your SecScan password",
     buildAccountHtml(
       "Reset your password",
       "Use the link below to choose a new password. Signing in again will end any other sessions on your account.",
@@ -505,7 +505,7 @@ export async function sendPasswordReset(toEmail: string, resetUrl: string): Prom
 
 // ── Marketing: shared audience + welcome email ──────────────────────────────
 //
-// Seclayer and Secscan.us run the same engine under two names and share one
+// SecScan and Secscan.us run the same engine under two names and share one
 // signup pool. Every new account — on either domain, through either sign-in
 // path — is added to one Resend Audience so a single broadcast reaches
 // everyone, and gets one welcome email. There is no separate opt-in checkbox:
@@ -548,10 +548,10 @@ export async function addToMarketingAudience(email: string, firstName?: string |
 export async function sendWelcomeEmail(toEmail: string, firstName?: string | null): Promise<void> {
   await sendAccountEmail(
     toEmail,
-    "Welcome to Seclayer",
+    "Welcome to SecScan",
     buildAccountHtml(
-      firstName ? `Welcome, ${firstName}` : "Welcome to Seclayer",
-      "Seclayer and Secscan.us run the same scanning engine under one roof — real vulnerability checks, not a checklist: SQL injection, exposed secrets, misconfigured databases, and more. We'll email you when there's something worth knowing: new features, security research, and the occasional product update. Account and security emails (password resets, scan reports) always go out regardless.",
+      firstName ? `Welcome, ${firstName}` : "Welcome to SecScan",
+      "SecScan runs real vulnerability checks, not a checklist: SQL injection, exposed secrets, misconfigured databases, and more. We'll email you when there's something worth knowing: new features, security research, and the occasional product update. Account and security emails (password resets, scan reports) always go out regardless.",
       "Run your first scan",
       `${APP_ORIGIN}/dashboard`,
       "You can unsubscribe from product updates at any time via the link included in those emails.",

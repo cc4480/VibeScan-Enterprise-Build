@@ -7,7 +7,7 @@ import { signIn, accountErrorMessage } from "@/lib/account-api";
 import { GoogleButton, AuthDivider } from "@/components/google-button";
 
 export default function SignInPage() {
-  useSeo({ title: "Sign in — Seclayer", noindex: true });
+  useSeo({ title: "Sign in — SecScan", noindex: true });
 
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();

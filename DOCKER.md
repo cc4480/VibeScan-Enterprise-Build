@@ -1,4 +1,4 @@
-# Running Seclayer with Docker
+# Running SecScan with Docker
 
 The stack is three containers:
 

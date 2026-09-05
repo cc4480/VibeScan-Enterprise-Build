@@ -19,7 +19,7 @@ function getFriendlyError(err: unknown): string {
 }
 
 export default function SettingsPage() {
-  useSeo({ title: "Settings — Seclayer", noindex: true });
+  useSeo({ title: "Settings — SecScan", noindex: true });
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [apiKeyInput, setApiKeyInput] = useState("");

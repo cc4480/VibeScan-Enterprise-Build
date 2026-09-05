@@ -9,7 +9,7 @@ import { GoogleButton, AuthDivider } from "@/components/google-button";
 const MIN_PASSWORD_LENGTH = 10;
 
 export default function RegisterPage() {
-  useSeo({ title: "Create an account — Seclayer", noindex: true });
+  useSeo({ title: "Create an account — SecScan", noindex: true });
 
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();

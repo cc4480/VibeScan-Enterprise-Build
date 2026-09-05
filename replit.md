@@ -1,4 +1,4 @@
-# Seclayer
+# SecScan
 
 A website and vulnerability scanning SaaS that runs black-box security scans and produces plain-English reports powered by DeepSeek AI.
 

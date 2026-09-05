@@ -56,7 +56,7 @@ const CATEGORIES: Category[] = [
         wstgId: "WSTG-CRYP-01",
         what: "HTTPS (Hypertext Transfer Protocol Secure) encrypts all data sent between the user's browser and your server using TLS (Transport Layer Security). Without it, the connection is plaintext HTTP.",
         why: "On an unencrypted HTTP connection, anyone on the same network — a coffee shop Wi-Fi, an ISP, a government — can read or modify every byte of traffic. Passwords, session tokens, and personal data are fully exposed. This is the most critical security issue a web app can have.",
-        howTested: "Seclayer fetches your URL and inspects the protocol. If the final URL after redirects is HTTP, or if an HTTP version of your site exists and does not redirect to HTTPS, this finding is flagged as Critical.",
+        howTested: "SecScan fetches your URL and inspects the protocol. If the final URL after redirects is HTTP, or if an HTTP version of your site exists and does not redirect to HTTPS, this finding is flagged as Critical.",
         fix: "Obtain a free TLS certificate from Let's Encrypt and configure your server to redirect all HTTP traffic to HTTPS. Then add HSTS to cache the preference.",
         fixCode: `# Nginx — redirect HTTP to HTTPS and enable TLS
 server {
@@ -85,7 +85,7 @@ server {
         wstgId: "WSTG-CONF-07",
         what: "HSTS is a response header that tells browsers to always connect to your site over HTTPS — never HTTP — for a specified duration. Once a browser sees this header, it will refuse to load your site over plaintext HTTP for the max-age period.",
         why: "Even if your server always redirects HTTP → HTTPS, a user's very first visit (or a visit after the HSTS cache expires) uses plain HTTP. An attacker performing an SSL stripping attack can intercept that initial HTTP request before the redirect happens. HSTS prevents this by pre-caching the HTTPS requirement.",
-        howTested: "Seclayer checks for the Strict-Transport-Security header on HTTPS responses. It flags absence as Medium severity, and flags max-age values under 180 days as Low.",
+        howTested: "SecScan checks for the Strict-Transport-Security header on HTTPS responses. It flags absence as Medium severity, and flags max-age values under 180 days as Low.",
         fix: "Add the HSTS header to all HTTPS responses. For maximum protection, include includeSubDomains and preload, then register at hstspreload.org.",
         fixCode: `# Express (Node.js)
 app.use((req, res, next) => {
@@ -130,7 +130,7 @@ add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; prelo
         wstgId: "WSTG-CONF-12",
         what: "Content Security Policy is an HTTP header that tells the browser which sources of scripts, styles, images, and other resources are trusted. It is the primary browser-native defense against Cross-Site Scripting (XSS).",
         why: "Without a CSP, if an attacker achieves any form of HTML injection in your page, they can execute arbitrary JavaScript — stealing session cookies, impersonating the user, or exfiltrating data. CSP provides defense-in-depth even when XSS injection occurs.",
-        howTested: "Seclayer inspects the Content-Security-Policy header (and the meta http-equiv equivalent) on your main page response. Absence is flagged as High.",
+        howTested: "SecScan inspects the Content-Security-Policy header (and the meta http-equiv equivalent) on your main page response. Absence is flagged as High.",
         fix: "Add a strict CSP header. Start restrictive and loosen as needed using CSP violation reports.",
         fixCode: `# Start with this strict policy and tune with violation reports
 Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'
@@ -158,7 +158,7 @@ const securityHeaders = [
         wstgId: "WSTG-CONF-12",
         what: "'unsafe-inline' allows inline <script> tags and event handlers to execute. 'unsafe-eval' allows eval(), setTimeout(string), and the Function() constructor. Both keywords defeat most of CSP's XSS protection.",
         why: "A CSP with 'unsafe-inline' still blocks some injections but is trivially bypassed once an attacker can inject a <script> tag or onclick handler. Most AI-generated React apps include 'unsafe-inline' in styles, which often bleeds into script policy.",
-        howTested: "Seclayer parses your CSP and flags any script-src or default-src directive that contains 'unsafe-inline' or 'unsafe-eval'.",
+        howTested: "SecScan parses your CSP and flags any script-src or default-src directive that contains 'unsafe-inline' or 'unsafe-eval'.",
         fix: "Replace 'unsafe-inline' with nonces or hashes. For inline styles, consider moving them to external stylesheets.",
         fixCode: `# Instead of:
 Content-Security-Policy: script-src 'self' 'unsafe-inline'
@@ -192,7 +192,7 @@ Content-Security-Policy: script-src 'self' 'sha256-{BASE64_HASH_OF_SCRIPT}'`,
         wstgId: "WSTG-CLNT-09",
         what: "X-Frame-Options prevents your page from being embedded in an <iframe> on another site. The modern alternative is the CSP frame-ancestors directive, which offers more granular control.",
         why: "Clickjacking attacks trick users into clicking on elements they cannot see — your site is loaded invisibly in an iframe over a fake UI, and the user 'clicks' on your buttons without knowing. This is used to trigger account deletions, purchases, or OAuth approvals.",
-        howTested: "Seclayer checks for X-Frame-Options: DENY or SAMEORIGIN, and also for a frame-ancestors directive in the CSP header. Missing both is flagged as Medium.",
+        howTested: "SecScan checks for X-Frame-Options: DENY or SAMEORIGIN, and also for a frame-ancestors directive in the CSP header. Missing both is flagged as Medium.",
         fix: "Add X-Frame-Options: DENY (or SAMEORIGIN if you need same-domain embedding). For CSP-capable apps, prefer frame-ancestors.",
         fixCode: `# Simple — blocks all framing
 X-Frame-Options: DENY
@@ -218,7 +218,7 @@ res.setHeader("X-Frame-Options", "DENY");`,
         wstgId: "WSTG-CONF-07",
         what: "The X-Content-Type-Options: nosniff header stops browsers from guessing (sniffing) the MIME type of a response. Without it, a browser might execute a response it believes to be JavaScript even if it was served with a different content type.",
         why: "If an attacker uploads a file that contains JavaScript — such as a disguised image — and the server serves it with a loose content type, some browsers will sniff it as script and execute it. nosniff forces the browser to respect the declared content type.",
-        howTested: "Seclayer checks for X-Content-Type-Options: nosniff in response headers. Missing is flagged as Medium.",
+        howTested: "SecScan checks for X-Content-Type-Options: nosniff in response headers. Missing is flagged as Medium.",
         fix: "Add the header to all responses. It's a one-liner and has zero downside.",
         fixCode: `# Any web server — add to all responses
 X-Content-Type-Options: nosniff
@@ -244,7 +244,7 @@ add_header X-Content-Type-Options "nosniff" always;`,
         wstgId: "WSTG-CONF-07",
         what: "The Referrer-Policy header controls how much information is included in the Referer header when a user navigates away from your page. Without it, full URLs (including paths, query strings, and tokens) can leak to third-party sites.",
         why: "If your app uses tokens or session IDs in query strings (common in password reset links or OAuth flows), the full URL can appear in third-party analytics, CDN logs, or tracking pixels — exposing sensitive values.",
-        howTested: "Seclayer checks for the Referrer-Policy header. Absence is flagged as Low.",
+        howTested: "SecScan checks for the Referrer-Policy header. Absence is flagged as Low.",
         fix: "Add strict-origin-when-cross-origin as a sensible default. Use no-referrer for maximum privacy.",
         fixCode: `Referrer-Policy: strict-origin-when-cross-origin
 
@@ -263,7 +263,7 @@ res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");`,
         wstgId: "WSTG-CONF-07",
         what: "Permissions-Policy (formerly Feature-Policy) is a header that lets you disable browser features your app doesn't use — like the camera, microphone, geolocation, and interest cohort APIs.",
         why: "If third-party scripts are ever injected into your page (via XSS or a compromised dependency), they could silently request device features. Restricting these at the header level prevents such API access regardless of what JavaScript runs.",
-        howTested: "Seclayer checks for the Permissions-Policy header. Absence is flagged as Low.",
+        howTested: "SecScan checks for the Permissions-Policy header. Absence is flagged as Low.",
         fix: "Disable any browser features you don't use. This is low-effort, high-value hardening.",
         fixCode: `Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=(), payment=(), usb=()
 
@@ -290,7 +290,7 @@ res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), i
         wstgId: "WSTG-CONF-07",
         what: "CORS (Cross-Origin Resource Sharing) headers control which external websites can make browser-side API requests to your server. Access-Control-Allow-Origin: * allows any website in the world to call your API from a user's browser.",
         why: "A wildcard CORS policy combined with cookies or Authorization headers is particularly dangerous — it allows any malicious website a user visits to make authenticated API requests on their behalf. Even without credentials, wildcard CORS on user-data endpoints can enable cross-site data theft.",
-        howTested: "Seclayer sends an OPTIONS preflight request from a probe origin and inspects the Access-Control-Allow-Origin response. A wildcard on endpoints that serve user-specific data is flagged as Medium.",
+        howTested: "SecScan sends an OPTIONS preflight request from a probe origin and inspects the Access-Control-Allow-Origin response. A wildcard on endpoints that serve user-specific data is flagged as Medium.",
         fix: "Replace the wildcard with an explicit allowlist of your trusted frontend origins.",
         fixCode: `# Instead of:
 Access-Control-Allow-Origin: *
@@ -328,7 +328,7 @@ app.use(cors({
         wstgId: "WSTG-SESS-02",
         what: "The Secure attribute on a cookie tells the browser to only send it over HTTPS connections — never over plain HTTP. Without it, the cookie can be transmitted in cleartext if the user ever visits an HTTP version of your site.",
         why: "Session tokens sent over HTTP are visible to any network observer. Even if your main site redirects to HTTPS, an active attacker can intercept the HTTP request before the redirect happens (SSL stripping), capturing the session cookie in cleartext.",
-        howTested: "Seclayer inspects all Set-Cookie headers and flags any cookie that lacks the Secure attribute.",
+        howTested: "SecScan inspects all Set-Cookie headers and flags any cookie that lacks the Secure attribute.",
         fix: "Add Secure to all cookie definitions. Pair it with HttpOnly and SameSite for full protection.",
         fixCode: `# Full secure cookie
 Set-Cookie: session=abc123; Secure; HttpOnly; SameSite=Lax; Path=/
@@ -355,7 +355,7 @@ app.use(session({
         wstgId: "WSTG-SESS-02",
         what: "The HttpOnly attribute prevents client-side JavaScript from accessing a cookie via document.cookie. This is the primary mitigation against session theft via XSS.",
         why: "If an attacker successfully injects JavaScript into your page (via XSS), they can read all non-HttpOnly cookies with document.cookie. This is how session hijacking works in practice — the attacker exfiltrates the session token and logs in as the victim.",
-        howTested: "Seclayer inspects all Set-Cookie headers for the HttpOnly attribute. Session cookies without it are flagged as Medium.",
+        howTested: "SecScan inspects all Set-Cookie headers for the HttpOnly attribute. Session cookies without it are flagged as Medium.",
         fix: "Add HttpOnly to all session and authentication cookies.",
         fixCode: `Set-Cookie: session=abc123; HttpOnly; Secure; SameSite=Lax
 
@@ -374,7 +374,7 @@ app.use(session({
         wstgId: "WSTG-SESS-02",
         what: "SameSite controls whether a cookie is sent with cross-site requests (from other domains). SameSite=Strict never sends on cross-site requests. SameSite=Lax sends on top-level navigations (following links) but not on fetch/XHR requests. SameSite=None allows all cross-site requests.",
         why: "Without SameSite, cookies are sent with every cross-site request — including form submissions and iframes from malicious sites. This enables Cross-Site Request Forgery (CSRF) attacks where a victim visits an attacker's site and their browser silently submits a request to your app with their session.",
-        howTested: "Seclayer checks all Set-Cookie headers for the SameSite attribute. Absence is flagged as Medium.",
+        howTested: "SecScan checks all Set-Cookie headers for the SameSite attribute. Absence is flagged as Medium.",
         fix: "Add SameSite=Lax as the default. Use Strict for highly sensitive cookies. Only use None for third-party integrations (requires Secure).",
         fixCode: `# Safe default for most apps
 Set-Cookie: session=abc123; Secure; HttpOnly; SameSite=Lax
@@ -404,7 +404,7 @@ Set-Cookie: embed_token=abc; Secure; SameSite=None`,
         wstgId: "WSTG-INFO-02",
         what: "Many web servers and frameworks include version information in the Server response header (e.g., nginx/1.18.0, Apache/2.4.51 (Ubuntu)). This is also sometimes seen in the X-Powered-By header for application frameworks.",
         why: "Version disclosure alone is not exploitable, but it hands attackers a roadmap. Knowing you run nginx/1.18.0 lets them look up the CVE list for exactly that version and craft targeted exploits. Removing version numbers is simple defense-in-depth.",
-        howTested: "Seclayer reads the Server header and checks for version numbers using a regex. Disclosure is flagged as Info.",
+        howTested: "SecScan reads the Server header and checks for version numbers using a regex. Disclosure is flagged as Info.",
         fix: "Configure your server to omit version numbers from headers.",
         fixCode: `# Nginx — nginx.conf
 http {
@@ -432,7 +432,7 @@ app.use(helmet());`,
         wstgId: "WSTG-CONF-05",
         what: "Environment files like .env, .env.local, .env.production, or configuration files like wp-config.php contain database credentials, API keys, and other secrets. If accessible over HTTP, the entire application is compromised.",
         why: "A single exposed .env file typically reveals database URLs (direct DB access), secret keys (JWT forgery, session tampering), payment API keys (financial fraud), and third-party API credentials. This is one of the most common and catastrophic misconfigurations in deployed applications.",
-        howTested: "Seclayer probes common paths like /.env, /.env.local, /.env.production, /wp-config.php, /config.php and checks if they return accessible content (200 status with readable text).",
+        howTested: "SecScan probes common paths like /.env, /.env.local, /.env.production, /wp-config.php, /config.php and checks if they return accessible content (200 status with readable text).",
         fix: "Block .env files at the web server level. Never place them in the web root.",
         fixCode: `# Nginx — block .env files
 location ~ /\\.env {
@@ -465,7 +465,7 @@ location ~ /\\.env {
         wstgId: "WSTG-CONF-05",
         what: "If the .git directory is accessible from the web, attackers can reconstruct your entire source code — including all commit history, secret files, and any credentials that were ever committed, even if later removed.",
         why: "Full source code disclosure allows attackers to audit your entire application for vulnerabilities at their leisure, find hardcoded secrets in any commit, identify all API endpoints, understand your authentication logic, and craft precise exploits.",
-        howTested: "Seclayer requests /.git/HEAD and /.git/config and checks if they return a 200 response with git-formatted content.",
+        howTested: "SecScan requests /.git/HEAD and /.git/config and checks if they return a 200 response with git-formatted content.",
         fix: "Block the .git directory at the web server level. Never deploy the .git folder to a public server.",
         fixCode: `# Nginx
 location ~ /\\.git {
@@ -494,7 +494,7 @@ location ~ /\\.git {
         wstgId: "WSTG-CONF-05",
         what: "Swagger UI, OpenAPI JSON, and similar API documentation endpoints describe every route, parameter, request format, and authentication method of your API. Leaving them publicly accessible makes your API an open book for attackers.",
         why: "API docs reduce the effort required to attack your API from hours of enumeration to seconds of reading. Attackers can see every endpoint, understand expected inputs, find undocumented admin routes, and craft precise injection or authentication bypass attempts.",
-        howTested: "Seclayer probes common paths including /swagger.json, /swagger-ui.html, /api-docs, /openapi.json, /api/v1/docs, and similar patterns.",
+        howTested: "SecScan probes common paths including /swagger.json, /swagger-ui.html, /api-docs, /openapi.json, /api/v1/docs, and similar patterns.",
         fix: "Require authentication to access API docs in production, or serve docs only on internal networks.",
         fixCode: `# Express — protect swagger routes with auth middleware
 app.use("/api-docs", requireAuth, swaggerUi.serve);
@@ -524,7 +524,7 @@ if (process.env.NODE_ENV !== "production") {
         owasp: "A01",
         what: "Supabase provides a public JavaScript client that connects directly to your PostgreSQL database. Row Level Security (RLS) is PostgreSQL's built-in mechanism for restricting which rows a user can read, insert, update, or delete based on security policies.",
         why: "If RLS is not enabled on a Supabase table, any user with your anon key (which is public by default — embedded in your frontend) can query the entire table with no restrictions. In many vibe-coded apps, this means any visitor can read all user data, all records, and potentially delete or modify them. This is arguably the most common critical vulnerability in AI-generated Supabase apps.",
-        howTested: "Seclayer extracts the Supabase project URL from your app's JavaScript, then makes an unauthenticated REST API request to known table endpoints. If the response returns rows with HTTP 200, RLS is not enabled on those tables. This is the same request an attacker would make.",
+        howTested: "SecScan extracts the Supabase project URL from your app's JavaScript, then makes an unauthenticated REST API request to known table endpoints. If the response returns rows with HTTP 200, RLS is not enabled on those tables. This is the same request an attacker would make.",
         fix: "Enable RLS on every Supabase table and write policies that restrict access to the authenticated user's own rows.",
         fixCode: `-- Step 1: Enable RLS on each table (run in Supabase SQL editor)
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
@@ -573,7 +573,7 @@ USING (auth.uid() = author_id);`,
         owasp: "A05",
         what: "SPF (Sender Policy Framework) is a DNS TXT record that lists which mail servers are authorised to send email on behalf of your domain. Receiving mail servers check SPF to detect forged sender addresses.",
         why: "Without SPF, anyone can send email that appears to come from your domain — enabling phishing campaigns, business email compromise, and spam. Attackers craft convincing emails with your domain as the sender to trick recipients into revealing credentials or authorising payments.",
-        howTested: "Seclayer queries the DNS TXT record for your apex domain via Cloudflare DoH. Missing SPF is flagged High. Permissive +all (allows all senders) is flagged Critical.",
+        howTested: "SecScan queries the DNS TXT record for your apex domain via Cloudflare DoH. Missing SPF is flagged High. Permissive +all (allows all senders) is flagged Critical.",
         fix: "Publish an SPF record that lists your authorised sending sources and ends with -all to reject unauthorised senders.",
         fixCode: `# Add a TXT record to your DNS — example for Google Workspace + SendGrid:
 v=spf1 include:_spf.google.com include:sendgrid.net -all
@@ -600,7 +600,7 @@ dig TXT yourdomain.com | grep spf`,
         owasp: "A05",
         what: "DMARC (Domain-based Message Authentication, Reporting & Conformance) builds on SPF and DKIM to tell receiving mail servers what to do with messages that fail authentication — reject, quarantine, or do nothing.",
         why: "SPF and DKIM alone don't prevent spoofing of the human-visible From address. DMARC ties the SPF/DKIM results to the header From domain and specifies enforcement. Without DMARC, authenticated SPF/DKIM emails can still be spoofed at the UI level.",
-        howTested: "Seclayer queries _dmarc.yourdomain.com via DNS. Missing DMARC is High. p=none (monitoring only, no enforcement) is Medium.",
+        howTested: "SecScan queries _dmarc.yourdomain.com via DNS. Missing DMARC is High. p=none (monitoring only, no enforcement) is Medium.",
         fix: "Publish a DMARC record and gradually move to p=reject after monitoring with aggregate reports.",
         fixCode: `# Add TXT record at _dmarc.yourdomain.com
 
@@ -738,7 +738,7 @@ function CheckAccordion({ check }: { check: Check }) {
           <div className="flex gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20">
             <Shield className="w-4 h-4 text-primary shrink-0 mt-0.5" />
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-primary/70 mb-1">How Seclayer tests this</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary/70 mb-1">How SecScan tests this</p>
               <p className="text-sm text-muted-foreground leading-relaxed">{check.howTested}</p>
             </div>
           </div>
@@ -769,8 +769,8 @@ function CheckAccordion({ check }: { check: Check }) {
 
 export default function LearnPage() {
   useSeo({
-    title: "Security Documentation — Seclayer",
-    description: "Plain-English explanations of every security check Seclayer runs: HTTPS, HSTS, CSP, X-Frame-Options, CORS, cookie flags, Supabase RLS, and more. With code fixes.",
+    title: "Security Documentation — SecScan",
+    description: "Plain-English explanations of every security check SecScan runs: HTTPS, HSTS, CSP, X-Frame-Options, CORS, cookie flags, Supabase RLS, and more. With code fixes.",
     canonical: `${APP_ORIGIN}/learn`,
   });
 
@@ -802,7 +802,7 @@ export default function LearnPage() {
           Security checks documentation
         </h1>
         <p className="text-lg text-muted-foreground mb-5">
-          Plain-English explanations of every vulnerability Seclayer detects — what it is, why attackers exploit it, how we test for it, and exactly how to fix it.
+          Plain-English explanations of every vulnerability SecScan detects — what it is, why attackers exploit it, how we test for it, and exactly how to fix it.
         </p>
         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
           <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-primary" />{totalChecks} checks documented</span>
@@ -919,7 +919,7 @@ export default function LearnPage() {
         <Shield className="w-10 h-10 text-primary mx-auto mb-4" />
         <h2 className="text-2xl font-bold mb-2">See how your app scores</h2>
         <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-          Seclayer tests all of the above — plus dozens more checks — in a single automated scan. Get your grade in under 10 minutes.
+          SecScan tests all of the above — plus dozens more checks — in a single automated scan. Get your grade in under 10 minutes.
         </p>
         <Link href="/scan"
           className="inline-flex items-center gap-2 px-8 py-3 bg-primary text-primary-foreground font-bold rounded-xl hover:shadow-[0_0_20px_rgba(20,184,120,0.4)] hover:-translate-y-0.5 transition-all duration-200">

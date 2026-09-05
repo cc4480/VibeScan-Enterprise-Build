@@ -1,4 +1,4 @@
-# Seclayer — Full Scan Test Reference
+# SecScan — Full Scan Test Reference
 
 Complete catalogue of every security check performed by the engine. Organised by module. Each entry lists the methodology, what triggers a finding, and the severity range.
 
