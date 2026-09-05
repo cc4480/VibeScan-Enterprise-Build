@@ -516,3 +516,76 @@ describe("API-level IDOR", () => {
     expect(findings.some((f) => /Readable by Another Account/i.test(f.name))).toBe(false);
   });
 });
+
+describe("rate-limit finding", () => {
+  it("flags a genuinely unlimited sensitive endpoint", async () => {
+    // A customer-data endpoint with no throttling — the case this finding
+    // exists to catch.
+    const port = await serve((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(DATA);
+    });
+
+    const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+      runApiProbes({
+        endpoints: [ep({ url: `http://localhost:${port}/api/orders` })],
+      }),
+    );
+
+    const f = findings.find((x) => /Without Rate Limiting/i.test(x.name));
+    expect(f).toBeDefined();
+    expect(f!.evidence).toContain("/api/orders");
+  });
+
+  it("does not flag a liveness or discovery endpoint for answering an unlimited burst", async () => {
+    // Regression: this probe flagged seclayer.app's /api/system/health and
+    // /api/auth/providers — a platform health check and a public
+    // OAuth-provider-discovery route. Both are meant to answer every request;
+    // throttling either is the wrong fix, not the missing one. The endpoint
+    // shapes here mirror the ones actually found in production.
+    const exemptPaths = [
+      "/api/system/health",
+      "/api/health",
+      "/healthz",
+      "/api/auth/providers",
+      "/.well-known/security.txt",
+      "/robots.txt",
+      "/api/version",
+    ];
+
+    for (const path of exemptPaths) {
+      const port = await serve((_req, res) => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end('{"ok":true}');
+      });
+
+      const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+        runApiProbes({
+          endpoints: [ep({ url: `http://localhost:${port}${path}` })],
+        }),
+      );
+
+      expect(
+        findings.some((f) => /Without Rate Limiting/i.test(f.name)),
+        `expected no rate-limit finding for ${path}`,
+      ).toBe(false);
+    }
+  });
+
+  it("still flags a sensitive path that merely contains an exempt word as a substring", async () => {
+    // The exemption matches whole path segments, not substrings — a route
+    // like /api/health-records must not be swept up with /api/health.
+    const port = await serve((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(DATA);
+    });
+
+    const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+      runApiProbes({
+        endpoints: [ep({ url: `http://localhost:${port}/api/health-records` })],
+      }),
+    );
+
+    expect(findings.some((f) => /Without Rate Limiting/i.test(f.name))).toBe(true);
+  });
+});

@@ -49,6 +49,24 @@ const MAX_PARAMS_PER_ENDPOINT = 4;
 // limiter would have engaged.
 const RATE_LIMIT_BURST = 12;
 
+/**
+ * Paths that are meant to answer an unlimited burst and must not be flagged
+ * for it. A liveness probe is polled continuously by the platform itself —
+ * Railway, Kubernetes, a load balancer — and rate-limiting it would make the
+ * platform mark a healthy service as down. A provider-discovery or
+ * well-known endpoint returns data that is public by definition (an OAuth
+ * client ID is not a secret), so throttling it stops nothing an attacker
+ * couldn't already get by loading the page once.
+ *
+ * Found the hard way: this probe flagged seclayer.app's own
+ * /api/system/health and /api/auth/providers, while its actual
+ * credential-issuing endpoint enforced a limit correctly (verified live:
+ * 429 from the sixth request). The finding's own "credential stuffing"
+ * language never applied to either endpoint it named.
+ */
+const RATE_LIMIT_EXEMPT_PATTERN =
+  /\/(healthz?|health[-_]?check|status|ready(iness)?|live(ness)?|ping|version|manifest\.json|\.well-known\/[^/]+|providers?|config(uration)?|robots\.txt|sitemap\.xml|favicon\.ico)(\/|$)/i;
+
 /** Paths whose POST is a query rather than a write. */
 const READ_SHAPED = /\b(search|query|filter|lookup|find|list|report|graphql|validate|preview|check)\b/i;
 
@@ -242,7 +260,11 @@ export async function runApiProbes(input: ApiProbeInput): Promise<ScanVulnerabil
     // ── 1d. Rate limiting ───────────────────────────────────────────────────
     // Reads only, and a small burst — enough to show no limiter exists without
     // becoming load against a customer's server.
-    if (endpoint.method === "GET" && unratelimited.length < 3) {
+    if (
+      endpoint.method === "GET" &&
+      unratelimited.length < 3 &&
+      !RATE_LIMIT_EXEMPT_PATTERN.test(new URL(url).pathname)
+    ) {
       const burst = await Promise.all(
         Array.from({ length: RATE_LIMIT_BURST }, () =>
           scanFetch(url, {
