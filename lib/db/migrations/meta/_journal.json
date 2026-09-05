@@ -15,6 +15,13 @@
       "when": 1788540608286,
       "tag": "0001_nosy_the_twelve",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788619037822,
+      "tag": "0002_simple_mordo",
+      "breakpoints": true
     }
   ]
 }

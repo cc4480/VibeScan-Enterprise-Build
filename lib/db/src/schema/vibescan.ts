@@ -96,6 +96,29 @@ export const creditsTable = pgTable("credits", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Proof that a user controls a domain, which is what unlocks active offensive
+ * probing against it. Without this the scanner would fire attack payloads at
+ * any host someone types in, which is both a legal problem for us and an
+ * anonymous attack proxy for everyone else.
+ *
+ * One row per (user, domain). `verifiedAt` null means the challenge has been
+ * issued but not yet satisfied; the token stays so the user can retry.
+ */
+export const domainVerificationsTable = pgTable("domain_verifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: text("user_id").notNull(),
+  domain: text("domain").notNull(),
+  token: text("token").notNull(),
+  method: text("method", { enum: ["dns", "well_known"] }),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_domain_verif_user_domain").on(table.userId, table.domain),
+  index("idx_domain_verif_user").on(table.userId),
+]);
+
 export const monitorSubscriptionsTable = pgTable("monitor_subscriptions", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull(),
