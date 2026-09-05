@@ -126,8 +126,14 @@ function isRefusal(status: number, body: string): boolean {
 const IMPLAUSIBLE_ID = "999999997";
 
 /** Response fields that should not be leaving the server at all. */
+// Two entries deliberately excluded: bare "hash" and bare "token" are common
+// as public, non-sensitive field names — a content hash for cache-busting or
+// dedup, a share/invite token already exposed in a URL. The prefixed forms
+// (password_hash, access_token, session_token, …) still catch the case that
+// actually matters, without a bare word firing on every API that returns a
+// pagination cursor called "token".
 const SENSITIVE_FIELD_RE =
-  /^(password|passwd|pwd|password_?hash|hash|salt|secret|api_?key|apikey|private_?key|access_?token|refresh_?token|session_?token|token|ssn|social_?security|card_?number|cardnumber|cvv|cvc|iban|routing_?number|tax_?id)$/i;
+  /^(password|passwd|pwd|password_?hash|salt|secret|api_?key|apikey|private_?key|access_?token|refresh_?token|session_?token|ssn|social_?security|card_?number|cardnumber|cvv|cvc|iban|routing_?number|tax_?id)$/i;
 
 /** Fields that let a caller grant themselves something by including them. */
 const PRIVILEGE_FIELD_RE =

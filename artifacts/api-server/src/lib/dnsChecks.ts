@@ -198,11 +198,15 @@ export async function checkDmarc(hostname: string): Promise<ScanVulnerability[]>
 // DKIM CHECK
 // ─────────────────────────────────────────────────────────────────────────────
 
-const COMMON_DKIM_SELECTORS = [
+export const COMMON_DKIM_SELECTORS = [
   // Standard / service-specific selectors
   "default", "google", "mail", "smtp", "k1", "k2",
   "selector1", "selector2", "email", "mailjet", "mandrill",
   "sendgrid", "pm", "s1", "s2", "dkim", "key1", "key2",
+  // Confirmed the hard way: secscan.us's own DKIM record lives at
+  // resend._domainkey and was missing here, which would have made this
+  // checker report "No DKIM" against a domain actively sending signed mail.
+  "resend",
   "mxvault", "everlytickey1", "everlytickey2", "litesrv",
   // Additional common selectors
   "m1", "m2", "dkim1", "dkim2", "mx", "mailgun", "cm",

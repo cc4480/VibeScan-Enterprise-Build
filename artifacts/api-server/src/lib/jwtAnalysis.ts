@@ -76,10 +76,15 @@ function decodeJwt(token: string): {
 
 // ─── Sensitive payload key names ──────────────────────────────────────────────
 
+// "token" alone is deliberately excluded: access_token, refresh_token and
+// auth_token already catch the case that matters, and a bare "token" key is
+// common enough as an unrelated internal field (a correlation id, a
+// continuation cursor) that including it produced findings on payloads
+// carrying nothing sensitive at all.
 const SENSITIVE_KEYS = new Set([
   "password", "passwd", "pwd", "secret", "api_key", "apikey",
   "access_token", "refresh_token", "credit_card", "ssn", "dob",
-  "private_key", "token", "auth_token",
+  "private_key", "auth_token",
 ]);
 
 // ─── Main export ──────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { checkSpf, checkDmarc } from "./dnsChecks.js";
+import { checkSpf, checkDmarc, checkDkim, COMMON_DKIM_SELECTORS } from "./dnsChecks.js";
 
 /**
  * DNS check tests — stubs globalThis.fetch to simulate Cloudflare DoH responses.
@@ -153,5 +153,35 @@ describe("checkDmarc — policy enforcement", () => {
     );
     const vulns = await checkDmarc("example.com");
     expect(vulns.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("checkDkim", () => {
+  it("carries the resend selector", () => {
+    // Regression: secscan.us's own DKIM record lives at resend._domainkey and
+    // was missing from this list, which would have made this checker report
+    // "No DKIM" against a domain actively sending signed, delivering mail.
+    expect(COMMON_DKIM_SELECTORS).toContain("resend");
+  });
+
+  it("finds a record under the resend selector and reports nothing", async () => {
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("resend._domainkey")) {
+        return dohResponse([{ data: '"p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCB..."' }]);
+      }
+      return noTxt();
+    });
+
+    const vulns = await checkDkim("secscan.us");
+    expect(vulns).toEqual([]);
+  });
+
+  it("still reports when every selector, including resend, comes back empty", async () => {
+    vi.mocked(fetch).mockImplementation(async () => noTxt());
+
+    const vulns = await checkDkim("example.com");
+    expect(vulns.length).toBe(1);
+    expect(vulns[0]!.name).toMatch(/No DKIM/i);
   });
 });
