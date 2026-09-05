@@ -16,6 +16,7 @@ import MonitorPage from "@/pages/monitor";
 import SharedReport from "@/pages/shared-report";
 import LearnPage from "@/pages/learn";
 import SettingsPage from "@/pages/settings";
+import DomainsPage from "@/pages/domains";
 import SignInPage from "@/pages/sign-in";
 import RegisterPage from "@/pages/register";
 import ForgotPasswordPage from "@/pages/forgot-password";
@@ -168,6 +169,7 @@ function Router() {
             <Route path="/monitor" component={MonitorPage} />
             <Route path="/learn" component={LearnPage} />
             <Route path="/settings" component={SettingsPage} />
+            <Route path="/domains" component={DomainsPage} />
             <Route component={NotFound} />
           </Switch>
         </Layout>

@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Shield, LayoutDashboard, Menu, X, Plus, BookOpen, Bell, Settings, LogOut } from "lucide-react";
+import { Shield, LayoutDashboard, Menu, X, Plus, BookOpen, Bell, Settings, LogOut, ShieldCheck} from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGetCurrentAuthUser } from "@workspace/api-client-react";
@@ -138,6 +138,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <BookOpen className="w-3.5 h-3.5" /> Learn
             </Link>
             <Link
+              href="/domains"
+              className={cn(
+                "text-sm font-medium transition-colors hover:text-foreground flex items-center gap-1.5",
+                location === "/domains" ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" /> Domains
+            </Link>
+            <Link
               href="/settings"
               className={cn(
                 "text-sm font-medium transition-colors hover:text-foreground flex items-center gap-1.5",
@@ -198,6 +207,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
               className="px-4 py-2 text-foreground font-medium rounded-lg hover:bg-secondary flex items-center gap-2"
             >
               <BookOpen className="w-4 h-4" /> Learn
+            </Link>
+            <Link
+              href="/domains"
+              onClick={() => setMobileMenuOpen(false)}
+              className="px-4 py-2 text-foreground font-medium rounded-lg hover:bg-secondary flex items-center gap-2"
+            >
+              <ShieldCheck className="w-4 h-4" /> Domains
             </Link>
             <Link
               href="/settings"
