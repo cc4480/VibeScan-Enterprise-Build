@@ -35,6 +35,7 @@ import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { createSession, SESSION_COOKIE, SESSION_TTL } from "../lib/auth";
 import { clientIp } from "../lib/clientIp";
+import { addToMarketingAudience, sendWelcomeEmail } from "../lib/mailer";
 
 const router: IRouter = Router();
 
@@ -271,6 +272,13 @@ router.get(
             profileImageUrl: picture,
           })
           .returning();
+
+        // Best-effort, fire-and-forget: only for a genuinely new account, not
+        // every Google sign-in. Each function logs and swallows its own errors.
+        if (row) {
+          void addToMarketingAudience(normalizedEmail, firstName);
+          void sendWelcomeEmail(normalizedEmail, firstName);
+        }
       }
 
       if (!row) {

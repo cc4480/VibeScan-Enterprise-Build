@@ -5,9 +5,10 @@
  * Requires RESEND_API_KEY environment variable.
  */
 
-import { FROM_EMAIL } from "./appOrigin";
+import { FROM_EMAIL, APP_ORIGIN } from "./appOrigin";
 
 const RESEND_API = "https://api.resend.com/emails";
+const RESEND_AUDIENCES_API = "https://api.resend.com/audiences";
 
 interface SendReportEmailOptions {
   toEmail: string;
@@ -499,5 +500,62 @@ export async function sendPasswordReset(toEmail: string, resetUrl: string): Prom
       "This link expires in 1 hour and can only be used once. If you didn't ask to reset your password, you can ignore this email — your current password still works.",
     ),
     "password reset",
+  );
+}
+
+// ── Marketing: shared audience + welcome email ──────────────────────────────
+//
+// Seclayer and Secscan.us run the same engine under two names and share one
+// signup pool. Every new account — on either domain, through either sign-in
+// path — is added to one Resend Audience so a single broadcast reaches
+// everyone, and gets one welcome email. There is no separate opt-in checkbox:
+// consent comes from the account ToS, and every future marketing send goes
+// through Resend's Audience unsubscribe link, not this one-time message.
+//
+// Resend restricts per-domain sending keys from managing audiences/contacts
+// (a 401 "restricted_api_key" otherwise), so this uses a separate, broader
+// key set on both deployments specifically for this — RESEND_API_KEY is left
+// alone and keeps its narrower, per-send scope.
+
+export async function addToMarketingAudience(email: string, firstName?: string | null): Promise<void> {
+  const apiKey = process.env.RESEND_AUDIENCE_API_KEY;
+  const audienceId = process.env.RESEND_AUDIENCE_ID;
+  if (!apiKey || !audienceId) {
+    console.warn("[mailer] RESEND_AUDIENCE_API_KEY or RESEND_AUDIENCE_ID not set — skipping audience signup");
+    return;
+  }
+
+  try {
+    const res = await fetch(`${RESEND_AUDIENCES_API}/${audienceId}/contacts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        email,
+        first_name: firstName || undefined,
+        unsubscribed: false,
+      }),
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Resend API ${res.status}: ${errText}`);
+    }
+    console.log("[mailer] Added to marketing audience", { email });
+  } catch (err) {
+    console.error("[mailer] Failed to add contact to marketing audience:", err);
+  }
+}
+
+export async function sendWelcomeEmail(toEmail: string, firstName?: string | null): Promise<void> {
+  await sendAccountEmail(
+    toEmail,
+    "Welcome to Seclayer",
+    buildAccountHtml(
+      firstName ? `Welcome, ${firstName}` : "Welcome to Seclayer",
+      "Seclayer and Secscan.us run the same scanning engine under one roof — real vulnerability checks, not a checklist: SQL injection, exposed secrets, misconfigured databases, and more. We'll email you when there's something worth knowing: new features, security research, and the occasional product update. Account and security emails (password resets, scan reports) always go out regardless.",
+      "Run your first scan",
+      `${APP_ORIGIN}/dashboard`,
+      "You can unsubscribe from product updates at any time via the link included in those emails.",
+    ),
+    "welcome email",
   );
 }

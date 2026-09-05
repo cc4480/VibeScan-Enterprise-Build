@@ -27,7 +27,7 @@ import {
   SESSION_TTL,
 } from "../lib/auth";
 import { issueToken, redeemToken } from "../lib/authTokens";
-import { sendEmailVerification, sendPasswordReset } from "../lib/mailer";
+import { sendEmailVerification, sendPasswordReset, addToMarketingAudience, sendWelcomeEmail } from "../lib/mailer";
 import { clientIp } from "../lib/clientIp";
 
 const router: IRouter = Router();
@@ -151,6 +151,13 @@ router.post("/account/register", async (req, res): Promise<void> => {
       res.status(500).json({ error: "Could not create the account" });
       return;
     }
+
+    // Best-effort, fire-and-forget: a marketing-audience hiccup must never
+    // block or fail account creation. Each function logs and swallows its
+    // own errors. `email` (not row.email) because RegisterBody guarantees it
+    // non-null here, where the column type alone does not.
+    void addToMarketingAudience(email);
+    void sendWelcomeEmail(email);
 
     await startSession(req, res, row);
     res.status(201).json({ user: publicUser(row) });
