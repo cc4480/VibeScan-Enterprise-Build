@@ -314,7 +314,14 @@ function portVulns(openPorts: PortEntry[]): ScanVulnerability[] {
 
 // ─── Main export ─────────────────────────────────────────────────────────────
 
-export async function runRecon(targetUrl: string): Promise<ReconRunResult> {
+export async function runRecon(
+  targetUrl: string,
+  // A TCP sweep of someone else's host is reconnaissance against them, not a
+  // visit to their site, so it waits for the same ownership proof the
+  // offensive HTTP probes do. DNS and subdomain enumeration stay: both read
+  // public records without touching the target.
+  allowPortScan: boolean,
+): Promise<ReconRunResult> {
   const startedAt = Date.now();
   let hostname: string;
   try {
@@ -353,7 +360,7 @@ export async function runRecon(targetUrl: string): Promise<ReconRunResult> {
       log.warn({ err }, "[recon] Subdomain enumeration failed");
       return [] as SubdomainEntry[];
     }),
-    skipPortScan
+    skipPortScan || !allowPortScan
       ? Promise.resolve([] as PortEntry[])
       : scanPorts(resolvedIp!).catch((err) => {
           log.warn({ err }, "[recon] Port scan failed");

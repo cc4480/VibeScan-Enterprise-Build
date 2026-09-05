@@ -797,25 +797,48 @@ async function checkSupabaseRLS(html: string): Promise<ScanVulnerability[]> {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * @param allowActive  Whether the caller has established that the user may
+ *   have offensive traffic sent to this target (see lib/activeProbeGate.ts).
+ *   The probes below split on one question: would this look, to the target,
+ *   like an ordinary visitor, or like someone testing them?
+ *
+ *   Fetching a path — even one nothing links to — is what every crawler on
+ *   the internet does, so exposed files, robots.txt, security.txt, directory
+ *   listings and error pages stay available for any target. Sending a crafted
+ *   Origin, an unusual method, a redirect payload, or querying somebody's
+ *   database does not, and waits for verification.
+ */
 export async function runAllProbes(
   targetUrl: string,
   html: string,
+  allowActive: boolean,
 ): Promise<ScanVulnerability[]> {
-  const settled = await Promise.allSettled([
+  const passive = [
     checkSensitiveFiles(targetUrl),
-    checkHttpMethods(targetUrl),
-    checkActiveCors(targetUrl),
-    checkOpenRedirect(targetUrl),
     checkRobotsTxt(targetUrl),
     checkSRI(html, targetUrl),
     checkErrorDisclosure(targetUrl),
     checkHttpsRedirect(targetUrl),
+    // Header heuristic only — the behavioural burst lives in apiProbe.ts and
+    // is gated there.
     checkRateLimiting(targetUrl),
     checkClickjacking(targetUrl),
     checkDirectoryListing(targetUrl),
     checkSecurityTxt(targetUrl),
-    checkSupabaseRLS(html),
-  ]);
+  ];
+
+  const active = allowActive
+    ? [
+        checkHttpMethods(targetUrl),
+        checkActiveCors(targetUrl),
+        checkOpenRedirect(targetUrl),
+        // Reads rows out of the target's Supabase instance.
+        checkSupabaseRLS(html),
+      ]
+    : [];
+
+  const settled = await Promise.allSettled([...passive, ...active]);
 
   return settled
     .filter((r): r is PromiseFulfilledResult<ScanVulnerability[]> => r.status === "fulfilled")
