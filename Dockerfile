@@ -128,3 +128,19 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD ["node", "artifacts/api-server/dist/healthcheck-secscan.mjs"]
 
 CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/secscan.mjs"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# seclayer-app — alias for the standalone seclayer.app Railway project
+#
+# Railway selects a Docker build target by matching the stage name to the
+# service name, falling back to the last stage in the file (secscan) when
+# nothing matches. The service in the seclayer.app project is named
+# "seclayer-app", not "seclayer", so with no matching stage it was silently
+# building the scanner image instead of the web tier — a background worker
+# with no HTTP listener, requiring DATABASE_URL, deployed as the public web
+# app. This stage exists only to give it a name match. Keep it last in the
+# file for the same reason: any other platform that builds this Dockerfile
+# without choosing a target should still get seclayer, not secscan.
+# ─────────────────────────────────────────────────────────────────────────────
+FROM seclayer AS seclayer-app
