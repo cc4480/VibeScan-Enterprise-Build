@@ -27,3 +27,13 @@ export const SCANNER_USER_AGENT: string =
 /** From address for notification email. Must be a domain verified with Resend. */
 export const FROM_EMAIL: string =
   process.env.FROM_EMAIL ?? `SecScan <reports@${APP_DOMAIN}>`;
+
+/**
+ * Address replies go to. FROM_EMAIL is a send-only mailbox on the Resend
+ * domain — mail sent to it is not delivered anywhere — so without this every
+ * reply a customer writes is silently lost. Set REPLY_TO_EMAIL to an inbox a
+ * human actually reads; leave it unset and no reply_to header is attached,
+ * which is the honest default rather than pointing replies at a black hole.
+ */
+export const REPLY_TO_EMAIL: string | undefined =
+  process.env.REPLY_TO_EMAIL?.trim() || undefined;
