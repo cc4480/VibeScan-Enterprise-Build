@@ -170,11 +170,10 @@ export async function callDeepSeek(
   vulnerabilities: ScanVulnerability[],
   technologies: string[],
   tier: string,
-  userApiKey?: string | null,
 ): Promise<AiAnalysisResult | null> {
-  const apiKey = userApiKey || process.env.DEEPSEEK_API_KEY;
+  const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
-    console.warn("[deepseek] No DeepSeek API key available (user-configured or server default) — skipping AI analysis");
+    console.warn("[deepseek] DEEPSEEK_API_KEY is not set — skipping AI analysis");
     return null;
   }
 

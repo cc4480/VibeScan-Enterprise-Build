@@ -384,20 +384,6 @@ export interface Credits {
   balance: number;
 }
 
-export interface DeepseekKeyStatus {
-  configured: boolean;
-  /**
-   * Last 4 characters of the configured key, for display only. Null if unconfigured.
-   * @nullable
-   */
-  last4: string | null;
-}
-
-export interface SetDeepseekKeyRequest {
-  /** @minLength 10 */
-  apiKey: string;
-}
-
 export type MonitorSubscriptionStatus =
   (typeof MonitorSubscriptionStatus)[keyof typeof MonitorSubscriptionStatus];
 
