@@ -6,6 +6,9 @@
  */
 
 import { FROM_EMAIL, REPLY_TO_EMAIL, APP_ORIGIN } from "./appOrigin";
+import { db, usersTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
+import { unsubscribeHeaders } from "./emailPrefs";
 
 const RESEND_API = "https://api.resend.com/emails";
 const RESEND_AUDIENCES_API = "https://api.resend.com/audiences";
@@ -16,6 +19,29 @@ const RESEND_AUDIENCES_API = "https://api.resend.com/audiences";
  * which is how a reply-to header goes missing on one email and nobody
  * notices until a customer's reply disappears.
  */
+/**
+ * Whether recurring alert mail may be sent to this user.
+ *
+ * Checked here rather than at each call site so a new alert type cannot ship
+ * without honouring the opt-out. Fails OPEN, unlike the scan gate: a missed
+ * alert means somebody does not hear that their certificate expires, while an
+ * extra email to someone who opted out is an annoyance. A database blip should
+ * not silence a security warning.
+ */
+async function alertEmailsAllowed(userId: string): Promise<boolean> {
+  try {
+    const [row] = await db
+      .select({ optedOut: usersTable.alertEmailsOptedOut })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId))
+      .limit(1);
+    return !row?.optedOut;
+  } catch (err) {
+    console.error("[mailer] Could not read alert preference; sending anyway:", err);
+    return true;
+  }
+}
+
 function resendBody(fields: Record<string, unknown>): string {
   return JSON.stringify({
     from: FROM_EMAIL,
@@ -129,6 +155,8 @@ interface CveMatch {
 
 interface SendMonitorCveAlertOptions {
   toEmail: string;
+  /** Signs the unsubscribe link and identifies whose preference to honour. */
+  userId: string;
   targetUrl: string;
   cveMatches: CveMatch[];
   scanId: string;
@@ -148,6 +176,11 @@ export async function sendMonitorCveAlertEmail(opts: SendMonitorCveAlertOptions)
   if (!apiKey) {
     console.warn("[mailer] RESEND_API_KEY is not set — skipping CVE alert email");
     return;
+  }
+
+  if (!(await alertEmailsAllowed(opts.userId))) {
+    console.log("[mailer] Skipping CVE alert email — user opted out", { to: opts.toEmail });
+    return;
   }
 
   const { targetUrl, cveMatches, dashboardUrl } = opts;
@@ -218,6 +251,7 @@ export async function sendMonitorCveAlertEmail(opts: SendMonitorCveAlertOptions)
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: resendBody({
+        headers: unsubscribeHeaders(APP_ORIGIN, opts.userId),
         to: [opts.toEmail],
         subject: `⚠ CVE Alert: ${topMatch?.cveId ?? "New vulnerability"}${extra} affects ${targetUrl}`,
         html,
@@ -244,6 +278,8 @@ export interface RegressionItem {
 
 interface SendRegressionAlertOptions {
   toEmail: string;
+  /** Signs the unsubscribe link and identifies whose preference to honour. */
+  userId: string;
   targetUrl: string;
   regressions: RegressionItem[];
   scanId: string;
@@ -252,7 +288,12 @@ interface SendRegressionAlertOptions {
 
 export async function sendRegressionAlertEmail(opts: SendRegressionAlertOptions): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return;
+  if (!apiKey) return;
+
+  if (!(await alertEmailsAllowed(opts.userId))) {
+    console.log("[mailer] Skipping regression alert email — user opted out", { to: opts.toEmail });
+    return;
+  }
 
   const { targetUrl, regressions, dashboardUrl } = opts;
 
@@ -305,6 +346,7 @@ export async function sendRegressionAlertEmail(opts: SendRegressionAlertOptions)
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: resendBody({
+        headers: unsubscribeHeaders(APP_ORIGIN, opts.userId),
         to: [opts.toEmail],
         subject: `🔴 Regression alert: ${regressions.length} security check${regressions.length > 1 ? "s" : ""} failing on ${targetUrl}`,
         html,
@@ -321,6 +363,8 @@ export async function sendRegressionAlertEmail(opts: SendRegressionAlertOptions)
 
 interface SendCertExpiryOptions {
   toEmail: string;
+  /** Signs the unsubscribe link and identifies whose preference to honour. */
+  userId: string;
   targetUrl: string;
   daysRemaining: number;
   expiryDate: Date;
@@ -329,7 +373,12 @@ interface SendCertExpiryOptions {
 
 export async function sendCertExpiryEmail(opts: SendCertExpiryOptions): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return;
+  if (!apiKey) return;
+
+  if (!(await alertEmailsAllowed(opts.userId))) {
+    console.log("[mailer] Skipping cert expiry email — user opted out", { to: opts.toEmail });
+    return;
+  }
 
   const { targetUrl, daysRemaining, expiryDate, dashboardUrl } = opts;
   const urgency = daysRemaining <= 7 ? "🚨 URGENT" : daysRemaining <= 14 ? "⚠️ Warning" : "📋 Notice";
@@ -367,6 +416,7 @@ export async function sendCertExpiryEmail(opts: SendCertExpiryOptions): Promise<
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: resendBody({
+        headers: unsubscribeHeaders(APP_ORIGIN, opts.userId),
         to: [opts.toEmail],
         subject: `${urgency}: TLS certificate for ${targetUrl} expires in ${daysRemaining} days`,
         html,
@@ -381,6 +431,8 @@ export async function sendCertExpiryEmail(opts: SendCertExpiryOptions): Promise<
 
 interface SendMonitorScanQueuedOptions {
   toEmail: string;
+  /** Signs the unsubscribe link and identifies whose preference to honour. */
+  userId: string;
   targetUrl: string;
   scanId: string;
   reason: "weekly" | "cve" | "adaptive";
@@ -389,7 +441,12 @@ interface SendMonitorScanQueuedOptions {
 
 export async function sendMonitorScanQueuedEmail(opts: SendMonitorScanQueuedOptions): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return;
+  if (!apiKey) return;
+
+  if (!(await alertEmailsAllowed(opts.userId))) {
+    console.log("[mailer] Skipping monitor scan queued email — user opted out", { to: opts.toEmail });
+    return;
+  }
 
   const { targetUrl, reason, dashboardUrl } = opts;
   const label = reason === "weekly" ? "Weekly security rescan" : reason === "adaptive" ? "Scheduled security rescan" : "CVE-triggered rescan";
@@ -424,6 +481,7 @@ export async function sendMonitorScanQueuedEmail(opts: SendMonitorScanQueuedOpti
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: resendBody({
+        headers: unsubscribeHeaders(APP_ORIGIN, opts.userId),
         to: [opts.toEmail],
         subject: `${label} started for ${targetUrl}`,
         html,
@@ -559,6 +617,45 @@ export async function sendPasswordReset(toEmail: string, resetUrl: string): Prom
 // (a 401 "restricted_api_key" otherwise), so this uses a separate, broader
 // key set on both deployments specifically for this — RESEND_API_KEY is left
 // alone and keeps its narrower, per-send scope.
+
+/**
+ * Mirror a product-updates preference onto the Resend contact.
+ *
+ * The audience is what a broadcast actually sends to, so a preference held
+ * only in our own database would be ignored the moment an update went out
+ * from the Resend dashboard. Patches by email rather than by contact id, so
+ * it works without storing Resend ids alongside ours.
+ *
+ * Best-effort: the caller has already saved the preference, so a failure here
+ * is logged rather than surfaced. The two can drift if Resend is down, which
+ * is worth reconciling if this ever matters at volume.
+ */
+export async function setMarketingSubscription(email: string, subscribed: boolean): Promise<void> {
+  const apiKey = process.env.RESEND_AUDIENCE_API_KEY;
+  const audienceId = process.env.RESEND_AUDIENCE_ID;
+  if (!apiKey || !audienceId) {
+    console.warn("[mailer] Audience not configured — cannot sync product-updates preference");
+    return;
+  }
+
+  try {
+    const res = await fetch(
+      `${RESEND_AUDIENCES_API}/${audienceId}/contacts/${encodeURIComponent(email)}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ unsubscribed: !subscribed }),
+      },
+    );
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Resend API ${res.status}: ${errText}`);
+    }
+    console.log("[mailer] Synced product-updates preference", { email, subscribed });
+  } catch (err) {
+    console.error("[mailer] Failed to sync product-updates preference:", err);
+  }
+}
 
 export async function addToMarketingAudience(email: string, firstName?: string | null): Promise<void> {
   const apiKey = process.env.RESEND_AUDIENCE_API_KEY;

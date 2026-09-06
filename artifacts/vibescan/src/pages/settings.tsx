@@ -1,8 +1,56 @@
 import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSeo } from "@/lib/seo";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Loader2, AlertTriangle } from "lucide-react";
-import { deleteAccount } from "@/lib/account-api";
+import { Trash2, Loader2, AlertTriangle, Mail } from "lucide-react";
+import {
+  deleteAccount,
+  getEmailPreferences,
+  setEmailPreferences,
+  type EmailPreferences,
+} from "@/lib/account-api";
+
+/** Row with a switch. Optimistic: the toggle moves on click and reverts if the
+ *  save fails, because a control that lags a round trip feels broken. */
+function PreferenceToggle({
+  label,
+  description,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  disabled: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-6 py-4 border-b border-white/5 last:border-0">
+      <div className="min-w-0">
+        <div className="font-medium text-sm mb-1">{label}</div>
+        <p className="text-sm text-muted-foreground leading-relaxed">{description}</p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+        className={`shrink-0 mt-1 w-11 h-6 rounded-full transition-colors disabled:opacity-50 ${
+          checked ? "bg-primary" : "bg-white/15"
+        }`}
+      >
+        <span
+          className={`block w-5 h-5 rounded-full bg-white transition-transform ${
+            checked ? "translate-x-[22px]" : "translate-x-[2px]"
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
 
 function getFriendlyError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err ?? "");
@@ -20,6 +68,36 @@ export default function SettingsPage() {
   // to dismiss by reflex for something with no undo.
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const queryClient = useQueryClient();
+  const [saving, setSaving] = useState(false);
+
+  const { data: prefs, isLoading: prefsLoading } = useQuery({
+    queryKey: ["email-preferences"],
+    queryFn: getEmailPreferences,
+  });
+
+  const updatePref = async (changes: Partial<EmailPreferences>) => {
+    const previous = queryClient.getQueryData<EmailPreferences>(["email-preferences"]);
+    queryClient.setQueryData<EmailPreferences>(["email-preferences"], (old) =>
+      old ? { ...old, ...changes } : old,
+    );
+    setSaving(true);
+    try {
+      const saved = await setEmailPreferences(changes);
+      queryClient.setQueryData(["email-preferences"], saved);
+    } catch (err) {
+      // Put the switch back where it was; leaving it flipped would claim a
+      // preference we did not manage to store.
+      if (previous) queryClient.setQueryData(["email-preferences"], previous);
+      toast({
+        title: "Couldn't save preference",
+        description: getFriendlyError(err),
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleDeleteAccount = async () => {
     setDeleting(true);
@@ -43,6 +121,44 @@ export default function SettingsPage() {
       <div className="mb-10">
         <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-3">Settings</h1>
         <p className="text-muted-foreground text-lg">Manage your account.</p>
+      </div>
+
+      <div className="glass-panel p-6 sm:p-10 rounded-3xl mb-8">
+        <div className="flex items-start gap-4 mb-2">
+          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20 shrink-0">
+            <Mail className="w-6 h-6 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold mb-1">Email</h2>
+            <p className="text-sm text-muted-foreground">
+              Account emails — password resets, email verification and purchase receipts —
+              always send, and are not listed here.
+            </p>
+          </div>
+        </div>
+
+        {prefsLoading ? (
+          <div className="flex items-center gap-2 text-muted-foreground text-sm py-4">
+            <Loader2 className="w-4 h-4 animate-spin" /> Loading preferences…
+          </div>
+        ) : prefs ? (
+          <div className="mt-4">
+            <PreferenceToggle
+              label="Product updates"
+              description="New features, security research and the occasional announcement. Not more than we would want to receive ourselves."
+              checked={prefs.productUpdates}
+              disabled={saving}
+              onChange={(next) => updatePref({ productUpdates: next })}
+            />
+            <PreferenceToggle
+              label="Monitor alerts"
+              description="CVE matches, security regressions and certificate expiry warnings for the targets you monitor. Turning these off means we will not tell you when something breaks."
+              checked={prefs.monitorAlerts}
+              disabled={saving}
+              onChange={(next) => updatePref({ monitorAlerts: next })}
+            />
+          </div>
+        ) : null}
       </div>
 
       <div className="glass-panel p-6 sm:p-10 rounded-3xl border border-red-500/20">

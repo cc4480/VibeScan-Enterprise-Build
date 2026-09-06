@@ -111,3 +111,26 @@ export async function requestEmailVerification(): Promise<{ ok: boolean; already
 export async function deleteAccount(): Promise<void> {
   await customFetch("/api/account", { method: "DELETE", responseType: "json" });
 }
+
+export interface EmailPreferences {
+  /** Product updates and announcements. Marketing; off by choice.
+   *  Account mail (resets, verification, receipts) is not covered by either
+   *  flag and always sends. */
+  productUpdates: boolean;
+  /** Monitor alerts: CVE matches, regressions, certificate expiry. */
+  monitorAlerts: boolean;
+}
+
+export async function getEmailPreferences(): Promise<EmailPreferences> {
+  return customFetch("/api/account/email-preferences");
+}
+
+export async function setEmailPreferences(
+  changes: Partial<EmailPreferences>,
+): Promise<EmailPreferences> {
+  return customFetch("/api/account/email-preferences", {
+    method: "PUT",
+    body: JSON.stringify(changes),
+    headers: { "Content-Type": "application/json" },
+  });
+}

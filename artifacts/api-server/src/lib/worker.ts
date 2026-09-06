@@ -518,6 +518,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
               if (sub?.userEmail) {
                 await sendRegressionAlertEmail({
                   toEmail: sub.userEmail,
+                  userId: sub.userId,
                   targetUrl,
                   regressions: newRegressions.map((v) => ({
                     checkTitle: v.name,
