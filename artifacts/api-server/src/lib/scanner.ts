@@ -356,6 +356,10 @@ export interface RunScanAuth {
 export async function runScan(
   targetUrl: string,
   tier: string,
+  // Whether the caller established that this user may have offensive traffic
+  // sent to this target. Required rather than defaulted: a scan entry point
+  // that forgets to decide should fail to compile, not quietly attack someone.
+  allowActiveProbes: boolean,
   auth?: RunScanAuth,
   // Correlates out-of-band callbacks back to this scan. Optional so a monitor
   // rescan or a test can call runScan without one; SSRF detection is simply
@@ -375,7 +379,7 @@ export async function runScan(
           }
         : {}),
     },
-    () => runScanInner(targetUrl, tier, auth, scanId ?? null),
+    () => runScanInner(targetUrl, tier, allowActiveProbes, auth, scanId ?? null),
   );
 }
 
@@ -400,9 +404,33 @@ function sessionLostFinding(): ScanVulnerability {
   });
 }
 
+/**
+ * Finding raised when the scan ran without offensive probes.
+ *
+ * Same reasoning as sessionLostFinding: a report that quietly omitted half the
+ * checks would read as a clean bill of health. The user has to know that the
+ * injection, traversal, access-control and backend-exposure checks did not run
+ * at all — those are where the severe findings come from, and their absence
+ * here says nothing about whether the target has them.
+ */
+function activeProbesSkippedFinding(): ScanVulnerability {
+  return vuln({
+    name: "Active security testing was skipped for this scan",
+    severity: "info",
+    category: "Scan Coverage",
+    description:
+      "This scan checked only what an ordinary visitor can observe: response headers, TLS, cookies, DNS, exposed files and known-vulnerable versions. The checks that actively test for flaws — SQL injection, cross-site scripting, path traversal, broken access control, SSRF, and exposed Supabase/Firebase data — were not run, because they send real attack traffic and we only do that against a domain whose owner has asked us to. A clean result here does not mean those flaws are absent; it means they were not looked for.",
+    evidence: "No verified ownership on record for this domain at scan time.",
+    solution:
+      "Verify that you control this domain — add the DNS TXT record or publish the verification file shown on your dashboard — then run the scan again to include active testing.",
+    confidence: 100,
+  });
+}
+
 async function runScanInner(
   targetUrl: string,
   tier: string,
+  allowActiveProbes: boolean,
   auth?: RunScanAuth,
   scanId: string | null = null,
 ): Promise<ScanResult> {
@@ -858,7 +886,7 @@ async function runScanInner(
   ).catch(() => ({ vulnerabilities: [], pagesVisited: [], probedNotFound: [] }));
 
   const probePromises: Promise<ScanVulnerability[]>[] = [
-    runAllProbes(finalUrl, html).catch(() => []),
+    runAllProbes(finalUrl, html, allowActiveProbes).catch(() => []),
     checkDnsSecurity(finalUrl).catch(() => []),
     checkForKnownVulnerabilities(html, rawHeaders).catch(() => []),
     // Passive JWT analysis — no extra HTTP requests
@@ -867,27 +895,37 @@ async function runScanInner(
     checkSubdomainTakeover(finalUrl).catch(() => []),
     // Source map exposure — checks JS bundles for .map files
     checkSourceMaps(html, finalUrl).catch(() => []),
-    // Vibe-stack database security — Supabase RLS + Firebase rules (both tiers)
-    checkVibeStackSecurity(html, finalUrl, tier).catch(() => []),
-    // BaaS open-data checks not covered above: PocketBase, Appwrite
-    runBaasProbes(finalUrl, html).catch(() => []),
-    // GraphQL introspection + field suggestions
-    runGraphqlProbe(finalUrl, html).catch(() => []),
-    // Exposed API docs: Swagger/OpenAPI/ReDoc
+    // Exposed API docs: Swagger/OpenAPI/ReDoc — fetching published doc paths
     runApiDocsProbe(finalUrl).catch(() => []),
-    // Next.js __NEXT_DATA__ prop leaks
+    // Next.js __NEXT_DATA__ prop leaks — read from the page already fetched
     runNextjsProbe(finalUrl, html).catch(() => []),
-    // Public cloud storage listing: S3, GCS, Azure Blob
-    runStorageProbe(finalUrl, html).catch(() => []),
   ];
 
-  probePromises.push(
-    scanJavaScriptForSecrets(html, finalUrl).catch(() => []),
-    // Active path traversal probing — multiple HTTP requests
-    checkPathTraversal(finalUrl, html).catch(() => []),
-    // A03 Injection — reflected XSS + error-based SQLi active probing
-    runInjectionProbes(finalUrl, html).catch(() => []),
-  );
+  // Everything below reads data out of a backend the target owns, or fuzzes an
+  // endpoint to see what it admits to. That is testing, not visiting.
+  if (allowActiveProbes) {
+    probePromises.push(
+      // Vibe-stack database security — Supabase RLS + Firebase rules (both tiers)
+      checkVibeStackSecurity(html, finalUrl, tier).catch(() => []),
+      // BaaS open-data checks not covered above: PocketBase, Appwrite
+      runBaasProbes(finalUrl, html).catch(() => []),
+      // GraphQL introspection + field suggestions
+      runGraphqlProbe(finalUrl, html).catch(() => []),
+      // Public cloud storage listing: S3, GCS, Azure Blob
+      runStorageProbe(finalUrl, html).catch(() => []),
+    );
+  }
+
+  probePromises.push(scanJavaScriptForSecrets(html, finalUrl).catch(() => []));
+
+  if (allowActiveProbes) {
+    probePromises.push(
+      // Active path traversal probing — multiple HTTP requests
+      checkPathTraversal(finalUrl, html).catch(() => []),
+      // A03 Injection — reflected XSS + error-based SQLi active probing
+      runInjectionProbes(finalUrl, html).catch(() => []),
+    );
+  }
 
   const [crawlResult, ...probeResults] = await Promise.all([
     crawlPromise,
@@ -906,7 +944,7 @@ async function runScanInner(
   // Discovery reads the JS bundles, and the probes spend a few requests per
   // endpoint. On an API-first SPA this is the only path that finds anything at
   // all — the HTML carries no forms, links or parameters to collect.
-  {
+  if (allowActiveProbes) {
     const origin = new URL(finalUrl).origin;
     const endpoints = await collectApiSurface(origin, html).catch(() => [] as ApiEndpoint[]);
 
@@ -937,7 +975,7 @@ async function runScanInner(
   // account actually reached are the ones worth asking a second account for.
   // Requires both accounts — one identity cannot demonstrate an authorisation
   // boundary between users.
-  if (auth?.secondary) {
+  if (allowActiveProbes && auth?.secondary) {
     const candidateUrls = [finalUrl, ...crawlResult.pagesVisited];
     const accessFindings = await runAccessControlProbes({
       urls: candidateUrls,
@@ -967,7 +1005,11 @@ async function runScanInner(
     tlsGrade,
     technologies,
     vulnerabilities: autoEnrichConfidence(
-      sessionWasLost() ? [...deduped, sessionLostFinding()] : deduped,
+      [
+        ...deduped,
+        ...(sessionWasLost() ? [sessionLostFinding()] : []),
+        ...(allowActiveProbes ? [] : [activeProbesSkippedFinding()]),
+      ],
       technologies,
     ),
     requestDurationMs,

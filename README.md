@@ -1,8 +1,19 @@
-# Seclayer
+# SecScan
+
+> **Repository identity.** This repo (`VibeScan-Enterprise-Build`, originally
+> VibeScan) is **SecScan**, deployed at **secscan.us**.
+>
+> It is **not** Seclayer. Seclayer is a separate product in a separate repo
+> (`seclayer.io2026`, deployed at seclayer.app) with no shared git history.
+> Seclayer is the higher tier: it adds real nmap port/service scanning and
+> red-team attack modules, neither of which exists here. SecScan's port scan is
+> a TCP-connect sweep over 33 common ports (`artifacts/api-server/src/lib/recon.ts`).
+>
+> The two launch separately. Never deploy one to the other's Railway service.
 
 Black-box web security scanning that produces a plain-English report.
 
-Point Seclayer at a URL and it probes the live site from the outside — no
+Point SecScan at a URL and it probes the live site from the outside — no
 agent, no source access, no credentials — then grades what it finds A–F and
 explains each issue in language a non-specialist can act on. Deep scans add a
 DeepSeek-generated analysis and a paste-ready fix prompt tailored to the stack

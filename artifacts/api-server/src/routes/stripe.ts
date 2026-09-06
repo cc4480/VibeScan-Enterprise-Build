@@ -1,7 +1,8 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db, scansTable, creditsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { stripe, CREDITS_MAP } from "../lib/stripe";
+import { stripe, CREDITS_MAP, PRICE_MAP } from "../lib/stripe";
+import { sendPurchaseReceiptEmail } from "../lib/mailer";
 import { enqueueScan } from "../lib/queue";
 
 const router: IRouter = Router();
@@ -48,6 +49,11 @@ router.post(
           const session = event.data.object as import("stripe").Stripe.Checkout.Session;
           const meta = session.metadata ?? {};
 
+          // Stripe only knows the address the customer paid with; that is the
+          // one entitled to the receipt, and for a guest scan it is the only
+          // address we have at all.
+          const payerEmail = session.customer_details?.email ?? session.customer_email ?? null;
+
           if (meta.type === "scan") {
             const scanId = meta.scan_id;
             if (!scanId) break;
@@ -87,6 +93,16 @@ router.post(
               .set({ status: "queued", startedAt: new Date() })
               .where(eq(scansTable.id, scanId));
 
+            if (payerEmail) {
+              // Not awaited: Stripe retries a webhook that is slow to ack, and a
+              // duplicate delivery would charge nothing twice but would mail twice.
+              void sendPurchaseReceiptEmail({
+                toEmail: payerEmail,
+                productName: PRICE_MAP[scan.tier]?.name ?? "SecScan scan",
+                amountCents: session.amount_total ?? 0,
+              });
+            }
+
             req.log.info({ scanId }, "Scan paid and enqueued");
           } else if (meta.type === "credits") {
             const userId = meta.user_id;
@@ -110,6 +126,15 @@ router.post(
               await db.insert(creditsTable).values({
                 userId,
                 balance: creditsToAdd,
+              });
+            }
+
+            if (payerEmail) {
+              void sendPurchaseReceiptEmail({
+                toEmail: payerEmail,
+                productName: PRICE_MAP[tier]?.name ?? "SecScan credit pack",
+                amountCents: session.amount_total ?? 0,
+                creditsAdded: creditsToAdd,
               });
             }
 

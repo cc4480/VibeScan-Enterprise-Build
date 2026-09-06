@@ -1,4 +1,4 @@
-# Deploying Seclayer
+# Deploying SecScan
 
 Docker Compose deployment onto any Linux host, with a domain registered at
 IONOS pointed at it.
@@ -6,7 +6,7 @@ IONOS pointed at it.
 ## Before you start: what IONOS is and isn't providing here
 
 Registering a domain at IONOS gives you the **name**, not somewhere to run this.
-Seclayer needs a long-running Node process (the pg-boss job queue and the
+SecScan needs a long-running Node process (the pg-boss job queue and the
 monitor/CVE schedulers live inside the API process), PostgreSQL 16, and
 Chromium for headless SPA rendering. That means a machine you get root on.
 
@@ -14,7 +14,7 @@ Chromium for headless SPA rendering. That means a machine you get root on.
   4 GB RAM: Chromium is the memory-hungry part, and deep scans run it.
 - **IONOS MyWebsite Now / Now Shop** — website *builders*. They cannot run this
   app: no Node runtime, no Docker, no PostgreSQL, no root. If these were bought
-  intending to host Seclayer, they don't serve that purpose.
+  intending to host SecScan, they don't serve that purpose.
 - **IONOS Mail Business** — useful, but for a different job: it gives you a
   mailbox on your domain. Report email is sent through Resend, not this.
 

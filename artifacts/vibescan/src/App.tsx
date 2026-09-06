@@ -16,6 +16,8 @@ import MonitorPage from "@/pages/monitor";
 import SharedReport from "@/pages/shared-report";
 import LearnPage from "@/pages/learn";
 import SettingsPage from "@/pages/settings";
+import DomainsPage from "@/pages/domains";
+import LegalPage from "@/pages/legal";
 import SignInPage from "@/pages/sign-in";
 import RegisterPage from "@/pages/register";
 import ForgotPasswordPage from "@/pages/forgot-password";
@@ -167,7 +169,10 @@ function Router() {
             <Route path="/report/:id" component={ReportViewer} />
             <Route path="/monitor" component={MonitorPage} />
             <Route path="/learn" component={LearnPage} />
+            <Route path="/privacy">{() => <LegalPage kind="privacy" />}</Route>
+            <Route path="/terms">{() => <LegalPage kind="terms" />}</Route>
             <Route path="/settings" component={SettingsPage} />
+            <Route path="/domains" component={DomainsPage} />
             <Route component={NotFound} />
           </Switch>
         </Layout>

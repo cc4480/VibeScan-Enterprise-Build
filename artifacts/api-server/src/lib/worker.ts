@@ -24,6 +24,7 @@ import { runWithScanHttp } from "./http";
 import { corroborateMerge } from "./scoring";
 import { findingFingerprint, normalizeEvidenceKey, canonicalizeTargetUrl } from "./fingerprint";
 import { runRecon } from "./recon";
+import { activeProbesUnlocked } from "./activeProbeGate";
 import { warnIfLocalDataStale, OSV_CACHE_MAX_SIZE } from "./cveCheck";
 import { refreshEolData, loadEolCacheFromDb, EOL_REFRESH_QUEUE } from "./eolFetcher";
 import { callDeepSeek } from "./deepseek";
@@ -97,8 +98,15 @@ async function processScanJob(job: ScanJob): Promise<void> {
     return null;
   });
 
+  // One decision, consulted by both the HTTP scan and recon, so a target can
+  // never be port-scanned by a path that skipped the check the probes made.
+  const allowActiveProbes = await activeProbesUnlocked(userId, targetUrl);
+  if (!allowActiveProbes) {
+    log.info("Domain not verified for this user — running passive checks only");
+  }
+
   // Recon runs concurrently: DNS enumeration, subdomain brute-force, port scan
-  const reconPromise = runRecon(targetUrl).catch((err) => {
+  const reconPromise = runRecon(targetUrl, allowActiveProbes).catch((err) => {
     log.warn({ err }, "Recon failed (non-fatal)");
     return null;
   });
@@ -174,6 +182,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
       runScan(
         targetUrl,
         tier,
+        allowActiveProbes,
         httpCredentials
           ? {
               credentials: httpCredentials,

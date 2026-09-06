@@ -183,7 +183,7 @@ const INTROSPECTION_QUERY = {
   }`,
 };
 
-const BOGUS_FIELD_QUERY = { query: "{ nonExistentFieldSeclayerProbe }" };
+const BOGUS_FIELD_QUERY = { query: "{ nonExistentFieldSecScanProbe }" };
 
 async function checkEndpoint(url: string): Promise<ScanVulnerability[]> {
   // Step 1: confirm it's actually GraphQL (strict validation)
@@ -239,7 +239,7 @@ async function checkEndpoint(url: string): Promise<ScanVulnerability[]> {
         `that doesn't exist (e.g. "Cannot query field 'usr' on type 'Query'. Did you mean 'user'?"). ` +
         `This leaks valid field names even when introspection is disabled, letting attackers ` +
         `enumerate the API schema incrementally using a dictionary of common names.`,
-      evidence: `POST ${url}\n{"query":"{ nonExistentFieldSeclayerProbe }"}\nResponse: errors[].message contains field suggestion\nError has GraphQL "locations" array (confirmed GQL endpoint)`,
+      evidence: `POST ${url}\n{"query":"{ nonExistentFieldSecScanProbe }"}\nResponse: errors[].message contains field suggestion\nError has GraphQL "locations" array (confirmed GQL endpoint)`,
       solution:
         "Disable field suggestions in your GraphQL server. graphql-js: add a custom validation rule that removes suggestions. " +
         "Apollo Server v4+: this is configurable via `formatError`. " +

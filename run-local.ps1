@@ -1,4 +1,4 @@
-# run-local.ps1 — start the VibeScan/Seclayer stack locally on Windows.
+# run-local.ps1 — start the SecScan stack locally on Windows.
 # Usage:  powershell -ExecutionPolicy Bypass -File .\run-local.ps1
 # Opens two new windows: the API server (port 8080) and the Vite frontend (port 18425).
 # App entry point:  http://localhost:18425

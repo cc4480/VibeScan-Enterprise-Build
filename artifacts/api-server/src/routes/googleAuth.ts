@@ -96,14 +96,31 @@ function safeReturnTo(raw: unknown): string {
   return raw;
 }
 
+/**
+ * Every failure here happens during a top-level browser navigation: the person
+ * clicked a button and the browser left the site. Answering with a bare status
+ * and a sentence strands them on an unstyled page with no navigation and no way
+ * back other than the back button — which is what "it goes to a white screen"
+ * means in practice.
+ *
+ * So failures go back to the sign-in page with a code, and the page says what
+ * happened. The code is a fixed identifier rather than a message: it ends up in
+ * a URL the user can see and edit, so it must not be something we render back
+ * to them verbatim.
+ */
+function failToSignIn(res: Response, code: string): void {
+  res.redirect(`/sign-in?error=${encodeURIComponent(code)}`);
+}
+
 // ── GET /api/auth/google ─────────────────────────────────────────────────────
 router.get("/auth/google", async (req: Request, res: Response): Promise<void> => {
   if (!googleConfigured()) {
-    res.status(503).send("Google sign-in is not configured.");
+    req.log.error("Google sign-in attempted but GOOGLE_CLIENT_ID/SECRET are not set");
+    failToSignIn(res, "not_configured");
     return;
   }
   if (rateLimited(`google:${clientIp(req)}`)) {
-    res.status(429).send("Too many sign-in attempts. Please try again shortly.");
+    failToSignIn(res, "rate_limited");
     return;
   }
 
@@ -138,7 +155,7 @@ router.get("/auth/google", async (req: Request, res: Response): Promise<void> =>
     res.redirect(authUrl.href);
   } catch (err) {
     req.log.error({ err }, "Could not start Google sign-in");
-    res.status(500).send("Sign-in unavailable. Please try again.");
+    failToSignIn(res, "unavailable");
   }
 });
 
@@ -147,7 +164,8 @@ router.get(
   "/auth/google/callback",
   async (req: Request, res: Response): Promise<void> => {
     if (!googleConfigured()) {
-      res.status(503).send("Google sign-in is not configured.");
+      req.log.error("Google callback hit but GOOGLE_CLIENT_ID/SECRET are not set");
+      failToSignIn(res, "not_configured");
       return;
     }
 
@@ -155,7 +173,7 @@ router.get(
     res.clearCookie(PKCE_COOKIE, { path: "/api/auth/google" });
 
     if (!raw) {
-      res.status(400).send("Sign-in session expired. Please start again.");
+      failToSignIn(res, "session_expired");
       return;
     }
 
@@ -172,7 +190,7 @@ router.get(
       expectedState = parsed.state;
       returnTo = safeReturnTo(parsed.returnTo);
     } catch {
-      res.status(400).send("Sign-in session was malformed. Please start again.");
+      failToSignIn(res, "session_malformed");
       return;
     }
 
@@ -198,7 +216,7 @@ router.get(
 
       if (typeof sub !== "string" || typeof email !== "string") {
         req.log.warn("Google returned no sub or email");
-        res.status(400).send("Google did not return an email address.");
+        failToSignIn(res, "no_email");
         return;
       }
 
@@ -240,7 +258,7 @@ router.get(
             // Two Google identities claiming one address should not silently
             // swap ownership of the account.
             req.log.warn({ email: normalizedEmail }, "Google sub conflict on existing account");
-            res.status(409).send("This email is already linked to a different Google account.");
+            failToSignIn(res, "account_conflict");
             return;
           }
           [row] = await db
@@ -282,7 +300,7 @@ router.get(
       }
 
       if (!row) {
-        res.status(500).send("Could not create your account. Please try again.");
+        failToSignIn(res, "create_failed");
         return;
       }
 
@@ -310,7 +328,7 @@ router.get(
       res.redirect(returnTo);
     } catch (err) {
       req.log.error({ err }, "Google sign-in callback failed");
-      res.status(400).send("Sign-in failed. Please try again.");
+      failToSignIn(res, "failed");
     }
   },
 );

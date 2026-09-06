@@ -101,3 +101,13 @@ export async function verifyEmail(token: string): Promise<{ ok: boolean }> {
 export async function requestEmailVerification(): Promise<{ ok: boolean; alreadyVerified: boolean }> {
   return customFetch("/api/account/verify/request", { method: "POST", responseType: "json" });
 }
+
+/**
+ * Permanently erase the account and everything belonging to it.
+ *
+ * There is no undo and no grace period, so the caller is responsible for
+ * making the user confirm before this is reached.
+ */
+export async function deleteAccount(): Promise<void> {
+  await customFetch("/api/account", { method: "DELETE", responseType: "json" });
+}

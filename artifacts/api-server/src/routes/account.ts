@@ -15,7 +15,16 @@
 
 import { Router, type IRouter, type Request } from "express";
 import { z } from "zod";
-import { db, usersTable } from "@workspace/db";
+import {
+  db,
+  usersTable,
+  scansTable,
+  creditsTable,
+  monitorSubscriptionsTable,
+  dismissedFindingsTable,
+  reportSharesTable,
+  domainVerificationsTable,
+} from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { hashPassword, verifyPassword, needsRehash } from "../lib/password";
 import {
@@ -221,6 +230,51 @@ router.post("/account/logout", async (req, res): Promise<void> => {
   // alone would leave a stolen copy working until it expired.
   await clearSession(res, getSessionId(req));
   res.json({ ok: true });
+});
+
+/**
+ * Erase the account and everything belonging to it.
+ *
+ * Required by GDPR Art. 17 and the CCPA, but the reason to implement it
+ * properly rather than flag a row as deleted is simpler: someone asking to be
+ * erased means it.
+ *
+ * Order matters. scans and monitor subscriptions cascade to the rows that hang
+ * off them — reports, share links, out-of-band tokens, CVE alerts, score
+ * history, regressions, certificate warnings — so those go first and the rest
+ * follow. The user row is last, so a failure part-way leaves an account that
+ * can still sign in and retry rather than an orphaned set of records with no
+ * owner.
+ *
+ * What survives is named in the privacy policy: Stripe keeps its own payment
+ * records for accounting, and database backups age out on their own schedule.
+ */
+router.delete("/account", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const userId = req.user.id;
+
+  try {
+    await db.delete(scansTable).where(eq(scansTable.userId, userId));
+    await db.delete(monitorSubscriptionsTable).where(eq(monitorSubscriptionsTable.userId, userId));
+    await db.delete(reportSharesTable).where(eq(reportSharesTable.userId, userId));
+    await db.delete(dismissedFindingsTable).where(eq(dismissedFindingsTable.userId, userId));
+    await db.delete(domainVerificationsTable).where(eq(domainVerificationsTable.userId, userId));
+    await db.delete(creditsTable).where(eq(creditsTable.userId, userId));
+    await db.delete(usersTable).where(eq(usersTable.id, userId));
+
+    // The session outlives the row it points at unless it is revoked here.
+    await clearSession(res, getSessionId(req));
+
+    req.log.info({ userId }, "Account deleted at user request");
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err, userId }, "Failed to delete account");
+    res.status(500).json({ error: "Failed to delete account" });
+  }
 });
 
 // ── Email verification ───────────────────────────────────────────────────────

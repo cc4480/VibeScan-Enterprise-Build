@@ -5,7 +5,7 @@ import { AuthShell, AuthForm, Field } from "@/components/auth-shell";
 import { requestPasswordReset, accountErrorMessage } from "@/lib/account-api";
 
 export default function ForgotPasswordPage() {
-  useSeo({ title: "Reset your password — Seclayer", noindex: true });
+  useSeo({ title: "Reset your password — SecScan", noindex: true });
 
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);

@@ -107,7 +107,7 @@ function buildSlackBody(payload: WebhookPayload): Record<string, unknown> {
         color,
         fallback: `${label} for ${domain}`,
         fields: attachmentFields,
-        footer: `Seclayer · ${APP_DOMAIN}`,
+        footer: `SecScan · ${APP_DOMAIN}`,
         ts: Math.floor(Date.now() / 1000),
       },
     ],

@@ -5,10 +5,24 @@
  * Requires RESEND_API_KEY environment variable.
  */
 
-import { FROM_EMAIL, APP_ORIGIN } from "./appOrigin";
+import { FROM_EMAIL, REPLY_TO_EMAIL, APP_ORIGIN } from "./appOrigin";
 
 const RESEND_API = "https://api.resend.com/emails";
 const RESEND_AUDIENCES_API = "https://api.resend.com/audiences";
+
+/**
+ * Every outbound message goes through here so `from` and `reply_to` are
+ * applied uniformly. They were previously spelled out at each call site,
+ * which is how a reply-to header goes missing on one email and nobody
+ * notices until a customer's reply disappears.
+ */
+function resendBody(fields: Record<string, unknown>): string {
+  return JSON.stringify({
+    from: FROM_EMAIL,
+    ...(REPLY_TO_EMAIL ? { reply_to: REPLY_TO_EMAIL } : {}),
+    ...fields,
+  });
+}
 
 interface SendReportEmailOptions {
   toEmail: string;
@@ -41,7 +55,7 @@ function buildHtml(opts: SendReportEmailOptions): string {
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <!-- Header -->
         <tr><td style="padding-bottom:32px;text-align:center;">
-          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Sec<span style="color:#6366f1;">layer</span></span>
+          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Sec<span style="color:#6366f1;">Scan</span></span>
         </td></tr>
 
         <!-- Grade Card -->
@@ -61,8 +75,8 @@ function buildHtml(opts: SendReportEmailOptions): string {
 
         <!-- Footer -->
         <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
-          <p style="margin:0;">You received this because you ran a Seclayer deep scan.</p>
-          <p style="margin:4px 0 0;">© 2026 Seclayer</p>
+          <p style="margin:0;">You received this because you ran a SecScan deep scan.</p>
+          <p style="margin:4px 0 0;">© 2026 SecScan</p>
         </td></tr>
       </table>
     </td></tr>
@@ -85,10 +99,9 @@ export async function sendReportReadyEmail(opts: SendReportEmailOptions): Promis
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        from: FROM_EMAIL,
+      body: resendBody({
         to: [opts.toEmail],
-        subject: `Your Seclayer report is ready — Grade ${opts.grade} for ${opts.targetUrl}`,
+        subject: `Your SecScan report is ready — Grade ${opts.grade} for ${opts.targetUrl}`,
         html: buildHtml(opts),
       }),
     });
@@ -167,7 +180,7 @@ export async function sendMonitorCveAlertEmail(opts: SendMonitorCveAlertOptions)
     <tr><td align="center" style="padding:40px 16px;">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <tr><td style="padding-bottom:32px;text-align:center;">
-          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Sec<span style="color:#6366f1;">layer</span></span>
+          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Sec<span style="color:#6366f1;">Scan</span></span>
         </td></tr>
 
         <tr><td style="background:#1a1d27;border-radius:16px;border:1px solid rgba(255,255,255,0.08);padding:40px;">
@@ -191,8 +204,8 @@ export async function sendMonitorCveAlertEmail(opts: SendMonitorCveAlertOptions)
         </td></tr>
 
         <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
-          <p style="margin:0;">You received this because you have a Seclayer continuous monitor active for ${targetUrl}.</p>
-          <p style="margin:4px 0 0;">© 2026 Seclayer · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
+          <p style="margin:0;">You received this because you have a SecScan continuous monitor active for ${targetUrl}.</p>
+          <p style="margin:4px 0 0;">© 2026 SecScan · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
         </td></tr>
       </table>
     </td></tr>
@@ -204,8 +217,7 @@ export async function sendMonitorCveAlertEmail(opts: SendMonitorCveAlertOptions)
     const res = await fetch(RESEND_API, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        from: FROM_EMAIL,
+      body: resendBody({
         to: [opts.toEmail],
         subject: `⚠ CVE Alert: ${topMatch?.cveId ?? "New vulnerability"}${extra} affects ${targetUrl}`,
         html,
@@ -263,7 +275,7 @@ export async function sendRegressionAlertEmail(opts: SendRegressionAlertOptions)
     <tr><td align="center" style="padding:40px 16px;">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <tr><td style="padding-bottom:32px;text-align:center;">
-          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Sec<span style="color:#6366f1;">layer</span></span>
+          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Sec<span style="color:#6366f1;">Scan</span></span>
         </td></tr>
         <tr><td style="background:#1a1d27;border-radius:16px;border:1px solid rgba(255,255,255,0.08);padding:40px;">
           <div style="display:inline-flex;align-items:center;gap:8px;background:#fb923c22;padding:6px 14px;border-radius:20px;margin-bottom:24px;">
@@ -280,7 +292,7 @@ export async function sendRegressionAlertEmail(opts: SendRegressionAlertOptions)
           </div>
         </td></tr>
         <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
-          <p style="margin:0;">© 2026 Seclayer · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
+          <p style="margin:0;">© 2026 SecScan · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
         </td></tr>
       </table>
     </td></tr>
@@ -292,8 +304,7 @@ export async function sendRegressionAlertEmail(opts: SendRegressionAlertOptions)
     const res = await fetch(RESEND_API, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        from: FROM_EMAIL,
+      body: resendBody({
         to: [opts.toEmail],
         subject: `🔴 Regression alert: ${regressions.length} security check${regressions.length > 1 ? "s" : ""} failing on ${targetUrl}`,
         html,
@@ -332,7 +343,7 @@ export async function sendCertExpiryEmail(opts: SendCertExpiryOptions): Promise<
     <tr><td align="center" style="padding:40px 16px;">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <tr><td style="padding-bottom:32px;text-align:center;">
-          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Sec<span style="color:#6366f1;">layer</span></span>
+          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Sec<span style="color:#6366f1;">Scan</span></span>
         </td></tr>
         <tr><td style="background:#1a1d27;border-radius:16px;border:1px solid rgba(255,255,255,0.08);padding:40px;text-align:center;">
           <div style="display:inline-block;font-size:48px;margin-bottom:16px;">🔒</div>
@@ -343,7 +354,7 @@ export async function sendCertExpiryEmail(opts: SendCertExpiryOptions): Promise<
           <a href="${dashboardUrl}" style="display:inline-block;background:#6366f1;color:#fff;font-weight:700;font-size:15px;padding:14px 32px;border-radius:10px;text-decoration:none;">View Monitor Dashboard →</a>
         </td></tr>
         <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
-          <p style="margin:0;">© 2026 Seclayer · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
+          <p style="margin:0;">© 2026 SecScan · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
         </td></tr>
       </table>
     </td></tr>
@@ -355,8 +366,7 @@ export async function sendCertExpiryEmail(opts: SendCertExpiryOptions): Promise<
     const res = await fetch(RESEND_API, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        from: FROM_EMAIL,
+      body: resendBody({
         to: [opts.toEmail],
         subject: `${urgency}: TLS certificate for ${targetUrl} expires in ${daysRemaining} days`,
         html,
@@ -392,7 +402,7 @@ export async function sendMonitorScanQueuedEmail(opts: SendMonitorScanQueuedOpti
     <tr><td align="center" style="padding:40px 16px;">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <tr><td style="padding-bottom:32px;text-align:center;">
-          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Sec<span style="color:#6366f1;">layer</span></span>
+          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Sec<span style="color:#6366f1;">Scan</span></span>
         </td></tr>
         <tr><td style="background:#1a1d27;border-radius:16px;border:1px solid rgba(255,255,255,0.08);padding:40px;text-align:center;">
           <p style="margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:0.1em;color:#94a3b8;">${label}</p>
@@ -401,7 +411,7 @@ export async function sendMonitorScanQueuedEmail(opts: SendMonitorScanQueuedOpti
           <a href="${dashboardUrl}" style="display:inline-block;background:#6366f1;color:#fff;font-weight:700;font-size:15px;padding:14px 32px;border-radius:10px;text-decoration:none;">View Monitor Dashboard →</a>
         </td></tr>
         <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
-          <p style="margin:0;">© 2026 Seclayer · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
+          <p style="margin:0;">© 2026 SecScan · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
         </td></tr>
       </table>
     </td></tr>
@@ -413,8 +423,7 @@ export async function sendMonitorScanQueuedEmail(opts: SendMonitorScanQueuedOpti
     const res = await fetch(RESEND_API, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        from: FROM_EMAIL,
+      body: resendBody({
         to: [opts.toEmail],
         subject: `${label} started for ${targetUrl}`,
         html,
@@ -461,7 +470,7 @@ async function sendAccountEmail(to: string, subject: string, html: string, label
     const res = await fetch(RESEND_API, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ from: FROM_EMAIL, to: [to], subject, html }),
+      body: resendBody({ to: [to], subject, html }),
     });
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
@@ -473,16 +482,50 @@ async function sendAccountEmail(to: string, subject: string, html: string, label
   }
 }
 
+/**
+ * Receipt for a completed Stripe purchase. Stripe can email its own receipt,
+ * but only if that is switched on in the Stripe dashboard, and it says nothing
+ * about what the money actually bought here — a single scan versus a credit
+ * pack, and how many credits landed. Sent from our side so the customer always
+ * has one, and always has one that names the product.
+ *
+ * `amountCents` is the amount Stripe charged, in the smallest currency unit.
+ */
+export async function sendPurchaseReceiptEmail(opts: {
+  toEmail: string;
+  productName: string;
+  amountCents: number;
+  creditsAdded?: number;
+}): Promise<void> {
+  const amount = `$${(opts.amountCents / 100).toFixed(2)}`;
+  const detail = opts.creditsAdded
+    ? `${opts.creditsAdded} deep-scan credit${opts.creditsAdded === 1 ? "" : "s"} have been added to your account and never expire.`
+    : "Your scan has been queued and you'll get a separate email as soon as the report is ready.";
+
+  await sendAccountEmail(
+    opts.toEmail,
+    `Your SecScan receipt — ${opts.productName}`,
+    buildAccountHtml(
+      "Thanks for your purchase",
+      `You paid <strong>${amount}</strong> for <strong>${opts.productName}</strong>. ${detail}`,
+      "Go to your dashboard",
+      `${APP_ORIGIN}/dashboard`,
+      "This is a receipt for your records. Reply to this email if anything looks wrong.",
+    ),
+    "purchase receipt",
+  );
+}
+
 export async function sendEmailVerification(toEmail: string, verifyUrl: string): Promise<void> {
   await sendAccountEmail(
     toEmail,
-    "Confirm your email for Seclayer",
+    "Confirm your email for SecScan",
     buildAccountHtml(
       "Confirm your email",
       "Confirming your address lets us send you scan results and security alerts, and lets you get back into your account if you forget your password.",
       "Confirm email",
       verifyUrl,
-      "This link expires in 24 hours. If you didn't create a Seclayer account, you can ignore this email.",
+      "This link expires in 24 hours. If you didn't create a SecScan account, you can ignore this email.",
     ),
     "email verification",
   );
@@ -491,7 +534,7 @@ export async function sendEmailVerification(toEmail: string, verifyUrl: string):
 export async function sendPasswordReset(toEmail: string, resetUrl: string): Promise<void> {
   await sendAccountEmail(
     toEmail,
-    "Reset your Seclayer password",
+    "Reset your SecScan password",
     buildAccountHtml(
       "Reset your password",
       "Use the link below to choose a new password. Signing in again will end any other sessions on your account.",
@@ -505,7 +548,7 @@ export async function sendPasswordReset(toEmail: string, resetUrl: string): Prom
 
 // ── Marketing: shared audience + welcome email ──────────────────────────────
 //
-// Seclayer and Secscan.us run the same engine under two names and share one
+// SecScan and Secscan.us run the same engine under two names and share one
 // signup pool. Every new account — on either domain, through either sign-in
 // path — is added to one Resend Audience so a single broadcast reaches
 // everyone, and gets one welcome email. There is no separate opt-in checkbox:
@@ -548,10 +591,10 @@ export async function addToMarketingAudience(email: string, firstName?: string |
 export async function sendWelcomeEmail(toEmail: string, firstName?: string | null): Promise<void> {
   await sendAccountEmail(
     toEmail,
-    "Welcome to Seclayer",
+    "Welcome to SecScan",
     buildAccountHtml(
-      firstName ? `Welcome, ${firstName}` : "Welcome to Seclayer",
-      "Seclayer and Secscan.us run the same scanning engine under one roof — real vulnerability checks, not a checklist: SQL injection, exposed secrets, misconfigured databases, and more. We'll email you when there's something worth knowing: new features, security research, and the occasional product update. Account and security emails (password resets, scan reports) always go out regardless.",
+      firstName ? `Welcome, ${firstName}` : "Welcome to SecScan",
+      "SecScan runs real vulnerability checks, not a checklist: SQL injection, exposed secrets, misconfigured databases, and more. We'll email you when there's something worth knowing: new features, security research, and the occasional product update. Account and security emails (password resets, scan reports) always go out regardless.",
       "Run your first scan",
       `${APP_ORIGIN}/dashboard`,
       "You can unsubscribe from product updates at any time via the link included in those emails.",

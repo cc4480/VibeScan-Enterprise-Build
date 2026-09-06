@@ -603,7 +603,7 @@ function AddSubscriptionForm({ onSuccess }: { onSuccess: () => void }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function MonitorPage() {
-  useSeo({ title: "Monitor — Seclayer", noindex: true });
+  useSeo({ title: "Monitor — SecScan", noindex: true });
   const queryClient = useQueryClient();
 
   const { data: subscriptions, isLoading, error } = useQuery({
