@@ -59,6 +59,12 @@ COPY --from=builder /app/artifacts/vibescan/dist/public ./artifacts/vibescan/dis
 # the path explicitly so a future layout change cannot silently 404 the frontend.
 ENV FRONTEND_STATIC_DIR=/app/artifacts/vibescan/dist/public
 
+# index.ts throws unless PORT is set. It lives here rather than on the web stage
+# so that every runtime image can boot the web entrypoint — which matters
+# because a service whose start command names index.mjs may be running an image
+# built from a different stage than intended.
+ENV PORT=8080
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # seclayer — the web tier
@@ -70,8 +76,6 @@ ENV FRONTEND_STATIC_DIR=/app/artifacts/vibescan/dist/public
 # ─────────────────────────────────────────────────────────────────────────────
 FROM runtime-base AS seclayer
 
-ENV PORT=8080
-
 USER node
 
 EXPOSE 8080
@@ -79,9 +83,27 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/api/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-# index.ts throws unless PORT is set; ENV PORT above satisfies it.
+# index.ts throws unless PORT is set; runtime-base sets it for every image.
 CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# seclayer-app — alias so a service of that name resolves to the web tier
+#
+# Railway picks a build target by matching the stage name to the service name.
+# The seclayer.app project's service is named "seclayer-app", which matches no
+# stage, so it once built the scanner image and deployed a queue worker with no
+# HTTP listener as the public web app. This stage exists only to give that name
+# something to match.
+#
+# It deliberately is NOT last. The final stage is the fallback for any service
+# Railway cannot name-match, and that fallback has to be the scanner: the web
+# services name index.mjs in their start command and boot correctly from any
+# runtime image, while the scanner service has no start command and so runs
+# whatever CMD the image carries. With the web tier last, the scanner silently
+# became a second web tier and every queued scan sat unclaimed forever.
+# ─────────────────────────────────────────────────────────────────────────────
+FROM seclayer AS seclayer-app
 
 # ─────────────────────────────────────────────────────────────────────────────
 # secscan — the scanner tier
@@ -129,18 +151,3 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
 
 CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/secscan.mjs"]
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# seclayer-app — alias for the standalone seclayer.app Railway project
-#
-# Railway selects a Docker build target by matching the stage name to the
-# service name, falling back to the last stage in the file (secscan) when
-# nothing matches. The service in the seclayer.app project is named
-# "seclayer-app", not "seclayer", so with no matching stage it was silently
-# building the scanner image instead of the web tier — a background worker
-# with no HTTP listener, requiring DATABASE_URL, deployed as the public web
-# app. This stage exists only to give it a name match. Keep it last in the
-# file for the same reason: any other platform that builds this Dockerfile
-# without choosing a target should still get seclayer, not secscan.
-# ─────────────────────────────────────────────────────────────────────────────
-FROM seclayer AS seclayer-app
