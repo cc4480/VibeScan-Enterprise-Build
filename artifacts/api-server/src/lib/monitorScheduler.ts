@@ -173,6 +173,7 @@ async function runSweep(): Promise<void> {
     if (sub.userEmail) {
       await sendMonitorScanQueuedEmail({
         toEmail: sub.userEmail,
+        userId: sub.userId,
         targetUrl: sub.targetUrl,
         scanId,
         reason: "adaptive",
@@ -283,6 +284,7 @@ async function runCveCheck(): Promise<void> {
       if (sub.userEmail) {
         await sendMonitorCveAlertEmail({
           toEmail: sub.userEmail,
+          userId: sub.userId,
           targetUrl: sub.targetUrl,
           cveMatches: sortedMatches.map(({ cve, matchedTech }) => ({
             cveId: cve.id,
@@ -412,6 +414,7 @@ async function runCertExpiryCheck(): Promise<void> {
         if (sub.userEmail) {
           await sendCertExpiryEmail({
             toEmail: sub.userEmail,
+            userId: sub.userId,
             targetUrl: sub.targetUrl,
             daysRemaining,
             expiryDate,

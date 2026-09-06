@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgTable, timestamp, varchar } from "drizzle-orm/pg-core";
+import { index, jsonb, pgTable, timestamp, varchar, boolean} from "drizzle-orm/pg-core";
 
 // (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
 export const sessionsTable = pgTable(
@@ -19,6 +19,18 @@ export const usersTable = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
+
+  // Email preferences. Two flags rather than one, because the two kinds of mail
+  // are opted out of for different reasons and by different routes: product
+  // updates are marketing and are turned off in Settings, while monitor alerts
+  // are mail the user asked for per target and are turned off from the
+  // List-Unsubscribe header on the alert itself.
+  //
+  // Neither covers account mail — password resets, email verification and
+  // purchase receipts still send, because switching those off would lock
+  // people out of their own account.
+  marketingOptedOut: boolean("marketing_opted_out").notNull().default(false),
+  alertEmailsOptedOut: boolean("alert_emails_opted_out").notNull().default(false),
 
   // ── Account credentials ────────────────────────────────────────────────────
   // Null for anonymous identities: a row whose id is the UUID the browser

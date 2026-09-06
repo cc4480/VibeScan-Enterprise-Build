@@ -12,6 +12,7 @@ import sharesRouter from "./shares";
 import accountRouter from "./account";
 import oobRouter from "./oob";
 import domainVerificationRouter from "./domainVerification";
+import emailPreferencesRouter from "./emailPreferences";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(sharesRouter);
 router.use(accountRouter);
 router.use(oobRouter);
 router.use(domainVerificationRouter);
+router.use(emailPreferencesRouter);
 
 export default router;
