@@ -19,11 +19,6 @@ export const usersTable = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
-  // User-supplied DeepSeek API key, AES-256-GCM encrypted at rest (see
-  // artifacts/api-server/src/lib/crypto.ts). Never decrypted for API responses —
-  // only deepseekApiKeyLast4 is ever sent to the client, for display purposes.
-  deepseekApiKeyEncrypted: varchar("deepseek_api_key_encrypted"),
-  deepseekApiKeyLast4: varchar("deepseek_api_key_last4", { length: 4 }),
 
   // ── Account credentials ────────────────────────────────────────────────────
   // Null for anonymous identities: a row whose id is the UUID the browser
