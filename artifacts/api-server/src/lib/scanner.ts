@@ -562,7 +562,29 @@ async function runScanInner(
 
   // ── Content-Security-Policy ───────────────────────────────────────────
   const csp = headerVal(rawHeaders, "content-security-policy");
-  if (!csp) {
+  // A report-only policy is not enforcement — the browser reports the
+  // violation and runs the script anyway — so its presence is still a finding.
+  // But it is a different finding, and saying "header absent from response"
+  // about a site plainly running a CSP in report-only mode is wrong, and reads
+  // as a false positive to anyone who checks. google.com does exactly this.
+  const cspReportOnly = headerVal(rawHeaders, "content-security-policy-report-only");
+  if (!csp && cspReportOnly) {
+    vulnerabilities.push(vuln({
+      name: "Content-Security-Policy is report-only (not enforced)",
+      severity: "medium",
+      category: "Injection Defense",
+      description:
+        "A Content-Security-Policy is present but sent as Content-Security-Policy-Report-Only. In that mode the browser reports violations and still executes the offending script, so the policy provides no protection against Cross-Site Scripting — it only shows what a real policy would have blocked. This is the correct way to trial a policy, and is a problem only if it was meant to be enforcing.",
+      evidence: `GET ${finalUrl}
+Content-Security-Policy: (absent)
+Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
+      solution:
+        "Once the violation reports are clean, send the same policy as Content-Security-Policy to begin enforcing it. Sending both during the transition is fine.",
+      cweId: "CWE-79",
+      cvssScore: 5.3,
+      wstgId: "WSTG-CONF-12",
+    }));
+  } else if (!csp) {
     vulnerabilities.push(vuln({
       name: "Missing Content-Security-Policy (CSP)",
       severity: "high",

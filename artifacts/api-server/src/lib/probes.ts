@@ -278,10 +278,17 @@ export async function checkRobotsTxt(baseUrl: string): Promise<ScanVulnerability
     .map((l) => l.replace(/^Disallow:\s*/i, "").trim())
     .filter((p) => p && p !== "/" && p.length > 1);
 
+  // Deliberately excludes /api/ and "dashboard". Both are ordinary parts of a
+  // public site — google.com's robots.txt disallows /maps/api/js/ and
+  // /maps/reserve/partner-dashboard, which are documented public endpoints, and
+  // matching them produced a "discloses sensitive paths" finding on the most
+  // scrutinised site on the internet. A path being under /api/ says nothing
+  // about whether it is meant to be private; the patterns below name things
+  // that are not supposed to face the public at all.
   const sensitivePatterns = [
     /admin/i, /backup/i, /config/i, /private/i, /secret/i,
-    /internal/i, /\/api\//i, /database/i, /\/db\//i, /\.sql/i,
-    /staging/i, /\/dev\//i, /\/logs?\//i, /debug/i, /dashboard/i,
+    /internal/i, /database/i, /\/db\//i, /\.sql/i,
+    /staging/i, /\/dev\//i, /\/logs?\//i, /debug/i,
     /\/tmp\//i, /\/test\//i, /\.env/i, /credentials/i,
   ];
 
@@ -519,7 +526,12 @@ export async function checkRateLimiting(targetUrl: string): Promise<ScanVulnerab
     h["cf-ray"] ||                                          // Cloudflare
     h["x-akamai-request-id"] || h["akamai-grn"] ||         // Akamai WAF
     h["x-amz-cf-id"] ||                                    // AWS CloudFront
-    /gfe|google-cloud|google-edge|google frontend/i.test(h["server"] ?? "") || // GFE
+    // Google fronts different products with different server tokens: `gws`
+    // (web search), `gfe` (Google Front End), `ESF` (API frontend), `sffe`
+    // (static content), `Golfe2`. Only `gfe` was listed, so google.com itself —
+    // which answers `Server: gws` — was reported as having no rate limiting.
+    /^(gws|gfe|esf|sffe|golfe)/i.test(h["server"] ?? "") ||
+    /google-cloud|google-edge|google frontend/i.test(h["server"] ?? "") ||
     /google/i.test(h["via"] ?? "") ||                       // Google infra
     /cloudfront/i.test(h["x-cache"] ?? "") ||               // CloudFront cache
     h["x-azure-ref"] || h["x-ms-ref"] ||                   // Azure Front Door / CDN
