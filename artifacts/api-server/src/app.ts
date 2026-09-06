@@ -2,13 +2,14 @@ import express, { type Express } from "express";
 import cors, { type CorsOptions } from "cors";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import nodePath from "node:path";
 import { fileURLToPath } from "node:url";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { isSpaRoute } from "./lib/spaRoutes";
+import { metaForPath, applyPageMeta } from "./lib/pageMeta";
 import { authMiddleware } from "./middlewares/authMiddleware";
 import { APP_ORIGIN } from "./lib/appOrigin";
 import { configureTrustProxy } from "./lib/clientIp";
@@ -286,9 +287,25 @@ if (process.env.NODE_ENV !== "production") {
     // Keep in sync with the <Route> list in artifacts/vibescan/src/App.tsx.
     // A route added there and missed here 404s in production while working
     // perfectly in dev, where Vite serves the shell for everything.
+    // Read once. The shell changes only on deploy, and re-reading it per
+    // request would put a disk hit in front of every page view.
+    const shellPath = nodePath.join(staticDir, "index.html");
+    let shellHtml: string | null = null;
+    const shell = (): string => {
+      if (shellHtml === null) shellHtml = readFileSync(shellPath, "utf-8");
+      return shellHtml;
+    };
+
     app.get(/.*/, (req, res) => {
       if (isSpaRoute(req.path)) {
-        res.sendFile(nodePath.join(staticDir, "index.html"));
+        const meta = metaForPath(req.path);
+        // The homepage's built metadata is already right, so it is sent as a
+        // file rather than rewritten with a copy of itself.
+        if (!meta) {
+          res.sendFile(shellPath);
+          return;
+        }
+        res.type("html").send(applyPageMeta(shell(), meta));
         return;
       }
       // Deliberately a minimal page with no sign-in affordance: a 404 that
