@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { isSpaRoute } from "./lib/spaRoutes";
 import { authMiddleware } from "./middlewares/authMiddleware";
 import { APP_ORIGIN } from "./lib/appOrigin";
 import { configureTrustProxy } from "./lib/clientIp";
@@ -203,6 +204,15 @@ app.use(authMiddleware);
 
 app.use("/api", router);
 
+// Anything under /api that no route matched is a 404, and it has to be JSON.
+// Without this the SPA fallback below answers with the app shell and a 200, so
+// a client fetching a mistyped or removed endpoint receives HTML that parses as
+// success. A wrong URL should fail loudly at the call site, not surface later
+// as a confusing JSON parse error.
+app.use("/api", (_req, res) => {
+  res.status(404).json({ error: "Not found" });
+});
+
 // ── Google Search Console: file verification ─────────────────────────────────
 // Google offers three proofs. DNS TXT is the one to prefer — it survives a
 // redeploy, a host move and a change of static bundle, and it is a one-line
@@ -260,9 +270,46 @@ if (process.env.NODE_ENV !== "production") {
   if (existsSync(staticDir)) {
     logger.info({ staticDir }, "Production: serving static frontend");
     app.use(express.static(staticDir, { dotfiles: "allow" }));
-    // SPA fallback — client-side routes (e.g. /report/abc) must receive index.html
-    app.get(/.*/, (_req, res) => {
-      res.sendFile(nodePath.join(staticDir, "index.html"));
+
+    // The shell is served ONLY for paths the client router actually renders.
+    //
+    // This is a reputation fix, not tidiness. A catch-all that answers 200 plus
+    // the full app shell for every path means /wp-login.php, /admin/login and
+    // /secure/signin all return a page carrying a sign-in form. Unlimited
+    // distinct URLs, all 200, all showing a login UI is indistinguishable from
+    // a credential-harvesting kit — Google Safe Browsing flagged seclayer.app
+    // domain-wide as "Deceptive pages" for exactly this shape, with no sample
+    // URLs, because the pattern itself was the finding, and Chrome then blocked
+    // every visitor. It is also a soft-404 problem on its own: crawlers see
+    // infinite duplicate pages.
+    //
+    // Keep in sync with the <Route> list in artifacts/vibescan/src/App.tsx.
+    // A route added there and missed here 404s in production while working
+    // perfectly in dev, where Vite serves the shell for everything.
+    app.get(/.*/, (req, res) => {
+      if (isSpaRoute(req.path)) {
+        res.sendFile(nodePath.join(staticDir, "index.html"));
+        return;
+      }
+      // Deliberately a minimal page with no sign-in affordance: a 404 that
+      // still rendered the app shell would keep the same fingerprint that
+      // caused the problem.
+      res
+        .status(404)
+        .type("html")
+        .send(
+          '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
+            '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+            '<meta name="robots" content="noindex">' +
+            "<title>404 - Page not found</title></head>" +
+            '<body style="font-family:system-ui,-apple-system,sans-serif;background:#0f1117;color:#e4e4e7;' +
+            'display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0">' +
+            '<main style="text-align:center;padding:2rem">' +
+            '<h1 style="font-size:1.25rem;margin:0 0 .5rem">404 - Page not found</h1>' +
+            '<p style="color:#a1a1aa;font-size:.875rem;margin:0 0 1.25rem">That page does not exist on SecScan.</p>' +
+            '<a href="/" style="color:#34d399;font-size:.875rem">Go to secscan.us</a>' +
+            "</main></body></html>",
+        );
     });
   } else {
     logger.warn({ staticDir }, "Frontend static dir not found — frontend will not be served");
