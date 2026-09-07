@@ -469,10 +469,46 @@ export interface CrawlResult {
   probedNotFound: string[];
 }
 
+/**
+ * The cookie defects the ROOT response already reported, as dedup keys.
+ *
+ * The crawl's dedup set must start from these rather than empty. The root page's
+ * cookies are analysed separately in scanner.ts, so a cookie set on BOTH the root
+ * and an inner page was reported twice: once as "Missing Secure Flag" and again
+ * as "Missing Secure Flag on Inner Page". Same cookie, same defect, two findings.
+ *
+ * Seen on google.com: NID is set on / and on /imghp and came back as two
+ * findings. Both were factually correct, which is what makes this kind of
+ * duplication corrosive — the user checks, finds the scanner is right, and still
+ * counts the second one as noise.
+ *
+ * Only records what the root WOULD have reported, so a defect the root did not
+ * flag is still catchable on an inner page. Uses the same split and key format as
+ * scanner.ts; a different split would seed the wrong names and either duplicate
+ * anyway or suppress a genuine finding.
+ */
+export function seedCookieIssuesFromRoot(rootSetCookies: string[]): Set<string> {
+  const seen = new Set<string>();
+  for (const cookie of rootSetCookies) {
+    const firstSegment = cookie.split(";")[0] ?? "";
+    if (!firstSegment.includes("=")) continue;
+    const namePart = firstSegment.split("=")[0]?.trim() ?? "";
+    if (!namePart || INFRA_COOKIE_NAMES.has(namePart.toLowerCase())) continue;
+    if (!/secure/i.test(cookie)) seen.add(`secure::${namePart}`);
+    if (!/httponly/i.test(cookie)) seen.add(`httponly::${namePart}`);
+  }
+  return seen;
+}
+
 export async function crawlAndCheck(
   rootUrl: string,
   rootHtml: string,
   rootHeaders: Record<string, string>,
+  // The root response's cookies, already split by getSetCookie(). Passed in
+  // rather than re-derived from rootHeaders: splitting a joined Set-Cookie on
+  // commas shears cookies at the comma inside expires=, which seeds the wrong
+  // names and defeats the deduplication entirely.
+  rootSetCookies: string[],
   maxPages: number,
 ): Promise<CrawlResult> {
   let origin: string;
@@ -521,7 +557,7 @@ export async function crawlAndCheck(
   // Shared dedup set for cookie findings — prevents the same cookie issue
   // (e.g. GAESA missing Secure) from being filed once per crawled page.
   // Key format: "issueType::cookieName"
-  const seenCookieIssues = new Set<string>();
+  const seenCookieIssues = seedCookieIssuesFromRoot(rootSetCookies);
 
   // Track which header is missing on which paths (for gap aggregation)
   const gapMap = new Map<keyof typeof rootSnapshot, string[]>([

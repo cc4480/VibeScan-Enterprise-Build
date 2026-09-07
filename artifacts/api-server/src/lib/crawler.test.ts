@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractInternalLinks } from "./crawler.js";
+import { extractInternalLinks, seedCookieIssuesFromRoot } from "./crawler.js";
 
 const BASE = "https://example.com";
 
@@ -107,5 +107,42 @@ describe("extractInternalLinks", () => {
     expect(result).toContain("https://example.com/about");
     expect(result).toContain("https://example.com/pricing");
     expect(result).toContain("https://example.com/blog");
+  });
+});
+
+describe("seedCookieIssuesFromRoot", () => {
+  // The root page's cookies are analysed in scanner.ts, the inner pages' in the
+  // crawler. Without seeding, a cookie set on BOTH was reported twice — once as
+  // "Missing Secure Flag" and again as "Missing Secure Flag on Inner Page".
+  // Seen on google.com with NID, where both findings were factually correct,
+  // which is exactly what makes the duplicate corrosive.
+  it("records defects the root already reported so the crawl does not repeat them", () => {
+    const seen = seedCookieIssuesFromRoot(["NID=abc; expires=Tue, 09-Mar-2027 08:52:06 GMT; path=/; domain=.google.com; HttpOnly"]);
+    expect(seen.has("secure::NID")).toBe(true);   // no Secure -> root reported it
+    expect(seen.has("httponly::NID")).toBe(false); // HttpOnly IS set -> nothing to report
+  });
+
+  it("does not seed defects the root did not have, so inner pages stay catchable", () => {
+    // A properly flagged cookie on the root must not mask the SAME cookie being
+    // set badly on an inner page.
+    const seen = seedCookieIssuesFromRoot(["sid=1; Secure; HttpOnly"]);
+    expect(seen.size).toBe(0);
+  });
+
+  it("takes cookies already split, so a comma inside expires cannot shear them", () => {
+    // The list arrives pre-split by getSetCookie(), so the comma inside expires
+    // is just data — the shearing that caused the NID false positive cannot occur.
+    const seen = seedCookieIssuesFromRoot(["a=1; expires=Tue, 09-Mar-2027 08:52:06 GMT; path=/", "b=2; Secure"]);
+    expect(seen.has("secure::a")).toBe(true);
+    expect(seen.has("secure::b")).toBe(false);
+  });
+
+  it("ignores infrastructure cookies the site operator cannot change", () => {
+    const seen = seedCookieIssuesFromRoot(["__cf_bm=x; path=/"]);
+    expect(seen.has("secure::__cf_bm")).toBe(false);
+  });
+
+  it("is empty when the response sets no cookies", () => {
+    expect(seedCookieIssuesFromRoot([]).size).toBe(0);
   });
 });
