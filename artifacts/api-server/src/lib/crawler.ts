@@ -566,6 +566,20 @@ export async function crawlAndCheck(
       return page.status;
     }
 
+    // Only documents are routes. The href regex above matches every href in the
+    // markup, including <link rel="preload"> and <link rel="stylesheet">, so
+    // bundles and images arrive here looking like pages. Judging them for
+    // missing X-Frame-Options is meaningless — a stylesheet cannot be framed —
+    // and it inflated the count: scanning google.com reported three routes
+    // missing the header when only two were pages, the third being a preloaded
+    // JS bundle.
+    const contentType = (
+      Object.entries(page.headers).find(([k]) => k.toLowerCase() === "content-type")?.[1] ?? ""
+    ).toLowerCase();
+    if (contentType && !/text\/html|application\/xhtml/.test(contentType)) {
+      return page.status;
+    }
+
     // Record this URL as successfully visited
     pagesVisited.push(url);
 
