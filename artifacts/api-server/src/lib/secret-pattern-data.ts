@@ -54,11 +54,19 @@ export const SECRET_PATTERNS: SecretPattern[] = [
 
   // ── Google ────────────────────────────────────────────────────────────────
   {
-    name: "Google API Key Exposed",
+    name: "Google API Key in Client Code (verify referrer restrictions)",
     pattern: /AIza[0-9A-Za-z\-_]{35}/,
-    severity: "high", cvssScore: 7.5, cweId: "CWE-798",
-    description: "A Google API Key was found in client-side code. Depending on which APIs are enabled and whether the key has referrer/IP restrictions, attackers can abuse billing-metered APIs (Maps, Places, Vision, Translate), exfiltrate data, or run up large charges on your account.",
-    solution: "Restrict the API key to specific HTTP referrers and APIs in the Google Cloud Console. For server-side APIs, move the key to the backend. Regularly audit key usage for anomalies in the Cloud Console.",
+    // Info, not High. An AIza key is browser-facing by design — Maps, YouTube
+    // embeds and Firebase all ship one to the client, and Google's own
+    // properties do too (this fired High on youtube.com's public embed key).
+    // Its presence is therefore expected, not evidence of a leak. The only real
+    // risk is a key left *unrestricted*, and that cannot be proven from the
+    // page alone. Reporting it Info "verify restrictions" is consistent with how
+    // Firebase AIza keys and Stripe pk_live_ publishable keys are already
+    // treated — flag the thing to check, do not cry breach over a public value.
+    severity: "info", cvssScore: 0, cweId: "CWE-798",
+    description: "A Google API key (AIza…) was found in client-side code. These keys are designed to be public — Google Maps, YouTube embeds and Firebase all expose one to the browser — so this alone is not a vulnerability. It becomes a risk only if the key is left without HTTP-referrer or API restrictions, which cannot be determined from the page. This is a prompt to verify, not a confirmed exposure.",
+    solution: "In the Google Cloud Console, confirm this key is restricted to your specific HTTP referrers and to only the APIs it needs. An unrestricted key can be used from anywhere and can run up billing on metered APIs (Maps, Places, Vision). Server-side-only keys must never appear in client code at all.",
     validate: (m) => !/EXAMPLE|SAMPLE|YOUR.API.KEY/i.test(m),
   },
   {
