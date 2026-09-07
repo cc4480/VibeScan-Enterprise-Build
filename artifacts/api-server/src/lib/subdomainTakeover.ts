@@ -102,10 +102,19 @@ export async function checkSubdomainTakeover(
   const service = SERVICES.find((s) => s.cnamePattern.test(cname));
   if (!service) return [];
 
-  // Verify the CNAME target itself is unclaimed — try HTTPS then HTTP
+  // Confirm the unclaimed fingerprint on the ORIGINAL hostname, not the CNAME
+  // target. Many providers — Fastly, and CDNs like it — route by Host header:
+  // the raw CNAME target (reddit.map.fastly.net) is not itself a configured
+  // domain, so requesting it directly returns the provider's "unknown domain"
+  // error, which is indistinguishable from a genuinely dangling resource. That
+  // fired a Critical takeover on www.reddit.com and every other live
+  // Fastly/CDN-fronted site. A real takeover shows the unclaimed fingerprint on
+  // the hostname itself — because that is the Host an attacker (and a visitor)
+  // would send — while a claimed, working site serves its real page there. So
+  // the hostname is the only correct place to look.
   const result =
-    (await safeGet(`https://${cname}/`)) ??
-    (await safeGet(`http://${cname}/`));
+    (await safeGet(`https://${hostname}/`)) ??
+    (await safeGet(`http://${hostname}/`));
 
   if (!result) return [];
 
