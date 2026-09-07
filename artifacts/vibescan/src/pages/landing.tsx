@@ -322,7 +322,12 @@ export default function LandingPage() {
               icon: Bell,
               title: "Continuous Monitor",
               desc: "Automated rescans + CVE alerts.",
-              features: ["Weekly deep rescans", "Daily CVE feed monitoring", "Instant alerts for your stack", "Full AI report every run"],
+              features: [
+                "Rescans that follow your grade (A: 14d → F: 3d)",
+                "Daily CVE matching, ranked by EPSS",
+                "Certificate expiry alerts at 30/14/7 days",
+                "Regression alerts and Slack webhooks",
+              ],
               cta: "Start Monitoring",
               href: "/monitor",
               color: "text-indigo-400",
