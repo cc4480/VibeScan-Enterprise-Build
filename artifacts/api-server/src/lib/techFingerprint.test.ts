@@ -147,3 +147,107 @@ describe("detectTechnologies — edge cases", () => {
     expect(result.filter((t) => t === "WordPress")).toHaveLength(1);
   });
 });
+
+// ── Regression: false positives found by scanning secscan.info ──────────────
+//
+// A static Astro site was reported as Next.js + Tailwind + Bootstrap, and its
+// documentation pages as Lovable + Bolt.new. Every one came from matching a
+// generic class name or a word in prose. Technologies feed CVE matching, so a
+// phantom framework produces alerts for advisories that cannot apply.
+
+describe("detectTechnologies — does not fire on prose or generic classes", () => {
+  it("ignores __NEXT_DATA__ mentioned in text", () =>
+    expect(
+      detectTechnologies({}, "<p>Next.js serialises props into __NEXT_DATA__ in the page.</p>"),
+    ).not.toContain("Next.js"));
+
+  it("ignores a semantic grid class", () =>
+    expect(detectTechnologies({}, '<div class="grid"><div class="card">x</div></div>')).not.toContain(
+      "Tailwind CSS",
+    ));
+
+  it("ignores a lone utility-shaped class", () =>
+    expect(detectTechnologies({}, '<div class="text-sm">x</div>')).not.toContain("Tailwind CSS"));
+
+  it("ignores anchor ids that look like margin utilities", () =>
+    expect(
+      detectTechnologies({}, '<section id="m-scanner"></section><a href="#m-probes">x</a>'),
+    ).not.toContain("Tailwind CSS"));
+
+  it("ignores hyphenated class names ending in row", () =>
+    expect(detectTechnologies({}, '<div class="cta-row"><div class="row">x</div></div>')).not.toContain(
+      "Bootstrap",
+    ));
+
+  it("ignores a hand-rolled btn btn-primary", () =>
+    expect(detectTechnologies({}, '<a class="btn btn-primary">x</a>')).not.toContain("Bootstrap"));
+
+  it("ignores a container class", () =>
+    expect(detectTechnologies({}, '<div class="container">x</div>')).not.toContain("Bootstrap"));
+
+  it("ignores the word columns", () =>
+    expect(detectTechnologies({}, '<div class="columns">x</div>')).not.toContain("Bulma"));
+
+  it("ignores AI-builder hostnames written in prose", () => {
+    const prose = "<p>Apps on lovable.app, bolt.new or .stackblitz.io get targeted checks.</p>";
+    expect(detectTechnologies({}, prose)).not.toContain("Lovable");
+    expect(detectTechnologies({}, prose)).not.toContain("Bolt.new");
+  });
+});
+
+describe("detectTechnologies — still detects the real thing", () => {
+  it("detects Tailwind from a cluster of real utilities", () =>
+    expect(
+      detectTechnologies({}, '<div class="flex items-center gap-4 px-6 py-3 text-sm bg-white rounded-lg">x</div>'),
+    ).toContain("Tailwind CSS"));
+
+  it("detects Tailwind from palette colours", () =>
+    expect(
+      detectTechnologies({}, '<div class="bg-slate-800 text-white border-gray-200 rounded-lg shadow-md">x</div>'),
+    ).toContain("Tailwind CSS"));
+
+  it("detects Tailwind from the CDN script", () =>
+    expect(detectTechnologies({}, '<script src="https://cdn.tailwindcss.com"></script>')).toContain(
+      "Tailwind CSS",
+    ));
+
+  it("detects Bootstrap from its stylesheet", () =>
+    expect(detectTechnologies({}, '<link href="/css/bootstrap.min.css" rel="stylesheet">')).toContain(
+      "Bootstrap",
+    ));
+
+  it("detects Bootstrap from a data-bs- attribute", () =>
+    expect(detectTechnologies({}, '<button data-bs-toggle="modal">x</button>')).toContain("Bootstrap"));
+
+  it("detects Bootstrap from a breakpoint grid class", () =>
+    expect(detectTechnologies({}, '<div class="col-md-6">x</div>')).toContain("Bootstrap"));
+
+  it("detects Next.js from the __NEXT_DATA__ script element", () =>
+    expect(
+      detectTechnologies({}, '<script id="__NEXT_DATA__" type="application/json">{}</script>'),
+    ).toContain("Next.js"));
+
+  it("detects Next.js from a _next/static asset", () =>
+    expect(detectTechnologies({}, '<script src="/_next/static/chunks/main.js"></script>')).toContain(
+      "Next.js",
+    ));
+
+  it("detects Astro from the generator meta", () =>
+    expect(detectTechnologies({}, '<meta name="generator" content="Astro v5.18.2">')).toContain("Astro"));
+
+  it("detects Astro from an island", () =>
+    expect(detectTechnologies({}, "<astro-island uid=\"x\"></astro-island>")).toContain("Astro"));
+
+  it("detects Lovable from a real asset URL", () =>
+    expect(detectTechnologies({}, '<img src="https://lovable-uploads.lovable.app/x.png">')).toContain(
+      "Lovable",
+    ));
+
+  it("detects Bolt.new from a real script URL", () =>
+    expect(detectTechnologies({}, '<script src="https://bolt.new/app.js"></script>')).toContain(
+      "Bolt.new",
+    ));
+
+  it("detects Bulma from a real column class", () =>
+    expect(detectTechnologies({}, '<div class="column is-half">x</div>')).toContain("Bulma"));
+});
