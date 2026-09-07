@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { runWithScanHttp } from "./http.js";
-import { checkErrorDisclosure, checkDirectoryListing } from "./probes.js";
+import { checkErrorDisclosure, checkDirectoryListing, checkSensitiveFiles } from "./probes.js";
 
 const servers: http.Server[] = [];
 
@@ -124,5 +124,71 @@ describe("checkDirectoryListing — regression: weak pattern removed", () => {
 
     expect(findings.length).toBeGreaterThan(0);
     expect(findings[0]!.name).toMatch(/Directory Listing/i);
+  });
+});
+
+describe("checkSensitiveFiles — regression: SPA shell served for file paths", () => {
+  // vercel.com returns its ~2.5MB marketing HTML shell (status 200) for ANY
+  // path, including /WEB-INF/classes/application.properties and /.bash_history.
+  // That shell contains the words "security." and "git"/"npm"/"docker" in its
+  // prose, which satisfied the weak validators for those paths — and its
+  // per-path size/title variation defeated matchesCatchAll. Result: a Critical
+  // "Spring properties exposed" and a High ".bash_history exposed", both false.
+  it("does not flag file paths when the site serves an HTML document for everything", async () => {
+    const shell = (path: string) =>
+      "<!doctype html><html><head><title>Vercel — " + path + "</title></head>" +
+      "<body><main>Deploy with git, npm, docker. Security. best practices. " +
+      "server.port and datasource. jwt. mail. " +
+      "x".repeat(50_000) + "</main></body></html>";
+
+    const port = await serve((req, res) => {
+      // 200 + HTML for literally any path, with per-path title + size jitter
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(shell(req.url ?? "/") + "y".repeat(((req.url ?? "").length * 137) % 4000));
+    });
+
+    const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+      checkSensitiveFiles(`http://localhost:${port}`),
+    );
+
+    // Nothing here is real — every hit is the shell.
+    expect(findings).toEqual([]);
+  });
+
+  it("still flags a genuinely exposed .env served as plaintext", async () => {
+    const port = await serve((req, res) => {
+      if ((req.url ?? "") === "/.env") {
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.end("DB_PASSWORD=hunter2\nSTRIPE_SECRET_KEY=sk_live_abc123\nJWT_SECRET=xyz");
+        return;
+      }
+      // everything else 404s (not a catch-all site)
+      res.writeHead(404, { "content-type": "text/html" });
+      res.end("<!doctype html><html><body>not found</body></html>");
+    });
+
+    const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+      checkSensitiveFiles(`http://localhost:${port}`),
+    );
+
+    expect(findings.some((f) => /Environment File Exposed/i.test(f.name))).toBe(true);
+  });
+
+  it("still flags a real phpinfo page (servesHtml opt-out) even though it is HTML", async () => {
+    const port = await serve((req, res) => {
+      if ((req.url ?? "") === "/phpinfo.php") {
+        res.writeHead(200, { "content-type": "text/html" });
+        res.end("<!doctype html><html><head><title>phpinfo()</title></head><body>PHP Version 8.2.1</body></html>");
+        return;
+      }
+      res.writeHead(404, { "content-type": "text/html" });
+      res.end("<!doctype html><html><body>not found</body></html>");
+    });
+
+    const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+      checkSensitiveFiles(`http://localhost:${port}`),
+    );
+
+    expect(findings.some((f) => /PHP Info Page Exposed/i.test(f.name))).toBe(true);
   });
 });

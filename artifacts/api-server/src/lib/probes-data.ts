@@ -15,6 +15,14 @@ export interface SensitivePath {
   description: string;
   solution: string;
   validate: (body: string, contentType: string) => boolean;
+  /**
+   * Set when the file's genuine exposed content is itself an HTML document —
+   * phpinfo output, an Apache status page, an admin login form. For every other
+   * path a full HTML document is the SPA/catch-all shell, not the file, and the
+   * probe layer suppresses it before validate runs. Without this exemption that
+   * suppression would also hide a real phpinfo page. See probes.ts.
+   */
+  servesHtml?: boolean;
 }
 
 export const SENSITIVE_PATHS: SensitivePath[] = [
@@ -118,6 +126,7 @@ export const SENSITIVE_PATHS: SensitivePath[] = [
   },
   {
     path: "/phpinfo.php",
+    servesHtml: true,
     name: "PHP Info Page Exposed",
     severity: "high", cweId: "CWE-200", cvssScore: 7.5,
     category: "Information Disclosure",
@@ -127,6 +136,7 @@ export const SENSITIVE_PATHS: SensitivePath[] = [
   },
   {
     path: "/info.php",
+    servesHtml: true,
     name: "PHP Info Page Exposed (info.php)",
     severity: "high", cweId: "CWE-200", cvssScore: 7.5,
     category: "Information Disclosure",
@@ -363,6 +373,7 @@ export const SENSITIVE_PATHS: SensitivePath[] = [
   },
   {
     path: "/server-status",
+    servesHtml: true,
     name: "Apache Server Status Page Exposed",
     severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
     category: "Information Disclosure",
@@ -600,6 +611,7 @@ export const SENSITIVE_PATHS: SensitivePath[] = [
   // ── Database admin panels ─────────────────────────────────────────────────
   {
     path: "/phpmyadmin/",
+    servesHtml: true,
     name: "phpMyAdmin Database Admin Exposed",
     severity: "high", cweId: "CWE-200", cvssScore: 8.1,
     category: "Information Disclosure",
@@ -614,6 +626,7 @@ export const SENSITIVE_PATHS: SensitivePath[] = [
   },
   {
     path: "/adminer.php",
+    servesHtml: true,
     name: "Adminer Database Admin Tool Exposed",
     severity: "high", cweId: "CWE-200", cvssScore: 8.1,
     category: "Information Disclosure",
@@ -679,6 +692,7 @@ export const SENSITIVE_PATHS: SensitivePath[] = [
   // ── Apache / Nginx diagnostics ────────────────────────────────────────────
   {
     path: "/server-info",
+    servesHtml: true,
     name: "Apache Server Info Page Exposed",
     severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
     category: "Information Disclosure",

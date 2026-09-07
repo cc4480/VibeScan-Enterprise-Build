@@ -75,6 +75,22 @@ export async function checkSensitiveFiles(baseUrl: string): Promise<ScanVulnerab
       if (matchesCatchAll(result.body, catchAll)) return null;
 
       const ct = result.headers["content-type"] ?? "";
+
+      // A sensitive FILE that comes back as a full HTML document is the SPA /
+      // catch-all shell, never the file — a real .env, .properties or
+      // .bash_history is not an HTML page. matchesCatchAll above compares body
+      // size and <title> against a baseline, but a modern SPA varies both per
+      // path (per-route meta, OG tags, titles), so that check misses on the
+      // large sites it matters most for. This structural guard does not: it
+      // caught vercel.com's 2.5 MB marketing shell being read as an exposed
+      // Spring application.properties (its prose contains "security.") and an
+      // exposed .bash_history (its prose contains "git"/"npm"/"docker"). Paths
+      // whose genuine content IS html — phpinfo, server-status, admin panels —
+      // opt out with servesHtml.
+      if (!p.servesHtml && /<!doctype\s+html|<html[\s>]/i.test(result.body.slice(0, 4000))) {
+        return null;
+      }
+
       if (!p.validate(result.body, ct)) return null;
 
       const wstgId = /phpmyadmin|adminer|admin\s+panel|admin\s+interface|management\s+interface/i.test(p.name)
