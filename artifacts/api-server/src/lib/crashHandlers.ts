@@ -33,6 +33,38 @@ function describe(err: unknown): { message: string; stack?: string } {
 }
 
 /**
+ * Whether a crash is a remote peer mishandling an HTTP connection, rather than a
+ * fault in our own state.
+ *
+ * The scanner makes outbound requests to arbitrary, often hostile targets. Some
+ * servers close the TCP socket in a way that trips an assertion deep inside
+ * undici's HTTP parser — `AssertionError [ERR_ASSERTION]: false == true` at
+ * `Parser.finish` / `Socket.onHttpSocketEnd`. It fires on the socket event loop,
+ * not on the frame awaiting `fetch()`, so no try/catch around the request can
+ * reach it, and it arrives as an `uncaughtException`.
+ *
+ * Unlike a logic bug, it corrupts nothing here: a connection we were reading
+ * from went away. Treating it as fatal means one hostile response kills every
+ * scan in flight and stalls the queue — observed 2026-09-07, when nytimes.com
+ * crashed the worker mid-survey. So this specific, narrowly matched class is
+ * logged and swallowed; the request that triggered it fails on its own timeout
+ * and the worker keeps running. Everything else stays fatal — a crash of unknown
+ * origin still exits, because a half-alive process is worse than a restart.
+ */
+export function isRecoverableOutboundHttpError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const code = (err as NodeJS.ErrnoException).code;
+  const stack = err.stack ?? "";
+  // The undici HTTP-parser assertion on connection teardown. Matched narrowly:
+  // an assertion, from undici, in its parser/socket-end path — not any assertion.
+  return (
+    code === "ERR_ASSERTION" &&
+    /undici/.test(stack) &&
+    /Parser\.finish|onHttpSocketEnd|HTTPParser/.test(stack)
+  );
+}
+
+/**
  * Fire-and-forget alert. Never throws: a failure to report a crash must not
  * become a second crash, and must not delay the exit beyond its timeout.
  */
@@ -88,9 +120,28 @@ export function installCrashHandlers(
     })();
   };
 
+  const handle = (kind: string) => {
+    const fatal = die(kind);
+    return (err: unknown) => {
+      // A remote peer breaking a connection is not our crash to die on. Log it
+      // and stay up; the triggering request fails on its own. See the predicate.
+      if (isRecoverableOutboundHttpError(err)) {
+        const { message, stack } = describe(err);
+        logger.warn(
+          { service, kind, err: { message, stack } },
+          `${service}: recovered from outbound HTTP parser error — worker staying up`,
+        );
+        return;
+      }
+      fatal(err);
+    };
+  };
+
   // An unhandled rejection leaves the process in an unknown state. Node's own
   // default is to terminate, and pretending otherwise is how a service ends up
-  // half-alive: accepting requests it can no longer serve.
-  process.on("unhandledRejection", die("unhandled promise rejection"));
-  process.on("uncaughtException", die("uncaught exception"));
+  // half-alive: accepting requests it can no longer serve. The one exception is
+  // a recoverable outbound-HTTP error (see handle) — a dropped connection to a
+  // scan target, which leaves our own state intact.
+  process.on("unhandledRejection", handle("unhandled promise rejection"));
+  process.on("uncaughtException", handle("uncaught exception"));
 }
