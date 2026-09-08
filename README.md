@@ -120,14 +120,24 @@ lib/
   `SCAN_DAILY_LIMIT_ANON` (10) to `SCAN_DAILY_LIMIT_ACCOUNT` (50), because an
   account is attributable in a way an anonymous UUID is not.
   `lib/replit-auth-web` is vestigial.
-- **Job queue in-process.** pg-boss runs inside the API server and owns scan
-  jobs plus the EOL/CVE refresh and monitor schedulers. No separate worker to deploy.
+- **Two processes, one image.** `src/index.ts` (`seclayer`, the web tier) serves
+  the API and the built frontend and only *enqueues* scans. `src/secscan.ts`
+  (the scanner) runs the pg-boss worker, the monitor scheduler and the EOL/CVE
+  refresh, and owns Chromium. They share nothing but the `scan-job` queue in
+  Postgres, which is what lets them scale separately and keeps Playwright out of
+  the web image. `docker-compose.yml` brings up both; on Railway they are two
+  services off the same Dockerfile with different start commands — see
+  [`deploy/railway/NOTES.md`](deploy/railway/NOTES.md), which records what
+  happens when the web service accidentally boots the scanner's entrypoint.
 - **Everything external degrades gracefully.** DeepSeek, Resend, and Stripe each
   check for their key at startup and log a warning if absent; the app stays
   functional without any of them.
-- **Bring your own AI key.** Users can save a personal DeepSeek key in Settings
-  to spend their own credits instead of the server's. Keys are AES-256
-  encrypted at rest with `ENCRYPTION_KEY` and never re-displayed.
+- **Credentials are encrypted at rest and discarded after the scan.** A
+  credentialed scan holds a customer's live login, so `lib/crypto.ts` seals it
+  with AES-256-GCM under `ENCRYPTION_KEY`, and the worker nulls the column on
+  both the success and the failure path — the credentials live exactly as long
+  as the scan that needed them. Storing them requires a registered, verified
+  account; an anonymous UUID is not enough.
 - **Monitoring is risk-adaptive.** Rescan cadence follows the grade — A every 14
   days, B/C every 7, D/F every 3 — with Slack-compatible webhooks for CVE
   alerts, regressions, and certificate expiry.
@@ -183,7 +193,7 @@ don't commit it.
 | `PORT` | **yes** | API server refuses to boot without it. Use `8080` locally. |
 | `DATABASE_URL` | **yes** | PostgreSQL connection string. |
 | `DEEPSEEK_API_KEY` | no | Fallback AI analysis when a user hasn't set their own key. |
-| `ENCRYPTION_KEY` | no | 32-byte base64 AES-256 key for user-supplied secrets. Without it, Settings → DeepSeek key returns 503. |
+| `ENCRYPTION_KEY` | no | 32-byte base64 AES-256 key that seals scan credentials at rest. Without it, credentialed scanning is unavailable; anonymous scanning is unaffected. |
 | `RESEND_API_KEY` | no | Email notifications (report ready, CVE alerts). |
 | `APP_ORIGIN` | no | Base URL for links in emails. No trailing slash. |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | no | Dormant — scans are free. |
@@ -199,7 +209,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```bash
 pnpm run typecheck                              # whole workspace
 pnpm run build                                  # typecheck + build every package
-pnpm --filter @workspace/api-server run test    # 200 tests, 8 files
+pnpm --filter @workspace/api-server run test    # 769 tests, 52 files
+pnpm --filter @workspace/vibescan run test      #  20 tests,  3 files
 ```
 
 After editing `lib/api-spec/openapi.yaml`, regenerate and rebuild the
