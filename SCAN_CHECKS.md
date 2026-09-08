@@ -21,7 +21,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 | Module | Findings | Lines | Tests | Coverage |
 |---|---:|---:|---:|---|
-| `probes-data.ts` | 78 | 811 | 29 | direct |
+| `probes-data.ts` | 78 | 826 | 29 | direct |
 | `secret-pattern-data.ts` | 34 | 506 | 17 | direct |
 | `probes.ts` | 16 | 906 | 9 | direct |
 | `recon-data.ts` | 14 | 178 | 12 | direct |
@@ -247,7 +247,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `probes-data.ts`
 
-*78 findings · 811 lines · 29 tests.*
+*78 findings · 826 lines · 29 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|

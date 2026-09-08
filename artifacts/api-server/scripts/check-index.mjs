@@ -125,6 +125,26 @@ function maskLiterals(text) {
     return "";
   };
 
+  // A regex can also follow a keyword, where the character before it is an
+  // ordinary letter. `return /"[^"]{8,}"/i.test(body)` in probes-data.ts read
+  // the "n" of "return" as the previous code character, classified the slash as
+  // division, and scanned the pattern as code — so {8,} opened a brace that
+  // never closed and every object span after it started in the wrong place.
+  // Findings from /Dockerfile onward were then reported under their
+  // neighbour's name.
+  const KEYWORD_BEFORE_REGEX = new Set([
+    "return", "typeof", "instanceof", "in", "of", "case", "do", "else",
+    "void", "delete", "yield", "await", "new", "throw",
+  ]);
+
+  const prevWord = () => {
+    let j = i - 1;
+    while (j >= 0 && /\s/.test(text[j])) j--;
+    const end = j + 1;
+    while (j >= 0 && /[\w$]/.test(text[j])) j--;
+    return text.slice(j + 1, end);
+  };
+
   // Template literals nest — scanner.ts has `...${vendor ? `${vendor}'s` : "x"}...`
   // — so a scan that just runs to the next backtick ends the string inside its
   // own interpolation and every brace after it is classified wrongly. That is
@@ -162,7 +182,10 @@ function maskLiterals(text) {
       }
       if (ch === "`") { i++; scanTemplate(); continue; }
       // A `/` opens a regex only where a value may begin — otherwise it is division.
-      if (ch === "/" && /^[(,=:[!&|?{};+\-*%<>]?$/.test(prevCode())) {
+      if (
+        ch === "/" &&
+        (/^[(,=:[!&|?{};+\-*%<>]?$/.test(prevCode()) || KEYWORD_BEFORE_REGEX.has(prevWord()))
+      ) {
         i++;
         let inClass = false;
         while (i < text.length) {
