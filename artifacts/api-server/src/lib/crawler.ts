@@ -12,6 +12,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { isLikelySessionCookie, requiresHttpOnly } from "./cookieClassification.js";
 import type { ScanVulnerability } from "./scanner";
 
 const PAGE_TIMEOUT_MS = 8_000;
@@ -255,18 +256,6 @@ const INFRA_COOKIE_NAMES = new Set([
   "_abck",        // Akamai Bot Manager
 ]);
 
-// Cookies whose name suggests they actually carry session/auth state — see
-// the identical pattern (and rationale) in scanner.ts's analyzeCookies().
-// Duplicated rather than imported so this pure-logic module doesn't pull in
-// scanner.ts's runtime dependency graph (which requires DATABASE_URL at
-// import time). Must match the pattern in scanner.ts.
-const SESSION_COOKIE_PATTERN =
-  /session|token|jwt|csrf|xsrf|login|credential|phpsessid|jsessionid|connect\.sid|remember_?me|auth_?token|access_?token|refresh_?token|\bsid\b/i;
-
-function isLikelySessionCookie(name: string): boolean {
-  return SESSION_COOKIE_PATTERN.test(name);
-}
-
 function checkPageCookies(
   setCookies: string[],
   pageUrl: string,
@@ -317,7 +306,9 @@ function checkPageCookies(
       }
     }
 
-    if (!/httponly/i.test(cookie)) {
+    // A double-submit CSRF token has to stay readable by JavaScript; see
+    // requiresHttpOnly. The root scan applies the same exemption.
+    if (!/httponly/i.test(cookie) && requiresHttpOnly(namePart)) {
       const key = `httponly::${namePart}`;
       if (!seenCookieIssues.has(key)) {
         seenCookieIssues.add(key);

@@ -13,6 +13,7 @@
 
 import { randomUUID } from "node:crypto";
 import { detectChallengePage } from "./challengePage.js";
+import { isLikelySessionCookie, requiresHttpOnly } from "./cookieClassification.js";
 
 /**
  * Checks whether a hostname appears to be on the HSTS preload list.
@@ -184,13 +185,6 @@ const INFRA_COOKIE_NAMES = new Set([
 // merely sets a non-sensitive marker cookie (which is extremely common —
 // e.g. GitHub's "logged_in" flag) gets penalized as if it leaked a session
 // token.
-const SESSION_COOKIE_PATTERN =
-  /session|token|jwt|csrf|xsrf|login|credential|phpsessid|jsessionid|connect\.sid|remember_?me|auth_?token|access_?token|refresh_?token|\bsid\b/i;
-
-function isLikelySessionCookie(name: string): boolean {
-  return SESSION_COOKIE_PATTERN.test(name);
-}
-
 // Takes the ALREADY-SPLIT cookie list from the fetch layer (getSetCookie()),
 // not the flattened header string.
 //
@@ -244,7 +238,11 @@ function analyzeCookies(setCookies: string[], flattenedFallback?: string): ScanV
     const isSession = isLikelySessionCookie(namePart);
 
     if (!/secure/i.test(cookie))   (isSession ? noSecure : noSecureOther).push(namePart);
-    if (!/httponly/i.test(cookie)) (isSession ? noHttpOnly : noHttpOnlyOther).push(namePart);
+    // A CSRF token is exempt from HttpOnly and only from HttpOnly: the page has
+    // to read it to echo it back. It still needs Secure and SameSite.
+    if (!/httponly/i.test(cookie) && requiresHttpOnly(namePart)) {
+      (isSession ? noHttpOnly : noHttpOnlyOther).push(namePart);
+    }
     if (!/samesite/i.test(cookie)) (isSession ? noSameSite : noSameSiteOther).push(namePart);
   }
 
