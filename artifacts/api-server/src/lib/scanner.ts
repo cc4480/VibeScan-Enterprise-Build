@@ -190,10 +190,29 @@ function isLikelySessionCookie(name: string): boolean {
   return SESSION_COOKIE_PATTERN.test(name);
 }
 
-function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[] {
-  if (!setCookieHeader) return [];
-
-  const cookies = setCookieHeader.split(/\n|,(?=[^;])/);
+// Takes the ALREADY-SPLIT cookie list from the fetch layer (getSetCookie()),
+// not the flattened header string.
+//
+// Re-splitting a joined header on /\n|,(?=[^;])/ produced false positives.
+// A Set-Cookie value legitimately contains a comma inside its expires date --
+// "expires=Tue, 09-Mar-2027" -- and that comma is followed by a space, which
+// matches [^;]. The cookie was sheared in half and every attribute AFTER the
+// date became invisible:
+//
+//   NID=abc; expires=Tue, 09-Mar-2027 ...; HttpOnly
+//     -> "NID=abc; expires=Tue"        <- analysed as the whole cookie
+//     -> " 09-Mar-2027 ...; HttpOnly"  <- discarded, no "=" in first segment
+//
+// google.com's NID was reported as "Readable by JavaScript" when it does carry
+// HttpOnly. That hits any cookie whose expires= precedes its security flags,
+// which is most of them.
+//
+// The fallback keeps the old behaviour only where getSetCookie is unavailable.
+function analyzeCookies(setCookies: string[], flattenedFallback?: string): ScanVulnerability[] {
+  const cookies = setCookies.length > 0
+    ? setCookies
+    : (flattenedFallback ? flattenedFallback.split(/\n|,(?=[^;])/) : []);
+  if (cookies.length === 0) return [];
 
   // Collect affected cookie names per problem type instead of emitting one
   // finding per cookie — a site that sets 10 cookies should not score 10×
@@ -856,7 +875,7 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
 
   // ── Cookie analysis ───────────────────────────────────────────────────
   const setCookie = headerVal(rawHeaders, "set-cookie");
-  vulnerabilities.push(...analyzeCookies(setCookie));
+  vulnerabilities.push(...analyzeCookies(initial.setCookies ?? [], setCookie));
 
   // ── Mixed content ─────────────────────────────────────────────────────
   if (isHttps && /src=["']http:\/\//i.test(html.slice(0, 100_000))) {
@@ -904,7 +923,7 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
   // traversal.
   // Run crawl separately to capture pagesVisited alongside findings
   const crawlPromise = crawlAndCheck(
-    finalUrl, html, rawHeaders, CRAWL_PAGE_BUDGET,
+    finalUrl, html, rawHeaders, initial.setCookies ?? [], CRAWL_PAGE_BUDGET,
   ).catch(() => ({ vulnerabilities: [], pagesVisited: [], probedNotFound: [] }));
 
   const probePromises: Promise<ScanVulnerability[]>[] = [

@@ -550,6 +550,10 @@ export async function checkRateLimiting(targetUrl: string): Promise<ScanVulnerab
     /google-cloud|google-edge|google frontend/i.test(h["server"] ?? "") ||
     /google/i.test(h["via"] ?? "") ||                       // Google infra
     /cloudfront/i.test(h["x-cache"] ?? "") ||               // CloudFront cache
+    // GitHub's own edge. Same category as the CDNs above: rate limiting is
+    // enforced at the infrastructure tier and the HTML responses carry no
+    // rate-limit headers, so github.com was reported as having none at all.
+    h["x-github-edge-region"] || h["x-github-request-id"] ||
     h["x-azure-ref"] || h["x-ms-ref"] ||                   // Azure Front Door / CDN
     /akamai/i.test(h["x-check-cacheable"] ?? "");           // Akamai edge
 
