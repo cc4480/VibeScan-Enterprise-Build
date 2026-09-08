@@ -154,6 +154,53 @@ const SETTLE_MS = 1_500; // extra wait after networkidle for deferred renders
  *
  * Callers should fall back to raw `fetch()` on null.
  */
+/** A cookie as Playwright reports it. Only the fields we serialise. */
+export interface BrowserCookie {
+  name: string;
+  value: string;
+  domain?: string;
+  path?: string;
+  secure?: boolean;
+  httpOnly?: boolean;
+  sameSite?: string;
+}
+
+/**
+ * Turn browser-context cookies into Set-Cookie strings for the scanned origin.
+ *
+ * Filters to first-party cookies. A browser context accumulates cookies from
+ * every origin the page touches — Google, ad networks, embedded widgets — and
+ * the scanned site is not responsible for any of them. Attributing them
+ * produced a "session cookie SID missing Secure" finding against bestbuy.com,
+ * whose own server sends no Set-Cookie header at all; SID is a Google cookie.
+ *
+ * A cookie belongs to the target when its domain is the target host or a parent
+ * of it, matching how the browser decides what to send.
+ */
+export function toSetCookieStrings(cookies: BrowserCookie[], targetUrl: string): string[] {
+  let host: string;
+  try {
+    host = new URL(targetUrl).hostname.toLowerCase();
+  } catch {
+    return [];
+  }
+
+  return cookies
+    .filter((c) => {
+      const domain = (c.domain ?? "").replace(/^\./, "").toLowerCase();
+      if (!domain) return true; // host-only cookie from this page
+      return host === domain || host.endsWith(`.${domain}`);
+    })
+    .map((c) => {
+      let s = `${c.name}=${c.value}`;
+      if (c.secure) s += "; Secure";
+      if (c.httpOnly) s += "; HttpOnly";
+      if (c.sameSite && c.sameSite !== "None") s += `; SameSite=${c.sameSite}`;
+      if (c.path) s += `; Path=${c.path}`;
+      return s;
+    });
+}
+
 export async function renderPage(url: string): Promise<RenderedPage | null> {
   if (!_browser) return null;
 
@@ -232,17 +279,21 @@ export async function renderPage(url: string): Promise<RenderedPage | null> {
     const finalUrl: string = page.url();
     const html: string = await page.content();
 
-    // Reconstruct Set-Cookie strings from the page's cookies
+    // Reconstruct Set-Cookie strings from the page's cookies.
+    //
+    // Scoped to the page's own URL deliberately. `context.cookies()` with no
+    // argument returns EVERY cookie in the browser context — including ones set
+    // by Google, ad networks, embedded widgets and any other third party the
+    // page loaded. Attributing those to the scanned site produces findings its
+    // server never sent: bestbuy.com was reported as having a session cookie
+    // "SID" missing the Secure flag, a Google cookie name, when bestbuy.com
+    // returns no Set-Cookie header at all.
+    //
+    // Passing the URL filters to cookies that would actually be sent to this
+    // origin, which is the only set the site is responsible for.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cookieObjects: any[] = await (context as any).cookies();
-    const setCookies: string[] = cookieObjects.map((c) => {
-      let s = `${c.name}=${c.value}`;
-      if (c.secure)   s += "; Secure";
-      if (c.httpOnly) s += "; HttpOnly";
-      if (c.sameSite && c.sameSite !== "None") s += `; SameSite=${c.sameSite}`;
-      if (c.path)     s += `; Path=${c.path}`;
-      return s;
-    });
+    const cookieObjects: BrowserCookie[] = await (context as any).cookies(finalUrl);
+    const setCookies: string[] = toSetCookieStrings(cookieObjects, finalUrl);
 
     // Use the captured URL as final if navigation settled at a different path
     const effectiveFinalUrl = finalUrl || responseUrl || url;
