@@ -1,0 +1,133 @@
+# Runs the checks that were previously only ever run by hand.
+#
+# Node 24 matches the .replit `nodejs-24` module and the Dockerfile base, so a
+# version difference cannot be the reason CI and production disagree.
+#
+# pnpm is not pinned in package.json, so the version lives here and in the
+# Dockerfile. If they drift, the lockfile check below is what will notice.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# A new push to the same branch makes the previous run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  REGISTRY: ghcr.io
+
+jobs:
+  verify:
+    name: Typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # No version pin here on purpose: action-setup reads packageManager
+      # from package.json. Pinning it separately is what broke this workflow
+      # -- it said 11 while the repo declares pnpm@10.33.0, and action-setup
+      # errors out when the two disagree, so CI failed on its first step.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          # Restores the pnpm store between runs. Without it every run
+          # re-downloads 593 packages, which is most of the wall time.
+          cache: pnpm
+
+      # --frozen-lockfile fails rather than silently updating the lockfile, so a
+      # dependency added without committing pnpm-lock.yaml is caught here rather
+      # than by a Docker build weeks later.
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Builds the lib packages first, then typechecks the apps. Running the
+      # app typecheck alone reports hundreds of phantom errors because the
+      # workspace type output does not exist yet — see the note in DOCKER.md.
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      # -r so a package that gains a test script is picked up automatically
+      # rather than needing this file edited to notice.
+      - name: Test
+        run: pnpm -r --if-present run test
+
+      # The frontend build is the step most likely to break on a change that
+      # typechecks: bundling resolves imports the compiler is happy to leave
+      # unresolved.
+      - name: Build
+        run: pnpm -r --if-present --filter '!@workspace/mockup-sandbox' run build
+
+  docker:
+    name: Docker image (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # seclayer and secscan deploy as separate images, so both are built here.
+    # They diverge only after the shared runtime-base stage — secscan adds
+    # Chromium — which is exactly the part most likely to break on its own.
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [seclayer, secscan]
+    # Only on the default branch and pull requests into it: building the image
+    # on every push to every branch costs more than it catches.
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master'
+
+    # Pushing to GitHub Container Registry needs this; the default token is
+    # read-only for packages.
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Only master publishes. A pull request still builds the image — the point
+      # of that job is to catch a broken Dockerfile before merge — but it has no
+      # business writing to the registry.
+      - name: Log in to the registry
+        if: github.ref == 'refs/heads/master'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tags every image with the commit SHA as well as a moving tag, so a
+      # deployment can name the exact build it is running and roll back to a
+      # specific one rather than to "whatever latest was yesterday".
+      - name: Derive tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.target }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=long
+
+      # Builds the deployment artifact itself. The image build has broken twice
+      # for reasons the test suite could not see — a musl base that cannot
+      # resolve platform binaries, and a Chromium download failing mid-build.
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          push: ${{ github.ref == 'refs/heads/master' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Scoped per target so the two builds do not evict each other's cache.
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
