@@ -22,10 +22,10 @@ module does. `none` — neither, so no test exercises it at all.
 | Module | Findings | Lines | Tests | Coverage |
 |---|---:|---:|---:|---|
 | `probes-data.ts` | 78 | 811 | 29 | direct |
-| `secret-pattern-data.ts` | 33 | 474 | 9 | direct |
+| `secret-pattern-data.ts` | 33 | 482 | 13 | direct |
 | `probes.ts` | 16 | 906 | 9 | direct |
 | `dnsChecks.ts` | 9 | 490 | 26 | direct |
-| `nextjsProbe.ts` | 9 | 245 | 7 | direct |
+| `nextjsProbe.ts` | 9 | 248 | 7 | direct |
 | `structuredData.ts` | 9 | 415 | 34 | direct |
 | `crawler-data.ts` | 8 | 122 | 26 | direct |
 | `apiProbe.ts` | 7 | 644 | 31 | direct |
@@ -202,7 +202,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `nextjsProbe.ts`
 
-*9 findings · 245 lines · 7 tests.*
+*9 findings · 248 lines · 7 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -393,7 +393,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `secret-pattern-data.ts`
 
-*33 findings · 474 lines · 9 tests · emitted by `jsScanner.ts`.*
+*33 findings · 482 lines · 13 tests · emitted by `jsScanner.ts`.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
