@@ -385,7 +385,10 @@ if (jsonAt !== -1) {
   try {
     current = readFileSync(OUT, "utf8");
   } catch {}
-  if (current !== text) {
+  // Compared with line endings normalised: git hands a Windows checkout CRLF,
+  // and this check is about content drift, not about which OS ran it.
+  const same = current.replace(/\r\n/g, "\n") === text.replace(/\r\n/g, "\n");
+  if (!same) {
     console.error("SCAN_CHECKS.md is out of date. Run: node artifacts/api-server/scripts/check-index.mjs");
     process.exit(1);
   }
