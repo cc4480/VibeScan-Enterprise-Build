@@ -47,6 +47,35 @@ interface JwtPayload {
   [k: string]: unknown;
 }
 
+/**
+ * Whether a decoded JWT actually authenticates or authorizes somebody.
+ *
+ * The expiry findings below — no `exp`, excessive lifetime, HS256 without
+ * expiry — all assume the token is a session credential, where "valid forever"
+ * means "a stolen token works forever". That assumption does not hold for the
+ * many JWT-shaped values that are simply public infrastructure identifiers.
+ *
+ * Netlify injects one into every site it hosts:
+ *
+ *   {"site_id":"…","account_id":"…","deploy_id":"…","issuer":"nfserver"}
+ *
+ * It names a build, not a person; it grants nothing; an `exp` on it would be
+ * meaningless. Flagging it produced two Highs on mistral.ai — and would have on
+ * every Netlify-hosted site scanned.
+ *
+ * A token that carries no subject and no authorization claim cannot be used to
+ * act as anyone, so its lifetime is not a finding. Requiring one of these
+ * claims is what separates a credential from a label.
+ */
+const AUTH_CLAIMS = [
+  "sub", "aud", "scope", "scp", "role", "roles", "permissions", "perms",
+  "groups", "email", "user_id", "userId", "uid", "username", "user",
+];
+
+function looksLikeAuthToken(payload: JwtPayload): boolean {
+  return AUTH_CLAIMS.some((c) => payload[c] !== undefined);
+}
+
 function b64Decode(input: string): string {
   const base64 = input.replace(/-/g, "+").replace(/_/g, "/");
   const padded = base64.padEnd(base64.length + (4 - (base64.length % 4)) % 4, "=");
@@ -148,8 +177,12 @@ export async function analyzeJwts(
       }));
     }
 
+    // Expiry only matters for a token that can act as somebody. See
+    // looksLikeAuthToken — a public build/deploy identifier is not a credential.
+    const isAuthToken = looksLikeAuthToken(payload);
+
     // 3. Missing expiry
-    if (payload.exp === undefined) {
+    if (isAuthToken && payload.exp === undefined) {
       report("no-exp", vuln({
         name: "JWT Token Has No Expiry (exp Claim Missing)",
         severity: "high",
@@ -167,6 +200,7 @@ export async function analyzeJwts(
 
     // 4. Extremely long-lived token
     if (
+      isAuthToken &&
       payload.exp !== undefined &&
       payload.iat !== undefined &&
       payload.exp - payload.iat > 365 * 24 * 3600
@@ -187,7 +221,7 @@ export async function analyzeJwts(
     }
 
     // 5. HS256 without expiry (offline brute-force + infinite lifetime)
-    if (alg === "hs256" && payload.exp === undefined) {
+    if (isAuthToken && alg === "hs256" && payload.exp === undefined) {
       report("hs256-no-exp", vuln({
         name: "JWT Uses HS256 Without Expiry — Offline Brute-Force Risk",
         severity: "high",
