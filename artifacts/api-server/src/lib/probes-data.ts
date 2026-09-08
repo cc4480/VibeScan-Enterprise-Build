@@ -270,9 +270,24 @@ export const SENSITIVE_PATHS: SensitivePath[] = [
     name: "Configuration File Exposed (config.json)",
     severity: "high", cweId: "CWE-200", cvssScore: 7.5,
     category: "Information Disclosure",
-    description: "A configuration JSON file is publicly accessible, potentially containing connection strings, API keys, or internal endpoint URLs.",
-    solution: "Remove config.json from the web root. Use environment variables for configuration, never static files.",
-    validate: (body, ct) => (ct.includes("json") || body.trim().startsWith("{")) && !ct.includes("text/html"),
+    description: "A configuration JSON file containing credential-shaped values is publicly accessible. Configuration served from the web root is readable by anyone, so any secret in it is public.",
+    solution: "Remove config.json from the web root, or strip the secret values from it. Server-side configuration belongs in environment variables. Only values that are safe to publish — API endpoint URLs, publishable SDK keys, feature flags — may ship to the browser.",
+    // Serving /config.json is not itself a finding. It is the conventional name
+    // for a single-page app's public bootstrap config: API endpoint URLs,
+    // feature flags, and publishable client SDK keys (Firebase apiKey,
+    // LaunchDarkly client ids, Braze) that are public by design. Flagging every
+    // one of those was a High on kraken.com for a file containing exactly that
+    // and nothing secret.
+    //
+    // Require a credential-shaped KEY carrying a non-trivial value — the thing
+    // that would actually make the file an exposure.
+    validate: (body, ct) => {
+      if (ct.includes("text/html")) return false;
+      if (!(ct.includes("json") || body.trim().startsWith("{"))) return false;
+      return /"[^"]*(?:password|passwd|secret|private_?key|connection_?string|db_pass|aws_secret|client_secret|api_secret)[^"]*"\s*:\s*"[^"]{8,}"/i.test(
+        body,
+      );
+    },
   },
   {
     path: "/Dockerfile",
