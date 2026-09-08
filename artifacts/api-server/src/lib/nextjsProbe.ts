@@ -81,7 +81,10 @@ const NEXT_DATA_SECRET_PATTERNS: NextDataSecretPattern[] = [
   },
   {
     name: "Private Key in __NEXT_DATA__",
-    pattern: /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/,
+    // Same reasoning as secret-pattern-data.ts: a bare PEM header is a
+    // formatting template in crypto libraries, not a leaked key. Require the
+    // base64 key body to follow.
+    pattern: /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----[\s\\rn"']{0,12}[A-Za-z0-9+/]{40,}/,
     severity: "critical", cvssScore: 10.0, cweId: "CWE-321",
     description:
       "A cryptographic private key was found in the __NEXT_DATA__ JSON blob. This key is now " +

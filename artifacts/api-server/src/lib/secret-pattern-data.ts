@@ -229,7 +229,15 @@ export const SECRET_PATTERNS: SecretPattern[] = [
   // ── Cryptographic Keys ────────────────────────────────────────────────────
   {
     name: "Private Key Exposed in JavaScript",
-    pattern: /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/,
+    // The PEM header alone proves nothing. Crypto libraries embed it as a
+    // formatting template: JSEncrypt — common on bank login forms — ships
+    // `getPrivateKey = function () { var t = "-----BEGIN RSA PRIVATE KEY-----" ... }`
+    // with no key anywhere near it. That bare header fired a CVSS 10.0 Critical
+    // on capitalone.com, and would on every site loading the library.
+    // Require real base64 key material to follow. The separator class allows an
+    // escaped newline, since inside a JS string literal the break between the
+    // header and the key body is a backslash-n rather than an actual newline.
+    pattern: /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----[\s\\rn"']{0,12}[A-Za-z0-9+/]{40,}/,
     severity: "critical", cvssScore: 10.0, cweId: "CWE-321",
     description: "A cryptographic private key was found in client-side JavaScript. This is an emergency. Private keys are used to sign JWTs, establish TLS connections, authenticate SSH sessions, and more. Anyone who downloads this page has your private key.",
     solution: "EMERGENCY: Immediately revoke and replace this key pair everywhere it is used. Audit all systems that accepted this key for unauthorized access. Private keys must NEVER exist in frontend code under any circumstances.",
