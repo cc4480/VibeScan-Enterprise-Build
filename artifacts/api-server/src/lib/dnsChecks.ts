@@ -101,12 +101,33 @@ function ancestorDomains(hostname: string): string[] {
  * Looks for a record matching `match` at `name`, then at each ancestor.
  * Returns the first hit, or the status of the most specific lookup so a caller
  * can tell "no record" from "could not ask".
+ *
+ * `nxdomainMeansAbsent` decides what NXDOMAIN is evidence of, and the two
+ * callers genuinely differ:
+ *
+ *   DMARC asks for `_dmarc.<domain>`, a label that only exists when a policy
+ *   has been published. NXDOMAIN there is the ordinary way of saying "no DMARC
+ *   record" — europa.eu answers exactly that — so treating it as unknown loses
+ *   a true finding.
+ *
+ *   SPF asks for the domain itself, which we have just fetched a web page
+ *   from. NXDOMAIN there means the lookup failed to describe reality, and a
+ *   missing-record finding must not be built on it.
  */
 async function findUpChain(
   hostname: string,
   label: (domain: string) => string,
   match: (txt: string) => boolean,
-): Promise<{ found: string | null; at: string | null; status: number; checked: string[] }> {
+  nxdomainMeansAbsent = false,
+): Promise<{
+  found: string | null;
+  at: string | null;
+  /** What the resolver said for the most specific name — reported verbatim in evidence. */
+  status: number;
+  /** True when the lookups actually established that no record exists. */
+  conclusive: boolean;
+  checked: string[];
+}> {
   const checked: string[] = [];
   let firstStatus = -1;
   for (const domain of ancestorDomains(hostname)) {
@@ -114,12 +135,14 @@ async function findUpChain(
     checked.push(queried);
     const { answers, status } = await dnsQuery(queried, "TXT");
     if (checked.length === 1) firstStatus = status;
-    if (status === -1) return { found: null, at: null, status: -1, checked };
+    if (status === -1) return { found: null, at: null, status: -1, conclusive: false, checked };
+    if (status === 3 && nxdomainMeansAbsent) continue;
     const records = answers.map((a) => a.data.replace(/^"|"$/g, "").replace(/"\s*"/g, ""));
     const hit = records.find(match);
-    if (hit) return { found: hit, at: queried, status, checked };
+    if (hit) return { found: hit, at: queried, status, conclusive: true, checked };
   }
-  return { found: null, at: null, status: firstStatus, checked };
+  const conclusive = firstStatus === 0 || (nxdomainMeansAbsent && firstStatus === 3);
+  return { found: null, at: null, status: firstStatus, conclusive, checked };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -128,9 +151,9 @@ async function findUpChain(
 
 export async function checkSpf(hostname: string): Promise<ScanVulnerability[]> {
   const spf = await findUpChain(hostname, (d) => d, (r) => r.startsWith("v=spf1"));
-  // -1 is a network failure and 3 is NXDOMAIN: in neither case did we learn
-  // that the record is absent, so neither may produce a finding.
-  if (spf.status === -1 || spf.status === 3) return [];
+  // A network failure or an NXDOMAIN on the domain itself teaches us nothing
+  // about whether a record exists, so neither may produce a finding.
+  if (!spf.conclusive) return [];
   const spfRecord = spf.found;
 
   if (!spfRecord) {
@@ -204,8 +227,13 @@ export async function checkDmarc(hostname: string): Promise<ScanVulnerability[]>
   // RFC 7489 already says a receiver falls back to the organisational domain
   // when the exact name has no policy, so accepting a parent's record matches
   // what a real mail receiver does.
-  const dmarc = await findUpChain(hostname, (d) => `_dmarc.${d}`, (r) => r.startsWith("v=DMARC1"));
-  if (dmarc.status === -1 || dmarc.status === 3) return [];
+  const dmarc = await findUpChain(
+    hostname,
+    (d) => `_dmarc.${d}`,
+    (r) => r.startsWith("v=DMARC1"),
+    true, // an absent _dmarc label IS the "no policy published" answer
+  );
+  if (!dmarc.conclusive) return [];
   const dmarcRecord = dmarc.found;
 
   if (!dmarcRecord) {

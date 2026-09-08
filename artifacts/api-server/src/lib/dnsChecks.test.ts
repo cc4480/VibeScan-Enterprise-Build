@@ -271,12 +271,26 @@ describe("answers are matched against the record type that was asked for", () =>
 });
 
 describe("evidence reports the status the resolver actually returned", () => {
-  it("does not claim NOERROR, or report at all, when the name does not exist", async () => {
-    // _dmarc.www.gov.uk is NXDOMAIN. The evidence string used to say
-    // "Status: NOERROR (domain exists)" regardless of what came back.
+  it("treats an absent _dmarc label as an absent policy, not as an unknown", async () => {
+    // Over-correction caught in the final run: suppressing on NXDOMAIN threw
+    // away a TRUE finding. _dmarc.europa.eu is NXDOMAIN on two independent
+    // resolvers and europa.eu has real MX records — it genuinely publishes no
+    // DMARC policy, which is exactly what an absent _dmarc label means.
     vi.mocked(fetch).mockImplementation(async () => dohResponse([], 3));
 
-    expect(await checkDmarc("www.gov.uk")).toEqual([]);
+    const vulns = await checkDmarc("european-union.europa.eu");
+    expect(vulns).toHaveLength(1);
+    expect(vulns[0]!.name).toMatch(/missing dmarc/i);
+    expect(vulns[0]!.evidence).not.toMatch(/NOERROR/);
+    expect(vulns[0]!.evidence).toMatch(/NXDOMAIN/);
+  });
+
+  it("withholds an SPF finding when the domain itself does not resolve", async () => {
+    // SPF asks for the domain, not a sub-label: NXDOMAIN there means the
+    // lookup did not describe reality, so no finding may be built on it.
+    vi.mocked(fetch).mockImplementation(async () => dohResponse([], 3));
+
+    expect(await checkSpf("www.example.com")).toEqual([]);
   });
 
   it("names every domain it queried in the evidence", async () => {

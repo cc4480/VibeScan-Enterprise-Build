@@ -54,16 +54,31 @@ _None currently. Re-run the scanner against these targets after any scanner chan
 | `JavaScript Source Map Exposed` | about.gitlab.com | Real. `https://about.gitlab.com/_nuxt/Dtrxhrnz.js.map` returns HTTP 200, 2.95 MB, 301 source files with `sourcesContent` included. |
 | `JavaScript Source Map Exposed` | archive.org | Real, HTTP 200, 25 KB — but the map covers a vendored `lit` polyfill, so what is exposed is a public library's source, not the operator's. True finding, arguably over-severe at HIGH. |
 
-### Known-weak, not yet fixed
+### Fixed — second pass, from the verification run
 
-**`No Rate Limiting Detected` fired on 15 of 30 sites**, including Stripe,
-Wikipedia and GOV.UK. Verified by hand: stripe.com really does send no
-rate-limit headers at all. So the check is literally accurate and its name is
-not — it detects that rate limiting is *not advertised*, which is the normal
-configuration, and asserts that it is *absent*. It carries confidence 52 and
-LOW severity, which is the scanner hedging on a signal it cannot actually
-observe. Excluded from the published baseline. Either the finding should be
-renamed to what it measures, or it should not be a finding.
+Re-running the corpus after the DNS fixes surfaced three more, one of them
+introduced by the fix itself. This is the argument for re-running rather than
+trusting a green suite.
+
+| Finding | Target | Why it was wrong |
+|---|---|---|
+| `DNSSEC Not Enabled` | www.nasa.gov | **Introduced by the record-type filter above.** DNSKEY lives at the zone apex, and `checkDnssec` asked the scanned hostname: `www.nasa.gov` answers with one CNAME and no DNSKEY, while `nasa.gov` is properly signed. Before answers were filtered by type, that CNAME was counted as a DNSKEY and the check passed for entirely the wrong reason — a hidden false negative that the filter converted into a visible false positive. The corpus went from 13/30 to 26/29 in one run, which is what made it obvious. Now walks to the apex. Verified after: nasa.gov's finding is gone, and stripe.com, wikipedia.org and github.com genuinely publish no DNSKEY, so the higher figure is the true one. |
+| `No Rate Limiting Detected` | 15 of 30 sites | Asserted something a passive GET cannot observe. stripe.com sends no rate-limit headers at all and unquestionably rate-limits; rate limiting lives on login and API routes, not the homepage, and CDNs throttle silently. The infrastructure allowlist had already been patched twice — Google server tokens, then GitHub's edge — which is the shape of a check chasing an unobservable property one vendor at a time. Renamed to `Rate Limiting Not Advertised in Response Headers` and dropped to INFO, weight 0. |
+| `Hardcoded JWT Token in Source` (**HIGH**) | nytimes.com | An Iterate survey widget's `apiKey` inside Google Tag Manager, payload `{"company_id":"…","iat":…}`. Publishable by design, the same category as the Supabase anon key already excluded. Two entries now share the regex and split on whether the payload carries a principal claim — `sub`, `user_id`, `email`, `role`, `scope`. With one it is a credential leak at HIGH; with none it is an account identifier, reported at INFO so the signal survives without the accusation. |
+| Every content-derived finding | etsy.com, ebay.com, amazon.co.uk, stackoverflow.com, reuters.com | Naming untrusted findings in a coverage note was not enough — the report still told Etsy it was missing CSP and serving a wildcard CORS policy, both true only of Cloudflare's interstitial. Twelve of eighteen findings on that scan described a page Etsy never served. Findings are now withheld unless their source never read the intercepted response: DNS, email authentication, mail transport. etsy.com goes from 18 findings to 4, all four genuinely about Etsy. |
+
+`toEmailDomain` was deleted rather than patched. Guessing a registrable domain
+from label lengths is what produced the GOV.UK failure in the first place.
+
+### Result
+
+| Target | Before | After |
+|---|---|---|
+| www.gov.uk | 12 findings, 3 actionable | 7 findings, 0 actionable |
+| www.etsy.com | 18 findings, 6 actionable | 4 findings, 1 actionable |
+| stackoverflow.com | 13 findings, 4 actionable | 3 findings, 0 actionable |
+
+686 tests pass, including twelve new regressions across these six bugs.
 
 ## 2026-09-07
 
