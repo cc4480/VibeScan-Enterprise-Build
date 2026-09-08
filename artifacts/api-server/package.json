@@ -10,6 +10,7 @@
     "start": "node --env-file-if-exists=../../.env --enable-source-maps ./dist/index.mjs",
     "start:secscan": "node --env-file-if-exists=../../.env --enable-source-maps ./dist/secscan.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "docs:checks": "node ./scripts/check-index.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"

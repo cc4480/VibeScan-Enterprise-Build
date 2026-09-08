@@ -61,6 +61,12 @@ jobs:
       - name: Test
         run: pnpm -r --if-present run test
 
+      # SCAN_CHECKS.md is generated from the finding literals, and the whole
+      # point of generating it is that it cannot quietly fall behind the code.
+      # It went stale by hand in four days; this fails the build instead.
+      - name: Check the check index is current
+        run: node artifacts/api-server/scripts/check-index.mjs --check
+
       # The frontend build is the step most likely to break on a change that
       # typechecks: bundling resolves imports the compiler is happy to leave
       # unresolved.
