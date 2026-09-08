@@ -24,6 +24,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `probes-data.ts` | 78 | 811 | 29 | direct |
 | `secret-pattern-data.ts` | 33 | 482 | 13 | direct |
 | `probes.ts` | 16 | 906 | 9 | direct |
+| `recon-data.ts` | 14 | 178 | 12 | direct |
 | `dnsChecks.ts` | 9 | 490 | 26 | direct |
 | `nextjsProbe.ts` | 9 | 248 | 7 | direct |
 | `structuredData.ts` | 9 | 415 | 34 | direct |
@@ -36,19 +37,16 @@ module does. `none` — neither, so no test exercises it at all.
 | `accessControlProbe.ts` | 3 | 377 | 18 | direct |
 | `firebase-probes.ts` | 3 | 261 | 5 | direct |
 | `mailTls.ts` | 3 | 316 | 12 | direct |
+| `storageProbe.ts` | 3 | 262 | 8 | direct |
+| `baasProbes.ts` | 2 | 265 | 6 | direct |
+| `graphqlProbe.ts` | 2 | 292 | 8 | direct |
 | `injectionProbe.ts` | 2 | 237 | 7 | direct |
+| `sourceMaps.ts` | 2 | 172 | 11 | direct |
+| `apiDocsProbe.ts` | 1 | 284 | 9 | direct |
 | `pathTraversal.ts` | 1 | 168 | 4 | direct |
 | `ssrfProbe.ts` | 1 | 192 | 6 | direct |
 | `scanner.ts` | 31 | 1202 | — | indirect, via challengePage.test.ts, firebase-probes.test.ts, scoring.test.ts |
 | `subdomain-service-data.ts` | 19 | 152 | — | indirect, via subdomainTakeover.test.ts |
-| `recon-data.ts` | 14 | 178 | — | **none** |
-| `storageProbe.ts` | 3 | 262 | — | **none** |
-| `baasProbes.ts` | 2 | 239 | — | **none** |
-| `graphqlProbe.ts` | 2 | 292 | — | **none** |
-| `sourceMaps.ts` | 2 | 172 | — | **none** |
-| `apiDocsProbe.ts` | 1 | 284 | — | **none** |
-
-> **6 modules carrying 24 findings have no test reaching them:** `apiDocsProbe`, `baasProbes`, `graphqlProbe`, `recon-data`, `sourceMaps`, `storageProbe`.
 
 ## Findings by module
 
@@ -64,7 +62,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `apiDocsProbe.ts`
 
-*1 findings · 284 lines · no test file.*
+*1 findings · 284 lines · 9 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -86,7 +84,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `baasProbes.ts`
 
-*2 findings · 239 lines · no test file.*
+*2 findings · 265 lines · 6 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -161,7 +159,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `graphqlProbe.ts`
 
-*2 findings · 292 lines · no test file.*
+*2 findings · 292 lines · 8 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -334,7 +332,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `recon-data.ts`
 
-*14 findings · 178 lines · no test file · emitted by `recon.ts`.*
+*14 findings · 178 lines · 12 tests · emitted by `recon.ts`.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -433,7 +431,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `sourceMaps.ts`
 
-*2 findings · 172 lines · no test file.*
+*2 findings · 172 lines · 11 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -450,7 +448,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `storageProbe.ts`
 
-*3 findings · 262 lines · no test file.*
+*3 findings · 262 lines · 8 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|

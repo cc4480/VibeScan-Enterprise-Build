@@ -76,11 +76,42 @@ const POCKETBASE_COLLECTIONS = [
   "messages", "profiles", "content", "records", "items",
 ];
 
+/**
+ * PocketBase answers /api/health with {"code":200,"message":"API is healthy.","data":{}}.
+ *
+ * `{"status":"ok"}` used to be accepted here as an alternative, and a great
+ * many services that are not PocketBase answer exactly that. Paired with a
+ * catch-all that returns 200 for any path, it produced three High
+ * "unauthenticated collection access" findings against an API with no
+ * PocketBase anywhere in it.
+ */
+function isPocketBaseHealth(body: string): boolean {
+  return /"code"\s*:\s*200/.test(body) && /"message"\s*:/.test(body);
+}
+
+/**
+ * The list shape PocketBase returns: an items array alongside paging fields.
+ * Requiring it means a catch-all serving HTML — or any other 200 — cannot be
+ * read as an open collection.
+ */
+function isPocketBaseListResponse(body: string): { ok: boolean; hasRecords: boolean; total: number } {
+  try {
+    const data = JSON.parse(body) as { items?: unknown[]; totalItems?: number; page?: number; perPage?: number };
+    const shaped =
+      Array.isArray(data.items) &&
+      (typeof data.totalItems === "number" || typeof data.page === "number" || typeof data.perPage === "number");
+    if (!shaped) return { ok: false, hasRecords: false, total: 0 };
+    return { ok: true, hasRecords: (data.items as unknown[]).length > 0, total: data.totalItems ?? 0 };
+  } catch {
+    return { ok: false, hasRecords: false, total: 0 };
+  }
+}
+
 async function probePocketBase(baseUrl: string): Promise<ScanVulnerability[]> {
   // Confirm it's PocketBase
   const health = await safeGet(`${baseUrl}/api/health`);
   if (!health || health.status !== 200) return [];
-  if (!/"code"\s*:\s*200/.test(health.body) && !/"status"\s*:\s*"ok"/.test(health.body)) return [];
+  if (!isPocketBaseHealth(health.body)) return [];
 
   const found: ScanVulnerability[] = [];
 
@@ -89,15 +120,10 @@ async function probePocketBase(baseUrl: string): Promise<ScanVulnerability[]> {
     const r = await safeGet(`${baseUrl}/api/collections/${col}/records?perPage=1`);
     if (!r || r.status !== 200) continue;
 
-    let hasRecords = false;
-    let total = 0;
-    try {
-      const data = JSON.parse(r.body) as { items?: unknown[]; totalItems?: number };
-      hasRecords = Array.isArray(data.items) && data.items.length > 0;
-      total = data.totalItems ?? 0;
-    } catch {
-      hasRecords = r.body.includes('"items"');
-    }
+    const shape = isPocketBaseListResponse(r.body);
+    if (!shape.ok) continue;
+    const hasRecords = shape.hasRecords;
+    const total = shape.total;
 
     found.push(vuln({
       name: `PocketBase — Unauthenticated Access to '${col}' Collection`,
