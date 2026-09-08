@@ -15,6 +15,56 @@ DATABASE_URL=postgres://localhost/anything \
 `DATABASE_URL` only has to be *set* — the scanner module imports the db layer at
 load time. It is never read by a passive scan.
 
+## 2026-09-08 — 30-site corpus round
+
+Thirty sites across six sectors, scanned passively to build a published baseline.
+The point was to measure, not to hunt; the hunt happened anyway. One finding —
+**"Missing SPF Record — Email Spoofing Possible", HIGH, against www.gov.uk** —
+turned out to contain three separate bugs, and GOV.UK publishes `v=spf1 -all` at
+`gov.uk` and `p=reject` at `_dmarc.gov.uk`. It is the single most email-secure
+domain a UK scan is likely to encounter, and we reported it as having neither.
+
+Every one of the three is the same underlying error the audit has now recorded
+four times: **reading the presence of a response as the meaning of the
+response.** STARTTLS read reachability as an answer; the WAF detector read
+`x-datadome` presence as "blocked"; `security.txt` reported "not found"
+regardless; and here, DNS answers were read without checking what they were.
+
+### Fixed
+
+| Finding | Target | Why it was wrong |
+|---|---|---|
+| `Missing SPF Record` + `Missing DMARC Record` (both **HIGH**) | www.gov.uk | `toEmailDomain` derived the email domain by counting label lengths: `uk` is 2 characters and `gov` is 3, so it took the `.co.uk` branch, and with only 3 labels it returned the hostname **unchanged**. SPF was looked up at `www.gov.uk` and DMARC at `_dmarc.www.gov.uk` — neither of which exists. `www.bbc.co.uk` escaped only because it has four labels. Replaced with a walk up the ancestor chain that accepts a record found at any parent, which is what RFC 7489 says a receiver does anyway. |
+| Severity escalated Medium → **HIGH** on the same finding | www.gov.uk | `dnsQuery` returned the whole DoH answer section without filtering on record type. An MX query for `www.gov.uk` answers with two **CNAME** records (type 5) pointing at Fastly and no MX at all; `mxAnswers.length > 0` read that as "domain actively sends email". Answers are now filtered to the type that was asked for. |
+| Evidence claimed `Status: NOERROR (domain exists)` | www.gov.uk | Hardcoded into the evidence string. `_dmarc.www.gov.uk` is NXDOMAIN. The function's own doc comment already said a missing-record finding may only be reported when status is 0 — the code checked only for -1. NXDOMAIN now suppresses the finding, and evidence prints the status the resolver actually returned plus every name queried. |
+
+The test fixtures could not have caught any of this: `dohResponse()` built answers
+with no `type` field at all, so a CNAME-counted-as-MX was unrepresentable. The
+helper now emits realistic answers and six regression tests cover the three bugs.
+
+### Open
+
+_None currently. Re-run the scanner against these targets after any scanner change._
+
+### Checked and correct — corpus round
+
+| Finding | Target | Verified |
+|---|---|---|
+| `Missing DMARC Record` | european-union.europa.eu | Genuinely absent. `_dmarc.europa.eu` is NXDOMAIN on both Cloudflare and Google resolvers, and `europa.eu` has real MX records (pphosted, Outlook). The finding stands. |
+| `JavaScript Source Map Exposed` | about.gitlab.com | Real. `https://about.gitlab.com/_nuxt/Dtrxhrnz.js.map` returns HTTP 200, 2.95 MB, 301 source files with `sourcesContent` included. |
+| `JavaScript Source Map Exposed` | archive.org | Real, HTTP 200, 25 KB — but the map covers a vendored `lit` polyfill, so what is exposed is a public library's source, not the operator's. True finding, arguably over-severe at HIGH. |
+
+### Known-weak, not yet fixed
+
+**`No Rate Limiting Detected` fired on 15 of 30 sites**, including Stripe,
+Wikipedia and GOV.UK. Verified by hand: stripe.com really does send no
+rate-limit headers at all. So the check is literally accurate and its name is
+not — it detects that rate limiting is *not advertised*, which is the normal
+configuration, and asserts that it is *absent*. It carries confidence 52 and
+LOW severity, which is the scanner hedging on a signal it cannot actually
+observe. Excluded from the published baseline. Either the finding should be
+renamed to what it measures, or it should not be a finding.
+
 ## 2026-09-07
 
 Targets: google.com, github.com, cloudflare.com, mozilla.org.
@@ -104,10 +154,6 @@ Verified across 15 sites (google, github, cloudflare, mozilla, stackoverflow,
 npm, reddit, amazon.co.uk, bbc, wikipedia, vercel, nytimes, gov.uk, shopify,
 MDN): zero findings above INFO, the two Cloudflare interstitials correctly
 identified, every real page correctly left alone.
-
-### Open
-
-_None currently. Re-run the scanner against these targets after any scanner change._
 
 ### Shipped
 

@@ -38,6 +38,16 @@ interface DohResponse {
  * Only report a "missing record" finding when status === 0, so transient
  * failures don't produce false-positive alerts.
  */
+/**
+ * DNS numeric record types, so an answer can be matched against what was asked
+ * for. The answer section carries the whole resolution chain, not just the
+ * record type in the question: an MX query for a CNAMEd host comes back with
+ * the CNAMEs and no MX at all. Counting those as MX records told the SPF check
+ * that www.gov.uk "actively sends email", which escalated a finding that was
+ * already wrong from Medium to High.
+ */
+const RRTYPE = { A: 1, NS: 2, CNAME: 5, MX: 15, TXT: 16, DNSKEY: 48 } as const;
+
 async function dnsQuery(
   name: string,
   type: "TXT" | "MX" | "A" | "DNSKEY" | "NS",
@@ -52,7 +62,8 @@ async function dnsQuery(
     });
     if (!res.ok) return { answers: [], status: -1 };
     const json = (await res.json()) as DohResponse;
-    return { answers: json.Answer ?? [], status: json.Status };
+    const wanted = RRTYPE[type];
+    return { answers: (json.Answer ?? []).filter((a) => a.type === wanted), status: json.Status };
   } catch {
     return { answers: [], status: -1 };
   } finally {
@@ -60,20 +71,71 @@ async function dnsQuery(
   }
 }
 
+/** Human-readable DNS status, so evidence states what the resolver actually said. */
+function statusLabel(status: number): string {
+  if (status === 0) return "NOERROR (name exists)";
+  if (status === 2) return "SERVFAIL (resolver error)";
+  if (status === 3) return "NXDOMAIN (name does not exist)";
+  return `status ${status}`;
+}
+
+/**
+ * Every ancestor of a hostname that could hold an organisational record, most
+ * specific first, stopping before the bare TLD: www.gov.uk -> www.gov.uk, gov.uk.
+ *
+ * Walking the chain replaces guessing the registrable domain from label
+ * arithmetic. The guess got www.gov.uk wrong — "uk" is two characters and "gov"
+ * is three, so it took the .co.uk branch and then returned the hostname
+ * unchanged, and SPF was looked up at www.gov.uk while GOV.UK publishes
+ * v=spf1 -all at gov.uk. Any record found anywhere up the chain means the
+ * organisation has published one, which is the question being asked.
+ */
+function ancestorDomains(hostname: string): string[] {
+  const labels = hostname.split(".").filter(Boolean);
+  const out: string[] = [];
+  for (let i = 0; i <= labels.length - 2; i++) out.push(labels.slice(i).join("."));
+  return out.slice(0, 4);
+}
+
+/**
+ * Looks for a record matching `match` at `name`, then at each ancestor.
+ * Returns the first hit, or the status of the most specific lookup so a caller
+ * can tell "no record" from "could not ask".
+ */
+async function findUpChain(
+  hostname: string,
+  label: (domain: string) => string,
+  match: (txt: string) => boolean,
+): Promise<{ found: string | null; at: string | null; status: number; checked: string[] }> {
+  const checked: string[] = [];
+  let firstStatus = -1;
+  for (const domain of ancestorDomains(hostname)) {
+    const queried = label(domain);
+    checked.push(queried);
+    const { answers, status } = await dnsQuery(queried, "TXT");
+    if (checked.length === 1) firstStatus = status;
+    if (status === -1) return { found: null, at: null, status: -1, checked };
+    const records = answers.map((a) => a.data.replace(/^"|"$/g, "").replace(/"\s*"/g, ""));
+    const hit = records.find(match);
+    if (hit) return { found: hit, at: queried, status, checked };
+  }
+  return { found: null, at: null, status: firstStatus, checked };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SPF CHECK
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function checkSpf(hostname: string): Promise<ScanVulnerability[]> {
-  const { answers, status } = await dnsQuery(hostname, "TXT");
-  // status -1 means network failure — don't false-positive on transient errors
-  if (status === -1) return [];
-  const txtRecords = answers.map((a) => a.data.replace(/^"|"$/g, "").replace(/"\s*"/g, ""));
-
-  const spfRecord = txtRecords.find((r) => r.startsWith("v=spf1"));
+  const spf = await findUpChain(hostname, (d) => d, (r) => r.startsWith("v=spf1"));
+  // -1 is a network failure and 3 is NXDOMAIN: in neither case did we learn
+  // that the record is absent, so neither may produce a finding.
+  if (spf.status === -1 || spf.status === 3) return [];
+  const spfRecord = spf.found;
 
   if (!spfRecord) {
-    // Check if the domain has MX records (sends email) — if so, missing SPF is worse
+    // MX answers are filtered to real MX records now, so a CNAMEd web host no
+    // longer reads as a mail sender.
     const { answers: mxAnswers } = await dnsQuery(hostname, "MX");
     const sendsMail = mxAnswers.length > 0;
 
@@ -82,7 +144,7 @@ export async function checkSpf(hostname: string): Promise<ScanVulnerability[]> {
       severity: sendsMail ? "high" : "medium",
       category: "Email Security",
       description: `No SPF (Sender Policy Framework) record was found for ${hostname}. Without SPF, anyone can send emails that appear to come from @${hostname}. Attackers use this to send phishing emails to your customers, partners, and employees under your domain name, with no technical barrier to doing so.`,
-      evidence: `DNS TXT query: ${hostname}\nStatus: NOERROR (domain exists)\nNo v=spf1 record found in ${answers.length} TXT record(s)${sendsMail ? `\nMX records present (${mxAnswers.length}) — domain actively sends email` : ""}`,
+      evidence: `DNS TXT queries: ${spf.checked.join(", ")}\nStatus: ${statusLabel(spf.status)}\nNo v=spf1 record found at the host or any parent domain${sendsMail ? `\nMX records present (${mxAnswers.length}) — domain actively sends email` : ""}`,
       solution: `Add a TXT record to your DNS for ${hostname}:\n"v=spf1 include:_spf.yourmailprovider.com ~all"\n\nReplace 'include:...' with your actual mail provider's SPF include. End with '-all' (hard fail) for strictest enforcement. Verify at: https://mxtoolbox.com/spf.aspx`,
       cweId: "CWE-290",
       cvssScore: sendsMail ? 7.5 : 5.3,
@@ -139,12 +201,12 @@ export async function checkSpf(hostname: string): Promise<ScanVulnerability[]> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function checkDmarc(hostname: string): Promise<ScanVulnerability[]> {
-  const dmarcHost = `_dmarc.${hostname}`;
-  const { answers, status } = await dnsQuery(dmarcHost, "TXT");
-  if (status === -1) return [];
-  const txtRecords = answers.map((a) => a.data.replace(/^"|"$/g, "").replace(/"\s*"/g, ""));
-
-  const dmarcRecord = txtRecords.find((r) => r.startsWith("v=DMARC1"));
+  // RFC 7489 already says a receiver falls back to the organisational domain
+  // when the exact name has no policy, so accepting a parent's record matches
+  // what a real mail receiver does.
+  const dmarc = await findUpChain(hostname, (d) => `_dmarc.${d}`, (r) => r.startsWith("v=DMARC1"));
+  if (dmarc.status === -1 || dmarc.status === 3) return [];
+  const dmarcRecord = dmarc.found;
 
   if (!dmarcRecord) {
     return [vuln({
@@ -152,7 +214,7 @@ export async function checkDmarc(hostname: string): Promise<ScanVulnerability[]>
       severity: "high",
       category: "Email Security",
       description: `No DMARC (Domain-based Message Authentication, Reporting & Conformance) record exists for ${hostname}. Without DMARC, even if SPF and DKIM are configured, there is no policy telling receiving mail servers what to do with messages that fail authentication. Attackers can bypass SPF/DKIM using the "From" header spoofing that DMARC is specifically designed to prevent.`,
-      evidence: `DNS TXT query: _dmarc.${hostname}\nStatus: NOERROR (domain exists)\nNo v=DMARC1 record found in ${answers.length} TXT record(s)`,
+      evidence: `DNS TXT queries: ${dmarc.checked.join(", ")}\nStatus: ${statusLabel(dmarc.status)}\nNo v=DMARC1 record found at the host or any parent domain`,
       solution: `Add a TXT record for _dmarc.${hostname}:\n"v=DMARC1; p=quarantine; rua=mailto:dmarc@${hostname}; ruf=mailto:dmarc@${hostname}; fo=1"\n\nStart with p=none (monitoring) and progress to p=quarantine then p=reject once you verify legitimate email flows. Use https://dmarcian.com to monitor reports.`,
       cweId: "CWE-290",
       cvssScore: 7.5,

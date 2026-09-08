@@ -29,14 +29,53 @@ const DEFAULT_TARGETS = [
   "https://www.mozilla.org",
 ];
 
-async function main(): Promise<void> {
-  const targets = process.argv.slice(2).length ? process.argv.slice(2) : DEFAULT_TARGETS;
-  console.log(`[live-scan] Passive scan of ${targets.length} target(s). Scrutinise every actionable finding.\n`);
+/**
+ * `--json <path>` also writes the full result per target, so a run can be
+ * aggregated rather than only read. The console output is unchanged — it is
+ * what the audit procedure asks you to actually look at.
+ */
+function jsonDest(argv: string[]): string | null {
+  const i = argv.indexOf("--json");
+  if (i === -1) return null;
+  const dest = argv[i + 1];
+  if (!dest) throw new Error("--json needs a destination path");
+  return dest;
+}
 
-  for (const url of targets) {
+async function main(): Promise<void> {
+  const argv = process.argv.slice(2);
+  const dest = jsonDest(argv);
+  const targets = argv.filter((a, i) => a !== "--json" && argv[i - 1] !== "--json");
+  const list = targets.length ? targets : DEFAULT_TARGETS;
+  const collected: unknown[] = [];
+  console.log(`[live-scan] Passive scan of ${list.length} target(s). Scrutinise every actionable finding.\n`);
+
+  for (const url of list) {
     try {
+      const started = Date.now();
       const r = await runScan(url, "deep", false, undefined, null);
       const actionable = r.vulnerabilities.filter((v) => v.severity !== "info");
+      collected.push({
+        url,
+        finalUrl: r.finalUrl,
+        statusCode: r.statusCode,
+        server: r.server,
+        tlsGrade: r.tlsGrade,
+        technologies: r.technologies,
+        pagesScanned: r.pagesScanned?.length ?? 0,
+        renderedWithBrowser: r.renderedWithBrowser ?? false,
+        elapsedMs: Date.now() - started,
+        findings: r.vulnerabilities.map((v) => ({
+          name: v.name,
+          severity: v.severity,
+          category: v.category,
+          cweId: v.cweId ?? null,
+          cvssScore: v.cvssScore ?? null,
+          wstgId: v.wstgId ?? null,
+          confidence: v.confidence ?? null,
+          evidence: v.evidence ? String(v.evidence).slice(0, 600) : null,
+        })),
+      });
       console.log(`=== ${url} === ${r.vulnerabilities.length} findings, ${actionable.length} actionable`);
       for (const v of r.vulnerabilities) {
         const conf = v.confidence == null ? "--" : String(v.confidence);
@@ -47,8 +86,16 @@ async function main(): Promise<void> {
       }
       console.log("");
     } catch (err) {
-      console.log(`=== ${url} === SCAN FAILED: ${err instanceof Error ? err.message : String(err)}\n`);
+      const message = err instanceof Error ? err.message : String(err);
+      collected.push({ url, failed: message });
+      console.log(`=== ${url} === SCAN FAILED: ${message}\n`);
     }
+  }
+
+  if (dest) {
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(dest, JSON.stringify({ scannedAt: new Date().toISOString(), results: collected }, null, 1));
+    console.log(`[live-scan] Wrote ${dest} — ${collected.length} result(s).`);
   }
 }
 
