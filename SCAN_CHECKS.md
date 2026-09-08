@@ -7,7 +7,7 @@ Every finding the scanner can emit, read out of `artifacts/api-server/src/lib`. 
 complete list; [SCAN_COVERAGE.md](SCAN_COVERAGE.md) is the readable one, grouped by module with
 the Basic/Deep tier and the methodology behind each group.
 
-**281 findings across 26 modules**, in 35 categories. 87 critical, 75 high, 61 medium, 20 low, 38 info.
+**281 findings across 26 modules**, in 35 categories. 87 critical, 74 high, 61 medium, 21 low, 38 info.
 
 A finding is a distinct name the scanner can put in a report, which is not the same as a check
 type: the data-table modules below define many findings from one piece of detection logic —
@@ -30,7 +30,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `structuredData.ts` | 9 | 415 | 34 | direct |
 | `crawler-data.ts` | 8 | 122 | 26 | direct |
 | `apiProbe.ts` | 7 | 644 | 31 | direct |
-| `crawler.ts` | 7 | 674 | 26 | direct |
+| `crawler.ts` | 7 | 685 | 26 | direct |
 | `supabase-probes.ts` | 7 | 520 | 5 | direct |
 | `jwtAnalysis.ts` | 6 | 262 | 9 | direct |
 | `cveCheck.ts` | 4 | 594 | 3 | direct |
@@ -45,7 +45,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `apiDocsProbe.ts` | 1 | 284 | 9 | direct |
 | `pathTraversal.ts` | 1 | 168 | 4 | direct |
 | `ssrfProbe.ts` | 1 | 192 | 6 | direct |
-| `scanner.ts` | 31 | 1202 | — | indirect, via challengePage.test.ts, firebase-probes.test.ts, scoring.test.ts |
+| `scanner.ts` | 31 | 1201 | — | indirect, via challengePage.test.ts, firebase-probes.test.ts, scoring.test.ts |
 | `subdomain-service-data.ts` | 19 | 152 | — | indirect, via subdomainTakeover.test.ts |
 
 ## Findings by module
@@ -93,17 +93,17 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `crawler.ts`
 
-*7 findings · 674 lines · 26 tests.*
+*7 findings · 685 lines · 26 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
 | Content-Security-Policy Missing on Internal Routes | High | Security Header Inconsistency | 7.2 | CWE-79 | WSTG-CONF-12 |
 | Session Cookie Missing Secure Flag on Inner Page / Non-Session Cookie Missing Secure Flag on Inner Page | High / Low | Session Management | 6.5 | CWE-614 | WSTG-SESS-02 |
-| Strict-Transport-Security Missing on Internal Routes | High | Security Header Inconsistency | 7.4 | CWE-523 | WSTG-CONF-07 |
 | Session Cookie Missing HttpOnly Flag on Inner Page / Non-Session Cookie Readable by JavaScript on Inner Page | Medium / Info | Session Management | 5.3 | CWE-1004 | WSTG-SESS-02 |
 | X-Content-Type-Options Missing on Internal Routes | Medium | Security Header Inconsistency | 4.3 | CWE-16 | WSTG-CONF-07 |
 | X-Frame-Options / frame-ancestors Missing on Internal Routes | Medium | Security Header Inconsistency | 4.3 | CWE-1021 | WSTG-CLNT-09 |
 | Referrer-Policy Missing on Internal Routes | Low | Security Header Inconsistency | 3.1 | CWE-200 | WSTG-CONF-07 |
+| Strict-Transport-Security Missing on Internal Routes | Low | Security Header Inconsistency | 3.1 | CWE-523 | WSTG-CONF-07 |
 
 ### `crawler-data.ts`
 
@@ -353,7 +353,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `scanner.ts`
 
-*31 findings · 1202 lines · no test file.*
+*31 findings · 1201 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
