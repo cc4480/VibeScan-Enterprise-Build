@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { checkSpf, checkDmarc, checkDkim, COMMON_DKIM_SELECTORS } from "./dnsChecks.js";
+import { checkSpf, checkDmarc, checkDkim, checkDnssec, COMMON_DKIM_SELECTORS } from "./dnsChecks.js";
 
 /**
  * DNS check tests — stubs globalThis.fetch to simulate Cloudflare DoH responses.
@@ -286,5 +286,33 @@ describe("evidence reports the status the resolver actually returned", () => {
     expect(vulns[0]!.evidence).toMatch(/_dmarc\.www\.example\.com/);
     expect(vulns[0]!.evidence).toMatch(/_dmarc\.example\.com/);
     expect(vulns[0]!.evidence).toMatch(/NOERROR/);
+  });
+});
+
+describe("DNSSEC is checked at the zone apex", () => {
+  const DNSKEY = 48;
+
+  it("does not report a signed zone as unsigned when www is a CNAME", async () => {
+    // www.nasa.gov answers a DNSKEY query with one CNAME and no DNSKEY, while
+    // nasa.gov is signed. Filtering answers by type exposed this: before the
+    // filter, the CNAME was counted as a DNSKEY and the check passed by accident.
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("name=www.nasa.gov")) {
+        return dohResponse([{ data: "nasa-gov.edgekey.net.", type: CNAME }], 0, CNAME);
+      }
+      return dohResponse([{ data: "257 3 8 AwEAAc...", type: DNSKEY }], 0, DNSKEY);
+    });
+
+    expect(await checkDnssec("www.nasa.gov")).toEqual([]);
+  });
+
+  it("still reports a zone that is genuinely unsigned", async () => {
+    vi.mocked(fetch).mockImplementation(async () => dohResponse([]));
+
+    const vulns = await checkDnssec("www.example.com");
+    expect(vulns).toHaveLength(1);
+    expect(vulns[0]!.name).toMatch(/DNSSEC/i);
+    expect(vulns[0]!.evidence).toMatch(/example\.com/);
   });
 });

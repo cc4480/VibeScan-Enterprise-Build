@@ -559,18 +559,28 @@ export async function checkRateLimiting(targetUrl: string): Promise<ScanVulnerab
 
   if (!hasRateLimit) {
     return [vuln({
-      name: "No Rate Limiting Detected",
-      severity: "low",
+      // Renamed from "No Rate Limiting Detected", which asserted something this
+      // check cannot observe. A passive GET of a homepage sees response headers
+      // and nothing else; rate limiting normally lives on login and API routes
+      // and normally advertises nothing. Across a 30-site corpus this fired on
+      // 15, including Stripe, Wikipedia and GOV.UK — stripe.com sends no
+      // rate-limit headers whatsoever and unquestionably rate-limits. The
+      // allowlist above had already been patched twice, for Google server
+      // tokens and for GitHub's edge, which is the shape of a check chasing an
+      // unobservable property one vendor at a time.
+      //
+      // It now says only what was seen, at INFO, which carries weight 0 in
+      // computeRiskScore — a site cannot be graded worse for declining to
+      // publish its throttling policy.
+      name: "Rate Limiting Not Advertised in Response Headers",
+      severity: "info",
       category: "Brute Force Protection",
-      description: "No rate limiting or throttling signals were detected in the response headers. Without rate limiting, attackers can run automated brute-force attacks against login endpoints, enumerate valid user accounts through credential stuffing, abuse API endpoints at scale, or perform denial-of-service attacks by flooding your server. Note: many load balancers and reverse proxies enforce rate limiting without exposing headers — verify your infrastructure configuration before treating this as confirmed.",
-      evidence: `GET ${targetUrl}\nNo rate-limit headers found (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)`,
-      solution: "Implement rate limiting on all sensitive endpoints (login, registration, password reset, API). Node.js: express-rate-limit. Django: DRF throttling. Also implement: account lockout after N failures, CAPTCHA on login, and IP-based throttling at the CDN/load balancer level. Return standard headers: X-RateLimit-Limit, X-RateLimit-Remaining, Retry-After.",
+      description: "No rate-limit headers were present on this response. That is the normal configuration for most sites and is not itself a weakness: rate limiting is usually enforced on authentication and API routes rather than the homepage, and most CDNs and load balancers throttle without advertising it. This is recorded so you can confirm that protection exists where it matters — it is not evidence that it is missing.",
+      evidence: `GET ${targetUrl}\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled.`,
+      solution: "Confirm that rate limiting is enforced on login, registration, password reset and API endpoints — the routes that matter for brute force and credential stuffing. If it is already enforced at your CDN or load balancer, no change is needed. Returning X-RateLimit-Limit, X-RateLimit-Remaining and Retry-After makes the protection visible to clients and to scanners.",
       cweId: "CWE-307",
-      cvssScore: 5.3,
+      cvssScore: 0,
       wstgId: "WSTG-ATHN-03",
-      // Header-absence check only; infra-level rate limiting leaves no HTTP evidence.
-      // Manually set confidence below the verification threshold so users know to confirm.
-      confidence: 52,
     })];
   }
 

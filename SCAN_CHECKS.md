@@ -7,7 +7,7 @@ Every finding the scanner can emit, read out of `artifacts/api-server/src/lib`. 
 complete list; [SCAN_COVERAGE.md](SCAN_COVERAGE.md) is the readable one, grouped by module with
 the Basic/Deep tier and the methodology behind each group.
 
-**279 findings across 26 modules**, in 35 categories. 87 critical, 75 high, 61 medium, 21 low, 35 info.
+**280 findings across 26 modules**, in 35 categories. 87 critical, 75 high, 61 medium, 20 low, 37 info.
 
 A finding is a distinct name the scanner can put in a report, which is not the same as a check
 type: the data-table modules below define many findings from one piece of detection logic —
@@ -22,9 +22,9 @@ module does. `none` — neither, so no test exercises it at all.
 | Module | Findings | Lines | Tests | Coverage |
 |---|---:|---:|---:|---|
 | `probes-data.ts` | 78 | 811 | 29 | direct |
-| `secret-pattern-data.ts` | 32 | 429 | 3 | direct |
-| `probes.ts` | 16 | 896 | 9 | direct |
-| `dnsChecks.ts` | 9 | 401 | 17 | direct |
+| `secret-pattern-data.ts` | 33 | 474 | 9 | direct |
+| `probes.ts` | 16 | 906 | 9 | direct |
+| `dnsChecks.ts` | 9 | 462 | 25 | direct |
 | `nextjsProbe.ts` | 9 | 245 | 7 | direct |
 | `structuredData.ts` | 9 | 415 | 34 | direct |
 | `crawler-data.ts` | 8 | 122 | 26 | direct |
@@ -135,7 +135,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `dnsChecks.ts`
 
-*9 findings · 401 lines · 17 tests.*
+*9 findings · 462 lines · 25 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -226,7 +226,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `probes.ts`
 
-*16 findings · 896 lines · 9 tests.*
+*16 findings · 906 lines · 9 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -243,8 +243,8 @@ module does. `none` — neither, so no test exercises it at all.
 | Open Redirect Vulnerability | Medium | Unvalidated Redirects | 6.1 | CWE-601 | WSTG-CLNT-04 |
 | Supabase Detected — Verify Row Level Security (RLS) | Medium | Database Security | 6.5 | CWE-862 | WSTG-ATHZ-01 |
 | X-Frame-Options Header Misconfigured | Medium | UI Security | 4.3 | CWE-1021 | WSTG-CLNT-09 |
-| No Rate Limiting Detected | Low | Brute Force Protection | 5.3 | CWE-307 | WSTG-ATHN-03 |
 | Missing security.txt (RFC 9116) | Info | Information Disclosure | 0 | CWE-205 | — |
+| Rate Limiting Not Advertised in Response Headers | Info | Brute Force Protection | 0 | CWE-307 | WSTG-ATHN-03 |
 | robots.txt Discloses Sensitive Application Paths | Info | Information Disclosure | — | CWE-200 | WSTG-INFO-01 |
 
 ### `probes-data.ts`
@@ -393,7 +393,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `secret-pattern-data.ts`
 
-*32 findings · 429 lines · 3 tests · emitted by `jsScanner.ts`.*
+*33 findings · 474 lines · 9 tests · emitted by `jsScanner.ts`.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -428,6 +428,7 @@ module does. `none` — neither, so no test exercises it at all.
 | Internal IP Address Exposed | Low | Exposed Secrets / Credentials | 3.1 | CWE-200 | — |
 | Firebase API Key with Open Security Rules | Info | Exposed Secrets / Credentials | 3.1 | CWE-798 | — |
 | Google API Key in Client Code (verify referrer restrictions) | Info | Exposed Secrets / Credentials | 0 | CWE-798 | — |
+| JWT-Shaped Publishable Key in Client Code (verify it is not a credential) | Info | Exposed Secrets / Credentials | 0 | CWE-798 | — |
 | Mapbox Public Token — Restrict to Your Domain | Info | Exposed Secrets / Credentials | 2.6 | CWE-200 | — |
 
 ### `sourceMaps.ts`

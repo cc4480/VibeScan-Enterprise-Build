@@ -29,16 +29,6 @@ interface DohResponse {
 }
 
 /**
- * Returns { answers, status } where:
- *   status  0 = NOERROR  (domain exists, record type may or may not exist)
- *   status  2 = SERVFAIL (resolver error)
- *   status  3 = NXDOMAIN (domain does not exist)
- *   status -1 = network / timeout failure (we don't know)
- *
- * Only report a "missing record" finding when status === 0, so transient
- * failures don't produce false-positive alerts.
- */
-/**
  * DNS numeric record types, so an answer can be matched against what was asked
  * for. The answer section carries the whole resolution chain, not just the
  * record type in the question: an MX query for a CNAMEd host comes back with
@@ -48,6 +38,16 @@ interface DohResponse {
  */
 const RRTYPE = { A: 1, NS: 2, CNAME: 5, MX: 15, TXT: 16, DNSKEY: 48 } as const;
 
+/**
+ * Returns { answers, status } where:
+ *   status  0 = NOERROR  (domain exists, record type may or may not exist)
+ *   status  2 = SERVFAIL (resolver error)
+ *   status  3 = NXDOMAIN (domain does not exist)
+ *   status -1 = network / timeout failure (we don't know)
+ *
+ * Only report a "missing record" finding when status === 0, so transient
+ * failures don't produce false-positive alerts.
+ */
 async function dnsQuery(
   name: string,
   type: "TXT" | "MX" | "A" | "DNSKEY" | "NS",
@@ -319,20 +319,31 @@ export async function checkDkim(hostname: string): Promise<ScanVulnerability[]> 
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function checkDnssec(hostname: string): Promise<ScanVulnerability[]> {
-  const { answers, status } = await dnsQuery(hostname, "DNSKEY");
-  if (status === -1) return [];
-  if (answers.length === 0) {
-    return [vuln({
-      name: "DNSSEC Not Enabled",
-      severity: "info",
-      category: "DNS Security",
-      description: `DNSSEC is not configured for ${hostname}. Without DNSSEC, DNS responses can be forged or tampered with in transit (DNS cache poisoning / Kaminsky attack). Attackers can redirect your domain's traffic to malicious servers without users or servers being able to detect it.`,
-      evidence: `No DNSKEY records found for ${hostname}.`,
-      solution: "Enable DNSSEC through your domain registrar. Most major registrars (Cloudflare, AWS Route 53, Google Domains) offer one-click DNSSEC. Your DNS hosting provider must also support signed zones. This requires coordination between your registrar and DNS provider.",
-      cweId: "CWE-350",
-    })];
+  // DNSSEC signs a ZONE, and DNSKEY lives at the zone apex. Asking a CNAMEd
+  // www host returns the CNAME chain and no DNSKEY: www.nasa.gov answers with a
+  // single CNAME while nasa.gov is properly signed. Before answers were matched
+  // against the requested type, that CNAME was counted as a DNSKEY and the
+  // check silently passed for the wrong reason — so this walk up the ancestors
+  // has to land with the type filter, not after it.
+  const checked: string[] = [];
+  let firstStatus = -1;
+  for (const domain of ancestorDomains(hostname)) {
+    checked.push(domain);
+    const { answers, status } = await dnsQuery(domain, "DNSKEY");
+    if (checked.length === 1) firstStatus = status;
+    if (status === -1) return [];
+    if (answers.length > 0) return [];
   }
-  return [];
+
+  return [vuln({
+    name: "DNSSEC Not Enabled",
+    severity: "info",
+    category: "DNS Security",
+    description: `DNSSEC is not configured for ${hostname}. Without DNSSEC, DNS responses can be forged or tampered with in transit (DNS cache poisoning / Kaminsky attack). Attackers can redirect your domain's traffic to malicious servers without users or servers being able to detect it.`,
+    evidence: `No DNSKEY records found for ${checked.join(" or ")} (${statusLabel(firstStatus)}).`,
+    solution: "Enable DNSSEC through your domain registrar. Most major registrars (Cloudflare, AWS Route 53, Google Domains) offer one-click DNSSEC. Your DNS hosting provider must also support signed zones. This requires coordination between your registrar and DNS provider.",
+    cweId: "CWE-350",
+  })];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -382,25 +393,6 @@ function isUncontrolledPlatformSubdomain(hostname: string): boolean {
   return UNCONTROLLED_DNS_PLATFORMS.some((suffix) => lower.endsWith(suffix));
 }
 
-/**
- * Derives the apex / registrable domain to use for email security DNS checks.
- * SPF and DMARC records always live on the apex domain, never on subdomains.
- * e.g.  www.google.com  → google.com
- *       blog.example.com → example.com
- *       app.mysite.co.uk → mysite.co.uk  (2-char ccTLD + short SLD)
- */
-function toEmailDomain(hostname: string): string {
-  const labels = hostname.split(".");
-  if (labels.length <= 2) return hostname;
-  const tld = labels[labels.length - 1] ?? "";
-  const sld = labels[labels.length - 2] ?? "";
-  // 2-part ccTLDs like .co.uk, .com.au, .org.uk — keep 3 labels
-  if (tld.length === 2 && sld.length <= 3) {
-    return labels.length <= 3 ? hostname : labels.slice(-3).join(".");
-  }
-  return labels.slice(-2).join(".");
-}
-
 export async function checkDnsSecurity(targetUrl: string): Promise<ScanVulnerability[]> {
   let hostname: string;
   try {
@@ -421,14 +413,21 @@ export async function checkDnsSecurity(targetUrl: string): Promise<ScanVulnerabi
     return [];
   }
 
-  // Email security records (SPF, DMARC) live on the apex/registrable domain,
-  // not on subdomains like www.example.com. Derive it once and pass it down.
-  const emailDomain = toEmailDomain(hostname);
+  // SPF and DMARC live on the organisational domain rather than on the www host,
+  // and checkSpf/checkDmarc now walk up the ancestor chain themselves, so they
+  // take the hostname as scanned. Guessing the registrable domain from label
+  // lengths — which is what used to happen here — reported GOV.UK as having
+  // neither record.
+  //
+  // DKIM cannot walk: a selector probe is a specific name, so it uses the most
+  // general ancestor, which is the apex for every host this scanner sees.
+  const ancestors = ancestorDomains(hostname);
+  const emailDomain = ancestors[ancestors.length - 1] ?? hostname;
 
   // Run SPF and DMARC first so we can decide whether to suppress DKIM brute-force.
   const [spf, dmarc] = await Promise.allSettled([
-    checkSpf(emailDomain),
-    checkDmarc(emailDomain),
+    checkSpf(hostname),
+    checkDmarc(hostname),
   ]);
 
   const dmarcVulns = dmarc.status === "fulfilled" ? dmarc.value : [];

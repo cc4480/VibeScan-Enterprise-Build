@@ -1101,7 +1101,7 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
     (v) => v.name === "API Endpoints Without Rate Limiting",
   );
   const deduped = hasBehaviouralRateLimitFinding
-    ? vulnerabilities.filter((v) => v.name !== "No Rate Limiting Detected")
+    ? vulnerabilities.filter((v) => v.name !== "Rate Limiting Not Advertised in Response Headers")
     : vulnerabilities;
 
   return {

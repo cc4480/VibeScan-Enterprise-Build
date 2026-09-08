@@ -38,14 +38,28 @@ describe("rate limiting behind a CDN", () => {
     }
   });
 
-  it("still reports a plain origin with no rate-limit signal", async () => {
+  it("still records a plain origin with no rate-limit signal", async () => {
     // The suppression must not have become a blanket amnesty.
     vi.resetModules();
     respondWith("<html></html>", { server: "nginx" });
     const { checkRateLimiting } = await import("./probes.js");
     const found = await checkRateLimiting("https://example.com/");
     expect(found).toHaveLength(1);
-    expect(found[0]!.name).toBe("No Rate Limiting Detected");
+    expect(found[0]!.name).toBe("Rate Limiting Not Advertised in Response Headers");
+  });
+
+  it("records it as info, because header absence is not evidence of absence", async () => {
+    // stripe.com sends no rate-limit headers at all and unquestionably rate
+    // limits; across 30 sites this fired on 15. The check can see whether rate
+    // limiting is ADVERTISED and nothing more, so it must not carry weight in
+    // the grade — info scores 0 in computeRiskScore.
+    vi.resetModules();
+    respondWith("<html></html>", { server: "nginx" });
+    const { checkRateLimiting } = await import("./probes.js");
+    const found = await checkRateLimiting("https://example.com/");
+    expect(found[0]!.severity).toBe("info");
+    expect(found[0]!.cvssScore).toBe(0);
+    expect(found[0]!.name).not.toMatch(/no rate limiting/i);
   });
 });
 
