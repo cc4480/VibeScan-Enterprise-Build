@@ -446,12 +446,46 @@ function interceptedFinding(vendor: string | null, signal: string): ScanVulnerab
     severity: "info",
     category: "Scan Coverage",
     description:
-      `The request for this page was answered by ${vendor ? `${vendor}'s` : "an edge"} bot-protection layer rather than by the site itself, so what was analysed is the challenge page. Findings derived from page content — security headers, cookies, Content-Security-Policy, structured data, third-party scripts — describe that challenge page and not this site. Header and TLS findings for the edge itself remain accurate.`,
+      `The request for this page was answered by ${vendor ? `${vendor}'s` : "an edge"} bot-protection layer rather than by the site itself, so what was analysed is the challenge page. Every check that reads the response — security headers, cookies, Content-Security-Policy, CORS, Subresource Integrity, structured data, third-party scripts — would have described that challenge page rather than this site, so those findings have been withheld rather than reported against you. What remains is what the interception could not affect: DNS and email authentication records, and mail transport security. This scan should not be read as a clean result.`,
     evidence: signal,
     solution:
       "Allow the scanner through the bot-protection rules for the duration of a scan — by source IP, or by User-Agent — then scan again. Verifying domain ownership also lets the scan authenticate itself.",
     confidence: 95,
   });
+}
+
+/**
+ * Categories whose checks never read the intercepted response, so they remain
+ * true about the target even when an edge answered instead of the origin.
+ */
+const SOURCES_NOT_READING_THE_RESPONSE = new Set([
+  "Email Security",
+  "DNS Security",
+  "Mail Transport Security",
+  "Scan Coverage",
+]);
+
+/**
+ * Drops findings that were read from a bot-protection interstitial.
+ *
+ * Naming them as untrusted in a Scan Coverage note was not enough: the report
+ * still said "etsy.com is missing Content-Security-Policy and serves a wildcard
+ * CORS policy", which describes Cloudflare's challenge page and is false about
+ * Etsy. Twelve of eighteen findings on that scan came from a page Etsy never
+ * served.
+ *
+ * An allowlist, not a denylist, and deliberately so. The question is not which
+ * findings look content-derived, but which sources did not read the intercepted
+ * response at all. Over-suppressing behind an aggressive WAF costs a finding;
+ * under-suppressing attributes another company's error page to the customer,
+ * which this audit has repeatedly found to be the more expensive error.
+ */
+export function withholdInterceptedFindings(
+  findings: ScanVulnerability[],
+  isChallenge: boolean,
+): ScanVulnerability[] {
+  if (!isChallenge) return findings;
+  return findings.filter((v) => SOURCES_NOT_READING_THE_RESPONSE.has(v.category));
 }
 
 function activeProbesSkippedFinding(): ScanVulnerability {
@@ -1100,9 +1134,25 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
   const hasBehaviouralRateLimitFinding = vulnerabilities.some(
     (v) => v.name === "API Endpoints Without Rate Limiting",
   );
-  const deduped = hasBehaviouralRateLimitFinding
+  const rateLimitDeduped = hasBehaviouralRateLimitFinding
     ? vulnerabilities.filter((v) => v.name !== "Rate Limiting Not Advertised in Response Headers")
     : vulnerabilities;
+
+  // When an edge answered instead of the origin, every check that read the
+  // response body or its headers describes the challenge page. Naming those
+  // findings as untrusted in a Scan Coverage note was not enough: the report
+  // still said "etsy.com is missing Content-Security-Policy and serves a
+  // wildcard CORS policy", which is a statement about Cloudflare's
+  // interstitial and false about Etsy. Twelve of eighteen findings on that
+  // scan came from a page Etsy did not serve.
+  //
+  // This is an allowlist rather than a denylist on purpose. The question is
+  // not "which findings look content-derived" but "which sources did not read
+  // the intercepted response at all" — DNS, mail transport and the scan's own
+  // coverage notes. Anything else is dropped, because over-suppressing behind
+  // an aggressive WAF costs a finding, while under-suppressing attributes
+  // another company's error page to the customer.
+  const deduped = withholdInterceptedFindings(rateLimitDeduped, challengeVerdict.isChallenge);
 
   return {
     targetUrl,

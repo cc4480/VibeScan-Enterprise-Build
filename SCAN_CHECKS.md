@@ -39,7 +39,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `injectionProbe.ts` | 2 | 237 | 7 | direct |
 | `pathTraversal.ts` | 1 | 168 | 4 | direct |
 | `ssrfProbe.ts` | 1 | 192 | 6 | direct |
-| `scanner.ts` | 31 | 1154 | — | indirect, via firebase-probes.test.ts, scoring.test.ts |
+| `scanner.ts` | 31 | 1204 | — | indirect, via challengePage.test.ts, firebase-probes.test.ts, scoring.test.ts |
 | `subdomain-service-data.ts` | 19 | 152 | — | indirect, via subdomainTakeover.test.ts |
 | `recon-data.ts` | 14 | 178 | — | **none** |
 | `storageProbe.ts` | 3 | 262 | — | **none** |
@@ -355,7 +355,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `scanner.ts`
 
-*31 findings · 1154 lines · no test file.*
+*31 findings · 1204 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { detectChallengePage } from "./challengePage.js";
+import { withholdInterceptedFindings } from "./scanner.js";
 
 /** The verbatim shape of the pages that prompted this module. */
 const CLOUDFLARE_403 = `<!DOCTYPE html><html lang="en-US"><head><title>Just a moment...</title>
@@ -113,5 +114,48 @@ describe("header values decide, not header presence", () => {
     const v = detectChallengePage(202, "", { "x-amzn-waf-action": "challenge" });
     expect(v.isChallenge).toBe(true);
     expect(v.vendor).toBe("AWS WAF");
+  });
+});
+
+// ─── Suppression of findings read from an interstitial ───────────────────────
+
+describe("withholdInterceptedFindings", () => {
+  // The shape of the etsy.com scan: 12 of 18 findings came from Cloudflare's
+  // interstitial, including "Missing Content-Security-Policy" and a wildcard
+  // CORS policy — both false about Etsy.
+  const scan = [
+    { category: "Injection Defense", name: "Missing Content-Security-Policy (CSP)" },
+    { category: "CORS Misconfiguration", name: "Permissive CORS Policy (Wildcard Origin)" },
+    { category: "Session Management", name: "Non-Session Cookie Readable by JavaScript" },
+    { category: "Supply Chain Security", name: "External Resources Missing SRI" },
+    { category: "UI Security", name: "Missing Clickjacking Protection (X-Frame-Options)" },
+    { category: "Email Security", name: "SPF Record Exceeds DNS Lookup Limit" },
+    { category: "DNS Security", name: "DNSSEC Not Enabled" },
+    { category: "Scan Coverage", name: "Scan was intercepted by a bot-protection challenge" },
+  ] as unknown as Parameters<typeof withholdInterceptedFindings>[0];
+
+  it("withholds everything read from the response when intercepted", () => {
+    const kept = withholdInterceptedFindings(scan, true);
+    expect(kept.map((f) => f.category)).toEqual([
+      "Email Security",
+      "DNS Security",
+      "Scan Coverage",
+    ]);
+  });
+
+  it("does not attribute the interstitial's missing headers to the target", () => {
+    const kept = withholdInterceptedFindings(scan, true);
+    expect(kept.some((f) => /Content-Security-Policy/.test(f.name))).toBe(false);
+    expect(kept.some((f) => /CORS/.test(f.name))).toBe(false);
+    expect(kept.some((f) => /Clickjacking/.test(f.name))).toBe(false);
+  });
+
+  it("keeps the coverage notice, so the scan cannot read as clean", () => {
+    const kept = withholdInterceptedFindings(scan, true);
+    expect(kept.some((f) => /intercepted/i.test(f.name))).toBe(true);
+  });
+
+  it("changes nothing on a scan that was not intercepted", () => {
+    expect(withholdInterceptedFindings(scan, false)).toHaveLength(scan.length);
   });
 });
