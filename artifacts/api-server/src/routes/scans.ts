@@ -129,27 +129,26 @@ router.post("/scans", scanRateLimit, async (req, res): Promise<void> => {
   // because a stored record should say what actually happened.
   const tier = "deep" as const;
 
-  // Rejects internal targets before a job is ever queued — the scanner runs
-  // inside our network and quotes responses back in the report, so an
-  // unguarded target URL is an open proxy into it.
+  // Refuse targets that point back at our own network before anything is
+  // stored or queued. The scanner runs inside our network and quotes responses
+  // back in the report, so an unguarded target URL is an open proxy into it.
+  // lib/http.ts enforces this again on every request and every redirect hop —
+  // this check exists so the person gets a straight answer now rather than an
+  // empty report later, and so an abusive target never reaches the queue.
+  //
+  // One call, not two: this was checkScanTarget twice in a row, and because the
+  // first returned on failure with the guard's terse internal reason, the
+  // plain-English message below was unreachable.
   const targetCheck = await checkScanTarget(targetUrl);
   if (!targetCheck.ok) {
-    res.status(400).json({ error: targetCheck.reason ?? "Invalid URL." });
-    return;
-  }
-
-  // Refuse targets that point back at our own network before anything is
-  // stored or queued. The scanner enforces this again on every request it
-  // makes — this check exists so the person gets a straight answer now rather
-  // than an empty report later, and so an abusive target never reaches the
-  // queue at all.
-  const addressCheck = await checkScanTarget(targetUrl);
-  if (!addressCheck.ok) {
-    req.log.warn({ targetUrl, reason: addressCheck.reason }, "Blocked scan target");
+    req.log.warn({ targetUrl, reason: targetCheck.reason }, "Blocked scan target");
     res.status(400).json({
       error:
-        "That address cannot be scanned: it is a private, local or link-local " +
-        "address. Scan a publicly reachable URL instead.",
+        targetCheck.reason === "not a valid URL" ||
+        targetCheck.reason === "must use http or https"
+          ? "That does not look like a URL we can scan. Use a full http:// or https:// address."
+          : "That address cannot be scanned: it is a private, local or link-local " +
+            "address. Scan a publicly reachable URL instead.",
     });
     return;
   }

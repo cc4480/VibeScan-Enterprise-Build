@@ -105,7 +105,6 @@ import { collectApiSurface, runApiProbes } from "./apiProbe";
 import { runSsrfProbes } from "./ssrfProbe";
 import type { ApiEndpoint } from "./apiSurface";
 import { isSpa, renderPage } from "./browser";
-import { checkScanTarget, checkHostname } from "./ssrfGuard";
 import { SCANNER_USER_AGENT } from "./appOrigin";
 
 export interface ScanVulnerability {

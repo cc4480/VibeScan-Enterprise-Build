@@ -16,8 +16,8 @@ Required env vars (secrets):
 - `PORT` — the API server throws at boot without it (`8080` locally; the Vite
   dev server proxies `/api` there). Injected by the artifact router on Replit.
 - `DATABASE_URL` — auto-provisioned by Replit PostgreSQL
-- `DEEPSEEK_API_KEY` — fallback AI analysis key for Deep scan reports, used when a user hasn't set their own key in Settings
-- `ENCRYPTION_KEY` — 32-byte base64 AES-256 key, encrypts user-supplied secrets (BYO DeepSeek key) at rest. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. Without it, the Settings → DeepSeek key feature returns 503.
+- `DEEPSEEK_API_KEY` — the AI analysis key. `callDeepSeek` reads this and only this; without it the scan completes and the report simply carries no AI section.
+- `ENCRYPTION_KEY` — 32-byte base64 AES-256-GCM key. Seals **scan credentials** at rest (`lib/crypto.ts`, used by `lib/scanCredentials.ts`); the worker nulls the column once the scan ends, on both the success and failure paths. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. Without it, credentialed scanning is unavailable; anonymous scanning is unaffected.
 - `RESEND_API_KEY` — Email notifications (report ready, CVE alerts)
 - `STRIPE_SECRET_KEY` — Stripe client for the webhook half of payments; no checkout flow exists yet
 
@@ -75,7 +75,7 @@ lib/
 - **No login required**: Auth is a UUID token auto-generated in `localStorage` (`vibescan_client_token`). The `authMiddleware` reads it from the `Authorization: Bearer` header.
 - **Graceful degradation**: All three external services (DeepSeek, Resend, Stripe) check for their env var and skip with a warning if not set — the app remains fully functional.
 - **Payments not implemented**: the Stripe webhook exists but no Checkout Session is ever created, so scans are always free. `DISABLE_PAYMENTS` is read only to warn when it is set to `false`, which misdescribes the behaviour.
-- **Job queue**: pg-boss runs inside the API server process, handling async scan jobs and the EOL/CVE refresh scheduler.
+- **Two processes, one image**: `src/index.ts` (`seclayer`, web tier) serves the API and frontend and only enqueues; `src/secscan.ts` runs the pg-boss worker, the monitor scheduler, the EOL/CVE refresh, and owns Chromium. The only channel between them is the `scan-job` queue in Postgres. Do not add Playwright imports to anything reachable from `index.ts`.
 
 ## Product
 
@@ -83,12 +83,12 @@ Everything is free during early access — `POST /scans` queues immediately and
 returns `checkoutUrl: null`; the `pack_5`/`pack_20` tiers are rejected at the
 route. The tier column and Stripe plumbing remain for a future revival.
 
-- **Basic scan**: headers, SSL/TLS, DNS, tech fingerprint
-- **Deep scan**: adds JS secret scanning, path traversal, and the site crawler,
-  with a DeepSeek AI report
+- **One scan, not tiers**: `routes/scans.ts` pins every run to `tier = "deep"`.
+  What varies is *access* — domain verification unlocks active probing,
+  credentials unlock the surface behind the login, a second account unlocks A01,
+  and `OOB_BASE_URL` unlocks A10. `basic` survives only so older rows stay readable.
 - **Monitor**: Continuous monitoring with weekly rescans and CVE-triggered alerts via email
 - **Reports**: Graded A–F with CVSS scores, remediation steps, and paste-ready AI fix prompt
-- **Settings**: users can add their own DeepSeek API key (`/settings`) to use their own account's credits for Deep scan AI analysis instead of the shared server key — encrypted at rest, never re-displayed after saving
 
 ## User preferences
 
@@ -143,8 +143,13 @@ into the deployment. `ssrfGuard.ts` is the single implementation — do not add 
 second copy:
 
 - `checkScanTarget(url)` — http/https + public-host check, called by
-  `POST /scans` and `POST /monitor/subscriptions` before a job is queued, and
-  again at the top of `runScan()` so no internal caller bypasses it.
+  `POST /scans` and `POST /monitor/subscriptions` before a job is queued.
+- `lib/http.ts` re-checks with `checkUrlSafe` on **every** request it issues and
+  on every redirect hop, so no internal caller can bypass the guard by reaching
+  a probe directly. That is where the defence-in-depth actually lives — not at
+  the top of `runScan()`, which does not call it. (`scanner.ts` imported
+  `checkScanTarget`/`checkHostname` without ever calling them; the dead imports
+  are gone.)
 - `checkHostname(host)` — host-only check. `webhook.ts` layers its https-only
   rule on top (a token must not leave in cleartext); scan targets allow http
   because a plaintext target is itself a finding.
@@ -152,9 +157,9 @@ second copy:
   IPv6 ULA/link-local, IPv4-mapped IPv6, `.local`/`.internal`, and public
   hostnames whose A/AAAA records point anywhere internal. **Fails closed** on
   DNS failure.
-- `runScan()` re-checks after redirects: `redirect: "follow"` means a public
-  host can bounce the scanner to an internal one, and every probe downstream
-  runs against `finalUrl`.
+- Redirects are re-checked per hop in `lib/http.ts`: `redirect: "follow"` means
+  a public host can bounce the scanner to an internal one, and every probe
+  downstream runs against `finalUrl`.
 - Not covered: DNS rebinding between check and connect. Closing that needs
   connection-level pinning of the resolved IP.
 
@@ -193,8 +198,11 @@ resist abuse counts against the client address instead.
 - API routes: `artifacts/api-server/src/routes/index.ts`
 - Scan engine: `artifacts/api-server/src/lib/scanner.ts`
 - AI analysis: `artifacts/api-server/src/lib/deepseek.ts`
-- User-supplied secret encryption: `artifacts/api-server/src/lib/crypto.ts`
-- BYO DeepSeek key settings: `artifacts/api-server/src/routes/settings.ts`, `artifacts/vibescan/src/pages/settings.tsx`
+- Scan-credential encryption: `artifacts/api-server/src/lib/crypto.ts` (AES-256-GCM),
+  used only by `lib/scanCredentials.ts`. There is no BYO-DeepSeek-key feature in
+  this repo and no `routes/settings.ts` — that belongs to **Seclayer**
+  (`seclayer.io2026`, `server/routes/account.ts`). Prose gets ported between the
+  two repos by hand; check the code before trusting a pointer that crosses over.
 - SPA/multi-tenant catch-all detection (shared by the path-probe engine and the API-docs probe): `artifacts/api-server/src/lib/spaCatchAll.ts`
 - API contract source of truth: `lib/api-spec/openapi.yaml` — after editing, regenerate with `pnpm --filter @workspace/api-spec run codegen`, then rebuild `lib/api-zod` and `lib/api-client-react` (their `dist/*.d.ts` is what typecheck actually reads, not `src` directly)
 - Continuous Monitoring v2 schema: `monitor_score_history` (per-scan grade/riskScore snapshot), `monitor_regressions` (checks newly failing vs. the previous scan), `cert_expiry_alerts` (dedup table). Rescan cadence is risk-adaptive — `computeNextScanAt(grade)` in `monitorScheduler.ts` schedules A-grade sites every 14 days, B/C every 7, D/F every 3; a 6-hour sweep picks up any subscription past its `nextScanAt`. Outbound webhooks (`webhook.ts`) fire Slack-compatible JSON for `cve_alert`, `regression_detected`, `cert_expiry`, `scan_complete` with a single retry.
