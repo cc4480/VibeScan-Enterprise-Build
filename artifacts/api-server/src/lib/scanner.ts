@@ -679,8 +679,22 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
       }));
     }
 
-    // Wildcard script-src defeats the entire point of CSP
-    if (/script-src\s+[^;]*\*/.test(csp)) {
+    // A wildcard only defeats CSP when it allows ANY origin. The old check was
+    // /script-src\s+[^;]*\*/ — any asterisk anywhere in the directive — which
+    // fires on ordinary allowlist entries like https://*.onetrust.com or
+    // *.google-analytics.com. Almost every CSP that loads analytics has one, so a
+    // well-built policy was reported HIGH as "XSS Protection Bypassed":
+    // cloudflare.com and mozilla.org both were, on CSPs listing ~20 named origins.
+    //
+    // A subdomain wildcard on a named, trusted domain is an allowlist entry, not a
+    // bypass. Only a bare * (optionally scheme-prefixed) lets scripts load from
+    // anywhere, so only that is reported.
+    const scriptSrc = /script-src\s+([^;]*)/i.exec(csp)?.[1] ?? "";
+    const allowsAnyOrigin = scriptSrc
+      .split(/\s+/)
+      .filter(Boolean)
+      .some((src) => src === "*" || src === "*:" || /^(https?:)?\/\/\*$/i.test(src));
+    if (allowsAnyOrigin) {
       vulnerabilities.push(vuln({
         name: "CSP script-src Contains Wildcard — XSS Protection Bypassed",
         severity: "high",
