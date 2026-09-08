@@ -22,7 +22,7 @@ import { purgeExpiredOobTokens } from "./oobServer";
 import { decryptCredentials, toScanHttpCredentials, looksSignedOut } from "./scanCredentials";
 import { runWithScanHttp } from "./http";
 import { corroborateMerge } from "./scoring";
-import { findingFingerprint, normalizeEvidenceKey, canonicalizeTargetUrl } from "./fingerprint";
+import { findingFingerprint, canonicalizeTargetUrl } from "./fingerprint";
 import { runRecon } from "./recon";
 import { activeProbesUnlocked } from "./activeProbeGate";
 import { warnIfLocalDataStale, OSV_CACHE_MAX_SIZE } from "./cveCheck";
@@ -294,7 +294,13 @@ async function processScanJob(job: ScanJob): Promise<void> {
     const dismissedFps = new Set(dismissals.map((d) => d.fingerprint));
     const beforeDismiss = scanResult.vulnerabilities.length;
     scanResult.vulnerabilities = scanResult.vulnerabilities.filter(
-      (v) => !dismissedFps.has(findingFingerprint(v.category, v.name, normalizeEvidenceKey(v.evidence))),
+      // Raw evidence, not normalizeEvidenceKey(evidence): findingFingerprint
+      // normalizes internally, and normalizeEvidenceKey is not idempotent — it
+      // lowercases first, then substitutes a literal uppercase "N" for dotted
+      // numerics, so a second pass turns "apache/N" into "apache/n" and the
+      // hash stops matching what routes/dismissals.ts stored. Every dismissal
+      // whose evidence named a version, IP or port silently came back.
+      (v) => !dismissedFps.has(findingFingerprint(v.category, v.name, v.evidence)),
     );
     autoSuppressedCount = beforeDismiss - scanResult.vulnerabilities.length;
     if (autoSuppressedCount > 0) {
