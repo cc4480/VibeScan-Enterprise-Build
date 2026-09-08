@@ -27,12 +27,12 @@ Targets: google.com, github.com, cloudflare.com, mozilla.org.
 | `Missing Secure Flag` reported twice for one cookie | google.com | Root cookies analysed in `scanner.ts`, inner pages in `crawler.ts`, with the crawl's dedup set starting empty. Now seeded from the root's cookies. |
 | `No Rate Limiting Detected` | github.com | Header-absence check. GitHub enforces at the edge and exposes no rate-limit headers on HTML. `x-github-edge-region` / `x-github-request-id` added to the infrastructure allowlist, alongside the existing Cloudflare/Akamai/CloudFront/Azure/Google entries. |
 
+| `CSP script-src Contains Wildcard — XSS Protection Bypassed` (**HIGH**) | cloudflare.com, mozilla.org | The check matched any `*` anywhere in the directive, so ordinary allowlist entries (`https://*.onetrust.com`, `*.google-analytics.com`) tripped it. Nearly every CSP that loads analytics has one, so well-built policies were reported HIGH. Now only a bare `*` (optionally scheme-prefixed) is reported. |
+| `Missing security.txt` evidence said "not found" | mozilla.org | The FINDING was right — mozilla.org's file is not RFC 9116 (`Email:`/`Main info:` rather than `Contact:`/`Expires:`). The evidence was hardcoded to "not found" regardless, so anyone verifying saw a file at HTTP 200 and concluded the scanner was broken. Evidence now reports what each path actually returned. |
+
 ### Open
 
-| Finding | Target | Evidence |
-|---|---|---|
-| `Missing security.txt (RFC 9116)` | mozilla.org | `https://www.mozilla.org/.well-known/security.txt` returns **200 OK, text/plain**, no redirect. The file plainly exists. |
-| `CSP script-src Contains Wildcard — XSS Protection Bypassed` (**HIGH**) | cloudflare.com, mozilla.org | Neither has a bare wildcard. Cloudflare is `'self'` plus ~20 specific https origins, some with *subdomain* wildcards (`https://*.onetrust.com`). Mozilla likewise (`*.google-analytics.com`). A subdomain wildcard on a named, trusted domain is not an XSS bypass; `script-src *` or `script-src https:` would be. Reporting HIGH on a well-built CSP is the worst kind of false positive — it is loud, and it is wrong. |
+_None currently. Re-run the scanner against these targets after any scanner change._
 
 ### Checked and correct — do not "fix" these
 
