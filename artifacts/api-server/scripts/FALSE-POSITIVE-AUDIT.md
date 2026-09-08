@@ -34,6 +34,22 @@ Targets: google.com, github.com, cloudflare.com, mozilla.org.
 
 _None currently. Re-run the scanner against these targets after any scanner change._
 
+### Shipped
+
+`c94fd75` deployed to secscan.us on 2026-09-07 — web tier (`seclayer` service,
+deployment `9860786a`) then worker (`secscan`, `13c194c0`), in that order,
+because the worker enforces the domain-verification gate and will block active
+probes while the `/domains` page that satisfies it is not yet served.
+
+Run counts before -> after on the four audit targets:
+
+| Target | Findings | Actionable |
+|---|---|---|
+| google.com | 15 -> 13 | 7 -> 6 |
+| github.com | 12 -> 11 | 6 -> 5 |
+| cloudflare.com | 9 -> 8 | 5 -> 4 |
+| mozilla.org | 8 -> 7 | 4 -> 3 |
+
 ### Checked and correct — do not "fix" these
 
 | Finding | Target | Verified |
