@@ -60,6 +60,19 @@ function jwtClass(match: string): "credential" | "publishable" | "not-a-jwt" {
 }
 
 /**
+ * Shared placeholder and entropy filter for the two generic key patterns, so
+ * they cannot drift apart: a value is worth reporting only when it is neither
+ * an obvious template nor low-entropy filler.
+ */
+function isRealSecretValue(match: string): boolean {
+  if (/your[_-]?(api[_-]?)?key|insert[_-]?key|replace[_-]?me|XXXXXXXX/i.test(match)) return false;
+  if (/EXAMPLE|PLACEHOLDER|YOUR_|<|>|\*{3,}|\.{3,}/i.test(match)) return false;
+  const valMatch = /[:=]\s*["']([^"']+)["']/.exec(match);
+  if (!valMatch) return false;
+  return shannonEntropy(valMatch[1]!) >= 3.0;
+}
+
+/**
  * Shannon entropy of a string — bits per character.
  * Real secret keys score > 3.5; placeholders / repeating patterns score < 3.0.
  * Used to filter low-entropy false positives in generic secret patterns.
@@ -348,21 +361,32 @@ export const SECRET_PATTERNS: SecretPattern[] = [
       return shannonEntropy(val) >= 2.5;
     },
   },
+  // A secret and an api key are not the same claim, and were being reported as
+  // one. `secret`, `auth_token` and `access_token` in browser-delivered code
+  // name something that was never meant to leave the server. `apiKey` names the
+  // thing a client-side SDK is *supposed* to ship: Coveo, Algolia, Mapbox,
+  // Segment and Sentry all hand the browser one, and so does Google, whose AIza
+  // key this file already reports at Info for exactly this reason.
+  //
+  // zoom.us was reported Medium for `apiKey` inside window.__zoomCoveoConfig —
+  // a search widget's key, public by construction. Whether such a key is
+  // properly restricted cannot be determined from the page, so the honest
+  // finding is "verify this", not "you leaked a secret".
   {
-    name: "Hardcoded Secret Key or Token in Source",
-    pattern: /(?:secret|api_key|apikey|auth_token|access_token)\s*[:=]\s*["']([a-zA-Z0-9\-_+/]{16,})["']/i,
+    name: "Hardcoded Secret or Auth Token in Source",
+    pattern: /(?:secret|auth_token|access_token)\s*[:=]\s*["']([a-zA-Z0-9\-_+/]{16,})["']/i,
     severity: "medium", cvssScore: 6.5, cweId: "CWE-798",
-    description: "A hardcoded secret key or token was found in client-side JavaScript. Keys and tokens embedded in frontend code are accessible to anyone who visits the site.",
-    solution: "Move API keys and tokens to the backend. Use short-lived, scoped tokens issued by your backend for any client-side API calls.",
-    validate: (m) => {
-      if (/your[_-]?(api[_-]?)?key|insert[_-]?key|replace[_-]?me|XXXXXXXX/i.test(m)) return false;
-      if (/EXAMPLE|PLACEHOLDER|YOUR_|<|>|\*{3,}|\.{3,}/i.test(m)) return false;
-      // Extract the value portion and validate entropy
-      const valMatch = /[:=]\s*["']([^"']+)["']/.exec(m);
-      if (!valMatch) return false;
-      // Low-entropy strings (all same chars, simple sequences) are likely placeholders
-      return shannonEntropy(valMatch[1]) >= 3.0;
-    },
+    description: "A hardcoded secret or authentication token was found in client-side JavaScript. Unlike a publishable API key, a value named as a secret or an auth token is not meant to reach the browser at all — anyone who visits the site can read it.",
+    solution: "Move the secret to the backend. Use short-lived, scoped tokens issued by your backend for any client-side API calls, and rotate the value that was exposed.",
+    validate: (m) => isRealSecretValue(m),
+  },
+  {
+    name: "API Key in Client Code (verify restrictions)",
+    pattern: /(?:api_key|apikey)\s*[:=]\s*["']([a-zA-Z0-9\-_+/]{16,})["']/i,
+    severity: "info", cvssScore: 0, cweId: "CWE-798",
+    description: "An API key was found in client-side JavaScript. Client-side SDKs — search, maps, analytics, error reporting — are designed to ship a key to the browser, so its presence is expected rather than a leak. The risk is a key left without origin, referrer or scope restrictions, which cannot be determined from the page. This is a prompt to verify, not a confirmed exposure.",
+    solution: "Confirm with the vendor's console that this key is restricted to your origins and to the minimum scope it needs — for search SDKs, a search-only key that cannot write. If it turns out to be a privileged or server-side key, rotate it and move it behind your backend.",
+    validate: (m) => isRealSecretValue(m),
   },
 
   // ── Internal infrastructure ───────────────────────────────────────────────

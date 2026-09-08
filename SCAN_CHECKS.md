@@ -7,7 +7,7 @@ Every finding the scanner can emit, read out of `artifacts/api-server/src/lib`. 
 complete list; [SCAN_COVERAGE.md](SCAN_COVERAGE.md) is the readable one, grouped by module with
 the Basic/Deep tier and the methodology behind each group.
 
-**280 findings across 26 modules**, in 35 categories. 87 critical, 75 high, 61 medium, 20 low, 37 info.
+**281 findings across 26 modules**, in 35 categories. 87 critical, 75 high, 61 medium, 20 low, 38 info.
 
 A finding is a distinct name the scanner can put in a report, which is not the same as a check
 type: the data-table modules below define many findings from one piece of detection logic —
@@ -22,7 +22,7 @@ module does. `none` — neither, so no test exercises it at all.
 | Module | Findings | Lines | Tests | Coverage |
 |---|---:|---:|---:|---|
 | `probes-data.ts` | 78 | 811 | 29 | direct |
-| `secret-pattern-data.ts` | 33 | 482 | 13 | direct |
+| `secret-pattern-data.ts` | 34 | 506 | 17 | direct |
 | `probes.ts` | 16 | 906 | 9 | direct |
 | `recon-data.ts` | 14 | 178 | 12 | direct |
 | `dnsChecks.ts` | 9 | 490 | 26 | direct |
@@ -391,7 +391,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `secret-pattern-data.ts`
 
-*33 findings · 482 lines · 13 tests · emitted by `jsScanner.ts`.*
+*34 findings · 506 lines · 17 tests · emitted by `jsScanner.ts`.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -420,10 +420,11 @@ module does. `none` — neither, so no test exercises it at all.
 | Slack Bot/OAuth Token Exposed | High | Exposed Secrets / Credentials | 8.1 | CWE-798 | — |
 | Stripe Webhook Secret Exposed | High | Exposed Secrets / Credentials | 8.1 | CWE-798 | — |
 | Twilio API Key Exposed | High | Exposed Secrets / Credentials | 8.1 | CWE-798 | — |
-| Hardcoded Secret Key or Token in Source | Medium | Exposed Secrets / Credentials | 6.5 | CWE-798 | — |
+| Hardcoded Secret or Auth Token in Source | Medium | Exposed Secrets / Credentials | 6.5 | CWE-798 | — |
 | Slack Incoming Webhook URL Exposed | Medium | Exposed Secrets / Credentials | 5.3 | CWE-798 | — |
 | Stripe Test Secret Key in Production | Medium | Exposed Secrets / Credentials | 5.3 | CWE-798 | — |
 | Internal IP Address Exposed | Low | Exposed Secrets / Credentials | 3.1 | CWE-200 | — |
+| API Key in Client Code (verify restrictions) | Info | Exposed Secrets / Credentials | 0 | CWE-798 | — |
 | Firebase API Key with Open Security Rules | Info | Exposed Secrets / Credentials | 3.1 | CWE-798 | — |
 | Google API Key in Client Code (verify referrer restrictions) | Info | Exposed Secrets / Credentials | 0 | CWE-798 | — |
 | JWT-Shaped Publishable Key in Client Code (verify it is not a credential) | Info | Exposed Secrets / Credentials | 0 | CWE-798 | — |

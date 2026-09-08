@@ -105,3 +105,42 @@ describe("SECRET_PATTERNS — a PEM header is not a private key", () => {
     }
   });
 });
+
+describe("SECRET_PATTERNS — an API key shipped to the browser is not a leaked secret", () => {
+  const secret = SECRET_PATTERNS.find((p) => p.name === "Hardcoded Secret or Auth Token in Source")!;
+  // Exact name: "Google API Key in Client Code (verify referrer restrictions)"
+  // also contains that phrase and sits earlier in the array.
+  const apiKey = SECRET_PATTERNS.find((p) => p.name === "API Key in Client Code (verify restrictions)")!;
+
+  // zoom.us: a Coveo search widget's key inside window.__zoomCoveoConfig.
+  const coveo = `apiKey: 'xxf1623479-48a6-4dce-8475-28e0b0720fbc'`;
+
+  it("reports a client-side apiKey at info, not as a hardcoded secret", () => {
+    expect(apiKey.severity).toBe("info");
+    expect(apiKey.cvssScore).toBe(0);
+    expect(apiKey.pattern.test(coveo)).toBe(true);
+    expect(apiKey.validate!(coveo)).toBe(true);
+    // The Medium pattern must not claim it at all.
+    expect(secret.pattern.test(coveo)).toBe(false);
+  });
+
+  it("still reports something named a secret at medium", () => {
+    const s = `client_secret: 'aG9wZWZ1bGx5X3JlYWxfc2VjcmV0X3ZhbHVl'`;
+    expect(secret.severity).toBe("medium");
+    expect(secret.pattern.test(s)).toBe(true);
+    expect(secret.validate!(s)).toBe(true);
+  });
+
+  it("still reports an access token at medium", () => {
+    const s = `access_token: 'ya29AbCdEfGh1234567890XyZqRsTuVw'`;
+    expect(secret.pattern.test(s)).toBe(true);
+    expect(secret.validate!(s)).toBe(true);
+  });
+
+  it("ignores placeholders in both", () => {
+    for (const p of [secret, apiKey]) {
+      expect(p.validate!(`apiKey: 'YOUR_API_KEY_HERE_XXXX'`), p.name).toBe(false);
+      expect(p.validate!(`secret: 'aaaaaaaaaaaaaaaaaaaa'`), p.name).toBe(false);
+    }
+  });
+});
