@@ -65,6 +65,46 @@ mozilla.org, example.com: 0 findings every round, and scan cost fell from a flat
 6.1s to 0.3–2.0s. One round caught mozilla's `alt2` MX going quiet mid-probe and
 correctly stayed silent — the false-positive path exercised live.
 
+### Caught before shipping — WAF interception (2026-09-07)
+
+Found the same way: pointing the new structured-data checks at real sites and
+reading the output.
+
+**stackoverflow.com and npmjs.com were reported as excluded from search
+indexes, with no Open Graph tags and no structured data.** All four statements
+are true — of the Cloudflare "Just a moment..." interstitial those sites return
+to the scanner, which carries `noindex,nofollow` and no metadata. None of them
+is true of the sites themselves.
+
+This is broader than structured data. When an edge answers instead of the
+origin, EVERY content-derived check describes the interstitial: CSP, cookies,
+security headers, SRI, inline scripts, technology fingerprint. The report reads
+as a scan of the customer's site and is a scan of a WAF error page.
+
+`src/lib/challengePage.ts` recognises the interception from vendor
+fingerprints — challenge-platform script paths, anchored interstitial titles,
+vendor headers — and the scan reports it once as a Scan Coverage finding saying
+plainly which findings can no longer be trusted. The structured-data module
+returns nothing at all in that case.
+
+Detection is strict on purpose: calling a real page a challenge page would
+suppress genuine findings, which is worse than the bug being fixed. A large
+document that merely loads a bot-protection script is not a challenge, a 403
+that returns a real access-denied page is not a challenge, and "just a moment"
+in body copy is not a challenge.
+
+**Then the detector itself produced a false positive, and it was the same
+mistake in a new place.** nytimes.com was flagged as intercepted on
+`x-datadome: protected` — a header DataDome sets on ALLOWED traffic. Its real
+1.3MB homepage, two JSON-LD blocks and all, was sitting in the response body.
+Fixed by matching the header's value rather than its presence; `re` is now
+required on every header signal so the shortcut cannot be taken again.
+
+Verified across 15 sites (google, github, cloudflare, mozilla, stackoverflow,
+npm, reddit, amazon.co.uk, bbc, wikipedia, vercel, nytimes, gov.uk, shopify,
+MDN): zero findings above INFO, the two Cloudflare interstitials correctly
+identified, every real page correctly left alone.
+
 ### Open
 
 _None currently. Re-run the scanner against these targets after any scanner change._

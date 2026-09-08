@@ -12,6 +12,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { detectChallengePage } from "./challengePage.js";
 
 /**
  * Checks whether a hostname appears to be on the HSTS preload list.
@@ -432,6 +433,27 @@ function sessionLostFinding(): ScanVulnerability {
  * at all — those are where the severe findings come from, and their absence
  * here says nothing about whether the target has them.
  */
+/**
+ * Emitted when the target's edge served a challenge instead of the site.
+ *
+ * Without this the report is quietly wrong rather than visibly incomplete:
+ * every content-derived check describes the interstitial, so the customer reads
+ * findings about Cloudflare's HTML with their own domain at the top.
+ */
+function interceptedFinding(vendor: string | null, signal: string): ScanVulnerability {
+  return vuln({
+    name: "Scan was intercepted by a bot-protection challenge",
+    severity: "info",
+    category: "Scan Coverage",
+    description:
+      `The request for this page was answered by ${vendor ? `${vendor}'s` : "an edge"} bot-protection layer rather than by the site itself, so what was analysed is the challenge page. Findings derived from page content — security headers, cookies, Content-Security-Policy, structured data, third-party scripts — describe that challenge page and not this site. Header and TLS findings for the edge itself remain accurate.`,
+    evidence: signal,
+    solution:
+      "Allow the scanner through the bot-protection rules for the duration of a scan — by source IP, or by User-Agent — then scan again. Verifying domain ownership also lets the scan authenticate itself.",
+    confidence: 95,
+  });
+}
+
 function activeProbesSkippedFinding(): ScanVulnerability {
   return vuln({
     name: "Active security testing was skipped for this scan",
@@ -931,6 +953,11 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
   // basic ones; with one tier there is one budget.
   const CRAWL_PAGE_BUDGET = 20;
 
+  // Did the edge answer instead of the site? Decided once, up front, because
+  // several checks downstream are only meaningful if the document is the
+  // target's own.
+  const challengeVerdict = detectChallengePage(initial.status, html, rawHeaders);
+
   // ── Run all parallel probes ───────────────────────────────────────────
   // All checks run concurrently — active HTTP probes, DNS checks, site crawl,
   // CVE lookup, JWT analysis, subdomain takeover, JS secret scanning and path
@@ -952,6 +979,18 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
         const { hostname } = new URL(finalUrl);
         const { inspectMailTls, mailTlsFindings } = await import("./mailTls.js");
         return mailTlsFindings(await inspectMailTls(hostname));
+      } catch {
+        return [];
+      }
+    })(),
+    // Structured data, social preview metadata and indexability. No network
+    // calls — it reads the document already fetched. Presentation findings are
+    // INFO (weight 0) so they cannot move the security grade; only genuine
+    // exposure (internal hosts, http assets, foreign canonical) carries weight.
+    (async () => {
+      try {
+        const { structuredDataFindings } = await import("./structuredData.js");
+        return structuredDataFindings(finalUrl, html, { status: initial.status, headers: rawHeaders });
       } catch {
         return [];
       }
@@ -1077,6 +1116,9 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
         ...deduped,
         ...(sessionWasLost() ? [sessionLostFinding()] : []),
         ...(allowActiveProbes ? [] : [activeProbesSkippedFinding()]),
+        ...(challengeVerdict.isChallenge
+          ? [interceptedFinding(challengeVerdict.vendor, challengeVerdict.signal ?? "")]
+          : []),
       ],
       technologies,
     ),

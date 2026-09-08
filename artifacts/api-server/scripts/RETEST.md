@@ -36,10 +36,15 @@ stopped firing.
 
 | Target | Findings | Actionable |
 |---|---|---|
-| google.com | 13 | 6 |
+| google.com | 15 | 6 |
 | github.com | 11 | 5 |
 | cloudflare.com | 8 | 4 |
 | mozilla.org | 7 | 3 |
+
+google.com gained two findings when the structured-data checks landed (it
+publishes no JSON-LD and no Open Graph tags). **Actionable did not move**, and
+that is the number to watch: presentation findings are INFO, weight 0 in
+computeRiskScore, so they must never change a grade.
 
 ---
 
@@ -70,6 +75,23 @@ github.com must NOT be reported as "No Rate Limiting Detected". It enforces at
 the edge and exposes no rate-limit headers on HTML; `x-github-edge-region` /
 `x-github-request-id` are in the allowlist alongside Cloudflare, Akamai,
 CloudFront, Azure and Google.
+
+**Findings must describe the site, not the WAF that answered for it.**
+stackoverflow.com and npmjs.com return HTTP 403 Cloudflare interstitials to the
+scanner. Those pages carry `noindex,nofollow`, no Open Graph tags and no
+structured data, all of which was being reported against the customer's domain.
+`detectChallengePage` recognises the interception, the scan reports it once
+under Scan Coverage, and content-derived checks stand down.
+
+Confirm with the live-scan list plus stackoverflow.com and npmjs.com: both must
+show `INTERCEPTED`, with no structured-data findings attributed to them.
+
+**A bot-protection header is not a verdict.**
+nytimes.com must NOT be reported as intercepted. It serves its real 1.3MB
+homepage under `x-datadome: protected`, which means the request was ALLOWED.
+Detection matches on the header's value (`block|challenge|captcha`), never on
+its presence. Same shape as the STARTTLS bug below — a signal being present is
+not the signal saying no.
 
 **A mail host that goes quiet is not a mail host without STARTTLS.**
 cloudflare.com must NOT be reported as "Mail Server Does Not Offer STARTTLS".
@@ -112,7 +134,7 @@ correct" section lists findings that look false and are not.
 
 ## After fixing
 
-1. `npx vitest run` in `artifacts/api-server` — 616 passing as of the mail-TLS work (601 before it, plus the JWT infra-token fixes).
+1. `npx vitest run` in `artifacts/api-server` — 667 passing (601 before the mail-TLS, structured-data and challenge-page work).
 2. Re-run the live scan and compare against the counts above.
 3. Update `FALSE-POSITIVE-AUDIT.md`: move the entry to Fixed, record the new
    counts, and add anything checked-and-correct so nobody "fixes" it later.
