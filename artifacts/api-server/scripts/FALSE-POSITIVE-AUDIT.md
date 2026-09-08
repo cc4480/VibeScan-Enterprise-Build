@@ -30,6 +30,41 @@ Targets: google.com, github.com, cloudflare.com, mozilla.org.
 | `CSP script-src Contains Wildcard — XSS Protection Bypassed` (**HIGH**) | cloudflare.com, mozilla.org | The check matched any `*` anywhere in the directive, so ordinary allowlist entries (`https://*.onetrust.com`, `*.google-analytics.com`) tripped it. Nearly every CSP that loads analytics has one, so well-built policies were reported HIGH. Now only a bare `*` (optionally scheme-prefixed) is reported. |
 | `Missing security.txt` evidence said "not found" | mozilla.org | The FINDING was right — mozilla.org's file is not RFC 9116 (`Email:`/`Main info:` rather than `Contact:`/`Expires:`). The evidence was hardcoded to "not found" regardless, so anyone verifying saw a file at HTTP 200 and concluded the scanner was broken. Evidence now reports what each path actually returned. |
 
+### Caught before shipping — mail transport probe (2026-09-07)
+
+The one false positive in this audit that was never released, because it was
+found by pointing the new detector at known-good targets before committing it.
+
+**`Mail Server Does Not Offer STARTTLS` on cloudflare.com.** Wrong: its MX
+advertises STARTTLS on port 25 and presents a certificate valid for 162 days.
+
+The detector probed 25, 587 and 465 on each MX host and gated its finding on
+whether a port was *reachable*. Cloudflare's MX completes the TCP handshake on
+587 and then resets before answering `EHLO`, so `starttlsAdvertised` stayed
+`null` — the probe learned nothing. Reachability was being read as an answer,
+so silence scored as "no STARTTLS".
+
+**It fired on some runs and not others**, depending on when the reset landed.
+That is worse than a consistent false positive: it cannot be reproduced by
+whoever disputes the report, and re-running the scan "fixes" it.
+
+Two fixes, both in `src/lib/mailTls.ts`:
+
+1. Only ports that actually answered `EHLO` count as evidence
+   (`starttlsAdvertised !== null`). Unreachable was already excluded; silent-
+   after-connect now is too. Regression test: *"stays silent when a host
+   connected but never answered EHLO"*.
+2. Probe port 25 only. An MX is an inbound relay — every message the world
+   sends to the domain arrives on 25, so 25 alone answers the question. 587 and
+   465 are submission ports for the domain's own authenticated users and
+   normally live on a different hostname. They measured nothing here and cost
+   ~5s of every scan (Google firewalls both; Cloudflare resets 587).
+
+Verified over 3 rounds against google.com, github.com, cloudflare.com,
+mozilla.org, example.com: 0 findings every round, and scan cost fell from a flat
+6.1s to 0.3–2.0s. One round caught mozilla's `alt2` MX going quiet mid-probe and
+correctly stayed silent — the false-positive path exercised live.
+
 ### Open
 
 _None currently. Re-run the scanner against these targets after any scanner change._

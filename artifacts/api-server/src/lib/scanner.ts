@@ -943,6 +943,19 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
   const probePromises: Promise<ScanVulnerability[]>[] = [
     runAllProbes(finalUrl, html, allowActiveProbes).catch(() => []),
     checkDnsSecurity(finalUrl).catch(() => []),
+    // Mail transport security: does the domain's MX actually offer STARTTLS,
+    // and is its certificate valid. Invisible from the web tier — a site can
+    // score perfectly on HTTPS while password-reset mail is relayed in
+    // cleartext. SPF/DMARC say who MAY send; they say nothing about encryption.
+    (async () => {
+      try {
+        const { hostname } = new URL(finalUrl);
+        const { inspectMailTls, mailTlsFindings } = await import("./mailTls.js");
+        return mailTlsFindings(await inspectMailTls(hostname));
+      } catch {
+        return [];
+      }
+    })(),
     checkForKnownVulnerabilities(html, rawHeaders).catch(() => []),
     // Passive JWT analysis — no extra HTTP requests
     analyzeJwts(rawHeaders, html).catch(() => []),

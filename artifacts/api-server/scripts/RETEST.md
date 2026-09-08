@@ -29,7 +29,8 @@ verification in the product and must never be aimed at sites you do not own.
 
 ## Expected counts
 
-The baseline as of `c94fd75`. A jump means something regressed; a drop is worth
+The baseline as of `c94fd75`, re-confirmed unchanged after the mail-TLS probe
+landed. A jump means something regressed; a drop is worth
 understanding rather than celebrating, since it may mean a real detector
 stopped firing.
 
@@ -70,6 +71,17 @@ the edge and exposes no rate-limit headers on HTML; `x-github-edge-region` /
 `x-github-request-id` are in the allowlist alongside Cloudflare, Akamai,
 CloudFront, Azure and Google.
 
+**A mail host that goes quiet is not a mail host without STARTTLS.**
+cloudflare.com must NOT be reported as "Mail Server Does Not Offer STARTTLS".
+Its MX completes the TCP handshake on 587 and then resets before answering
+`EHLO`. Only ports where `starttlsAdvertised` is an actual boolean count as
+evidence; `null` means the probe learned nothing. This one is easy to
+reintroduce by "simplifying" the filter to `reachable`, and the resulting bug is
+intermittent — it depends on when the reset lands, so it survives a re-run.
+
+Probe port 25 only. Adding 587/465 back costs ~5s on every scan and measures
+nothing: an MX is an inbound relay, and submission ports live elsewhere.
+
 **Evidence must describe what actually happened.**
 mozilla.org's security.txt finding is CORRECT — the file exists but is not
 RFC 9116 (`Email:` / `Main info:` rather than `Contact:` / `Expires:`). The
@@ -100,7 +112,7 @@ correct" section lists findings that look false and are not.
 
 ## After fixing
 
-1. `npx vitest run` in `artifacts/api-server` — 601 passing as of `c94fd75`.
+1. `npx vitest run` in `artifacts/api-server` — 613 passing as of the mail-TLS work.
 2. Re-run the live scan and compare against the counts above.
 3. Update `FALSE-POSITIVE-AUDIT.md`: move the entry to Fixed, record the new
    counts, and add anything checked-and-correct so nobody "fixes" it later.
