@@ -684,12 +684,29 @@ export async function checkSecurityTxt(
   }
 
   const paths = ["/.well-known/security.txt", "/security.txt"];
+  // What each path actually returned, so the evidence can say so.
+  //
+  // This used to report "not found" for both paths regardless of what happened.
+  // mozilla.org serves /.well-known/security.txt with HTTP 200 — it simply is not
+  // RFC 9116 (it uses Email:/Main info: rather than Contact:/Expires:). The
+  // finding is right; claiming the file is absent is not, and anyone who checks
+  // sees a file sitting there and reports the scanner as broken.
+  const observed: string[] = [];
   for (const p of paths) {
     // null (network error) reads the same as absent, which is the intent here.
     const res = await safeGet(origin + p, { redirect: "follow" }, 6_000);
-    if (res && res.status >= 200 && res.status < 300) {
-      if (/Contact:|Expires:|Policy:/i.test(res.body)) return [];
+    if (!res) {
+      observed.push(`GET ${origin}${p} → no response`);
+      continue;
     }
+    if (res.status >= 200 && res.status < 300) {
+      if (/Contact:|Expires:|Policy:/i.test(res.body)) return [];
+      observed.push(
+        `GET ${origin}${p} → HTTP ${res.status}, but no RFC 9116 fields (Contact:/Expires:/Policy:) in the body`,
+      );
+      continue;
+    }
+    observed.push(`GET ${origin}${p} → HTTP ${res.status}`);
   }
 
   return [vuln({
@@ -697,7 +714,7 @@ export async function checkSecurityTxt(
     severity: "info",
     category: "Information Disclosure",
     description: "No security.txt file was found at /.well-known/security.txt or /security.txt. RFC 9116 defines this as the standard way for security researchers to report vulnerabilities to your organisation. Without it, researchers may not know how to contact you responsibly, leading to public disclosure before you can patch.",
-    evidence: `GET ${origin}/.well-known/security.txt → not found\nGET ${origin}/security.txt → not found`,
+    evidence: observed.join("\n"),
     solution: "Create /.well-known/security.txt with at minimum: Contact (email or form URL), Expires (date after which the file is stale), and optionally Policy (URL of your vulnerability disclosure policy). Generator: https://securitytxt.org/",
     cweId: "CWE-205",
     cvssScore: 0,
