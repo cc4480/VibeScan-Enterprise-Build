@@ -350,9 +350,20 @@ interface HeaderGapMeta {
 const HEADER_GAP_META: Record<keyof HeaderSnapshot, HeaderGapMeta> = {
   hsts: {
     header: "Strict-Transport-Security",
-    severity: "high",
+    // Low, unlike the other headers here, because HSTS is host-scoped rather
+    // than per-response. Once any response from the host carries it — and this
+    // finding only fires when the root page does — the browser enforces
+    // HTTPS-only for the whole host until max-age expires. A route that omits
+    // it is therefore only reachable over HTTP by someone whose very first
+    // contact with the domain is that exact URL. Real, but defence-in-depth.
+    //
+    // Grading it High put robinhood.com at D over three sitemap pages, below
+    // sites serving no CSP at all — a ranking that says more about the weight
+    // than the risk. CSP and the rest stay High/Medium: those genuinely apply
+    // per response, so a route missing one is unprotected on every visit.
+    severity: "low",
     cweId: "CWE-523",
-    cvssScore: 7.4,
+    cvssScore: 3.1,
     wstgId: "WSTG-CONF-07",
     description:
       "The root URL has HSTS configured, but the following internal routes respond without the header. Routes that bypass the CDN (e.g. API endpoints hitting origin directly) won't enforce HTTPS-only connections.",
