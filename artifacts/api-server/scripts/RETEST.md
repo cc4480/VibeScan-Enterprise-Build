@@ -112,7 +112,7 @@ correct" section lists findings that look false and are not.
 
 ## After fixing
 
-1. `npx vitest run` in `artifacts/api-server` — 613 passing as of the mail-TLS work.
+1. `npx vitest run` in `artifacts/api-server` — 616 passing as of the mail-TLS work (601 before it, plus the JWT infra-token fixes).
 2. Re-run the live scan and compare against the counts above.
 3. Update `FALSE-POSITIVE-AUDIT.md`: move the entry to Fixed, record the new
    counts, and add anything checked-and-correct so nobody "fixes" it later.
