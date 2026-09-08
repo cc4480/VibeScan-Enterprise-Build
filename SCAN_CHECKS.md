@@ -24,7 +24,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `probes-data.ts` | 78 | 811 | 29 | direct |
 | `secret-pattern-data.ts` | 33 | 474 | 9 | direct |
 | `probes.ts` | 16 | 906 | 9 | direct |
-| `dnsChecks.ts` | 9 | 462 | 25 | direct |
+| `dnsChecks.ts` | 9 | 490 | 26 | direct |
 | `nextjsProbe.ts` | 9 | 245 | 7 | direct |
 | `structuredData.ts` | 9 | 415 | 34 | direct |
 | `crawler-data.ts` | 8 | 122 | 26 | direct |
@@ -135,7 +135,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `dnsChecks.ts`
 
-*9 findings · 462 lines · 25 tests.*
+*9 findings · 490 lines · 26 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
