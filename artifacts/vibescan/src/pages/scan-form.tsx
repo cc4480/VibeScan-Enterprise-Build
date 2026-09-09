@@ -11,8 +11,88 @@ import {
   type ScanCredentialsValue,
   type SecondAccountValue,
 } from "@/components/scan-credentials-fields";
-import { Shield, Zap, Globe, Lock, CheckCircle2, Loader2 } from "lucide-react";
+import { Shield, Zap, Globe, Lock, CheckCircle2, Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
+import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { listDomainVerifications } from "@/lib/domain-verification-api";
 import { cn } from "@/lib/utils";
+
+/**
+ * Whether the domain in the URL box has been proven to belong to this user.
+ *
+ * This is not decoration. lib/activeProbeGate.ts withholds EVERY active probe —
+ * injection, traversal, access control, SSRF, Supabase/Firebase exposure — until
+ * ownership is proven, and before this existed the form said the opposite: that
+ * the scan "sends real probe traffic to the target, including injection
+ * payloads and a port scan". For an unverified domain that was simply untrue,
+ * and the only place a user found out was an INFO finding in the finished
+ * report, after waiting for the scan.
+ *
+ * Matching is exact and deliberately so, because the gate's lookup is exact:
+ * verifying example.com does NOT unlock www.example.com. Telling someone their
+ * domain is verified when the gate will disagree would be worse than saying
+ * nothing.
+ */
+function domainOf(rawUrl: string): string | null {
+  const raw = (rawUrl || "").trim();
+  if (!raw) return null;
+  try {
+    return new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function ActiveTestingStatus({ url }: { url: string }) {
+  const domain = domainOf(url);
+  const { data: verifications, isLoading } = useQuery({
+    queryKey: ["domain-verifications"],
+    queryFn: listDomainVerifications,
+    staleTime: 60_000,
+  });
+
+  if (!domain) return null;
+
+  const verified = (verifications ?? []).some((v) => v.verified && v.domain === domain);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground ml-1">
+        <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+        Checking whether {domain} is verified…
+      </div>
+    );
+  }
+
+  if (verified) {
+    return (
+      <div className="flex items-start gap-2 rounded-xl border border-primary/20 bg-primary/5 p-3">
+        <ShieldCheck className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+        <p className="text-xs text-muted-foreground">
+          <span className="font-semibold text-foreground">{domain} is verified.</span>{" "}
+          This scan runs the full suite, including injection, path traversal, broken access
+          control and backend-exposure testing.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-start gap-2 rounded-xl border border-amber-500/25 bg-amber-500/5 p-3">
+      <ShieldAlert className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+      <p className="text-xs text-muted-foreground">
+        <span className="font-semibold text-foreground">Passive checks only for {domain}.</span>{" "}
+        Active testing — SQL injection, XSS, path traversal, broken access control, SSRF and
+        Supabase/Firebase exposure — is withheld until you prove you control this domain, because
+        it sends real attack traffic.{" "}
+        <Link href="/domains" className="text-primary underline underline-offset-2 font-medium">
+          Verify {domain}
+        </Link>{" "}
+        with a DNS record or a file, then scan again. Verification is per exact hostname.
+      </p>
+    </div>
+  );
+}
 
 function getFriendlyError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err ?? "");
@@ -150,6 +230,7 @@ export default function ScanFormPage() {
             <p className="text-xs text-muted-foreground ml-1">
               Any publicly accessible website works. Only scan sites you have permission to test.
             </p>
+            <ActiveTestingStatus url={url} />
           </div>
 
           {/* What a scan covers — informational, not a choice */}
@@ -183,8 +264,10 @@ export default function ScanFormPage() {
             </div>
 
             <p className="text-xs text-muted-foreground">
-              This scan sends real probe traffic to the target, including injection payloads and
-              a port scan. Only scan applications you own or are authorised to test.
+              On a domain you have verified, this scan sends real probe traffic to the target,
+              including injection payloads and a port scan. Without verification the active
+              checks are withheld and only the passive ones run. Either way, only scan
+              applications you own or are authorised to test.
             </p>
           </div>
 
