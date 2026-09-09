@@ -88,26 +88,28 @@ CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Name aliases — so a Railway service resolves to the web tier by name
+# A note on stage selection, because the obvious assumption is wrong
 #
-# Railway picks a build target by matching the stage name to the service name.
-# A service whose name matches no stage builds the FINAL stage instead, which is
-# the scanner — that is how a queue worker with no HTTP listener once got
-# deployed as the public web app. These aliases exist only to give such names
-# something to match.
+# Railway does NOT choose a build target by matching stage name to service name.
+# Verified from build logs on 2026-09-09: the web service, named `web`, built
+# `builder` -> `runtime-base` -> `secscan` and nothing else. The `web` stage
+# below was not built at all. Railway builds the FINAL stage and ignores the
+# rest, whatever the service is called.
 #
-# `seclayer-app` dates from when the seclayer.app service built from THIS repo.
-# It now builds from seclayer.io2026 and has its own Dockerfile, so this alias
-# is very likely dead — left in place rather than removed blind.
+# That is survivable only because of the deliberate choice in runtime-base:
+# both entrypoints and the frontend live there, so either image runs either
+# process, and the web service names index.mjs in its start command. The cost
+# is that the public web tier ships Chromium it never uses.
 #
-# It deliberately is NOT last. The final stage is the fallback for any service
-# Railway cannot name-match, and that fallback has to be the scanner: the web
-# services name index.mjs in their start command and boot correctly from any
-# runtime image, while the scanner service has no start command and so runs
-# whatever CMD the image carries. With the web tier last, the scanner silently
-# became a second web tier and every queued scan sat unclaimed forever.
+# The `web` stage is still real and still used — docker-compose.yml builds it
+# with `target: web`, and that is the deployment path where the Chromium
+# separation is actually enforced.
+#
+# Before reordering stages: the FINAL stage must stay `secscan`. The scanner
+# has no start command and runs whatever CMD the image carries, so if a web
+# stage were last the scanner would silently become a second web tier and
+# queued scans would never be claimed. That has happened.
 # ─────────────────────────────────────────────────────────────────────────────
-FROM web AS seclayer-app
 
 # ─────────────────────────────────────────────────────────────────────────────
 # secscan — the scanner tier
