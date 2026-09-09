@@ -1618,10 +1618,10 @@ function DownloadPDFButton({ data }: { data: PrintableReportData }) {
         heightLeft -= pageH;
       }
 
-      let filename = "seclayer-report.pdf";
+      let filename = "secscan-report.pdf";
       try {
         const host = new URL(data.targetUrl).hostname.replace(/^www\./, "");
-        filename = `seclayer-${host}.pdf`;
+        filename = `secscan-${host}.pdf`;
       } catch {
         // keep default
       }

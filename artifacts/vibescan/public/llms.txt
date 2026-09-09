@@ -1,18 +1,18 @@
-# Seclayer
+# SecScan
 
 > Automated black-box security scanning for web applications — built for vibe coders who ship fast.
 
-Seclayer performs automated black-box security scans on web applications you own or are
+SecScan performs automated black-box security scans on web applications you own or are
 authorised to test. Paste a URL and receive a plain-English security report powered by DeepSeek
 AI, usually within ten minutes, with no installs or agents required.
 
 Every scan is a full scan. There are no tiers to choose between.
 
-Seclayer is an automated scanner, not a manual penetration test. It is not passive: it sends
+SecScan is an automated scanner, not a manual penetration test. It is not passive: it sends
 real probe traffic to the target, including injection payloads and a port scan. Scan only what
 you own or have permission to test.
 
-## What Seclayer does
+## What SecScan does
 
 - Runs automated black-box security scans against a publicly reachable web application
 - Aligned with the OWASP Top 10. Strongest on security misconfiguration (A05), cryptographic
@@ -30,7 +30,7 @@ you own or have permission to test.
 - Provides per-agent fix prompts tailored to Cursor, Claude Code, Lovable, Bolt and Replit AI
 - Offers continuous monitoring with weekly rescans and daily CVE feed matching
 
-## Who Seclayer is for
+## Who SecScan is for
 
 Vibe coders, solo founders, indie developers and dev agencies who build with AI code generation
 tools (Cursor, Lovable, Bolt, Replit) and need to verify security before launching — or after

@@ -62,8 +62,8 @@ ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable
 ## 3. Configure
 
 ```bash
-git clone https://github.com/cc4480/VibeScan-Enterprise-Build.git seclayer
-cd seclayer
+git clone https://github.com/cc4480/VibeScan-Enterprise-Build.git secscan
+cd secscan
 cp .env.example .env
 ```
 
@@ -139,13 +139,13 @@ git pull && docker compose up -d --build
 **Backups.** Everything durable is in the `db` volume.
 
 ```bash
-docker compose exec -T db pg_dump -U seclayer seclayer | gzip > backup-$(date +%F).sql.gz
+docker compose exec -T db pg_dump -U "${POSTGRES_USER:-vibescan}" "${POSTGRES_DB:-vibescan}" | gzip > backup-$(date +%F).sql.gz
 ```
 
 Restore into a running stack:
 
 ```bash
-gunzip -c backup-2026-09-02.sql.gz | docker compose exec -T db psql -U seclayer seclayer
+gunzip -c backup-2026-09-02.sql.gz | docker compose exec -T db psql -U "${POSTGRES_USER:-vibescan}" "${POSTGRES_DB:-vibescan}"
 ```
 
 Store `ENCRYPTION_KEY` with the backups, or the restored DeepSeek keys are
