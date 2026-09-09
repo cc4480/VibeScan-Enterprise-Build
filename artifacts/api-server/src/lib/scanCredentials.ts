@@ -138,7 +138,7 @@ async function formLogin(
   let browser;
   try {
     // Imported here rather than at module scope so that requiring this file does
-    // not pull Playwright in. seclayer (the web tier) imports validateCredentials
+    // not pull Playwright in. The web tier imports validateCredentials
     // and encryptCredentials from this module; a static import would put Chromium
     // in the web bundle for the sake of a function only secscan ever calls.
     const { chromium } = await import("playwright");

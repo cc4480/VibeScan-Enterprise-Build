@@ -1,5 +1,9 @@
 /**
- * seclayer — the web process.
+ * web — the web process.
+ *
+ * Named `web`, not `seclayer`: Seclayer is a separate product on its own
+ * domain, and having this tier answer to that name is one `railway link` away
+ * from deploying one product onto the other.
  *
  * Serves the API and the built frontend. Scan work is handed to secscan through
  * the `scan-job` pg-boss queue rather than executed here, so this process holds
@@ -14,7 +18,7 @@ import { warnIfPaymentsMisconfigured } from "./lib/stripe";
 import { refreshCloudflareIps } from "./lib/cloudflareIps";
 import { behindCloudflare } from "./lib/clientIp";
 
-installCrashHandlers("seclayer");
+installCrashHandlers("web");
 warnIfPaymentsMisconfigured(logger);
 
 const rawPort = process.env["PORT"];

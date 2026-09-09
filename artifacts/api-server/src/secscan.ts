@@ -3,7 +3,7 @@
  *
  * Runs the pg-boss worker and the monitor scheduler, and nothing else. There is
  * no HTTP listener here: the only way work reaches this process is the
- * `scan-job` queue in Postgres, which seclayer (the web tier) writes to.
+ * `scan-job` queue in Postgres, which the web tier writes to.
  *
  * Splitting this out of the web process is what lets the two scale
  * independently — scans are long, CPU-heavy and hold a Chromium instance, while

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Creates the Railway project: Postgres, seclayer, secscan.
+# Creates the Railway project: Postgres, web, secscan.
 #
 #   railway login          # once, in your own terminal — it opens a browser
 #   ./deploy/railway/setup.sh
@@ -81,12 +81,12 @@ fi
 echo "Adding Postgres…"
 railway add --database postgres
 
-# ── seclayer: the web tier ──────────────────────────────────────────────────
+# ── web: the web tier ───────────────────────────────────────────────────────
 # DATABASE_URL uses Railway's reference syntax so it keeps working when the
 # database credentials rotate. PORT is deliberately unset: Railway injects it.
-echo "Creating seclayer…"
+echo "Creating web…"
 railway add \
-  --service seclayer \
+  --service web \
   --repo "${REPO}" \
   --branch "${BRANCH}" \
   --variables 'DATABASE_URL=${{Postgres.DATABASE_URL}}' \
@@ -95,10 +95,10 @@ railway add \
   --variables "TRUST_PROXY=2" \
   --variables "BEHIND_CLOUDFLARE=true" \
   --variables "CLOUDFLARE_ORIGIN_SECRET=${CLOUDFLARE_ORIGIN_SECRET}" \
-  --variables "RAILWAY_CONFIG_PATH=deploy/railway/seclayer.json"
+  --variables "RAILWAY_CONFIG_PATH=deploy/railway/web.json"
 
 # ── secscan: the scanner ────────────────────────────────────────────────────
-# Same ENCRYPTION_KEY as seclayer, or credentialed scans fail at scan time
+# Same ENCRYPTION_KEY as the web tier, or credentialed scans fail at scan time
 # rather than at startup. No domain, no PORT: work arrives only via the queue.
 echo "Creating secscan…"
 railway add \
@@ -116,11 +116,11 @@ echo
 echo "  1. Give secscan at least 2 GB of memory (dashboard → secscan → Settings)."
 echo "     Chromium is the one service where the default may not be enough."
 echo
-echo "  2. Generate the public domain for seclayer only:"
-echo "       railway domain --service seclayer"
+echo "  2. Generate the public domain for web only:"
+echo "       railway domain --service web"
 echo
 echo "  3. Apply the schema once the database is up:"
-echo "       railway run --service seclayer pnpm --filter @workspace/db run db:migrate"
+echo "       railway run --service web pnpm --filter @workspace/db run db:migrate"
 echo
 echo "  4. Confirm it is alive, then follow deploy/railway/README.md from step 5"
 echo "     for Cloudflare, the origin-secret Transform Rule, email and Search Console."

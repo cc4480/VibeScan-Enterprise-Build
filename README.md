@@ -120,7 +120,7 @@ lib/
   `SCAN_DAILY_LIMIT_ANON` (10) to `SCAN_DAILY_LIMIT_ACCOUNT` (50), because an
   account is attributable in a way an anonymous UUID is not.
   `lib/replit-auth-web` is vestigial.
-- **Two processes, one image.** `src/index.ts` (`seclayer`, the web tier) serves
+- **Two processes, one image.** `src/index.ts` (the `web` tier) serves
   the API and the built frontend and only *enqueues* scans. `src/secscan.ts`
   (the scanner) runs the pg-boss worker, the monitor scheduler and the EOL/CVE
   refresh, and owns Chromium. They share nothing but the `scan-job` queue in

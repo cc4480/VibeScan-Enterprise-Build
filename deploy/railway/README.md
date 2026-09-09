@@ -15,7 +15,7 @@ Three, in one Railway project:
 | Service    | Source                | Start command                                    | Public domain |
 | ---------- | --------------------- | ------------------------------------------------ | ------------- |
 | `postgres` | Railway Postgres      | —                                                | no            |
-| `seclayer` | this repo, `Dockerfile` | `node --enable-source-maps artifacts/api-server/dist/index.mjs` | **yes** — secscan.us |
+| `web` | this repo, `Dockerfile` | `node --enable-source-maps artifacts/api-server/dist/index.mjs` | **yes** — secscan.us |
 | `secscan`  | this repo, `Dockerfile` | (leave default)                                  | no            |
 
 Both application services build the same Dockerfile and differ only in what they
@@ -38,17 +38,17 @@ see [Deploying prebuilt images](#deploying-prebuilt-images-instead) at the end.
 
 ## Config as code
 
-`seclayer.json` and `secscan.json` in this directory carry each service's build
+`web.json` and `secscan.json` in this directory carry each service's build
 and deploy settings, so the start commands and health check are versioned rather
 than typed into the dashboard and forgotten. Point each service at its file:
 
-    Service → Settings → Config-as-code → Path:  deploy/railway/seclayer.json
+    Service → Settings → Config-as-code → Path:  deploy/railway/web.json
 
 Two things Railway does differently from the compose deployment, both harmless
 once known:
 
 - **Railway ignores the Dockerfile `HEALTHCHECK`.** It runs its own HTTP probe
-  against `healthcheckPath` instead. So `seclayer` is health-checked on
+  against `healthcheckPath` instead. So `web` is health-checked on
   `/api/healthz`, and the heartbeat probe built for `secscan` does not apply
   there — Railway watches the process rather than the file. The heartbeat still
   works, and still matters, under compose.
@@ -62,7 +62,7 @@ Railway → New Project → **Deploy PostgreSQL**. Rename it `postgres`.
 Railway exposes `DATABASE_URL` on that service. You will reference it from the
 other two rather than copying the value.
 
-## 2. Create the `seclayer` service
+## 2. Create the `web` service
 
 New service → **GitHub Repo** → this repository, branch `fix/dashboard-scan-flicker`
 (or `master` once merged).
@@ -107,14 +107,14 @@ only through the job queue in Postgres.
 
 ```ini
 DATABASE_URL=${{postgres.DATABASE_URL}}
-ENCRYPTION_KEY=<the same value as seclayer>
+ENCRYPTION_KEY=<the same value as web>
 APP_ORIGIN=https://secscan.us
 DEEPSEEK_API_KEY=<optional>
 RESEND_API_KEY=<optional>
 OOB_BASE_URL=
 ```
 
-`ENCRYPTION_KEY` **must match** seclayer's. The web tier encrypts scan
+`ENCRYPTION_KEY` **must match** the web tier's. The web tier encrypts scan
 credentials when a scan is created and the scanner decrypts them when it runs; a
 mismatch fails at scan time rather than at startup, on exactly the authenticated
 scans that need it.
@@ -131,7 +131,7 @@ has more than one replica. Run them once, from your machine:
 ```bash
 npm i -g @railway/cli
 railway link                 # pick the project
-railway run --service seclayer pnpm --filter @workspace/db run db:migrate
+railway run --service web pnpm --filter @workspace/db run db:migrate
 ```
 
 Re-run this after any schema change. Applying nothing is the normal outcome.
@@ -158,7 +158,7 @@ use your own → enter Cloudflare's two, replacing the `ui-dns.*` set. Confirm:
 dig NS secscan.us +short      # expect the cloudflare.com nameservers
 ```
 
-**Add the domain in Railway first.** seclayer → Settings → Networking → Custom
+**Add the domain in Railway first.** web → Settings → Networking → Custom
 Domain → `secscan.us`. Railway shows the CNAME target to use.
 
 **Then add the DNS record in Cloudflare**, initially **unproxied** (grey cloud):
@@ -190,7 +190,7 @@ defeat every per-IP limit in the app, including the one on `/login`.
 The app settles it without help from Cloudflare. The chain is:
 
 ```
-client → Cloudflare → Railway's router → seclayer
+client → Cloudflare → Railway's router → web
 ```
 
 Each hop appends the address it saw to `X-Forwarded-For`, so the **last** entry
@@ -281,7 +281,7 @@ railway run --service postgres pg_dump > backup-$(date +%F).sql
 
 The web image only avoids carrying Chromium when the two images are built
 separately, which the CI workflow already does — it publishes
-`seclayer` and `secscan` to ghcr.io on every push to master.
+`web` and `secscan` to ghcr.io on every push to master.
 
 Once that workflow is on GitHub, you can point each Railway service at its image
 instead of at the repo (Railway → New → Docker Image), which restores the 354 MB

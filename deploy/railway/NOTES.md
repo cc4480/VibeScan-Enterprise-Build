@@ -5,13 +5,13 @@ what to do; this says why some of it is phrased the way it is.
 
 ## The start command is not read from railway.json here
 
-`seclayer.json` and `secscan.json` exist and are correct, and setting
+`web.json` (then named `seclayer.json`) and `secscan.json` exist and are correct, and setting
 `RAILWAY_CONFIG_PATH` as a service variable **did not apply them**. The service
 kept the Dockerfile's default `CMD`, which is the *scanner* — so the web service
 came up as a second scanner, with no HTTP listener, and its public URL returned
 502 with "Application failed to respond".
 
-Nothing in the logs says "wrong entrypoint". The evidence was that the seclayer
+Nothing in the logs says "wrong entrypoint". The evidence was that the web
 service's own logs read `secscan ready — waiting for scan jobs`, and its stack
 traces pointed at `src/secscan.ts`.
 
@@ -126,7 +126,7 @@ and `CLOUDFLARE_ORIGIN_SECRET` were set this way during setup and should be
 rotated before the origin secret starts protecting anything:
 
 ```bash
-railway variables --service seclayer --set "CLOUDFLARE_ORIGIN_SECRET=$(openssl rand -hex 32)"
+railway variables --service web --set "CLOUDFLARE_ORIGIN_SECRET=$(openssl rand -hex 32)"
 ```
 
 Rotating `ENCRYPTION_KEY` is free only while no scan credentials are stored. It
@@ -134,9 +134,9 @@ becomes irreversible the moment one is: every stored secret is encrypted with it
 
 ## Verified working
 
-- Postgres, `seclayer` and `secscan` all Online; 16 tables, 1 migration recorded
-- `seclayer` serves `/api/healthz`, the SPA, `robots.txt` and `sitemap.xml`,
+- Postgres, `web` and `secscan` all Online; 16 tables, 1 migration recorded
+- `web` serves `/api/healthz`, the SPA, `robots.txt` and `sitemap.xml`,
   with `secscan.us` already in the generated URLs
 - Chromium launches on Railway — `Headless browser initialised`
-- A scan submitted to `seclayer` was picked up by `secscan` through the queue
+- A scan submitted to `web` was picked up by `secscan` through the queue
   and finished: status `complete`, progress 100, grade A

@@ -32,7 +32,7 @@ RUN pnpm -r --if-present --filter '!@workspace/mockup-sandbox' run build
 # ─────────────────────────────────────────────────────────────────────────────
 # Runtime base — everything both apps need, and nothing either one does not.
 #
-# seclayer and secscan are built from the same workspace but deploy as two
+# web and secscan are built from the same workspace but deploy as two
 # separate images. They share this base so a change to the Node version or the
 # bundle layout cannot drift between them.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -47,7 +47,7 @@ WORKDIR /app
 # identical between the two images, which is worth more than trimming it.
 COPY --from=builder /app/artifacts/api-server/dist ./artifacts/api-server/dist
 
-# The frontend lives in the shared base rather than only in the seclayer stage.
+# The frontend lives in the shared base rather than only in the web stage.
 # It costs the scanner image a couple of megabytes of static files it will never
 # serve, and buys the ability to run either entrypoint from either image — which
 # is what lets a platform that builds a Dockerfile without choosing a target
@@ -67,14 +67,14 @@ ENV PORT=8080
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# seclayer — the web tier
+# web — the web tier
 #
 # No Playwright and no Chromium: nothing reachable from src/index.ts imports
 # them. That is enforced by the bundle, not by convention — `grep playwright
 # dist/index.mjs` returns nothing, and the lazy import in scanCredentials.ts is
 # what keeps it that way.
 # ─────────────────────────────────────────────────────────────────────────────
-FROM runtime-base AS seclayer
+FROM runtime-base AS web
 
 USER node
 
@@ -88,13 +88,21 @@ CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# seclayer-app — alias so a service of that name resolves to the web tier
+# Name aliases — so a Railway service resolves to the web tier by name
 #
 # Railway picks a build target by matching the stage name to the service name.
-# The seclayer.app project's service is named "seclayer-app", which matches no
-# stage, so it once built the scanner image and deployed a queue worker with no
-# HTTP listener as the public web app. This stage exists only to give that name
+# A service whose name matches no stage builds the FINAL stage instead, which is
+# the scanner — that is how a queue worker with no HTTP listener once got
+# deployed as the public web app. These aliases exist only to give such names
 # something to match.
+#
+# `seclayer` is transitional: the SecScan project's web service is still called
+# that, and this keeps it matching the web tier until it is renamed. Remove this
+# alias once the Railway service is renamed to `web`.
+#
+# `seclayer-app` dates from when the seclayer.app service built from THIS repo.
+# It now builds from seclayer.io2026 and has its own Dockerfile, so this alias
+# is very likely dead — left in place rather than removed blind.
 #
 # It deliberately is NOT last. The final stage is the fallback for any service
 # Railway cannot name-match, and that fallback has to be the scanner: the web
@@ -103,7 +111,8 @@ CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
 # whatever CMD the image carries. With the web tier last, the scanner silently
 # became a second web tier and every queued scan sat unclaimed forever.
 # ─────────────────────────────────────────────────────────────────────────────
-FROM seclayer AS seclayer-app
+FROM web AS seclayer
+FROM web AS seclayer-app
 
 # ─────────────────────────────────────────────────────────────────────────────
 # secscan — the scanner tier

@@ -138,6 +138,6 @@ correct" section lists findings that look false and are not.
 2. Re-run the live scan and compare against the counts above.
 3. Update `FALSE-POSITIVE-AUDIT.md`: move the entry to Fixed, record the new
    counts, and add anything checked-and-correct so nobody "fixes" it later.
-4. Deploy **web tier before worker** (`seclayer` service, then `secscan`) — the
+4. Deploy **web tier before worker** (`web` service, then `secscan`) — the
    worker enforces the domain-verification gate and will block active probes
    while the `/domains` page that satisfies it is not yet being served.

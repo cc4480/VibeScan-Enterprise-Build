@@ -95,7 +95,7 @@ async function alert(service: string, kind: string, detail: string): Promise<voi
 }
 
 /**
- * @param service  Name recorded on every crash — "seclayer" or "secscan".
+ * @param service  Name recorded on every crash — "web" or "secscan".
  * @param onFatal  Optional cleanup (draining a queue, say) before exit.
  */
 export function installCrashHandlers(

@@ -78,13 +78,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
-    # seclayer and secscan deploy as separate images, so both are built here.
+    # web and secscan deploy as separate images, so both are built here.
     # They diverge only after the shared runtime-base stage — secscan adds
     # Chromium — which is exactly the part most likely to break on its own.
     strategy:
       fail-fast: false
       matrix:
-        target: [seclayer, secscan]
+        target: [web, secscan]
     # Only on the default branch and pull requests into it: building the image
     # on every push to every branch costs more than it catches.
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master'
