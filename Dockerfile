@@ -96,10 +96,6 @@ CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
 # deployed as the public web app. These aliases exist only to give such names
 # something to match.
 #
-# `seclayer` is transitional: the SecScan project's web service is still called
-# that, and this keeps it matching the web tier until it is renamed. Remove this
-# alias once the Railway service is renamed to `web`.
-#
 # `seclayer-app` dates from when the seclayer.app service built from THIS repo.
 # It now builds from seclayer.io2026 and has its own Dockerfile, so this alias
 # is very likely dead — left in place rather than removed blind.
@@ -111,7 +107,6 @@ CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
 # whatever CMD the image carries. With the web tier last, the scanner silently
 # became a second web tier and every queued scan sat unclaimed forever.
 # ─────────────────────────────────────────────────────────────────────────────
-FROM web AS seclayer
 FROM web AS seclayer-app
 
 # ─────────────────────────────────────────────────────────────────────────────
