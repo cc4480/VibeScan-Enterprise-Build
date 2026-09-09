@@ -60,9 +60,63 @@ const BLOCKED_SUFFIXES = [".local", ".internal", ".localhost", ".home.arpa"];
  */
 export function isPrivateAddress(addr: string): boolean {
   const normalized = addr.toLowerCase().replace(/^\[|\]$/g, "");
+  // An address that embeds an IPv4 one is judged on the IPv4 it carries,
+  // whatever notation it arrives in. The `^::ffff:` entry in the pattern list
+  // already catches the common mapped forms outright, but two others reach
+  // here intact, and Node's URL parser is what produces them:
+  //   [::127.0.0.1]      -> ::7f00:1        (deprecated IPv4-compatible)
+  //   [64:ff9b::7f00:1]  -> unchanged       (NAT64 well-known prefix)
+  // Neither is routable in most networks — the compatible form is deprecated
+  // and NAT64 needs a translating gateway — so this is defence in depth rather
+  // than a live hole. The sibling scanner had the fully exploitable version of
+  // this, where hex mapped forms walked straight past the guard.
+  const embedded = embeddedIpv4(normalized);
+  if (embedded) return isPrivateAddress(embedded);
   const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(normalized);
   const candidate = mapped?.[1] ?? normalized;
   return PRIVATE_IP_PATTERNS.some((r) => r.test(candidate));
+}
+
+/**
+ * The IPv4 address embedded in an IPv6 address, dotted, or null.
+ *
+ * Handles IPv4-mapped (::ffff:0:0/96), the deprecated IPv4-compatible form
+ * (::/96) and NAT64's well-known prefix (64:ff9b::/96), from the fully expanded
+ * address so notation does not matter.
+ */
+function embeddedIpv4(addr: string): string | null {
+  if (!net.isIPv6(addr)) return null;
+  let text = addr.replace(/%.*$/, "");
+  let tail: number[] = [];
+  const dotted = /(\d+\.\d+\.\d+\.\d+)$/.exec(text);
+  if (dotted) {
+    const o = dotted[1].split(".").map(Number);
+    if (o.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+    tail = [(o[0] << 8) | o[1], (o[2] << 8) | o[3]];
+    text = text.slice(0, -dotted[1].length).replace(/:$/, "") + ":";
+    if (text === ":") text = "::";
+  }
+  const [head, rest, extra] = text.split("::");
+  if (extra !== undefined) return null;
+  const parse = (part: string) => part.split(":").filter(Boolean).map((h) => parseInt(h, 16));
+  const left = parse(head ?? "");
+  const right = rest === undefined ? [] : parse(rest);
+  const groups =
+    rest === undefined
+      ? [...left, ...tail]
+      : [
+          ...left,
+          ...new Array(Math.max(0, 8 - left.length - right.length - tail.length)).fill(0),
+          ...right,
+          ...tail,
+        ];
+  if (groups.length !== 8 || groups.some((g) => !Number.isInteger(g) || g < 0 || g > 0xffff)) return null;
+  const [g0, g1, g2, g3, g4, g5, g6, g7] = groups;
+  const dot = () => `${(g6 >> 8) & 0xff}.${g6 & 0xff}.${(g7 >> 8) & 0xff}.${g7 & 0xff}`;
+  if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0xffff) return dot();
+  if (g0 === 0x64 && g1 === 0xff9b && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0) return dot();
+  if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0 && (g6 !== 0 || g7 > 1)) return dot();
+  return null;
 }
 
 /**

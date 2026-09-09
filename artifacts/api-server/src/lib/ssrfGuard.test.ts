@@ -211,3 +211,27 @@ describe("checkScanTarget", () => {
     expect((await checkScanTarget("http://example.com/")).ok).toBe(true);
   });
 });
+
+describe("embedded IPv4 in every IPv6 notation", () => {
+  // The sibling scanner (seclayer.io2026) had the fully exploitable version of
+  // this: its mapped check matched only the dotted form, and Node's URL parser
+  // rewrites [::ffff:127.0.0.1] into [::ffff:7f00:1], so every internal range
+  // was reachable in hex. SecScan's blanket ^::ffff: pattern covered that case,
+  // but two other embedding forms still reached the pattern list intact.
+  it.each([
+    ["::ffff:127.0.0.1", "mapped, dotted"],
+    ["::ffff:7f00:1", "mapped, hex — what URL parsing produces"],
+    ["0:0:0:0:0:ffff:7f00:1", "mapped, expanded"],
+    ["::ffff:a9fe:a9fe", "mapped — cloud metadata"],
+    ["::ffff:a00:1", "mapped — RFC1918"],
+    ["::127.0.0.1", "deprecated IPv4-compatible"],
+    ["::7f00:1", "IPv4-compatible, as URL parsing rewrites it"],
+    ["64:ff9b::7f00:1", "NAT64 well-known prefix"],
+  ])("blocks %s (%s)", (addr) => {
+    expect(isPrivateAddress(addr)).toBe(true);
+  });
+
+  it("still allows a public address written in mapped form", () => {
+    expect(isPrivateAddress("::ffff:8.8.8.8")).toBe(false);
+  });
+});
