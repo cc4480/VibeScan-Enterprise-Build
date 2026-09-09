@@ -44,7 +44,12 @@
     <!-- Theme color -->
     <meta name="theme-color" content="#14b87a" />
 
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- The shield mark. Replaces favicon.svg, which was a plain #FF3C00 square
+         with no logo on it — and which the JSON-LD below still cited as the
+         organisation logo, so that orange square was what search engines had. -->
+    <link rel="icon" type="image/png" sizes="512x512" href="/favicon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 
     <!-- JSON-LD Structured Data -->
     <script type="application/ld+json">
@@ -58,7 +63,7 @@
           "url": "https://secscan.us",
           "logo": {
             "@type": "ImageObject",
-            "url": "https://secscan.us/favicon.svg",
+            "url": "https://secscan.us/favicon.png",
             "width": 512,
             "height": 512
           },

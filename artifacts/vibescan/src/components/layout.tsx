@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Shield, LayoutDashboard, Menu, X, Plus, BookOpen, Bell, Settings, LogOut, LogIn, ShieldCheck} from "lucide-react";
+import { LayoutDashboard, Menu, X, Plus, BookOpen, Bell, Settings, LogOut, LogIn, ShieldCheck} from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGetCurrentAuthUser } from "@workspace/api-client-react";
@@ -116,9 +116,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 group">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-emerald-700 flex items-center justify-center shadow-lg shadow-primary/20 group-hover:shadow-primary/40 transition-all">
-              <Shield className="w-5 h-5 text-primary-foreground" />
-            </div>
+            {/* The real mark, not the generic glyph. The artwork already carries
+                its own dark ground and glow, so it needs no gradient tile behind
+                it — just the rounded crop. */}
+            <img
+              src="/favicon.png"
+              alt=""
+              width={40}
+              height={40}
+              className="w-10 h-10 rounded-xl object-cover shadow-lg shadow-primary/20 group-hover:shadow-primary/40 transition-all"
+            />
             <span className="font-display font-bold text-xl tracking-tight text-foreground">
               SecScan
             </span>
@@ -268,7 +275,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <footer className="border-t border-white/5 py-12 mt-auto bg-card/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-2 opacity-50">
-            <Shield className="w-5 h-5 text-foreground" />
+            <img src="/favicon.png" alt="" width={20} height={20} className="w-5 h-5 rounded object-cover" />
             <span className="font-display font-bold tracking-tight text-foreground">SecScan</span>
           </div>
           <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
