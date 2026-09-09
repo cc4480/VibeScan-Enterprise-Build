@@ -29,6 +29,7 @@
  * needs to be its own authenticated step.
  */
 
+import { safeReturnTo } from "../lib/safeRedirect";
 import { Router, type IRouter, type Request, type Response } from "express";
 import * as client from "openid-client";
 import { eq } from "drizzle-orm";
@@ -87,14 +88,6 @@ function rateLimited(key: string): boolean {
   return recent.length > MAX_ATTEMPTS;
 }
 
-/** Only ever redirect within our own site. */
-function safeReturnTo(raw: unknown): string {
-  if (typeof raw !== "string" || !raw.startsWith("/")) return "/";
-  // Reject protocol-relative targets ("//evil.example"), which are same-origin
-  // to a naive startsWith check but leave the site.
-  if (raw.startsWith("//")) return "/";
-  return raw;
-}
 
 /**
  * Every failure here happens during a top-level browser navigation: the person

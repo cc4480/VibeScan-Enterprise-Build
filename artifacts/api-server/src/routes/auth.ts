@@ -1,3 +1,4 @@
+import { safeReturnTo as toSafeReturnTo } from "../lib/safeRedirect";
 import { Router, type IRouter, type Request, type Response } from "express";
 import * as client from "openid-client";
 import crypto from "crypto";
@@ -228,7 +229,7 @@ if (oidcConfigured) {
           secure: req.protocol === "https",
         });
 
-        const safeReturnTo = returnTo.startsWith("/") ? returnTo : "/";
+        const safeReturnTo = toSafeReturnTo(returnTo);
         res.redirect(safeReturnTo);
       } catch (err) {
         req.log.error({ err }, "OIDC callback failed");
