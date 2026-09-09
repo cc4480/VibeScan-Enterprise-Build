@@ -37,7 +37,11 @@ const NOT_A_CHALLENGE: ChallengeVerdict = { isChallenge: false, vendor: null, si
  */
 const BODY_SIGNALS: { vendor: string; re: RegExp; label: string }[] = [
   { vendor: "Cloudflare", re: /\/cdn-cgi\/challenge-platform\//i, label: "/cdn-cgi/challenge-platform/ script" },
-  { vendor: "Cloudflare", re: /\bcf_chl_opt\b|\b__cf_chl_/i, label: "cf_chl_opt challenge payload" },
+  // No word boundary before cf_chl_opt: the markup Cloudflare actually emits is
+  // `window._cf_chl_opt={...}`, and "_" is a word character, so a leading 
+  // never matched the real-world form. Found while porting this file to
+  // seclayer.io2026, where a test of the live markup failed.
+  { vendor: "Cloudflare", re: /cf_chl_opt|__cf_chl_/i, label: "cf_chl_opt challenge payload" },
   { vendor: "Cloudflare", re: /cf-browser-verification|cf-im-under-attack/i, label: "cf-browser-verification marker" },
   { vendor: "Cloudflare", re: /<title>\s*Attention Required!\s*\|\s*Cloudflare\s*<\/title>/i, label: "Cloudflare block title" },
   { vendor: "Imperva/Incapsula", re: /_Incapsula_Resource|Incapsula incident ID/i, label: "Incapsula resource marker" },

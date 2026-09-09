@@ -159,3 +159,18 @@ describe("withholdInterceptedFindings", () => {
     expect(withholdInterceptedFindings(scan, false)).toHaveLength(scan.length);
   });
 });
+
+describe("the markup Cloudflare actually emits", () => {
+  // `\bcf_chl_opt\b` never matched `window._cf_chl_opt={...}` — "_" is a word
+  // character, so there is no boundary before "cf". Found while porting this
+  // file to seclayer.io2026, where a test of the live form failed.
+  it.each([
+    'window._cf_chl_opt={cvId:"3"};',
+    'window.__cf_chl_tk="abc";',
+    '<script>cf_chl_opt</script>',
+  ])("detects %s", (body) => {
+    const v = detectChallengePage(403, `<html><head><title>x</title></head><body>${body}</body></html>`);
+    expect(v.isChallenge).toBe(true);
+    expect(v.vendor).toBe("Cloudflare");
+  });
+});
