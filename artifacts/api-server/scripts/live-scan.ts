@@ -96,18 +96,69 @@ function jsonDest(argv: string[]): string | null {
   return dest;
 }
 
+/**
+ * Domains this repository's owner controls, and the ONLY ones `--active` will
+ * aim offensive traffic at.
+ *
+ * The product gates active probing on proven domain ownership
+ * (lib/activeProbeGate.ts), and this script does not touch that gate. It is a
+ * local test tool, so it carries its own hardcoded allowlist — the flag cannot
+ * be pointed at somebody else's site by a typo or a stray argument. Extending
+ * this means editing the list, deliberately.
+ */
+const OWNED_DOMAINS = new Set(["seclayer.app", "secscan.us"]);
+
+function assertOwned(list: string[]): void {
+  const foreign = list.filter((u) => {
+    try {
+      return !OWNED_DOMAINS.has(new URL(u).hostname.toLowerCase().replace(/^www\./, ""));
+    } catch {
+      return true;
+    }
+  });
+  if (foreign.length) {
+    console.error(
+      "[live-scan] --active sends real attack traffic — injection payloads, path\n" +
+        "            traversal and a port scan — so it is refused for anything\n" +
+        "            outside the owned-domain allowlist in this file.\n\n" +
+        `            Refused: ${foreign.join(", ")}\n` +
+        `            Allowed: ${[...OWNED_DOMAINS].join(", ")}`,
+    );
+    process.exit(2);
+  }
+}
+
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const dest = jsonDest(argv);
-  const targets = argv.filter((a, i) => a !== "--json" && argv[i - 1] !== "--json");
+  const active = argv.includes("--active");
+  const targets = argv.filter(
+    (a, i) => a !== "--json" && a !== "--active" && argv[i - 1] !== "--json",
+  );
   const list = targets.length ? targets : DEFAULT_TARGETS;
+
+  // --active is the only way this script sends offensive traffic. It must be
+  // asked for explicitly, needs explicit targets, and is refused for anything
+  // not owned. Without it the run is passive, which is what makes the twenty
+  // third-party targets above legitimate to scan at all.
+  if (active) {
+    if (!targets.length) {
+      console.error("[live-scan] --active needs explicit targets; it will not run the default third-party list.");
+      process.exit(2);
+    }
+    assertOwned(list);
+  }
+
   const collected: unknown[] = [];
-  console.log(`[live-scan] Passive scan of ${list.length} target(s). Scrutinise every actionable finding.\n`);
+  console.log(
+    `[live-scan] ${active ? "ACTIVE (owned targets only)" : "Passive"} scan of ${list.length} target(s). ` +
+      "Scrutinise every actionable finding.\n",
+  );
 
   for (const url of list) {
     try {
       const started = Date.now();
-      const r = await runScan(url, "deep", false, undefined, null);
+      const r = await runScan(url, "deep", active, undefined, null);
       const actionable = r.vulnerabilities.filter((v) => v.severity !== "info");
       collected.push({
         url,
