@@ -1051,6 +1051,14 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
       runGraphqlProbe(finalUrl, html).catch(() => []),
       // Public cloud storage listing: S3, GCS, Azure Blob
       runStorageProbe(finalUrl, html).catch(() => []),
+      // Real SCA, when the target publishes its own manifest. The path probe
+      // already reports that /package.json is exposed; this reads the
+      // dependency tree inside it and matches it against OSV, which is the
+      // thing that finding tells the customer an attacker would do.
+      (async () => {
+        const { scaFromExposedManifest } = await import("./manifestSca.js");
+        return scaFromExposedManifest(new URL(finalUrl).origin);
+      })().catch(() => []),
     );
   }
 

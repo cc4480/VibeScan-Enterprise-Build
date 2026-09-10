@@ -190,7 +190,7 @@ export function extractVersionedTechnologies(
 // OSV.dev QUERY (with in-process cache)
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface OsvVuln {
+export interface OsvVuln {
   id: string;
   aliases?: string[];
   summary?: string;
@@ -202,7 +202,7 @@ interface OsvVuln {
   }>;
 }
 
-async function queryOsv(packageName: string, version: string, ecosystem: string): Promise<OsvVuln[]> {
+export async function queryOsv(packageName: string, version: string, ecosystem: string): Promise<OsvVuln[]> {
   const cacheKey = osvCacheKey(packageName, version, ecosystem);
   if (osvCache.has(cacheKey)) {
     return osvCache.get(cacheKey)!;
@@ -239,7 +239,7 @@ async function queryOsv(packageName: string, version: string, ecosystem: string)
   }
 }
 
-function extractCvss(vuln: OsvVuln): number | null {
+export function extractCvss(vuln: OsvVuln): number | null {
   for (const s of vuln.severity ?? []) {
     if (s.type === "CVSS_V3" || s.type === "CVSS_V4") {
       // Parse CVSS score from vector string
@@ -256,7 +256,7 @@ function extractCvss(vuln: OsvVuln): number | null {
   return null;
 }
 
-function cvssToSeverity(score: number | null): ScanVulnerability["severity"] {
+export function cvssToSeverity(score: number | null): ScanVulnerability["severity"] {
   if (!score) return "medium";
   if (score >= 9.0) return "critical";
   if (score >= 7.0) return "high";
@@ -265,7 +265,7 @@ function cvssToSeverity(score: number | null): ScanVulnerability["severity"] {
   return "info";
 }
 
-function extractFixedVersion(osvVuln: OsvVuln): string | null {
+export function extractFixedVersion(osvVuln: OsvVuln): string | null {
   for (const affected of osvVuln.affected ?? []) {
     for (const range of affected.ranges ?? []) {
       for (const event of range.events ?? []) {
@@ -276,7 +276,7 @@ function extractFixedVersion(osvVuln: OsvVuln): string | null {
   return null;
 }
 
-function cveIds(osvVuln: OsvVuln): string[] {
+export function cveIds(osvVuln: OsvVuln): string[] {
   return (osvVuln.aliases ?? [osvVuln.id]).filter((id) => id.startsWith("CVE-")).slice(0, 3);
 }
 
