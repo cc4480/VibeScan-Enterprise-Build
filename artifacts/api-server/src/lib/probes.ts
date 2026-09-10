@@ -413,7 +413,20 @@ export async function checkErrorDisclosure(baseUrl: string): Promise<ScanVulnera
     { rx: /at\s+\w[\w.]+\s+\((?:\/[\w./\\-]+|[A-Z]:\\[\w./\\-]+):\d+:\d+\)/m, name: "JavaScript/Node.js stack trace with file paths" },
     { rx: /Traceback \(most recent call last\)[\s\S]{0,200}File "\/[^"]+"/m, name: "Python traceback with system file paths" },
     { rx: /in \/[\w./\\-]+\.php on line \d+/m, name: "PHP error with file path" },
-    { rx: /Parse error:|Fatal error:|Warning:|Notice:/m, name: "PHP error message" },
+    // Structural, like the three above it. This used to be
+    // /Parse error:|Fatal error:|Warning:|Notice:/ — a bare English word and a
+    // colon — so "Privacy Notice:" or "Legal Notice:" in ordinary page copy was
+    // reported as a leaked PHP error. linkedin.com, which is Java and serves
+    // JSESSIONID, was flagged for a PHP error on its 404 page.
+    //
+    // Each alternative below is a shape PHP actually emits and prose does not:
+    // a parse error names "syntax error", a fatal error is "Uncaught", and a
+    // warning or notice either names the failing function call or an undefined
+    // symbol. Errors that DO carry a file path are matched by the pattern above.
+    {
+      rx: /(?:Parse error:\s*syntax error|Fatal error:\s*Uncaught|(?:Warning|Notice|Deprecated):\s+(?:Undefined\s+(?:variable|index|offset|array key|property)|\w+\(\):))/m,
+      name: "PHP error message",
+    },
     { rx: /ActiveRecord::\w+|ActionController::\w+/m, name: "Ruby on Rails exception class" },
     { rx: /\bat [\w.$]+\([\w$.]+\.java:\d+\)/m, name: "Java stack trace" },
     { rx: /System\.(NullReference|InvalidOperation|Web\.Http)Exception/m, name: "ASP.NET exception" },

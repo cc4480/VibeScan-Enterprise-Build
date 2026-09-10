@@ -103,7 +103,37 @@ export const PATH_PROBES: PathProbe[] = [
     description: (path) =>
       `A GraphQL endpoint appears accessible at "${path}graphql". If introspection is enabled, attackers can enumerate your entire schema including all queries, mutations, types, and fields.`,
     solution: "Disable GraphQL introspection in production. Add depth limiting and query complexity analysis.",
-    validate: (body) => /\"__schema\"|\"__type\"|graphql|GraphQL/i.test(body),
+    // Structural, not the word. The old test matched /graphql|GraphQL/i
+    // anywhere in the body, so nytimes.com's ordinary HTML page — which names
+    // the word in a script URL — was reported as an exposed GraphQL endpoint.
+    //
+    // Two things are genuinely worth reporting at this path, and neither is
+    // "the page said graphql": a JSON response shaped the way the GraphQL spec
+    // says one is, and an interactive playground console served as HTML. A
+    // playground IS an exposure, so HTML is not rejected outright — it has to
+    // carry a playground fingerprint rather than the bare word.
+    validate: (body, ct) => {
+      const isHtml = ct.includes("text/html") || /^\s*<(?:!doctype|html)/i.test(body);
+      if (isHtml) {
+        return /GraphQL\s*Playground|GraphiQL|graphiql(?:\.min)?\.(?:js|css)|id=["']graphiql["']|Apollo\s+(?:Sandbox|Studio)|embeddable-sandbox/i.test(
+          body,
+        );
+      }
+      if (!(ct.includes("json") || body.trim().startsWith("{"))) return false;
+      try {
+        const doc = JSON.parse(body) as {
+          data?: { __typename?: unknown; __schema?: unknown };
+          errors?: unknown;
+        };
+        if (typeof doc?.data?.__typename === "string") return true;
+        if (doc?.data?.__schema) return true;
+        // A GET to a real GraphQL endpoint answers with a spec-shaped top-level
+        // `errors` array ("GET query missing" and similar).
+        return Array.isArray(doc?.errors) && doc.errors.length > 0;
+      } catch {
+        return false;
+      }
+    },
   },
   {
     suffix: "/debug.log",

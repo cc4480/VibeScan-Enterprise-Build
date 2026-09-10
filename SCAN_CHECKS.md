@@ -23,12 +23,12 @@ module does. `none` — neither, so no test exercises it at all.
 |---|---:|---:|---:|---|
 | `probes-data.ts` | 78 | 826 | 29 | direct |
 | `secret-pattern-data.ts` | 34 | 506 | 17 | direct |
-| `probes.ts` | 16 | 906 | 9 | direct |
+| `probes.ts` | 16 | 919 | 9 | direct |
 | `recon-data.ts` | 14 | 178 | 12 | direct |
 | `dnsChecks.ts` | 9 | 490 | 26 | direct |
 | `nextjsProbe.ts` | 9 | 248 | 7 | direct |
 | `structuredData.ts` | 9 | 415 | 34 | direct |
-| `crawler-data.ts` | 8 | 122 | 26 | direct |
+| `crawler-data.ts` | 8 | 152 | 26 | direct |
 | `apiProbe.ts` | 7 | 644 | 31 | direct |
 | `crawler.ts` | 7 | 685 | 26 | direct |
 | `supabase-probes.ts` | 7 | 520 | 5 | direct |
@@ -107,7 +107,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `crawler-data.ts`
 
-*8 findings · 122 lines · 26 tests.*
+*8 findings · 152 lines · 26 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -224,7 +224,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `probes.ts`
 
-*16 findings · 906 lines · 9 tests.*
+*16 findings · 919 lines · 9 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
