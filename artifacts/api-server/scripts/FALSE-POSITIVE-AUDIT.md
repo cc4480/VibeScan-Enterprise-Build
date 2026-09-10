@@ -5,6 +5,9 @@ Findings from pointing the passive scanner at well-secured third-party sites via
 and zero false ones, so every actionable finding is checked by hand against the
 live response.
 
+Scores and grades for every run live in `SCAN-RESULTS.md` beside this file.
+This document records what was wrong; that one records what was returned.
+
 Run it before releasing scanner changes:
 
 ```

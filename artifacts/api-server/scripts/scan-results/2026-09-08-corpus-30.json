@@ -1,0 +1,3435 @@
+{
+ "scannedAt": "2026-09-08T13:00:11.943Z",
+ "results": [
+  {
+   "url": "https://github.com",
+   "finalUrl": "https://github.com/",
+   "statusCode": 200,
+   "server": "github.com",
+   "tlsGrade": "A",
+   "technologies": [
+    "GitHub Pages"
+   ],
+   "pagesScanned": 31,
+   "renderedWithBrowser": false,
+   "elapsedMs": 14942,
+   "findings": [
+    {
+     "name": "Content-Security-Policy Allows Inline Styles (unsafe-inline in style-src)",
+     "severity": "low",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 74,
+     "evidence": "GET https://github.com/\nContent-Security-Policy: default-src 'none'; base-uri 'self'; child-src github.githubassets.com github.com/assets-cdn/worker/ github.com/assets/ gist.github.com/assets-cdn/worker/; connect-src 'self' uploads.github.com www.githubstatus.com collector.github.com raw.githubusercontent.com api.github.com github-cloud.s3.amazonaws.com github-production-repository-file-5c1aeb.s3.amazonaws.com github-production-upload-manifest-file-7fdce7.s3.amazonaws.com github-production-user-asset-6210df.s3.amazonaws.com *.rel.tunnels.api.visualstudio.com wss://*.rel.tunnels.api.visualstudi"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://github.com/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://github.com/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://github.com/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://github.com/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "Non-Session Cookie Readable by JavaScript",
+     "severity": "info",
+     "category": "Session Management",
+     "cweId": "CWE-1004",
+     "cvssScore": 2.6,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 60,
+     "evidence": "Affected cookie: _octo"
+    },
+    {
+     "name": "Content-Security-Policy Missing on 1 Internal Route",
+     "severity": "high",
+     "category": "Security Header Inconsistency",
+     "cweId": "CWE-79",
+     "cvssScore": 7.2,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 77,
+     "evidence": "Routes missing Content-Security-Policy:\n  • /healthz (probed)"
+    },
+    {
+     "name": "X-Content-Type-Options Missing on 1 Internal Route",
+     "severity": "medium",
+     "category": "Security Header Inconsistency",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "Routes missing X-Content-Type-Options:\n  • /healthz (probed)"
+    },
+    {
+     "name": "Referrer-Policy Missing on 1 Internal Route",
+     "severity": "low",
+     "category": "Security Header Inconsistency",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "Routes missing Referrer-Policy:\n  • /healthz (probed)"
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-350",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for github.com (NOERROR (name exists))."
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://gitlab.com",
+   "finalUrl": "https://about.gitlab.com/",
+   "statusCode": 200,
+   "server": "cloudflare",
+   "tlsGrade": "A",
+   "technologies": [
+    "Cloudflare",
+    "Nuxt.js",
+    "Vue.js",
+    "Bootstrap",
+    "Google Analytics"
+   ],
+   "pagesScanned": 1,
+   "renderedWithBrowser": false,
+   "elapsedMs": 4343,
+   "findings": [
+    {
+     "name": "Missing Content-Security-Policy (CSP)",
+     "severity": "high",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 7.2,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 89,
+     "evidence": "GET https://about.gitlab.com/\nContent-Security-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Clickjacking Protection (X-Frame-Options)",
+     "severity": "medium",
+     "category": "UI Security",
+     "cweId": "CWE-1021",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CLNT-09",
+     "confidence": 77,
+     "evidence": "GET https://about.gitlab.com/\nX-Frame-Options: (header absent)\nCSP frame-ancestors: (not present in Content-Security-Policy)"
+    },
+    {
+     "name": "Missing X-Content-Type-Options: nosniff",
+     "severity": "medium",
+     "category": "Content Sniffing",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://about.gitlab.com/\nX-Content-Type-Options: (header absent from response)"
+    },
+    {
+     "name": "Missing Referrer-Policy Header",
+     "severity": "low",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 82,
+     "evidence": "GET https://about.gitlab.com/\nReferrer-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 82,
+     "evidence": "GET https://about.gitlab.com/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://about.gitlab.com/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://about.gitlab.com/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://about.gitlab.com/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "External Resources Missing Subresource Integrity (SRI)",
+     "severity": "medium",
+     "category": "Supply Chain Security",
+     "cweId": "CWE-353",
+     "cvssScore": 6.1,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 80,
+     "evidence": "<script/link src=\"https://cdn.cookielaw.org/consent/7f944245-c5cd-4eed-a90e-dd955adfdd08/OtAutoBlock.js\" (no integrity= attribute)>\n<script/link src=\"https://cdn.cookielaw.org/scripttemplates/otSDKStub.js\" (no integrity= attribute)>\n<script/link src=\"https://geolocation.onetrust.com/cookieconsentpub/v1/geo/location/geofeed\" (no integrity= attribute)>\n<script/link src=\"https://cdn.bizible.com/scripts/bizible.js\" (no integrity= attribute)>\n<script/link src=\"https://munchkin.marketo.net/munchkin.js\" (no integrity= attribute)>"
+    },
+    {
+     "name": "Missing security.txt (RFC 9116)",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-205",
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 75,
+     "evidence": "GET https://about.gitlab.com/.well-known/security.txt → HTTP 404\nGET https://about.gitlab.com/security.txt → HTTP 404"
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-350",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for about.gitlab.com or gitlab.com (NOERROR (name exists))."
+    },
+    {
+     "name": "JavaScript Source Map Exposed — Full Source Code Accessible",
+     "severity": "high",
+     "category": "Source Code Exposure",
+     "cweId": "CWE-540",
+     "cvssScore": 7.5,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 97,
+     "evidence": "Source map URL: https://about.gitlab.com/_nuxt/1Ln_1lJl.js.map\nSource files mapped: 301\nFull source content (sourcesContent) included."
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://www.npmjs.com",
+   "finalUrl": "https://www.npmjs.com/",
+   "statusCode": 403,
+   "server": "cloudflare",
+   "tlsGrade": "A",
+   "technologies": [
+    "Cloudflare"
+   ],
+   "pagesScanned": 0,
+   "renderedWithBrowser": false,
+   "elapsedMs": 14984,
+   "findings": [
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    },
+    {
+     "name": "Scan was intercepted by a bot-protection challenge",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "cf-mitigated response header: challenge"
+    }
+   ]
+  },
+  {
+   "url": "https://stackoverflow.com",
+   "finalUrl": "https://stackoverflow.com/",
+   "statusCode": 429,
+   "server": "cloudflare",
+   "tlsGrade": "A",
+   "technologies": [
+    "Cloudflare"
+   ],
+   "pagesScanned": 0,
+   "renderedWithBrowser": false,
+   "elapsedMs": 12159,
+   "findings": [
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-350",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for stackoverflow.com (NOERROR (name exists))."
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    },
+    {
+     "name": "Scan was intercepted by a bot-protection challenge",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "cf-mitigated response header: challenge"
+    }
+   ]
+  },
+  {
+   "url": "https://vercel.com",
+   "finalUrl": "https://vercel.com/",
+   "statusCode": 200,
+   "server": "Vercel",
+   "tlsGrade": "A",
+   "technologies": [
+    "Vercel",
+    "Next.js",
+    "Tailwind CSS"
+   ],
+   "pagesScanned": 24,
+   "renderedWithBrowser": false,
+   "elapsedMs": 30594,
+   "findings": [
+    {
+     "name": "Weak Content-Security-Policy (unsafe-inline / unsafe-eval in script-src)",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 5.4,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 86,
+     "evidence": "GET https://vercel.com/\nContent-Security-Policy: default-src 'self' vercel.com *.vercel.com assets.vercel.com *.vercel.sh vercel.live wss://*.vercel.com *.codesandbox.io localhost:* chrome-extension://* https://www.youtube-nocookie.com https://risk.clearbit.com https://react-tweet.vercel.app/*;script-src 'self' 'unsafe-eval' 'unsafe-inline' 'inline-speculation-rules' https://snap.licdn.com https://www.youtube.com cdn.vercel-insights.com va.vercel-scripts.com vercel.com *.vercel.com assets.vercel.com *.vercel.sh vercel.live wss://*.vercel.com *.codesandbox.io localhost:* chrome-extension://* ht"
+    },
+    {
+     "name": "CSP Missing object-src 'none' Directive",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 89,
+     "evidence": "GET https://vercel.com/\nContent-Security-Policy: default-src 'self' vercel.com *.vercel.com assets.vercel.com *.vercel.sh vercel.live wss://*.vercel.com *.codesandbox.io localhost:* chrome-extension://* https://www.youtube-nocookie.com https://risk.clearbit.com https://react-tweet.vercel.app/*;script-src 'self' 'unsafe-eval' 'unsafe-inline' 'inline-speculation-rules' https://snap.licdn.com https://www.youtube.com cdn.vercel-insights.com va.vercel-scripts.com vercel.com *.vercel.com assets.vercel.com *.vercel.sh vercel.live wss://*.vercel.com *.codesandbox.io localhost:* chrome-extension://* ht"
+    },
+    {
+     "name": "CSP Missing base-uri Directive",
+     "severity": "low",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 3.5,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 89,
+     "evidence": "GET https://vercel.com/\nContent-Security-Policy: default-src 'self' vercel.com *.vercel.com assets.vercel.com *.vercel.sh vercel.live wss://*.vercel.com *.codesandbox.io localhost:* chrome-extension://* https://www.youtube-nocookie.com https://risk.clearbit.com https://react-tweet.vercel.app/*;script-src 'self' 'unsafe-eval' 'unsafe-inline' 'inline-speculation-rules' https://snap.licdn.com https://www.youtube.com cdn.vercel-insights.com va.vercel-scripts.com vercel.com *.vercel.com assets.vercel.com *.vercel.sh vercel.live wss://*.vercel.com *.codesandbox.io localhost:* chrome-extension://* ht"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://vercel.com/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://vercel.com/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://vercel.com/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "X-Powered-By Header Discloses Technology Stack",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": null,
+     "wstgId": "WSTG-INFO-09",
+     "confidence": 56,
+     "evidence": "GET https://vercel.com/\nX-Powered-By: Next.js, Payload"
+    },
+    {
+     "name": "Non-Session Cookie Readable by JavaScript",
+     "severity": "info",
+     "category": "Session Management",
+     "cweId": "CWE-1004",
+     "cvssScore": 2.6,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 68,
+     "evidence": "Affected cookies: _v-anonymous-id, _v-anonymous-id-renewed"
+    },
+    {
+     "name": "Content-Security-Policy Missing on 8 Internal Routes",
+     "severity": "high",
+     "category": "Security Header Inconsistency",
+     "cweId": "CWE-79",
+     "cvssScore": 7.2,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 92,
+     "evidence": "Routes missing Content-Security-Policy:\n  • /home (crawled)\n  • /ai-sdk (crawled)\n  • /ai-gateway (crawled)\n  • /sandbox (crawled)\n  • /passport (crawled)\n  • /connect (crawled)\n  … and 2 more"
+    },
+    {
+     "name": "X-Frame-Options / frame-ancestors Missing on 8 Internal Routes",
+     "severity": "medium",
+     "category": "Security Header Inconsistency",
+     "cweId": "CWE-1021",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CLNT-09",
+     "confidence": 85,
+     "evidence": "Routes missing X-Frame-Options / frame-ancestors:\n  • /home (crawled)\n  • /ai-sdk (crawled)\n  • /ai-gateway (crawled)\n  • /sandbox (crawled)\n  • /passport (crawled)\n  • /connect (crawled)\n  … and 2 more"
+    },
+    {
+     "name": "X-Content-Type-Options Missing on 8 Internal Routes",
+     "severity": "medium",
+     "category": "Security Header Inconsistency",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 85,
+     "evidence": "Routes missing X-Content-Type-Options:\n  • /home (crawled)\n  • /ai-sdk (crawled)\n  • /ai-gateway (crawled)\n  • /sandbox (crawled)\n  • /passport (crawled)\n  • /connect (crawled)\n  … and 2 more"
+    },
+    {
+     "name": "Referrer-Policy Missing on 8 Internal Routes",
+     "severity": "low",
+     "category": "Security Header Inconsistency",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 85,
+     "evidence": "Routes missing Referrer-Policy:\n  • /home (crawled)\n  • /ai-sdk (crawled)\n  • /ai-gateway (crawled)\n  • /sandbox (crawled)\n  • /passport (crawled)\n  • /connect (crawled)\n  … and 2 more"
+    },
+    {
+     "name": "Non-Session Cookie Readable by JavaScript on Inner Page",
+     "severity": "info",
+     "category": "Session Management",
+     "cweId": "CWE-1004",
+     "cvssScore": 2.6,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 68,
+     "evidence": "[Direct probe] GET https://vercel.com/admin\nSet-Cookie: _v-consent=<redacted>; Path=/; Max-Age=31536000; SameSite=Lax; Secure; Domain=.vercel.com"
+    },
+    {
+     "name": "Rate Limiting Not Advertised in Response Headers",
+     "severity": "info",
+     "category": "Brute Force Protection",
+     "cweId": "CWE-307",
+     "cvssScore": 0,
+     "wstgId": "WSTG-ATHN-03",
+     "confidence": 92,
+     "evidence": "GET https://vercel.com/\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled."
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-350",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for vercel.com (NOERROR (name exists))."
+    },
+    {
+     "name": "Exposed API Documentation — OpenAPI JSON spec at /openapi.json",
+     "severity": "medium",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 5.3,
+     "wstgId": "WSTG-CONF-02",
+     "confidence": 92,
+     "evidence": "GET https://vercel.com/openapi.json\nHTTP 200 — OpenAPI JSON spec confirmed (spec structure validated)"
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://www.cloudflare.com",
+   "finalUrl": "https://www.cloudflare.com/",
+   "statusCode": 200,
+   "server": "cloudflare",
+   "tlsGrade": "A",
+   "technologies": [
+    "Cloudflare",
+    "Fastly",
+    "Astro",
+    "Tailwind CSS",
+    "Google Tag Manager"
+   ],
+   "pagesScanned": 11,
+   "renderedWithBrowser": false,
+   "elapsedMs": 24298,
+   "findings": [
+    {
+     "name": "Weak Content-Security-Policy (unsafe-inline / unsafe-eval in script-src)",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 5.4,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 86,
+     "evidence": "GET https://www.cloudflare.com/\nContent-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com https://static-staging.cloudflareinsights.com https://challenges.cloudflare.com https://*.onetrust.com https://cdn.cookielaw.org https://ot.www.cloudflare.com https://www.googletagmanager.com https://tagmanager.google.com https://www.googleadservices.com https://googleads.g.doubleclick.net https://adservice.google.com https://cdn.bizible.com https://js.adsrvr.org https://*.marketo.net https://platform.twitter.com https://static.ads-t"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.cloudflare.com/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Non-Session Cookie Readable by JavaScript",
+     "severity": "info",
+     "category": "Session Management",
+     "cweId": "CWE-1004",
+     "cvssScore": 2.6,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 68,
+     "evidence": "Affected cookie: kndctr_8AD56F28618A50850A495FB6_AdobeOrg_identity"
+    },
+    {
+     "name": "Content-Security-Policy Missing on 9 Internal Routes",
+     "severity": "high",
+     "category": "Security Header Inconsistency",
+     "cweId": "CWE-79",
+     "cvssScore": 7.2,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 92,
+     "evidence": "Routes missing Content-Security-Policy:\n  • /es-es/ (crawled)\n  • /fr-fr/ (crawled)\n  • /de-de/ (crawled)\n  • /it-it/ (crawled)\n  • /pt-br/ (crawled)\n  • /zh-cn/ (crawled)\n  … and 3 more"
+    },
+    {
+     "name": "Non-Session Cookie Readable by JavaScript on Inner Page",
+     "severity": "info",
+     "category": "Session Management",
+     "cweId": "CWE-1004",
+     "cvssScore": 2.6,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 68,
+     "evidence": "GET https://www.cloudflare.com/es-es/\nSet-Cookie: _cfms_willow=enable; Max-Age=1209600; path=/; domain=.www.cloudflare.com; SameSite=Strict; Secure"
+    },
+    {
+     "name": "External Resources Missing Subresource Integrity (SRI)",
+     "severity": "medium",
+     "category": "Supply Chain Security",
+     "cweId": "CWE-353",
+     "cvssScore": 6.1,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 73,
+     "evidence": "<script/link src=\"https://ot.www.cloudflare.com/ot/scripttemplates/otSDKStub.js\" (no integrity= attribute)>"
+    },
+    {
+     "name": "Exposed API Documentation — OpenAPI JSON spec at /openapi.json",
+     "severity": "medium",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 5.3,
+     "wstgId": "WSTG-CONF-02",
+     "confidence": 92,
+     "evidence": "GET https://www.cloudflare.com/openapi.json\nHTTP 200 — OpenAPI JSON spec confirmed (spec structure validated)"
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://www.mozilla.org",
+   "finalUrl": "https://www.mozilla.org/en-US/",
+   "statusCode": 200,
+   "server": "granian",
+   "tlsGrade": "A",
+   "technologies": [
+    "Fastly",
+    "Varnish Cache",
+    "Sentry"
+   ],
+   "pagesScanned": 17,
+   "renderedWithBrowser": false,
+   "elapsedMs": 23682,
+   "findings": [
+    {
+     "name": "Weak Content-Security-Policy (unsafe-inline / unsafe-eval in script-src)",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 5.4,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 74,
+     "evidence": "GET https://www.mozilla.org/en-US/\nContent-Security-Policy: form-action 'self' https://abdri3ttkb.execute-api.us-east-2.amazonaws.com https://accounts.firefox.com/ https://basket.mozilla.org; default-src 'self' *.mozilla.org; base-uri 'none'; frame-src 'self' accounts.firefox.com gtm.mozilla.org js.stripe.com www.google-analytics.com www.googletagmanager.com www.youtube.com; script-src 'self' 'unsafe-eval' 'unsafe-inline' *.google-analytics.com *.googletagmanager.com cdn.transcend.io google-analytics.com googletagmanager.com js.stripe.com s.ytimg.com tagmanager.google.com transcend-cdn.com www"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.mozilla.org/en-US/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.mozilla.org/en-US/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.mozilla.org/en-US/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "External Resources Missing Subresource Integrity (SRI)",
+     "severity": "medium",
+     "category": "Supply Chain Security",
+     "cweId": "CWE-353",
+     "cvssScore": 6.1,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 73,
+     "evidence": "<script/link src=\"https://transcend-cdn.com/cm/d556c3a1-e57c-4bdf-a490-390a1aebf6dd/airgap.js\" (no integrity= attribute)>"
+    },
+    {
+     "name": "Missing security.txt (RFC 9116)",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-205",
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 75,
+     "evidence": "GET https://www.mozilla.org/.well-known/security.txt → HTTP 200, but no RFC 9116 fields (Contact:/Expires:/Policy:) in the body\nGET https://www.mozilla.org/security.txt → HTTP 404"
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-350",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for www.mozilla.org or mozilla.org (NOERROR (name exists))."
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://www.digitalocean.com",
+   "finalUrl": "https://www.digitalocean.com/",
+   "statusCode": 200,
+   "server": "cloudflare",
+   "tlsGrade": "A",
+   "technologies": [
+    "Cloudflare",
+    "Next.js"
+   ],
+   "pagesScanned": 10,
+   "renderedWithBrowser": false,
+   "elapsedMs": 20340,
+   "findings": [
+    {
+     "name": "Weak Content-Security-Policy (unsafe-inline / unsafe-eval in script-src)",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 5.4,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 86,
+     "evidence": "GET https://www.digitalocean.com/\nContent-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://segment.digitalocean.com consent.trustarc.com *.trustarc.com https://fast.wistia.com https://fast.wistia.net https://capture.navattic.com https://digitalocean.navattic.com https://boards.greenhouse.io https://*.ondigitalocean.app https://assets.digitalocean.com https://www.google-analytics.com https://*.google-analytics.com https://www.googleadservices.com https://googleads.g.doubleclick.net https://*.amplitude.com https://chall"
+    },
+    {
+     "name": "Missing X-Content-Type-Options: nosniff",
+     "severity": "medium",
+     "category": "Content Sniffing",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.digitalocean.com/\nX-Content-Type-Options: (header absent from response)"
+    },
+    {
+     "name": "Missing Referrer-Policy Header",
+     "severity": "low",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 82,
+     "evidence": "GET https://www.digitalocean.com/\nReferrer-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 82,
+     "evidence": "GET https://www.digitalocean.com/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.digitalocean.com/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.digitalocean.com/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.digitalocean.com/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "X-Powered-By Header Discloses Technology Stack",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": null,
+     "wstgId": "WSTG-INFO-09",
+     "confidence": 56,
+     "evidence": "GET https://www.digitalocean.com/\nX-Powered-By: Next.js"
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-350",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for www.digitalocean.com or digitalocean.com (NOERROR (name exists))."
+    },
+    {
+     "name": "No Structured Data Found",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "No <script type=\"application/ld+json\"> blocks in https://www.digitalocean.com/"
+    },
+    {
+     "name": "Incomplete Open Graph Metadata",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "og:title: AI-Native Cloud | DigitalOcean\nog:description: Run AI products in production with a unified stack for agents, inference, and cloud—built for control, performance, and economics at scale.\nog:image: (absent)"
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://www.fastly.com",
+   "finalUrl": "https://www.fastly.com/",
+   "statusCode": 200,
+   "server": "Artisanal bits",
+   "tlsGrade": "A",
+   "technologies": [
+    "Fastly",
+    "Gatsby"
+   ],
+   "pagesScanned": 6,
+   "renderedWithBrowser": false,
+   "elapsedMs": 14540,
+   "findings": [
+    {
+     "name": "Missing Content-Security-Policy (CSP)",
+     "severity": "high",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 7.2,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 89,
+     "evidence": "GET https://www.fastly.com/\nContent-Security-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Referrer-Policy Header",
+     "severity": "low",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 82,
+     "evidence": "GET https://www.fastly.com/\nReferrer-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 82,
+     "evidence": "GET https://www.fastly.com/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.fastly.com/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.fastly.com/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.fastly.com/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "Non-Session Cookie Readable by JavaScript",
+     "severity": "info",
+     "category": "Session Management",
+     "cweId": "CWE-1004",
+     "cvssScore": 2.6,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 68,
+     "evidence": "Affected cookie: ff_revamp"
+    },
+    {
+     "name": "Rate Limiting Not Advertised in Response Headers",
+     "severity": "info",
+     "category": "Brute Force Protection",
+     "cweId": "CWE-307",
+     "cvssScore": 0,
+     "wstgId": "WSTG-ATHN-03",
+     "confidence": 92,
+     "evidence": "GET https://www.fastly.com/\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled."
+    },
+    {
+     "name": "Missing security.txt (RFC 9116)",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-205",
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 75,
+     "evidence": "GET https://www.fastly.com/.well-known/security.txt → HTTP 404\nGET https://www.fastly.com/security.txt → no response"
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-350",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for www.fastly.com or fastly.com (NOERROR (name exists))."
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://letsencrypt.org",
+   "finalUrl": "https://letsencrypt.org/",
+   "statusCode": 200,
+   "server": "Netlify",
+   "tlsGrade": "A",
+   "technologies": [
+    "Netlify",
+    "Shopify",
+    "Squarespace",
+    "Wix",
+    "Tailwind CSS",
+    "Hugo"
+   ],
+   "pagesScanned": 3,
+   "renderedWithBrowser": false,
+   "elapsedMs": 30415,
+   "findings": [
+    {
+     "name": "Weak Content-Security-Policy (unsafe-inline / unsafe-eval in script-src)",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 5.4,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 86,
+     "evidence": "GET https://letsencrypt.org/\nContent-Security-Policy: default-src 'none'; font-src 'self' https://doublethedonation.com https://rsms.me http://rsms.me ; style-src 'self' 'unsafe-inline' https://donorbox.org https://doublethedonation.com https://rsms.me http://rsms.me ; script-src 'unsafe-eval' 'unsafe-inline' 'self' data: https://www.google-analytics.com https://www.googleadservices.com https://www.googletagmanager.com https://cdn.jsdelivr.net http://cdn.jsdelivr.net https://googleads.g.doubleclick.net https://donorbox.org https://doublethedonation.com https://js.stripe.com https://jspm.dev ht"
+    },
+    {
+     "name": "CSP Missing base-uri Directive",
+     "severity": "low",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 3.5,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 89,
+     "evidence": "GET https://letsencrypt.org/\nContent-Security-Policy: default-src 'none'; font-src 'self' https://doublethedonation.com https://rsms.me http://rsms.me ; style-src 'self' 'unsafe-inline' https://donorbox.org https://doublethedonation.com https://rsms.me http://rsms.me ; script-src 'unsafe-eval' 'unsafe-inline' 'self' data: https://www.google-analytics.com https://www.googleadservices.com https://www.googletagmanager.com https://cdn.jsdelivr.net http://cdn.jsdelivr.net https://googleads.g.doubleclick.net https://donorbox.org https://doublethedonation.com https://js.stripe.com https://jspm.dev ht"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://letsencrypt.org/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://letsencrypt.org/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://letsencrypt.org/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "Rate Limiting Not Advertised in Response Headers",
+     "severity": "info",
+     "category": "Brute Force Protection",
+     "cweId": "CWE-307",
+     "cvssScore": 0,
+     "wstgId": "WSTG-ATHN-03",
+     "confidence": 92,
+     "evidence": "GET https://letsencrypt.org/\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled."
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-350",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for letsencrypt.org (NOERROR (name exists))."
+    },
+    {
+     "name": "Twitter Card Metadata Absent",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 90,
+     "evidence": "twitter:card: (absent)"
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://www.bbc.co.uk",
+   "finalUrl": "https://www.bbc.co.uk/",
+   "statusCode": 200,
+   "server": "BBC-GTM",
+   "tlsGrade": "A",
+   "technologies": [
+    "Fastly",
+    "Varnish Cache"
+   ],
+   "pagesScanned": 22,
+   "renderedWithBrowser": false,
+   "elapsedMs": 19200,
+   "findings": [
+    {
+     "name": "Weak Content-Security-Policy (unsafe-inline / unsafe-eval in script-src)",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 5.4,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 74,
+     "evidence": "GET https://www.bbc.co.uk/\nContent-Security-Policy: default-src 'none'; script-src 'strict-dynamic' 'nonce-mup1APY22LIQGkDhDgr9e97vowIBQeRAa+2X8Vm5fc8QFPfIRk' 'self' 'report-sample' 'unsafe-inline' cdn.syndication.twimg.com connect.facebook.net c.files.bbci.co.uk emp.bbci.co.uk mybbc-analytics.files.bbci.co.uk nav.files.bbci.co.uk news.files.bbci.co.uk platform.twitter.com public.flourish.studio static.bbc.co.uk static.bbci.co.uk static.chartbeat.com static2.chartbeat.com www.bbc.co.uk www.instagram.com www.ons.gov.uk gn-web-assets.api.bbc.com www.google-analytics.com bitesize.files.bbci.co.uk"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.bbc.co.uk/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.bbc.co.uk/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.bbc.co.uk/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "Content-Security-Policy Missing on 3 Internal Routes",
+     "severity": "high",
+     "category": "Security Header Inconsistency",
+     "cweId": "CWE-79",
+     "cvssScore": 7.2,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 80,
+     "evidence": "Routes missing Content-Security-Policy:\n  • /accessibility/ (crawled)\n  • /schedules/p00fzl9m (crawled)\n  • /sounds (crawled)"
+    },
+    {
+     "name": "X-Frame-Options / frame-ancestors Missing on 2 Internal Routes",
+     "severity": "medium",
+     "category": "Security Header Inconsistency",
+     "cweId": "CWE-1021",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CLNT-09",
+     "confidence": 77,
+     "evidence": "Routes missing X-Frame-Options / frame-ancestors:\n  • /accessibility/ (crawled)\n  • /sounds (crawled)"
+    },
+    {
+     "name": "X-Content-Type-Options Missing on 2 Internal Routes",
+     "severity": "medium",
+     "category": "Security Header Inconsistency",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "Routes missing X-Content-Type-Options:\n  • /accessibility/ (crawled)\n  • /sounds (crawled)"
+    },
+    {
+     "name": "Referrer-Policy Missing on 3 Internal Routes",
+     "severity": "low",
+     "category": "Security Header Inconsistency",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 80,
+     "evidence": "Routes missing Referrer-Policy:\n  • /accessibility/ (crawled)\n  • /schedules/p00fzl9m (crawled)\n  • /sounds (crawled)"
+    },
+    {
+     "name": "Rate Limiting Not Advertised in Response Headers",
+     "severity": "info",
+     "category": "Brute Force Protection",
+     "cweId": "CWE-307",
+     "cvssScore": 0,
+     "wstgId": "WSTG-ATHN-03",
+     "confidence": 87,
+     "evidence": "GET https://www.bbc.co.uk/\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled."
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://www.nytimes.com",
+   "finalUrl": "https://www.nytimes.com/",
+   "statusCode": 200,
+   "server": "envoy",
+   "tlsGrade": "A",
+   "technologies": [
+    "Envoy Proxy",
+    "Fastly",
+    "Svelte",
+    "Sentry"
+   ],
+   "pagesScanned": 4,
+   "renderedWithBrowser": false,
+   "elapsedMs": 30700,
+   "findings": [
+    {
+     "name": "Weak Content-Security-Policy (unsafe-inline / unsafe-eval in script-src)",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 5.4,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 86,
+     "evidence": "GET https://www.nytimes.com/\nContent-Security-Policy: upgrade-insecure-requests; default-src data: 'unsafe-inline' 'unsafe-eval' https: nytresource:; script-src data: 'unsafe-inline' 'unsafe-eval' https: blob: nytresource:; style-src data: 'unsafe-inline' https: nytresource:; img-src data: https: blob: android-webview-video-poster: nytresource:; font-src data: https: nytresource:; connect-src data: https: wss: blob: nytresource:; media-src data: https: blob: nytresource:; object-src https:; child-src https: data: blob: nytresource:; form-action https: nytimes: nytcooking: nytxwd:; report-uri h"
+    },
+    {
+     "name": "CSP Missing object-src 'none' Directive",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 89,
+     "evidence": "GET https://www.nytimes.com/\nContent-Security-Policy: upgrade-insecure-requests; default-src data: 'unsafe-inline' 'unsafe-eval' https: nytresource:; script-src data: 'unsafe-inline' 'unsafe-eval' https: blob: nytresource:; style-src data: 'unsafe-inline' https: nytresource:; img-src data: https: blob: android-webview-video-poster: nytresource:; font-src data: https: nytresource:; connect-src data: https: wss: blob: nytresource:; media-src data: https: blob: nytresource:; object-src https:; child-src https: data: blob: nytresource:; form-action https: nytimes: nytcooking: nytxwd:; report-uri h"
+    },
+    {
+     "name": "CSP Missing base-uri Directive",
+     "severity": "low",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 3.5,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 89,
+     "evidence": "GET https://www.nytimes.com/\nContent-Security-Policy: upgrade-insecure-requests; default-src data: 'unsafe-inline' 'unsafe-eval' https: nytresource:; script-src data: 'unsafe-inline' 'unsafe-eval' https: blob: nytresource:; style-src data: 'unsafe-inline' https: nytresource:; img-src data: https: blob: android-webview-video-poster: nytresource:; font-src data: https: nytresource:; connect-src data: https: wss: blob: nytresource:; media-src data: https: blob: nytresource:; object-src https:; child-src https: data: blob: nytresource:; form-action https: nytimes: nytcooking: nytxwd:; report-uri h"
+    },
+    {
+     "name": "Missing Referrer-Policy Header",
+     "severity": "low",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 82,
+     "evidence": "GET https://www.nytimes.com/\nReferrer-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.nytimes.com/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.nytimes.com/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.nytimes.com/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "Non-Session Cookie Missing Secure Flag",
+     "severity": "low",
+     "category": "Session Management",
+     "cweId": "CWE-614",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 78,
+     "evidence": "Affected cookies: nyt-gdpr, nyt-geo, nyt-s-present"
+    },
+    {
+     "name": "Non-Session Cookie Readable by JavaScript",
+     "severity": "info",
+     "category": "Session Management",
+     "cweId": "CWE-1004",
+     "cvssScore": 2.6,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 68,
+     "evidence": "Affected cookies: nyt-a, datadome, nyt-gdpr, nyt-purr, nyt-geo, nyt.et.dd, datadome, nyt-s-present, nyt-traceid"
+    },
+    {
+     "name": "Non-Session Cookie Missing SameSite Attribute",
+     "severity": "info",
+     "category": "CSRF Protection",
+     "cweId": "CWE-352",
+     "cvssScore": 2.1,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 60,
+     "evidence": "Affected cookies: nyt-gdpr, nyt-geo, nyt-s-present"
+    },
+    {
+     "name": "Permissive crossdomain.xml Policy",
+     "severity": "medium",
+     "category": "CORS Misconfiguration",
+     "cweId": "CWE-942",
+     "cvssScore": 6.5,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 81,
+     "evidence": "GET https://www.nytimes.com/crossdomain.xml → HTTP 200 (1,478 bytes)\nContent-Type: text/xml"
+    },
+    {
+     "name": "robots.txt Discloses Sensitive Application Paths",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": null,
+     "wstgId": "WSTG-INFO-01",
+     "confidence": 51,
+     "evidence": "GET https://www.nytimes.com/robots.txt → HTTP 200\nDisallow: /athletic/wp/wp-admin/\nDisallow: /wirecutter/wp-admin/"
+    },
+    {
+     "name": "External Resources Missing Subresource Integrity (SRI)",
+     "severity": "medium",
+     "category": "Supply Chain Security",
+     "cweId": "CWE-353",
+     "cvssScore": 6.1,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 80,
+     "evidence": "<script/link src=\"https://www.googletagmanager.com/gtm.js?id=GTM-P528B3&gtm_auth=tfAzqo1rYDLgYhmTnSjPqw&gtm_preview=env-130&gtm_cookies_win=x\" (no integrity= attribute)>\n<script/link src=\"https://static01.nytimes.com/newsgraphics/IJ-hEyZ_bx6ARw/_app.BPxC0Cxy42pNz-1_yx_-wuWQM-OmYdm4dXsxyRyLf7s/immutable/assets/index.DlB3Aa4i.css\" (no integrity= attribute)>\n<script/link src=\"https://static01.nytimes.com/newsgraphics/IJ-hEyZ_bx6ARw/_app.BPxC0Cxy42pNz-1_yx_-wuWQM-OmYdm4dXsxyRyLf7s/immutable/assets/index.CyB6tk6K.css\" (no integrity= attribute)>\n<script/link src=\"https://static01.nytimes.com/newsgra"
+    },
+    {
+     "name": "Rate Limiting Not Advertised in Response Headers",
+     "severity": "info",
+     "category": "Brute Force Protection",
+     "cweId": "CWE-307",
+     "cvssScore": 0,
+     "wstgId": "WSTG-ATHN-03",
+     "confidence": 92,
+     "evidence": "GET https://www.nytimes.com/\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled."
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-350",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for www.nytimes.com or nytimes.com (NOERROR (name exists))."
+    },
+    {
+     "name": "Twitter Card Metadata Absent",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 90,
+     "evidence": "twitter:card: (absent)"
+    },
+    {
+     "name": "JWT-Shaped Publishable Key in Client Code (verify it is not a credential)",
+     "severity": "info",
+     "category": "Exposed Secrets / Credentials",
+     "cweId": "CWE-798",
+     "cvssScore": 0,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 100,
+     "evidence": "Source: external script /gtm.js\nMatch (redacted): eyJhbG...gY1o\nContext: ...\"vtp_html\":[\"template\",\"\\u003Cscript type=\\\"text\\/gtmscript\\\"\\u003Ewindow.iterateSettings={apiKey:\\\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjb21wYW55X2lkIjoiNWMwOThiM2QxNjU0YzEwMDAxMmM2OGY5IiwiaWF0Ijo..."
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://www.theguardian.com",
+   "finalUrl": "https://www.theguardian.com/us",
+   "statusCode": 200,
+   "server": null,
+   "tlsGrade": "A",
+   "technologies": [
+    "Sentry"
+   ],
+   "pagesScanned": 17,
+   "renderedWithBrowser": false,
+   "elapsedMs": 15100,
+   "findings": [
+    {
+     "name": "Weak Content-Security-Policy (unsafe-inline / unsafe-eval in script-src)",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 5.4,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 74,
+     "evidence": "GET https://www.theguardian.com/us\nContent-Security-Policy: upgrade-insecure-requests; default-src https:; script-src https: 'unsafe-inline' 'unsafe-eval' blob: 'unsafe-inline'; style-src https: 'unsafe-inline'; img-src https: data: blob:; media-src https: data: blob:; font-src 'self' https://assets.guim.co.uk https://pasteup.guim.co.uk https://interactive.guim.co.uk https://dashboard.ophan.co.uk https://cdn.braze.eu data:; connect-src https: wss: blob:; child-src https: blob:; object-src 'none'; base-uri 'none'\n(unsafe-inline or unsafe-eval present in script-src — inline script execution is p"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.theguardian.com/us\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.theguardian.com/us\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.theguardian.com/us\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "Non-Session Cookie Missing Secure Flag",
+     "severity": "low",
+     "category": "Session Management",
+     "cweId": "CWE-614",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 70,
+     "evidence": "Affected cookies: gu_client_ab_tests, gu_v2_mvt_id"
+    },
+    {
+     "name": "Non-Session Cookie Readable by JavaScript",
+     "severity": "info",
+     "category": "Session Management",
+     "cweId": "CWE-1004",
+     "cvssScore": 2.6,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 60,
+     "evidence": "Affected cookies: gu_client_ab_tests, gu_client_ab_tests, gu_v2_mvt_id, gu_v2_mvt_id, GU_mvt_id, GU_geo_country, GU_geo_country_region"
+    },
+    {
+     "name": "Non-Session Cookie Missing SameSite Attribute",
+     "severity": "info",
+     "category": "CSRF Protection",
+     "cweId": "CWE-352",
+     "cvssScore": 2.1,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 60,
+     "evidence": "Affected cookies: gu_client_ab_tests, gu_client_ab_tests, gu_v2_mvt_id, gu_v2_mvt_id, GU_mvt_id, GU_geo_country, GU_geo_country_region"
+    },
+    {
+     "name": "Permissive crossdomain.xml Policy",
+     "severity": "medium",
+     "category": "CORS Misconfiguration",
+     "cweId": "CWE-942",
+     "cvssScore": 6.5,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 81,
+     "evidence": "GET https://www.theguardian.com/crossdomain.xml → HTTP 200 (1,408 bytes)\nContent-Type: text/xml; charset=utf-8"
+    },
+    {
+     "name": "External Resources Missing Subresource Integrity (SRI)",
+     "severity": "medium",
+     "category": "Supply Chain Security",
+     "cweId": "CWE-353",
+     "cvssScore": 6.1,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 73,
+     "evidence": "<script/link src=\"https://assets.guim.co.uk/polyfill.io/v3/polyfill.min.js?rum=0&features=es6%2Ces7%2Ces2017%2Ces2018%2Ces2019%2Cdefault-3.6%2CHTMLPictureElement%2CIntersectionObserver%2CIntersectionObserverEntry%2CURLSearchParams%2Cfetch%2CNodeList.prototype.forEach%2Cnavigator.sendBeacon%2Cperformance.now%2CPromise.allSettled&flags=gated&callback=guardianPolyfilled&unknown=polyfill&cacheClear=1\" (no integrity= attribute)>"
+    },
+    {
+     "name": "Rate Limiting Not Advertised in Response Headers",
+     "severity": "info",
+     "category": "Brute Force Protection",
+     "cweId": "CWE-307",
+     "cvssScore": 0,
+     "wstgId": "WSTG-ATHN-03",
+     "confidence": 87,
+     "evidence": "GET https://www.theguardian.com/us\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled."
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-350",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for www.theguardian.com or theguardian.com (NOERROR (name exists))."
+    },
+    {
+     "name": "No Structured Data Found",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "No <script type=\"application/ld+json\"> blocks in https://www.theguardian.com/us"
+    },
+    {
+     "name": "Incomplete Open Graph Metadata",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "og:title: (absent)\nog:description: (absent)\nog:image: (absent)"
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://www.reuters.com",
+   "finalUrl": "https://www.reuters.com/",
+   "statusCode": 401,
+   "server": "CloudFront",
+   "tlsGrade": "A",
+   "technologies": [
+    "AWS CloudFront"
+   ],
+   "pagesScanned": 0,
+   "renderedWithBrowser": false,
+   "elapsedMs": 3739,
+   "findings": [
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-350",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for www.reuters.com or reuters.com (NOERROR (name exists))."
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    },
+    {
+     "name": "Scan was intercepted by a bot-protection challenge",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "DataDome challenge"
+    }
+   ]
+  },
+  {
+   "url": "https://apnews.com",
+   "finalUrl": "https://apnews.com/",
+   "statusCode": 403,
+   "server": "cloudflare",
+   "tlsGrade": "A",
+   "technologies": [
+    "Cloudflare"
+   ],
+   "pagesScanned": 0,
+   "renderedWithBrowser": false,
+   "elapsedMs": 9387,
+   "findings": [
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    },
+    {
+     "name": "Scan was intercepted by a bot-protection challenge",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "cf-mitigated response header: challenge"
+    }
+   ]
+  },
+  {
+   "url": "https://www.shopify.com",
+   "finalUrl": "https://www.shopify.com/",
+   "statusCode": 200,
+   "server": "cloudflare",
+   "tlsGrade": "A",
+   "technologies": [
+    "Cloudflare",
+    "Shopify",
+    "Tailwind CSS"
+   ],
+   "pagesScanned": 22,
+   "renderedWithBrowser": false,
+   "elapsedMs": 20233,
+   "findings": [
+    {
+     "name": "Missing Content-Security-Policy (CSP)",
+     "severity": "high",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 7.2,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 77,
+     "evidence": "GET https://www.shopify.com/\nContent-Security-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Clickjacking Protection (X-Frame-Options)",
+     "severity": "medium",
+     "category": "UI Security",
+     "cweId": "CWE-1021",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CLNT-09",
+     "confidence": 77,
+     "evidence": "GET https://www.shopify.com/\nX-Frame-Options: (header absent)\nCSP frame-ancestors: (not present in Content-Security-Policy)"
+    },
+    {
+     "name": "Missing Referrer-Policy Header",
+     "severity": "low",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.shopify.com/\nReferrer-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.shopify.com/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.shopify.com/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.shopify.com/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.shopify.com/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "Non-Session Cookie Readable by JavaScript",
+     "severity": "info",
+     "category": "Session Management",
+     "cweId": "CWE-1004",
+     "cvssScore": 2.6,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 60,
+     "evidence": "Affected cookies: _shopify_essential_, _shopify_s, _shopify_y"
+    },
+    {
+     "name": "Missing security.txt (RFC 9116)",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-205",
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 75,
+     "evidence": "GET https://www.shopify.com/.well-known/security.txt → no response\nGET https://www.shopify.com/security.txt → HTTP 404"
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-350",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for www.shopify.com or shopify.com (NOERROR (name exists))."
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://stripe.com",
+   "finalUrl": "https://stripe.com/",
+   "statusCode": 200,
+   "server": "nginx",
+   "tlsGrade": "A",
+   "technologies": [
+    "Nginx",
+    "Next.js"
+   ],
+   "pagesScanned": 21,
+   "renderedWithBrowser": false,
+   "elapsedMs": 17234,
+   "findings": [
+    {
+     "name": "Content-Security-Policy Allows Inline Styles (unsafe-inline in style-src)",
+     "severity": "low",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 86,
+     "evidence": "GET https://stripe.com/\nContent-Security-Policy: base-uri 'none'; child-src 'none'; connect-src https://c.increment.com https://c.stripe.dev https://c.stripe.global https://c.stripe.partners blob: https://b.stripecdn.com https://errors.stripe.com https://ext.stripe.com https://r.stripe.com https://stripe-images.s3.us-west-1.amazonaws.com https://stripe.com 'self'; default-src 'none'; font-src https://b.stripecdn.com 'self'; form-action https://stripe.com 'self'; frame-ancestors https://app.contentful.com 'self'; frame-src https://b.stripecdn.com https://js.stripe.com https://support-conversati"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 82,
+     "evidence": "GET https://stripe.com/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://stripe.com/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://stripe.com/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "Non-Session Cookie Readable by JavaScript",
+     "severity": "info",
+     "category": "Session Management",
+     "cweId": "CWE-1004",
+     "cvssScore": 2.6,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 68,
+     "evidence": "Affected cookie: cid"
+    },
+    {
+     "name": "Missing Cache-Control Headers",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-524",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 82,
+     "evidence": "GET https://stripe.com/\nCache-Control: (header absent)\nPragma: (header absent)"
+    },
+    {
+     "name": "External Resources Missing Subresource Integrity (SRI)",
+     "severity": "medium",
+     "category": "Supply Chain Security",
+     "cweId": "CWE-353",
+     "cvssScore": 6.1,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 77,
+     "evidence": "<script/link src=\"https://b.stripecdn.com/mkt-ssr-statics/assets/_next/static/i3b1WMgV5M7Sf0g8K5YReWlg7FTo4vGMxbXW0t%2BQMnA%3D/_buildManifest.js\" (no integrity= attribute)>\n<script/link src=\"https://b.stripecdn.com/mkt-ssr-statics/assets/_next/static/i3b1WMgV5M7Sf0g8K5YReWlg7FTo4vGMxbXW0t%2BQMnA%3D/_ssgManifest.js\" (no integrity= attribute)>"
+    },
+    {
+     "name": "Rate Limiting Not Advertised in Response Headers",
+     "severity": "info",
+     "category": "Brute Force Protection",
+     "cweId": "CWE-307",
+     "cvssScore": 0,
+     "wstgId": "WSTG-ATHN-03",
+     "confidence": 92,
+     "evidence": "GET https://stripe.com/\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled."
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-350",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for stripe.com (NOERROR (name exists))."
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://www.etsy.com",
+   "finalUrl": "https://www.etsy.com/",
+   "statusCode": 403,
+   "server": "DataDome",
+   "tlsGrade": "A",
+   "technologies": [
+    "Fastly",
+    "Varnish Cache"
+   ],
+   "pagesScanned": 1,
+   "renderedWithBrowser": false,
+   "elapsedMs": 9009,
+   "findings": [
+    {
+     "name": "SPF Record Exceeds DNS Lookup Limit",
+     "severity": "low",
+     "category": "Email Security",
+     "cweId": "CWE-290",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 87,
+     "evidence": "TXT record: v=spf1 ip4:66.3.159.0/24 ip4:192.147.0.0/24 ip4:173.46.67.72/29 ip4:192.147.1.0/24 ip4:38.106.64.0/24 ip4:38.76.1.0/24 ip4:38.76.2.0/24 ip4:162.220.28.32/27 ip4:162.220.28.64/28 ip4:208.74.204.0/22 ip4:46.19.168.0/23 include:servers.mcsv.net include:mail.zendesk.com include:amazonses.com include:_netblocks.google.com include:_netblocks2.google.com include:_netblocks3.google.com a:web.q4press.com include:cvent-planner.com include:mail.clinchtalent.com include:spf.redpoints.com -all\nEstimated DNS lookups: ~10"
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-350",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for www.etsy.com or etsy.com (NOERROR (name exists))."
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    },
+    {
+     "name": "Scan was intercepted by a bot-protection challenge",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "DataDome challenge"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ebay.com",
+   "finalUrl": "https://www.ebay.com/",
+   "statusCode": 403,
+   "server": "AkamaiGHost",
+   "tlsGrade": "A",
+   "technologies": [
+    "Ghost"
+   ],
+   "pagesScanned": 0,
+   "renderedWithBrowser": false,
+   "elapsedMs": 19181,
+   "findings": [
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-350",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for www.ebay.com or ebay.com (NOERROR (name exists))."
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    },
+    {
+     "name": "Scan was intercepted by a bot-protection challenge",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "HTTP 403 with a 1830-byte body"
+    }
+   ]
+  },
+  {
+   "url": "https://www.amazon.co.uk",
+   "finalUrl": "https://www.amazon.co.uk/",
+   "statusCode": 202,
+   "server": "CloudFront",
+   "tlsGrade": "A",
+   "technologies": [
+    "AWS CloudFront"
+   ],
+   "pagesScanned": 3,
+   "renderedWithBrowser": false,
+   "elapsedMs": 10028,
+   "findings": [
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    },
+    {
+     "name": "Scan was intercepted by a bot-protection challenge",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "x-amzn-waf-action response header: challenge"
+    }
+   ]
+  },
+  {
+   "url": "https://www.gov.uk",
+   "finalUrl": "https://www.gov.uk/",
+   "statusCode": 200,
+   "server": "nginx",
+   "tlsGrade": "A",
+   "technologies": [
+    "Nginx",
+    "Fastly",
+    "Varnish Cache",
+    "Angular",
+    "Ruby on Rails"
+   ],
+   "pagesScanned": 14,
+   "renderedWithBrowser": false,
+   "elapsedMs": 27146,
+   "findings": [
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.gov.uk/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.gov.uk/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.gov.uk/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "Rate Limiting Not Advertised in Response Headers",
+     "severity": "info",
+     "category": "Brute Force Protection",
+     "cweId": "CWE-307",
+     "cvssScore": 0,
+     "wstgId": "WSTG-ATHN-03",
+     "confidence": 92,
+     "evidence": "GET https://www.gov.uk/\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled."
+    },
+    {
+     "name": "No Structured Data Found",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "No <script type=\"application/ld+json\"> blocks in https://www.gov.uk/"
+    },
+    {
+     "name": "Twitter Card Metadata Absent",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 90,
+     "evidence": "twitter:card: (absent)"
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://www.wikipedia.org",
+   "finalUrl": "https://www.wikipedia.org/",
+   "statusCode": 200,
+   "server": "ATS/9.2.15",
+   "tlsGrade": "A",
+   "technologies": [],
+   "pagesScanned": 0,
+   "renderedWithBrowser": false,
+   "elapsedMs": 3695,
+   "findings": [
+    {
+     "name": "Missing Content-Security-Policy (CSP)",
+     "severity": "high",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 7.2,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 77,
+     "evidence": "GET https://www.wikipedia.org/\nContent-Security-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Clickjacking Protection (X-Frame-Options)",
+     "severity": "medium",
+     "category": "UI Security",
+     "cweId": "CWE-1021",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CLNT-09",
+     "confidence": 77,
+     "evidence": "GET https://www.wikipedia.org/\nX-Frame-Options: (header absent)\nCSP frame-ancestors: (not present in Content-Security-Policy)"
+    },
+    {
+     "name": "Missing X-Content-Type-Options: nosniff",
+     "severity": "medium",
+     "category": "Content Sniffing",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.wikipedia.org/\nX-Content-Type-Options: (header absent from response)"
+    },
+    {
+     "name": "Missing Referrer-Policy Header",
+     "severity": "low",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.wikipedia.org/\nReferrer-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.wikipedia.org/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.wikipedia.org/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.wikipedia.org/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.wikipedia.org/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "Server Version Disclosure",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": null,
+     "wstgId": "WSTG-INFO-02",
+     "confidence": 51,
+     "evidence": "GET https://www.wikipedia.org/\nServer: ATS/9.2.15"
+    },
+    {
+     "name": "Non-Session Cookie Readable by JavaScript",
+     "severity": "info",
+     "category": "Session Management",
+     "cweId": "CWE-1004",
+     "cvssScore": 2.6,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 60,
+     "evidence": "Affected cookies: GeoIP, NetworkProbeLimit"
+    },
+    {
+     "name": "Non-Session Cookie Missing SameSite Attribute",
+     "severity": "info",
+     "category": "CSRF Protection",
+     "cweId": "CWE-352",
+     "cvssScore": 2.1,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 60,
+     "evidence": "Affected cookies: WMF-Last-Access, WMF-Last-Access-Global, GeoIP"
+    },
+    {
+     "name": "robots.txt Discloses Sensitive Application Paths",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": null,
+     "wstgId": "WSTG-INFO-01",
+     "confidence": 54,
+     "evidence": "GET https://www.wikipedia.org/robots.txt → HTTP 200\nDisallow: /wiki/Wikipedia:Administratoren/Probleme/\nDisallow: /wiki/Wikipedia:Adminkandidaturen/\nDisallow: /wiki/Wikipedia:Administratoren/Notizen/\nDisallow: /wiki/Wikipedia_Diskussion:Adminkandidaturen/\nDisallow: /wiki/Wikipedia:Requests_for_adminship/\nDisallow: /wiki/Wikipedia%3ARequests_for_adminship/\nDisallow: /wiki/Wikipedia:Administratorer\nDisallow: /wiki/Wikipedia%3AAdministratorer"
+    },
+    {
+     "name": "Rate Limiting Not Advertised in Response Headers",
+     "severity": "info",
+     "category": "Brute Force Protection",
+     "cweId": "CWE-307",
+     "cvssScore": 0,
+     "wstgId": "WSTG-ATHN-03",
+     "confidence": 87,
+     "evidence": "GET https://www.wikipedia.org/\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled."
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-350",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for www.wikipedia.org or wikipedia.org (NOERROR (name exists))."
+    },
+    {
+     "name": "Twitter Card Metadata Absent",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 90,
+     "evidence": "twitter:card: (absent)"
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://archive.org",
+   "finalUrl": "https://archive.org/",
+   "statusCode": 200,
+   "server": "nginx/1.31.3",
+   "tlsGrade": "A",
+   "technologies": [
+    "Nginx 1.31.3"
+   ],
+   "pagesScanned": 1,
+   "renderedWithBrowser": false,
+   "elapsedMs": 12252,
+   "findings": [
+    {
+     "name": "Weak Content-Security-Policy (unsafe-inline / unsafe-eval in script-src)",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 5.4,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 74,
+     "evidence": "GET https://archive.org/\nContent-Security-Policy: report-uri https://archive.org/services/csp-report; base-uri 'self'; default-src *; img-src * data: blob:; object-src 'none'; media-src * blob:; connect-src * data: blob:; worker-src 'self' blob:; script-src https://archive.org/offshoot_assets/ https://*.archive.org/offshoot_assets/ https://offshoot.prod.archive.org/offshoot_assets/ https://archive.org/includes/ https://*.archive.org/includes/ https://offshoot.prod.archive.org/includes/ https://archive.org/components/ https://*.archive.org/components/ https://offshoot.prod.archive.org/component"
+    },
+    {
+     "name": "Missing Clickjacking Protection (X-Frame-Options)",
+     "severity": "medium",
+     "category": "UI Security",
+     "cweId": "CWE-1021",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CLNT-09",
+     "confidence": 77,
+     "evidence": "GET https://archive.org/\nX-Frame-Options: (header absent)\nCSP frame-ancestors: (not present in Content-Security-Policy)"
+    },
+    {
+     "name": "Missing X-Content-Type-Options: nosniff",
+     "severity": "medium",
+     "category": "Content Sniffing",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://archive.org/\nX-Content-Type-Options: (header absent from response)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://archive.org/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://archive.org/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://archive.org/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://archive.org/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "Server Version Disclosure",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": null,
+     "wstgId": "WSTG-INFO-02",
+     "confidence": 51,
+     "evidence": "GET https://archive.org/\nServer: nginx/1.31.3"
+    },
+    {
+     "name": "HTTP Traffic Not Redirected to HTTPS",
+     "severity": "medium",
+     "category": "Transport Security",
+     "cweId": "CWE-319",
+     "cvssScore": 5.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 81,
+     "evidence": "GET http://archive.org/ (followed up to 5 redirect hops)\nResult: request chain never reached https://archive.org/\nHSTS preload list: not preloaded"
+    },
+    {
+     "name": "Rate Limiting Not Advertised in Response Headers",
+     "severity": "info",
+     "category": "Brute Force Protection",
+     "cweId": "CWE-307",
+     "cvssScore": 0,
+     "wstgId": "WSTG-ATHN-03",
+     "confidence": 87,
+     "evidence": "GET https://archive.org/\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled."
+    },
+    {
+     "name": "DMARC Policy Set to None (Monitoring Only — No Enforcement)",
+     "severity": "medium",
+     "category": "Email Security",
+     "cweId": "CWE-290",
+     "cvssScore": 5.3,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "TXT record: v=DMARC1;p=none;rua=mailto:dmarc@archive.org"
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-350",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for archive.org (NOERROR (name exists))."
+    },
+    {
+     "name": "No Structured Data Found",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "No <script type=\"application/ld+json\"> blocks in https://archive.org/"
+    },
+    {
+     "name": "Incomplete Open Graph Metadata",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "og:title: (absent)\nog:description: (absent)\nog:image: (absent)"
+    },
+    {
+     "name": "JavaScript Source Map Exposed — Full Source Code Accessible",
+     "severity": "high",
+     "category": "Source Code Exposure",
+     "cweId": "CWE-540",
+     "cvssScore": 7.5,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 97,
+     "evidence": "Source map URL: https://archive.org/offshoot_assets/vendor/lit/polyfill-support.js.map\nSource files mapped: 3\nFull source content (sourcesContent) included."
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://european-union.europa.eu",
+   "finalUrl": "https://european-union.europa.eu/select-language?destination=/node/1",
+   "statusCode": 200,
+   "server": null,
+   "tlsGrade": "A",
+   "technologies": [
+    "AWS CloudFront",
+    "Drupal",
+    "jQuery"
+   ],
+   "pagesScanned": 10,
+   "renderedWithBrowser": false,
+   "elapsedMs": 15183,
+   "findings": [
+    {
+     "name": "Missing Content-Security-Policy (CSP)",
+     "severity": "high",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 7.2,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 77,
+     "evidence": "GET https://european-union.europa.eu/select-language?destination=/node/1\nContent-Security-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Referrer-Policy Header",
+     "severity": "low",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://european-union.europa.eu/select-language?destination=/node/1\nReferrer-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://european-union.europa.eu/select-language?destination=/node/1\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://european-union.europa.eu/select-language?destination=/node/1\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://european-union.europa.eu/select-language?destination=/node/1\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://european-union.europa.eu/select-language?destination=/node/1\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "External Resources Missing Subresource Integrity (SRI)",
+     "severity": "medium",
+     "category": "Supply Chain Security",
+     "cweId": "CWE-353",
+     "cvssScore": 6.1,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 77,
+     "evidence": "<script/link src=\"https://ec.europa.eu/wel/surveys/wr_survey01/wr_survey.js\" (no integrity= attribute)>\n<script/link src=\"https://webtools.europa.eu/load.js\" (no integrity= attribute)>"
+    },
+    {
+     "name": "Missing security.txt (RFC 9116)",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-205",
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 75,
+     "evidence": "GET https://european-union.europa.eu/.well-known/security.txt → no response\nGET https://european-union.europa.eu/security.txt → HTTP 429"
+    },
+    {
+     "name": "Page Excluded From Search Indexes",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "<meta name=\"robots\" content=\"noindex follow\">"
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://www.nasa.gov",
+   "finalUrl": "https://www.nasa.gov/",
+   "statusCode": 200,
+   "server": "nginx",
+   "tlsGrade": "A",
+   "technologies": [
+    "Nginx",
+    "WordPress 7.0.4",
+    "Google Tag Manager"
+   ],
+   "pagesScanned": 3,
+   "renderedWithBrowser": false,
+   "elapsedMs": 17016,
+   "findings": [
+    {
+     "name": "Missing Content-Security-Policy (CSP)",
+     "severity": "high",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 7.2,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 77,
+     "evidence": "GET https://www.nasa.gov/\nContent-Security-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing X-Content-Type-Options: nosniff",
+     "severity": "medium",
+     "category": "Content Sniffing",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.nasa.gov/\nX-Content-Type-Options: (header absent from response)"
+    },
+    {
+     "name": "Missing Referrer-Policy Header",
+     "severity": "low",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.nasa.gov/\nReferrer-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.nasa.gov/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.nasa.gov/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.nasa.gov/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.nasa.gov/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "External Resources Missing Subresource Integrity (SRI)",
+     "severity": "medium",
+     "category": "Supply Chain Security",
+     "cweId": "CWE-353",
+     "cvssScore": 6.1,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 77,
+     "evidence": "<script/link src=\"https://dap.digitalgov.gov/Universal-Federated-Analytics-Min.js?agency=NASA&#038;pga4=G-82GWVTTXCZ\" (no integrity= attribute)>\n<script/link src=\"https://cdn.parsely.com/keys/nasa.gov/p.js?ver=3.23.6\" (no integrity= attribute)>"
+    },
+    {
+     "name": "Rate Limiting Not Advertised in Response Headers",
+     "severity": "info",
+     "category": "Brute Force Protection",
+     "cweId": "CWE-307",
+     "cvssScore": 0,
+     "wstgId": "WSTG-ATHN-03",
+     "confidence": 87,
+     "evidence": "GET https://www.nasa.gov/\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled."
+    },
+    {
+     "name": "Missing security.txt (RFC 9116)",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-205",
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 75,
+     "evidence": "GET https://www.nasa.gov/.well-known/security.txt → HTTP 404\nGET https://www.nasa.gov/security.txt → HTTP 404"
+    },
+    {
+     "name": "SPF Record Exceeds DNS Lookup Limit",
+     "severity": "low",
+     "category": "Email Security",
+     "cweId": "CWE-290",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 87,
+     "evidence": "TXT record: v=spf1 include:_spf-4a.nasa.gov include:_spf-4b.nasa.gov include:_spf-4c.nasa.gov include:_spf-4d.nasa.gov include:_spf-4g.nasa.gov include:_spf-4m.nasa.gov include:_spf-4x.nasa.gov include:_spf-6a.nasa.gov include:spf.protection.outlook.com -all\nEstimated DNS lookups: ~9"
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://www.notion.so",
+   "finalUrl": "https://www.notion.com/",
+   "statusCode": 200,
+   "server": "cloudflare",
+   "tlsGrade": "A",
+   "technologies": [
+    "Cloudflare",
+    "Vercel",
+    "Next.js",
+    "React"
+   ],
+   "pagesScanned": 18,
+   "renderedWithBrowser": false,
+   "elapsedMs": 18448,
+   "findings": [
+    {
+     "name": "Weak Content-Security-Policy (unsafe-inline / unsafe-eval in script-src)",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 5.4,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 86,
+     "evidence": "GET https://www.notion.com/\nContent-Security-Policy: script-src 'self' 'unsafe-inline' 'unsafe-eval' https://gist.github.com https://apis.google.com https://cdn.amplitude.com https://api.amplitude.com https://dev-embed.notion.co https://embed.notion.co https://static.zdassets.com https://api.smooch.io\t https://solve-widget.forethought.ai https://decagon.ai https://http-inputs-notion.splunkcloud.com https://*.sentry.io https://checkout.stripe.com https://js.stripe.com https://embed.typeform.com https://admin.typeform.com https://ucv.bynder.com https://js.sentry-cdn.com https://js.chilipiper.com"
+    },
+    {
+     "name": "CSP Missing object-src 'none' Directive",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 89,
+     "evidence": "GET https://www.notion.com/\nContent-Security-Policy: script-src 'self' 'unsafe-inline' 'unsafe-eval' https://gist.github.com https://apis.google.com https://cdn.amplitude.com https://api.amplitude.com https://dev-embed.notion.co https://embed.notion.co https://static.zdassets.com https://api.smooch.io\t https://solve-widget.forethought.ai https://decagon.ai https://http-inputs-notion.splunkcloud.com https://*.sentry.io https://checkout.stripe.com https://js.stripe.com https://embed.typeform.com https://admin.typeform.com https://ucv.bynder.com https://js.sentry-cdn.com https://js.chilipiper.com"
+    },
+    {
+     "name": "CSP Missing base-uri Directive",
+     "severity": "low",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 3.5,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 89,
+     "evidence": "GET https://www.notion.com/\nContent-Security-Policy: script-src 'self' 'unsafe-inline' 'unsafe-eval' https://gist.github.com https://apis.google.com https://cdn.amplitude.com https://api.amplitude.com https://dev-embed.notion.co https://embed.notion.co https://static.zdassets.com https://api.smooch.io\t https://solve-widget.forethought.ai https://decagon.ai https://http-inputs-notion.splunkcloud.com https://*.sentry.io https://checkout.stripe.com https://js.stripe.com https://embed.typeform.com https://admin.typeform.com https://ucv.bynder.com https://js.sentry-cdn.com https://js.chilipiper.com"
+    },
+    {
+     "name": "Missing X-Content-Type-Options: nosniff",
+     "severity": "medium",
+     "category": "Content Sniffing",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.notion.com/\nX-Content-Type-Options: (header absent from response)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 82,
+     "evidence": "GET https://www.notion.com/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.notion.com/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.notion.com/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.notion.com/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "X-Powered-By Header Discloses Technology Stack",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": null,
+     "wstgId": "WSTG-INFO-09",
+     "confidence": 56,
+     "evidence": "GET https://www.notion.com/\nX-Powered-By: Next.js"
+    },
+    {
+     "name": "Non-Session Cookie Missing Secure Flag",
+     "severity": "low",
+     "category": "Session Management",
+     "cweId": "CWE-614",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 78,
+     "evidence": "Affected cookies: notion_browser_id, notion_check_cookie_consent"
+    },
+    {
+     "name": "Non-Session Cookie Readable by JavaScript",
+     "severity": "info",
+     "category": "Session Management",
+     "cweId": "CWE-1004",
+     "cvssScore": 2.6,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 68,
+     "evidence": "Affected cookies: notion_browser_id, notion_check_cookie_consent"
+    },
+    {
+     "name": "Non-Session Cookie Missing SameSite Attribute",
+     "severity": "info",
+     "category": "CSRF Protection",
+     "cweId": "CWE-352",
+     "cvssScore": 2.1,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 60,
+     "evidence": "Affected cookies: notion_browser_id, notion_check_cookie_consent"
+    },
+    {
+     "name": "DMARC Record Missing Aggregate Report Address (rua=)",
+     "severity": "info",
+     "category": "Email Security",
+     "cweId": "CWE-778",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "TXT record: v=DMARC1; p=reject"
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://www.figma.com",
+   "finalUrl": "https://www.figma.com/",
+   "statusCode": 200,
+   "server": null,
+   "tlsGrade": "A",
+   "technologies": [
+    "AWS CloudFront",
+    "Next.js"
+   ],
+   "pagesScanned": 12,
+   "renderedWithBrowser": false,
+   "elapsedMs": 30717,
+   "findings": [
+    {
+     "name": "Weak Content-Security-Policy (unsafe-inline / unsafe-eval in script-src)",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 5.4,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 86,
+     "evidence": "GET https://www.figma.com/\nContent-Security-Policy: default-src 'self' https://accounts.google.com/gsi/ ; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://platform.twitter.com/js/ https://platform.twitter.com/widgets.js https://player.vimeo.com/api/player.js https://www.youtube.com/iframe_api https://www.youtube.com/s/player/ https://accounts.google.com/gsi/client https://adora-cdn.com/adora-start.js https://decagon.ai ; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com/ https://accounts.google.com/gsi/style ; object-src 'none' ; base-uri 'self' ; font-src 'self' https://fon"
+    },
+    {
+     "name": "Missing X-Content-Type-Options: nosniff",
+     "severity": "medium",
+     "category": "Content Sniffing",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.figma.com/\nX-Content-Type-Options: nosniff, nosniff\n(must be exactly \"nosniff\")"
+    },
+    {
+     "name": "Missing Referrer-Policy Header",
+     "severity": "low",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 82,
+     "evidence": "GET https://www.figma.com/\nReferrer-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 82,
+     "evidence": "GET https://www.figma.com/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.figma.com/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.figma.com/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.figma.com/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "DMARC Record Missing Aggregate Report Address (rua=)",
+     "severity": "info",
+     "category": "Email Security",
+     "cweId": "CWE-778",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "TXT record: v=DMARC1; p=quarantine;"
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-350",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for www.figma.com or figma.com (NOERROR (name exists))."
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://slack.com",
+   "finalUrl": "https://slack.com/",
+   "statusCode": 200,
+   "server": "Apache",
+   "tlsGrade": "A",
+   "technologies": [
+    "Apache",
+    "Google Analytics",
+    "Google Tag Manager"
+   ],
+   "pagesScanned": 15,
+   "renderedWithBrowser": false,
+   "elapsedMs": 14054,
+   "findings": [
+    {
+     "name": "Missing Content-Security-Policy (CSP)",
+     "severity": "high",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 7.2,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 77,
+     "evidence": "GET https://slack.com/\nContent-Security-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing X-Content-Type-Options: nosniff",
+     "severity": "medium",
+     "category": "Content Sniffing",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://slack.com/\nX-Content-Type-Options: (header absent from response)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://slack.com/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://slack.com/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://slack.com/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "Non-Session Cookie Readable by JavaScript",
+     "severity": "info",
+     "category": "Session Management",
+     "cweId": "CWE-1004",
+     "cvssScore": 2.6,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 60,
+     "evidence": "Affected cookies: utm, b, x"
+    },
+    {
+     "name": "Missing Cache-Control Headers",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-524",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://slack.com/\nCache-Control: (header absent)\nPragma: (header absent)"
+    },
+    {
+     "name": "External Resources Missing Subresource Integrity (SRI)",
+     "severity": "medium",
+     "category": "Supply Chain Security",
+     "cweId": "CWE-353",
+     "cvssScore": 6.1,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 77,
+     "evidence": "<script/link src=\"https://cdn.cookielaw.org/scripttemplates/otSDKStub.js\" (no integrity= attribute)>\n<script/link src=\"https://reveal.clearbit.com/v1/companies/reveal?variable=reveal&amp;authorization=pk_7144fadb90a8fdd9c89e1395ff4171a3\" (no integrity= attribute)>\n<script/link src=\"https://d34u8crftukxnk.cloudfront.net/snippets/11179690159.js\" (no integrity= attribute)>"
+    },
+    {
+     "name": "Rate Limiting Not Advertised in Response Headers",
+     "severity": "info",
+     "category": "Brute Force Protection",
+     "cweId": "CWE-307",
+     "cvssScore": 0,
+     "wstgId": "WSTG-ATHN-03",
+     "confidence": 87,
+     "evidence": "GET https://slack.com/\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled."
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://www.dropbox.com",
+   "finalUrl": "https://www.dropbox.com/",
+   "statusCode": 200,
+   "server": "envoy",
+   "tlsGrade": "A",
+   "technologies": [
+    "Envoy Proxy"
+   ],
+   "pagesScanned": 18,
+   "renderedWithBrowser": false,
+   "elapsedMs": 23035,
+   "findings": [
+    {
+     "name": "Weak Content-Security-Policy (unsafe-inline / unsafe-eval in script-src)",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 5.4,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 74,
+     "evidence": "GET https://www.dropbox.com/\nContent-Security-Policy: base-uri 'self'; child-src https://www.dropbox.com/static/serviceworker/ blob:; connect-src https://* ws://127.0.0.1:*/ws blob: wss://dsimports.dropbox.com/; default-src 'none'; font-src 'self' data: https://*; form-action 'self' https://www.dropbox.com/ https://dl-web.dropbox.com/ https://photos.dropbox.com/ https://paper.dropbox.com/ https://showcase.dropbox.com/ https://www.hellofax.com/ https://app.hellofax.com/ https://www.hellosign.com/ https://app.hellosign.com/ https://docsend.com/ https://www.docsend.com/ https://help.dropbox.com/ "
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.dropbox.com/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.dropbox.com/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.dropbox.com/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "Non-Session Cookie Missing Secure Flag",
+     "severity": "low",
+     "category": "Session Management",
+     "cweId": "CWE-614",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 70,
+     "evidence": "Affected cookie: locale"
+    },
+    {
+     "name": "Non-Session Cookie Readable by JavaScript",
+     "severity": "info",
+     "category": "Session Management",
+     "cweId": "CWE-1004",
+     "cvssScore": 2.6,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 60,
+     "evidence": "Affected cookie: locale"
+    },
+    {
+     "name": "Non-Session Cookie Missing SameSite Attribute",
+     "severity": "info",
+     "category": "CSRF Protection",
+     "cweId": "CWE-352",
+     "cvssScore": 2.1,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 60,
+     "evidence": "Affected cookie: locale"
+    },
+    {
+     "name": "External Resources Missing Subresource Integrity (SRI)",
+     "severity": "medium",
+     "category": "Supply Chain Security",
+     "cweId": "CWE-353",
+     "cvssScore": 6.1,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 73,
+     "evidence": "<script/link src=\"https://cfl.dropboxstatic.com/static/atlas/warp/warp_page_edison_rspb_fallback/e_metaserver__static__js__warp__warp_page_edison-vflNDW4GH.js\" (no integrity= attribute)>"
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-350",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for www.dropbox.com or dropbox.com (NOERROR (name exists))."
+    },
+    {
+     "name": "Twitter Card Metadata Absent",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 90,
+     "evidence": "twitter:card: (absent)"
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://zoom.us",
+   "finalUrl": "https://www.zoom.com/",
+   "statusCode": 200,
+   "server": "cloudflare",
+   "tlsGrade": "A",
+   "technologies": [
+    "Cloudflare",
+    "Google Tag Manager"
+   ],
+   "pagesScanned": 19,
+   "renderedWithBrowser": false,
+   "elapsedMs": 29680,
+   "findings": [
+    {
+     "name": "Missing Content-Security-Policy (CSP)",
+     "severity": "high",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 7.2,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 77,
+     "evidence": "GET https://www.zoom.com/\nContent-Security-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Clickjacking Protection (X-Frame-Options)",
+     "severity": "medium",
+     "category": "UI Security",
+     "cweId": "CWE-1021",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CLNT-09",
+     "confidence": 77,
+     "evidence": "GET https://www.zoom.com/\nX-Frame-Options: (header absent)\nCSP frame-ancestors: (not present in Content-Security-Policy)"
+    },
+    {
+     "name": "Missing X-Content-Type-Options: nosniff",
+     "severity": "medium",
+     "category": "Content Sniffing",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.zoom.com/\nX-Content-Type-Options: (header absent from response)"
+    },
+    {
+     "name": "Missing Referrer-Policy Header",
+     "severity": "low",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.zoom.com/\nReferrer-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.zoom.com/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.zoom.com/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.zoom.com/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Permissive CORS Policy (Wildcard Origin)",
+     "severity": "medium",
+     "category": "CORS Misconfiguration",
+     "cweId": "CWE-942",
+     "cvssScore": 6.5,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 87,
+     "evidence": "GET https://www.zoom.com/\nAccess-Control-Allow-Origin: *"
+    },
+    {
+     "name": "Non-Session Cookie Readable by JavaScript on Inner Page",
+     "severity": "info",
+     "category": "Session Management",
+     "cweId": "CWE-1004",
+     "cvssScore": 2.6,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 60,
+     "evidence": "GET https://www.zoom.com/en/contact/contact-sales/\nSet-Cookie: EPiStateMarker=true; path=/; secure"
+    },
+    {
+     "name": "Non-Session Cookie Readable by JavaScript on Inner Page",
+     "severity": "info",
+     "category": "Session Management",
+     "cweId": "CWE-1004",
+     "cvssScore": 2.6,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 60,
+     "evidence": "GET https://www.zoom.com/en/contact/contact-sales/\nSet-Cookie: .EPiForm_BID=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; secure"
+    },
+    {
+     "name": "Non-Session Cookie Readable by JavaScript on Inner Page",
+     "severity": "info",
+     "category": "Session Management",
+     "cweId": "CWE-1004",
+     "cvssScore": 2.6,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 60,
+     "evidence": "GET https://www.zoom.com/en/contact/contact-sales/\nSet-Cookie: .EPiForm_VisitorIdentifier=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; secure"
+    },
+    {
+     "name": "Non-Session Cookie Readable by JavaScript on Inner Page",
+     "severity": "info",
+     "category": "Session Management",
+     "cweId": "CWE-1004",
+     "cvssScore": 2.6,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 60,
+     "evidence": "GET https://www.zoom.com/en/products/virtual-meetings/\nSet-Cookie: _zm_visitor_guid=<redacted>; max-age=31536000; domain=.zoom.com; path=/; secure; samesite=none"
+    },
+    {
+     "name": "External Resources Missing Subresource Integrity (SRI)",
+     "severity": "medium",
+     "category": "Supply Chain Security",
+     "cweId": "CWE-353",
+     "cvssScore": 6.1,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 80,
+     "evidence": "<script/link src=\"https://cdn.cookielaw.org/scripttemplates/otSDKStub.js\" (no integrity= attribute)>\n<script/link src=\"https://cdn.bc0a.com/autopilot/f00000000314502/autopilot_sdk.js\" (no integrity= attribute)>\n<script/link src=\"https://st1.zoom.us/homepage/20260825-1235/primary/dist/main.js\" (no integrity= attribute)>\n<script/link src=\"https://st1.zoom.us/homepage/20260825-1235/primary/dist/js/utilities/swiper-bundle.min.js\" (no integrity= attribute)>\n<script/link src=\"https://st1.zoom.us/homepage/20260825-1235/primary/dist/js/utilities/my-notes-video.js\" (no integrity= attribute)>"
+    },
+    {
+     "name": "Missing security.txt (RFC 9116)",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-205",
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 75,
+     "evidence": "GET https://www.zoom.com/.well-known/security.txt → HTTP 404\nGET https://www.zoom.com/security.txt → HTTP 404"
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-350",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for www.zoom.com or zoom.com (NOERROR (name exists))."
+    },
+    {
+     "name": "API Key in Client Code (verify restrictions)",
+     "severity": "info",
+     "category": "Exposed Secrets / Credentials",
+     "cweId": "CWE-798",
+     "cvssScore": 0,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 97,
+     "evidence": "Source: inline <script> block\nMatch (redacted): apiKey...fbc'\nContext: ...window.dataLayer = window.dataLayer || [];   window.__zoomCoveoConfig = {   userLocale: 'en-us',   apiKey: 'xxf1623479-48a6-4dce-8475-28e0b0720fbc',   coreScriptSrc: 'https://st1.zoom.us/homepage/2026..."
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  }
+ ]
+}
