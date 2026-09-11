@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractInternalLinks, seedCookieIssuesFromRoot } from "./crawler.js";
+import { extractInternalLinks, seedCookieIssuesFromRoot, buildHeaderGapVulns } from "./crawler.js";
 
 const BASE = "https://example.com";
 
@@ -144,5 +144,47 @@ describe("seedCookieIssuesFromRoot", () => {
 
   it("is empty when the response sets no cookies", () => {
     expect(seedCookieIssuesFromRoot([]).size).toBe(0);
+  });
+});
+
+describe("header-gap evidence keeps the query string", () => {
+  // Found by the 2026-09-10 re-scan. paypal.com links every internal page as
+  // "…/giving?locale.x=en_US". That URL answers with a CSP carrying no
+  // frame-ancestors; the bare "…/giving" answers with a DIFFERENT CSP that has
+  // it. The crawl fetched the linked form and was right — but the evidence
+  // printed only `new URL(p).pathname`, so verifying the finding the way the
+  // false-positive audit requires led straight to the wrong URL and made a true
+  // finding look false.
+  const root = { hsts: true, csp: true, xfo: true, xcto: true, rp: true };
+
+  it("prints the query that produced the observation", () => {
+    const gap = new Map([
+      ["xfo", ["https://www.paypal.com/us/digital-wallet/send-receive-money/giving?locale.x=en_US"]],
+    ] as const);
+    const [v] = buildHeaderGapVulns(root, gap as never, new Set());
+    expect(v!.evidence).toContain("?locale.x=en_US");
+    expect(v!.evidence).toContain("/us/digital-wallet/send-receive-money/giving");
+  });
+
+  it("still labels how the route was reached", () => {
+    const probed = "https://example.com/dashboard?next=%2Fhome";
+    const gap = new Map([["csp", [probed]]] as const);
+    const [v] = buildHeaderGapVulns(root, gap as never, new Set([probed]));
+    expect(v!.evidence).toContain("?next=%2Fhome");
+    expect(v!.evidence).toContain("(probed)");
+  });
+
+  it("leaves a query-less route unchanged", () => {
+    const gap = new Map([["rp", ["https://example.com/about"]]] as const);
+    const [v] = buildHeaderGapVulns(root, gap as never, new Set());
+    expect(v!.evidence).toContain("  • /about (crawled)");
+    expect(v!.evidence).not.toContain("?");
+  });
+
+  it("says nothing when the root lacked the header itself", () => {
+    // A gap is only a gap against a root that had it — otherwise it is the
+    // site-wide "missing header" finding, reported elsewhere.
+    const gap = new Map([["xfo", ["https://example.com/a?b=1"]]] as const);
+    expect(buildHeaderGapVulns({ ...root, xfo: false }, gap as never, new Set())).toEqual([]);
   });
 });

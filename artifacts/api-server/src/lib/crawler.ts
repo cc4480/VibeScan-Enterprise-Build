@@ -414,7 +414,9 @@ const HEADER_GAP_META: Record<keyof HeaderSnapshot, HeaderGapMeta> = {
   },
 };
 
-function buildHeaderGapVulns(
+// Exported for test: the query string is load-bearing in this evidence and a
+// regression here is invisible until someone tries to verify a finding.
+export function buildHeaderGapVulns(
   rootSnapshot: HeaderSnapshot,
   gapMap: Map<keyof HeaderSnapshot, string[]>,
   probedSet: Set<string>,
@@ -429,11 +431,22 @@ function buildHeaderGapVulns(
     // Only flag if root page HAD the header (makes this a regression, not a new issue)
     if (!rootSnapshot[key]) continue;
 
+    // The QUERY STRING IS PART OF THE ROUTE, and dropping it produced evidence
+    // that refuted itself. paypal.com links every internal page as
+    // "…/giving?locale.x=en_US"; that URL answers with a 1818-byte CSP carrying
+    // no frame-ancestors, while the bare "…/giving" answers with a different
+    // 2277-byte CSP that has it. The crawl saw the former and was right. The
+    // evidence printed the latter, so anyone verifying the finding the way the
+    // audit requires — fetch the path, read the header — found the header
+    // present and concluded the check was broken.
+    //
+    // Evidence that cannot be reproduced from what it prints is worse than no
+    // evidence: it argues against a true finding.
     const displayPaths = paths.slice(0, 6).map((p) => {
       try {
-        const pathname = new URL(p).pathname;
+        const u = new URL(p);
         const tag = probedSet.has(p) ? " (probed)" : " (crawled)";
-        return pathname + tag;
+        return u.pathname + u.search + tag;
       } catch { return p; }
     });
 

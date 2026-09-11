@@ -18,6 +18,36 @@ DATABASE_URL=postgres://localhost/anything \
 `DATABASE_URL` only has to be *set* — the scanner module imports the db layer at
 load time. It is never read by a passive scan.
 
+## 2026-09-10 — 38-target re-scan
+
+Three actionable findings were new against the earlier rounds. Two were real.
+The third was real too, and its evidence said otherwise.
+
+### Fixed
+
+| Finding | Target | Why it was wrong |
+|---|---|---|
+| `X-Frame-Options / frame-ancestors Missing on 5 Internal Routes` | www.paypal.com | The detection was correct and the **evidence refuted it**. `buildHeaderGapVulns` printed `new URL(p).pathname`, dropping the query. PayPal links every internal page as `…/giving?locale.x=en_US`, and that URL answers with an 1818-byte CSP carrying no `frame-ancestors`; the bare `…/giving` answers with a *different* 2277-byte CSP that has it. The crawl fetched the linked form and observed the gap correctly. Anyone verifying the finding as this audit requires — take the path, fetch it, read the header — landed on the other URL, found the header present, and would have "fixed" a working check. Evidence now carries `pathname + search`. |
+
+I nearly did exactly that. The first four checks (browser UA, scanner UA, ten
+repeats, the scanner's own fetch layer) all said `frame-ancestors` was present,
+and the finding looked plainly false. It was the *trailing-slash* variant test
+that showed PayPal serves two different CSPs, and PayPal's own HTML that showed
+which one the crawler had been given.
+
+**An evidence string is a claim that can be checked. If it points somewhere the
+scanner did not look, it does not merely fail to support the finding — it argues
+against it.** That is worse than no evidence, and it is the one defect in this
+document that would have caused a correct check to be deleted.
+
+### Checked and correct — 2026-09-10 round
+
+| Finding | Target | Verified |
+|---|---|---|
+| `Missing DMARC Record` (High) | european-union.europa.eu | Genuinely absent. `_dmarc.european-union.europa.eu` and `_dmarc.europa.eu` both answer NXDOMAIN (status 3) on Cloudflare DoH, and `europa.eu` publishes real MX (pphosted, Outlook). Same conclusion as the corpus round. |
+| `X-Frame-Options / frame-ancestors Missing` — 3 of the 5 paypal.com routes | www.paypal.com | `/manage-money`, `/ways-to-pay/add-payment-method` and `/manage-money/direct-deposit` genuinely lack `frame-ancestors` in every variant tested, with no `X-Frame-Options` header. |
+| `Content-Security-Policy Missing on 8 Internal Routes` (High) | www.reddit.com | **Did not reproduce.** Six repeats each of `/`, `/login` and `/dashboard` through the scanner's own fetch layer returned an identical 161-byte CSP every time; `/administrator`, `/auth` and `/signin` all carry it too. Only `/live` genuinely lacks one, and `/admin` is a 404 the crawler already excludes. The scan recorded no rate-limit or challenge signal, root CSP was present (or the gap finding could not have fired), and reddit answered in 18.5s across 14 pages. Cause unknown. **Left alone** — a check is not changed on a finding that cannot be reproduced, and the probable explanation is a degraded edge response during the probe burst, which is a property of the target that night, not of the scanner. Re-check on the next round. |
+
 ## 2026-09-08 — 30-site corpus round
 
 Thirty sites across six sectors, scanned passively to build a published baseline.
