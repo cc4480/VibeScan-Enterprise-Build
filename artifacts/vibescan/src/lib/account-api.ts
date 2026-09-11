@@ -49,11 +49,37 @@ export async function register(email: string, password: string): Promise<{ user:
   });
 }
 
-export async function signIn(email: string, password: string): Promise<{ user: AccountUser }> {
+/**
+ * Step one of signing in: the password.
+ *
+ * A correct password does NOT produce a session. It returns a challenge, and
+ * the server emails a six-digit code; verifySignIn exchanges the pair for a
+ * session. That is what makes this two-factor — the password is something you
+ * know, the code proves you can read the account's mailbox.
+ */
+export interface SignInChallenge {
+  twoFactorRequired: true;
+  /** Opaque handle to send back with the code. Not a credential on its own. */
+  challenge: string;
+  /** Masked address the code went to, e.g. "al***@example.com". */
+  sentTo: string;
+}
+
+export async function signIn(email: string, password: string): Promise<SignInChallenge> {
   return customFetch("/api/account/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
+    responseType: "json",
+  });
+}
+
+/** Step two: exchange the challenge and the emailed code for a session. */
+export async function verifySignIn(challenge: string, code: string): Promise<{ user: AccountUser }> {
+  return customFetch("/api/account/login/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ challenge, code }),
     responseType: "json",
   });
 }

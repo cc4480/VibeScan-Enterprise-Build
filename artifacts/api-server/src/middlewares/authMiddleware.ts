@@ -59,23 +59,38 @@ export async function authMiddleware(
     return;
   }
 
-  try {
-    // Auto-create user on first request — the UUID IS the user ID
-    await db
-      .insert(usersTable)
-      .values({
-        id: token,
-        email: null,
-        firstName: null,
-        lastName: null,
-        profileImageUrl: null,
-      })
-      .onConflictDoNothing();
+  // Legacy anonymous identities are read-only-compatible: an existing row is
+  // still honoured, a NEW one is never minted.
+  //
+  // This is what makes signing in mandatory. Until now any browser could invent
+  // a UUID, send it as a bearer token, and be handed a brand-new account with
+  // no email, no password and nothing tying it to a person — so "log in" was
+  // effectively optional, and an account was a string in localStorage that died
+  // with the browser profile.
+  //
+  // Existing anonymous rows keep working during the changeover rather than
+  // being cut off, because their scans, credits and monitors hang off that id
+  // and registering PROMOTES the same row in place (see routes/account.ts) —
+  // so those users can claim their history instead of losing it. Set
+  // ALLOW_LEGACY_ANONYMOUS_BEARER=false to close the path completely once
+  // they have had the chance.
+  if (process.env["ALLOW_LEGACY_ANONYMOUS_BEARER"] === "false") {
+    next();
+    return;
+  }
 
+  try {
     const [dbUser] = await db
       .select()
       .from(usersTable)
       .where(eq(usersTable.id, token));
+
+    // No row for this UUID: an unrecognised token is now simply not
+    // authenticated, where it used to CREATE the account it named.
+    if (!dbUser) {
+      next();
+      return;
+    }
 
     // Registering converts an anonymous row into an account in place, keeping
     // the same id. Without this check the original UUID would keep working as a

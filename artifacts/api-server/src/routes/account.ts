@@ -36,7 +36,9 @@ import {
   SESSION_TTL,
 } from "../lib/auth";
 import { issueToken, redeemToken } from "../lib/authTokens";
-import { sendEmailVerification, sendPasswordReset, addToMarketingAudience, sendWelcomeEmail } from "../lib/mailer";
+import { LOGIN_CODE_TTL_MS, normalizeLoginCode } from "../lib/loginCode";
+import { abandonLoginChallenges, issueLoginChallenge, redeemLoginChallenge } from "../lib/pendingLogin";
+import { sendEmailVerification, sendPasswordReset, sendLoginCode, addToMarketingAudience, sendWelcomeEmail } from "../lib/mailer";
 import { clientIp } from "../lib/clientIp";
 
 const router: IRouter = Router();
@@ -76,6 +78,17 @@ function isRateLimited(key: string): boolean {
   recent.push(now);
   attempts.set(key, recent);
   return recent.length > MAX_ATTEMPTS;
+}
+
+// "al***@example.com" — enough for the user to recognise their own mailbox,
+// not enough to hand the address to someone who only guessed the password.
+function maskEmail(address: string): string {
+  const at = address.lastIndexOf("@");
+  if (at <= 0) return "***";
+  const local = address.slice(0, at);
+  const domain = address.slice(at);
+  const head = local.slice(0, Math.min(2, local.length));
+  return `${head}${"*".repeat(Math.max(1, local.length - head.length))}${domain}`;
 }
 
 function publicUser(row: typeof usersTable.$inferSelect) {
@@ -176,7 +189,15 @@ router.post("/account/register", async (req, res): Promise<void> => {
   }
 });
 
-// ── Log in ───────────────────────────────────────────────────────────────────
+// ── Log in (step 1 of 2: password) ───────────────────────────────────────────
+//
+// A correct password no longer signs anyone in. It produces a CHALLENGE and an
+// emailed six-digit code; POST /account/login/verify exchanges the two for a
+// session. That is what makes this two-factor rather than one factor with extra
+// steps: the password is something you know, the code proves you can read the
+// account's mailbox, and neither alone gets you a session.
+//
+// See lib/loginCode.ts for why a six-digit secret is safe here at all.
 
 router.post("/account/login", async (req, res): Promise<void> => {
   if (isRateLimited(`login:${clientIp(req)}`)) {
@@ -215,10 +236,93 @@ router.post("/account/login", async (req, res): Promise<void> => {
       await db.update(usersTable).set({ passwordHash: upgraded }).where(eq(usersTable.id, row.id));
     }
 
+    // An account with no address on file cannot receive a code. That should be
+    // impossible — registering requires an email — but signing someone in
+    // without the second factor because their data is odd is exactly the
+    // fallback an attacker would look for, so it refuses instead.
+    if (!row.email) {
+      req.log.error({ userId: row.id }, "Account has a password but no email — cannot send a sign-in code");
+      res.status(500).json({ error: "Could not sign you in" });
+      return;
+    }
+
+    const { challenge, code } = await issueLoginChallenge(row.id);
+
+    // Deliberately awaited and NOT caught-and-ignored. sendLoginCode throws
+    // where the other senders swallow, because here the mail IS the sign-in:
+    // reporting success and sending nothing would leave the user at a code
+    // prompt they can never satisfy.
+    try {
+      await sendLoginCode(row.email, code, Math.round(LOGIN_CODE_TTL_MS / 60000));
+    } catch (err) {
+      // Spend the challenge we just minted. Leaving it live would put a code
+      // nobody received into the one-live-challenge slot, so the user's next
+      // attempt would silently retire it anyway — but this keeps the table
+      // honest about what is outstanding.
+      await abandonLoginChallenges(row.id);
+      req.log.error({ err }, "Could not send sign-in code");
+      res.status(502).json({ error: "Could not send your sign-in code. Please try again shortly." });
+      return;
+    }
+
+    res.json({
+      twoFactorRequired: true,
+      challenge,
+      // Echoed so the client can show WHERE the code went without having to
+      // remember the address the user typed. Masked: this response is the reply
+      // to a password, and a full address here would let someone who guessed a
+      // password harvest it.
+      sentTo: maskEmail(row.email),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Login failed");
+    res.status(500).json({ error: "Could not sign you in" });
+  }
+});
+
+// ── Log in (step 2 of 2: emailed code) ───────────────────────────────────────
+
+router.post("/account/login/verify", async (req, res): Promise<void> => {
+  // Keyed on IP as well as capped per challenge. The five-attempt cap is the
+  // real defence; this stops a script burning someone else's five as fast as
+  // the network allows.
+  if (isRateLimited(`login2fa:${clientIp(req)}`)) {
+    res.status(429).json({ error: "Too many attempts. Try again in a few minutes." });
+    return;
+  }
+
+  const challenge = typeof req.body?.challenge === "string" ? req.body.challenge : "";
+  const code = normalizeLoginCode(req.body?.code);
+  if (!challenge || !code) {
+    res.status(400).json({ error: "Enter the 6-digit code from your email" });
+    return;
+  }
+
+  try {
+    const result = await redeemLoginChallenge(challenge, code);
+    if (!result.ok) {
+      // ONE message for every failure. Telling "wrong code" from "no such
+      // challenge" would confirm a guessed challenge was real, and "expired"
+      // from "wrong" would tell an attacker their timing, not their guess, was
+      // the problem. The reason is logged, not sent.
+      if (result.reason === "too_many_attempts") {
+        req.log.warn("Sign-in code exhausted its attempts — possible brute force");
+      }
+      res.status(401).json({ error: "That code is not valid. Start again to get a new one." });
+      return;
+    }
+
+    const [row] = await db.select().from(usersTable).where(eq(usersTable.id, result.userId));
+    if (!row) {
+      // The account went away between the two steps (deleted mid-login).
+      res.status(401).json({ error: "That code is not valid. Start again to get a new one." });
+      return;
+    }
+
     await startSession(req, res, row);
     res.json({ user: publicUser(row) });
   } catch (err) {
-    req.log.error({ err }, "Login failed");
+    req.log.error({ err }, "Sign-in code verification failed");
     res.status(500).json({ error: "Could not sign you in" });
   }
 });
@@ -408,6 +512,12 @@ router.post("/account/password/reset", async (req, res): Promise<void> => {
     // signed in, and leaving their cookie alive would make the reset pointless.
     await deleteSessionsForUser(result.userId);
     await clearSession(res, getSessionId(req));
+
+    // And kill any pending two-factor challenge. Someone who knew the OLD
+    // password could be holding a live challenge from seconds ago; without
+    // this, resetting the password would evict their sessions while leaving
+    // them one emailed code away from a fresh one.
+    await abandonLoginChallenges(result.userId);
 
     res.json({ ok: true });
   } catch (err) {

@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSeo } from "@/lib/seo";
 import { AuthShell, AuthForm, Field } from "@/components/auth-shell";
-import { signIn, accountErrorMessage } from "@/lib/account-api";
+import { signIn, verifySignIn, accountErrorMessage } from "@/lib/account-api";
 import { GoogleButton, AuthDivider } from "@/components/google-button";
 
 /**
@@ -39,6 +39,12 @@ export default function SignInPage() {
   const queryClient = useQueryClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // Step two of sign-in. `challenge` is the handle the password step returned;
+  // holding it is what lets the emailed code be spent, and it is never a
+  // credential on its own.
+  const [challenge, setChallenge] = useState<string | null>(null);
+  const [sentTo, setSentTo] = useState("");
+  const [code, setCode] = useState("");
   // Seeded from the URL so a redirect back from a failed Google attempt lands
   // with the reason already on screen; typing in the form clears it as usual.
   const [error, setError] = useState<string | null>(() =>
@@ -46,21 +52,99 @@ export default function SignInPage() {
   );
   const [submitting, setSubmitting] = useState(false);
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  // Step one. A correct password does not sign anyone in — it returns a
+  // challenge and the server emails a code.
+  async function handlePasswordSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
-      await signIn(email, password);
+      const result = await signIn(email, password);
+      setChallenge(result.challenge);
+      setSentTo(result.sentTo);
+      setCode("");
+      setSubmitting(false);
+    } catch (err) {
+      setError(accountErrorMessage(err, "Could not sign you in. Try again."));
+      setSubmitting(false);
+    }
+  }
+
+  // Step two. Only this creates a session.
+  async function handleCodeSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!challenge) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      await verifySignIn(challenge, code.replace(/[\s-]/g, ""));
       // The signed-in identity differs from the anonymous one the cache was
       // filled with, so drop everything rather than show the previous user's
       // scans until each query happens to refetch.
       await queryClient.invalidateQueries();
       setLocation("/dashboard");
     } catch (err) {
-      setError(accountErrorMessage(err, "Could not sign you in. Try again."));
+      setError(accountErrorMessage(err, "That code is not valid. Start again to get a new one."));
+      setCode("");
       setSubmitting(false);
     }
+  }
+
+  // Back to the password step. The challenge is dropped rather than kept for
+  // later: the user is about to be issued a new one, which retires this.
+  function startOver() {
+    setChallenge(null);
+    setCode("");
+    setPassword("");
+    setError(null);
+  }
+
+  // ── Step two: the emailed code ──────────────────────────────────────────────
+  if (challenge) {
+    return (
+      <AuthShell
+        title="Check your email"
+        subtitle={`We sent a 6-digit code to ${sentTo}. It expires in 10 minutes.`}
+        footer={
+          <button
+            type="button"
+            onClick={startOver}
+            className="text-primary hover:underline underline-offset-4"
+          >
+            Use a different account
+          </button>
+        }
+      >
+        <AuthForm
+          onSubmit={handleCodeSubmit}
+          error={error}
+          submitting={submitting}
+          submitLabel="Sign in"
+          submittingLabel="Verifying…"
+          disabled={code.replace(/[\s-]/g, "").length !== 6}
+        >
+          <Field
+            label="Sign-in code"
+            // Not type="number": that renders spinners and can strip a leading
+            // zero, and a code is a string of digits rather than a quantity.
+            // `one-time-code` lets the browser and phone keyboard offer it
+            // straight from the notification.
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            // Room for the "123 456" spacing the email uses; the server strips
+            // separators, so pasting it verbatim works.
+            maxLength={7}
+            autoFocus
+            required
+            placeholder="123456"
+            hint="Spaces don't matter. Five wrong tries and you'll need a new code."
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+          />
+        </AuthForm>
+      </AuthShell>
+    );
   }
 
   return (
@@ -80,11 +164,11 @@ export default function SignInPage() {
       <AuthDivider />
 
       <AuthForm
-        onSubmit={handleSubmit}
+        onSubmit={handlePasswordSubmit}
         error={error}
         submitting={submitting}
-        submitLabel="Sign in"
-        submittingLabel="Signing in…"
+        submitLabel="Continue"
+        submittingLabel="Checking…"
       >
         <Field
           label="Email"

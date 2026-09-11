@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgTable, timestamp, varchar, boolean} from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, timestamp, varchar, boolean} from "drizzle-orm/pg-core";
 
 // (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
 export const sessionsTable = pgTable(
@@ -81,6 +81,52 @@ export const authTokensTable = pgTable(
   },
   (table) => [index("IDX_auth_tokens_user").on(table.userId)],
 );
+
+/**
+ * A password login that has passed step one and is waiting for its emailed code.
+ *
+ * This is what makes the code a genuine SECOND factor rather than a second
+ * delivery of the first. A row here is created ONLY after a password has been
+ * verified, and a session is issued ONLY by redeeming one. Neither half signs
+ * anyone in on its own: knowing the password gets you a row and an email you
+ * cannot read, and holding the code is useless without a row to spend it on.
+ *
+ * A six-digit code is a far weaker secret than the 32-byte values in
+ * auth_tokens — a million possibilities, walkable in seconds — so three things
+ * carry it, and all three live in this table's shape:
+ *
+ *  - challengeHash scopes the lookup. A code is never matched on its own value;
+ *    it is matched inside one challenge, which only someone who already passed
+ *    the password step holds. Without this, a guess would be tested against
+ *    every pending login at once instead of one.
+ *  - attempts caps guessing. Five wrong tries and the row is spent, correct
+ *    code or not.
+ *  - expiresAt keeps the window small, and issuing a new challenge retires the
+ *    user's earlier ones so several codes are never live at once.
+ *
+ * Only hashes are stored, as with auth_tokens: a dumped table yields neither a
+ * usable code nor a usable challenge.
+ */
+export const pendingLoginsTable = pgTable(
+  "pending_logins",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull(),
+    // SHA-256 of the opaque challenge handed to the client in step one.
+    challengeHash: varchar("challenge_hash").notNull().unique(),
+    // SHA-256 of the six-digit code emailed to the account's address.
+    codeHash: varchar("code_hash").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    // Set when redeemed or abandoned, rather than deleting, so a replay can be
+    // told apart from a challenge that never existed.
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("IDX_pending_logins_user").on(table.userId)],
+);
+
+export type PendingLogin = typeof pendingLoginsTable.$inferSelect;
 
 export type AuthToken = typeof authTokensTable.$inferSelect;
 

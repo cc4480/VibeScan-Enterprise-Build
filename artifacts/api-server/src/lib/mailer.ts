@@ -176,11 +176,16 @@ export async function sendMonitorCveAlertEmail(opts: SendMonitorCveAlertOptions)
   if (!apiKey) {
     console.warn("[mailer] RESEND_API_KEY is not set — skipping CVE alert email");
     return;
-  }
-
-  if (!(await alertEmailsAllowed(opts.userId))) {
-    console.log("[mailer] Skipping CVE alert email — user opted out", { to: opts.toEmail });
-    return;
+  }
+
+
+
+  if (!(await alertEmailsAllowed(opts.userId))) {
+
+    console.log("[mailer] Skipping CVE alert email — user opted out", { to: opts.toEmail });
+
+    return;
+
   }
 
   const { targetUrl, cveMatches, dashboardUrl } = opts;
@@ -288,11 +293,16 @@ interface SendRegressionAlertOptions {
 
 export async function sendRegressionAlertEmail(opts: SendRegressionAlertOptions): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return;
-
-  if (!(await alertEmailsAllowed(opts.userId))) {
-    console.log("[mailer] Skipping regression alert email — user opted out", { to: opts.toEmail });
-    return;
+  if (!apiKey) return;
+
+
+
+  if (!(await alertEmailsAllowed(opts.userId))) {
+
+    console.log("[mailer] Skipping regression alert email — user opted out", { to: opts.toEmail });
+
+    return;
+
   }
 
   const { targetUrl, regressions, dashboardUrl } = opts;
@@ -373,11 +383,16 @@ interface SendCertExpiryOptions {
 
 export async function sendCertExpiryEmail(opts: SendCertExpiryOptions): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return;
-
-  if (!(await alertEmailsAllowed(opts.userId))) {
-    console.log("[mailer] Skipping cert expiry email — user opted out", { to: opts.toEmail });
-    return;
+  if (!apiKey) return;
+
+
+
+  if (!(await alertEmailsAllowed(opts.userId))) {
+
+    console.log("[mailer] Skipping cert expiry email — user opted out", { to: opts.toEmail });
+
+    return;
+
   }
 
   const { targetUrl, daysRemaining, expiryDate, dashboardUrl } = opts;
@@ -441,11 +456,16 @@ interface SendMonitorScanQueuedOptions {
 
 export async function sendMonitorScanQueuedEmail(opts: SendMonitorScanQueuedOptions): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return;
-
-  if (!(await alertEmailsAllowed(opts.userId))) {
-    console.log("[mailer] Skipping monitor scan queued email — user opted out", { to: opts.toEmail });
-    return;
+  if (!apiKey) return;
+
+
+
+  if (!(await alertEmailsAllowed(opts.userId))) {
+
+    console.log("[mailer] Skipping monitor scan queued email — user opted out", { to: opts.toEmail });
+
+    return;
+
   }
 
   const { targetUrl, reason, dashboardUrl } = opts;
@@ -587,6 +607,58 @@ export async function sendEmailVerification(toEmail: string, verifyUrl: string):
     ),
     "email verification",
   );
+}
+
+/**
+ * The two-factor sign-in code.
+ *
+ * THIS ONE THROWS, unlike every other sender in this module. Everywhere else a
+ * failed send degrades to a warning, which is right for a receipt or an alert:
+ * the user's request succeeded and the mail is a nicety. Here the mail IS the
+ * sign-in. Swallowing the failure would tell the caller a code is on its way,
+ * leave them at a code prompt forever, and lock them out of their own account
+ * with nothing in the log to connect the two. The login route catches this and
+ * says the code could not be sent.
+ *
+ * A missing RESEND_API_KEY throws for the same reason — an instance with no
+ * mail provider cannot do two-factor sign-in, and must say so rather than
+ * pretend.
+ *
+ * The code is rendered as text, never as a link: a clickable code would be
+ * followed automatically by the mail scanners and prefetchers that made link
+ * sign-in unreliable in the first place.
+ */
+export async function sendLoginCode(toEmail: string, code: string, ttlMinutes: number): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    throw new Error("RESEND_API_KEY is not set — two-factor sign-in codes cannot be sent");
+  }
+  const spaced = `${code.slice(0, 3)} ${code.slice(3)}`;
+  const html = `<!DOCTYPE html>
+<html><body style="margin:0;padding:24px;background:#f4f7f5;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#121a17;">
+  <table role="presentation" width="100%" style="max-width:520px;margin:0 auto;background:#ffffff;border:1px solid #dbe4df;border-radius:8px;">
+    <tr><td style="padding:28px;">
+      <h1 style="margin:0 0 12px;font-size:20px;line-height:1.3;">Your sign-in code</h1>
+      <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#3c4b45;">Enter this code to finish signing in to SecScan.</p>
+      <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:32px;font-weight:700;letter-spacing:6px;background:#f4f7f5;border:1px solid #dbe4df;border-radius:8px;padding:16px 24px;text-align:center;color:#121a17;">${spaced}</div>
+      <p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#64766e;">It expires in ${ttlMinutes} minutes and can be used once. Spaces don't matter.</p>
+      <p style="margin:16px 0 0;font-size:13px;line-height:1.6;color:#64766e;">If you didn't just try to sign in, someone may know your password — change it. They cannot get in without this code.</p>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  const res = await fetch(RESEND_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    // The code is in the subject too: most clients preview enough of it to read
+    // without opening the mail, which is the fastest way back to the waiting tab.
+    body: resendBody({ to: [toEmail], subject: `${spaced} is your SecScan sign-in code`, html }),
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Resend API ${res.status}: ${errText}`);
+  }
+  console.log("[mailer] sign-in code sent", { to: toEmail });
 }
 
 export async function sendPasswordReset(toEmail: string, resetUrl: string): Promise<void> {

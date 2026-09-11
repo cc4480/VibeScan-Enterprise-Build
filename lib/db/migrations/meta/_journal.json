@@ -36,6 +36,13 @@
       "when": 1788721674772,
       "tag": "0004_mighty_ozymandias",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789140160591,
+      "tag": "0005_silly_fallen_one",
+      "breakpoints": true
     }
   ]
 }
