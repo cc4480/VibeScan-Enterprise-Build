@@ -63,7 +63,22 @@ day's data is bundled rather than fresh.
 
 Restarting after migrating clears it. Better: migrate first.
 
-## Migrating needs a temporary route to the database
+## Migrations now apply themselves on boot
+
+**The procedure below is no longer needed for a normal deploy.** Both
+entrypoints call `migrateToLatest()` before they serve anything
+(`lib/db/src/bootMigrate.ts`), the Dockerfile ships the committed migrations to
+`/app/lib/db/migrations`, and an advisory lock serialises `web` and `secscan`
+when they start together — drizzle's own `migrate()` takes no lock, and without
+one the loser of that race dies on a duplicate `__drizzle_migrations`
+(reproduced: removing the lock crashes the web tier's boot every time).
+
+A schema change now ships by pushing it. Nothing to remember, nothing to expose.
+
+The `db:migrate` CLI still exists for migrating a database before anything is
+deployed against it, and for local work. It calls the same function.
+
+## Migrating by hand needs a temporary route to the database (historical)
 
 `DATABASE_URL` on a Railway Postgres resolves to `postgres.railway.internal`,
 which only exists inside Railway's network — `railway run` injects it locally
@@ -87,8 +102,12 @@ railway api 'mutation { tcpProxyDelete(id: "<proxy-id>") }'
 
 Leaving the proxy in place would leave Postgres reachable from the internet with
 nothing but its password in front of it. Delete it when the migration is done,
-and confirm: `railway variables --service Postgres --kv | grep PUBLIC` should
-find nothing.
+and confirm: `railway variables --service Postgres --kv | grep -i public` should
+find nothing. (Lower-case, and no `+` — `grep` without `-E` treats `+` as a
+literal character, so `grep -i PUBLIC+` silently matches nothing and reads as
+"no proxy exists".)
+
+Boot-time migration exists so this is a last resort rather than routine.
 
 ## The GitHub source is configured but not usable yet
 

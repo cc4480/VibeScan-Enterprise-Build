@@ -17,6 +17,7 @@ import { installCrashHandlers } from "./lib/crashHandlers";
 import { warnIfPaymentsMisconfigured } from "./lib/stripe";
 import { refreshCloudflareIps } from "./lib/cloudflareIps";
 import { behindCloudflare } from "./lib/clientIp";
+import { migrateToLatest } from "@workspace/db";
 
 installCrashHandlers("web");
 warnIfPaymentsMisconfigured(logger);
@@ -46,17 +47,6 @@ if (behindCloudflare()) {
   setInterval(() => void refreshCloudflareIps(), DAILY_MS).unref();
 }
 
-// Warm the pg-boss connection at startup so the first user-triggered scan does
-// not pay the connection cost. Enqueueing is all this process does with the
-// queue — the worker and the monitor scheduler run in secscan.
-getBoss()
-  .then(() => {
-    logger.info("Job queue ready");
-  })
-  .catch((err: unknown) => {
-    logger.error({ err }, "Failed to initialize job queue — scans cannot be queued");
-  });
-
 // Stop accepting new work before exiting. The web tier holds no in-flight scans,
 // so there is nothing to drain beyond closing the queue connection.
 process.on("SIGTERM", () => {
@@ -71,11 +61,53 @@ process.on("SIGTERM", () => {
     });
 });
 
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
-  }
+async function start(): Promise<void> {
+  // Bring the schema up to date BEFORE anything can serve a request.
+  //
+  // Until this existed, migrations reached production only by hand, through a
+  // procedure that involved briefly exposing Postgres to the internet
+  // (deploy/railway/NOTES.md) — a step that had to be remembered before every
+  // schema-dependent deploy, and whose omission is silent until the first
+  // request touches a missing table. Both services have already booted against
+  // a database missing `eol_cache` and logged it at length.
+  //
+  // secscan runs this too. They share one database and start together, which is
+  // exactly why migrateToLatest takes an advisory lock; whoever loses the race
+  // waits and then finds nothing to apply.
+  const databaseUrl = process.env["DATABASE_URL"];
+  if (!databaseUrl) throw new Error("DATABASE_URL environment variable is required but was not provided.");
+  await migrateToLatest(databaseUrl, (msg) => logger.info(msg));
 
-  logger.info({ port }, "Server listening");
+  // Warm the pg-boss connection at startup so the first user-triggered scan does
+  // not pay the connection cost. Enqueueing is all this process does with the
+  // queue — the worker and the monitor scheduler run in secscan. After the
+  // migration, so the two are not creating schema at the same time.
+  //
+  // Still not fatal: a web tier that cannot reach the queue can serve every
+  // page and every report, and only scan submission degrades. That is a real
+  // degraded mode worth having, unlike a missing schema.
+  getBoss()
+    .then(() => {
+      logger.info("Job queue ready");
+    })
+    .catch((err: unknown) => {
+      logger.error({ err }, "Failed to initialize job queue — scans cannot be queued");
+    });
+
+  app.listen(port, (err) => {
+    if (err) {
+      logger.error({ err }, "Error listening on port");
+      process.exit(1);
+    }
+
+    logger.info({ port }, "Server listening");
+  });
+}
+
+start().catch((err: unknown) => {
+  // Deliberately fatal. A process that cannot establish its schema must fail
+  // the deploy rather than come up and throw on every request that touches a
+  // table it does not have.
+  logger.error({ err }, "web failed to start");
+  process.exit(1);
 });

@@ -47,6 +47,22 @@ WORKDIR /app
 # identical between the two images, which is worth more than trimming it.
 COPY --from=builder /app/artifacts/api-server/dist ./artifacts/api-server/dist
 
+# The committed migrations. Both entrypoints apply them on boot (see
+# lib/db/src/bootMigrate.ts), which is what removed the hand-run,
+# expose-Postgres-to-the-internet procedure that used to be the only way schema
+# reached production.
+#
+# They must be real files in the image: the server ships as an esbuild bundle,
+# which carries no non-JS assets, and drizzle's migrator reads the .sql files
+# and meta/_journal.json from disk at runtime. resolveMigrationsDir() finds them
+# relative to WORKDIR (/app), NOT relative to the bundle — import.meta.url there
+# points at dist/, where these have never been.
+#
+# In runtime-base rather than a single stage because both services migrate, and
+# because Railway builds only the final stage whatever the service is named
+# (see the note below).
+COPY --from=builder /app/lib/db/migrations ./lib/db/migrations
+
 # The frontend lives in the shared base rather than only in the web stage.
 # It costs the scanner image a couple of megabytes of static files it will never
 # serve, and buys the ability to run either entrypoint from either image — which

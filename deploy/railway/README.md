@@ -131,6 +131,9 @@ has more than one replica. Run them once, from your machine:
 ```bash
 npm i -g @railway/cli
 railway link                 # pick the project
+# Migrations apply themselves on boot now (lib/db/src/bootMigrate.ts).
+# This remains only for migrating a database BEFORE any service is deployed
+# against it, and needs a route to the database — see NOTES.md.
 railway run --service web pnpm --filter @workspace/db run db:migrate
 ```
 

@@ -16,12 +16,24 @@ import { logger } from "./lib/logger";
 import { getBoss } from "./lib/queue";
 import { startHeartbeat, stopHeartbeat } from "./lib/heartbeat";
 import { installCrashHandlers } from "./lib/crashHandlers";
+import { migrateToLatest } from "@workspace/db";
 
 // Stop advertising health before the process goes down, so an orchestrator
 // replaces this worker rather than leaving jobs with a dead one.
 installCrashHandlers("secscan", stopHeartbeat);
 
 async function main(): Promise<void> {
+  // Same as the web tier: bring the schema up to date before doing anything
+  // that touches it. Both processes run this and share one database, which is
+  // why migrateToLatest holds an advisory lock across the apply — drizzle's own
+  // migrate() takes none, so without it the two boots race and the loser dies
+  // on "relation already exists". Whoever waits finds nothing left to apply.
+  //
+  // Before pg-boss, so the queue is not creating its schema at the same time.
+  const databaseUrl = process.env["DATABASE_URL"];
+  if (!databaseUrl) throw new Error("DATABASE_URL environment variable is required but was not provided.");
+  await migrateToLatest(databaseUrl, (msg) => logger.info(msg));
+
   await getBoss();
   logger.info("Job queue ready");
 
