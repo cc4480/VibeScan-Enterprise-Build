@@ -9,6 +9,7 @@ import { FROM_EMAIL, REPLY_TO_EMAIL, APP_ORIGIN } from "./appOrigin";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { unsubscribeHeaders } from "./emailPrefs";
+import { htmlToPlainText } from "./htmlToText";
 
 const RESEND_API = "https://api.resend.com/emails";
 const RESEND_AUDIENCES_API = "https://api.resend.com/audiences";
@@ -42,11 +43,30 @@ async function alertEmailsAllowed(userId: string): Promise<boolean> {
   }
 }
 
+/**
+ * Build the Resend payload, ALWAYS with a plain-text alternative.
+ *
+ * Every message this service sent used to be HTML-only. Mail with no text part
+ * scores worse with spam filters before a human sees it, and renders as nothing
+ * in text-only clients. Rather than adding `text:` to a dozen call sites and
+ * trusting the next one to remember, the text part is derived here from the
+ * HTML whenever a caller has not supplied a better one — so it cannot go
+ * missing again, including from a sender added later.
+ *
+ * A hand-written text body still wins where the wording matters, and the
+ * senders that most need it pass one explicitly. This is the floor, not the
+ * ceiling.
+ */
 function resendBody(fields: Record<string, unknown>): string {
+  const html = typeof fields["html"] === "string" ? (fields["html"] as string) : undefined;
+  const supplied = typeof fields["text"] === "string" ? (fields["text"] as string).trim() : "";
+  const text = supplied || (html ? htmlToPlainText(html) : "");
+
   return JSON.stringify({
     from: FROM_EMAIL,
     ...(REPLY_TO_EMAIL ? { reply_to: REPLY_TO_EMAIL } : {}),
     ...fields,
+    ...(text ? { text } : {}),
   });
 }
 
@@ -535,7 +555,46 @@ function buildAccountHtml(heading: string, body: string, ctaLabel: string, ctaUr
 </body></html>`;
 }
 
-async function sendAccountEmail(to: string, subject: string, html: string, label: string): Promise<void> {
+/**
+ * The plain-text twin of buildAccountHtml, from the same inputs.
+ *
+ * Written rather than derived: these four messages (verification, reset,
+ * receipt, welcome) are the ones a user reads when something has gone wrong or
+ * money has moved, and the derived version buries the link in punctuation.
+ */
+function buildAccountText(heading: string, body: string, ctaLabel: string, ctaUrl: string, footnote: string): string {
+  // `body` carries inline markup (the receipt bolds the amount), so it goes
+  // through the same stripper rather than being pasted in raw — a text part
+  // containing "<strong>$29.00</strong>" is worse than no text part.
+  return [heading, "", htmlToPlainText(body), "", `${ctaLabel}: ${ctaUrl}`, "", footnote].join("\n");
+}
+
+interface AccountMessage {
+  heading: string;
+  body: string;
+  ctaLabel: string;
+  ctaUrl: string;
+  footnote: string;
+}
+
+/**
+ * Send one account email, rendering BOTH parts from the same content.
+ *
+ * Callers pass the message once. Handing the same five strings to an HTML
+ * builder and a text builder separately is how the two versions drift until
+ * they say different things — which is worse than having only one.
+ */
+async function sendAccountMessage(to: string, subject: string, m: AccountMessage, label: string): Promise<void> {
+  await sendAccountEmail(
+    to,
+    subject,
+    buildAccountHtml(m.heading, m.body, m.ctaLabel, m.ctaUrl, m.footnote),
+    label,
+    buildAccountText(m.heading, m.body, m.ctaLabel, m.ctaUrl, m.footnote),
+  );
+}
+
+async function sendAccountEmail(to: string, subject: string, html: string, label: string, text?: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     // Matches the rest of this module: a missing key degrades to a warning
@@ -548,7 +607,7 @@ async function sendAccountEmail(to: string, subject: string, html: string, label
     const res = await fetch(RESEND_API, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: resendBody({ to: [to], subject, html }),
+      body: resendBody({ to: [to], subject, html, ...(text ? { text } : {}) }),
     });
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
@@ -580,31 +639,31 @@ export async function sendPurchaseReceiptEmail(opts: {
     ? `${opts.creditsAdded} deep-scan credit${opts.creditsAdded === 1 ? "" : "s"} have been added to your account and never expire.`
     : "Your scan has been queued and you'll get a separate email as soon as the report is ready.";
 
-  await sendAccountEmail(
+  await sendAccountMessage(
     opts.toEmail,
     `Your SecScan receipt — ${opts.productName}`,
-    buildAccountHtml(
-      "Thanks for your purchase",
-      `You paid <strong>${amount}</strong> for <strong>${opts.productName}</strong>. ${detail}`,
-      "Go to your dashboard",
-      `${APP_ORIGIN}/dashboard`,
-      "This is a receipt for your records. Reply to this email if anything looks wrong.",
-    ),
+    {
+      heading: "Thanks for your purchase",
+      body: `You paid <strong>${amount}</strong> for <strong>${opts.productName}</strong>. ${detail}`,
+      ctaLabel: "Go to your dashboard",
+      ctaUrl: `${APP_ORIGIN}/dashboard`,
+      footnote: "This is a receipt for your records. Reply to this email if anything looks wrong.",
+    },
     "purchase receipt",
   );
 }
 
 export async function sendEmailVerification(toEmail: string, verifyUrl: string): Promise<void> {
-  await sendAccountEmail(
+  await sendAccountMessage(
     toEmail,
     "Confirm your email for SecScan",
-    buildAccountHtml(
-      "Confirm your email",
-      "Confirming your address lets us send you scan results and security alerts, and lets you get back into your account if you forget your password.",
-      "Confirm email",
-      verifyUrl,
-      "This link expires in 24 hours. If you didn't create a SecScan account, you can ignore this email.",
-    ),
+    {
+      heading: "Confirm your email",
+      body: "Confirming your address lets us send you scan results and security alerts, and lets you get back into your account if you forget your password.",
+      ctaLabel: "Confirm email",
+      ctaUrl: verifyUrl,
+      footnote: "This link expires in 24 hours. If you didn't create a SecScan account, you can ignore this email.",
+    },
     "email verification",
   );
 }
@@ -652,7 +711,20 @@ export async function sendLoginCode(toEmail: string, code: string, ttlMinutes: n
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     // The code is in the subject too: most clients preview enough of it to read
     // without opening the mail, which is the fastest way back to the waiting tab.
-    body: resendBody({ to: [toEmail], subject: `${spaced} is your SecScan sign-in code`, html }),
+    body: resendBody({
+      to: [toEmail],
+      subject: `${spaced} is your SecScan sign-in code`,
+      html,
+      // Written out rather than derived. This is the message a user reads when
+      // they cannot get into their account, sometimes on a phone with images
+      // off, and the derived version puts the code in a wall of styling.
+      text:
+        `Your SecScan sign-in code is ${spaced}\n\n` +
+        `Enter it to finish signing in. It expires in ${ttlMinutes} minutes and can be used once. ` +
+        `Spaces don't matter.\n\n` +
+        `If you didn't just try to sign in, someone may know your password — change it. ` +
+        `They cannot get in without this code.`,
+    }),
   });
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
@@ -662,16 +734,16 @@ export async function sendLoginCode(toEmail: string, code: string, ttlMinutes: n
 }
 
 export async function sendPasswordReset(toEmail: string, resetUrl: string): Promise<void> {
-  await sendAccountEmail(
+  await sendAccountMessage(
     toEmail,
     "Reset your SecScan password",
-    buildAccountHtml(
-      "Reset your password",
-      "Use the link below to choose a new password. Signing in again will end any other sessions on your account.",
-      "Choose a new password",
-      resetUrl,
-      "This link expires in 1 hour and can only be used once. If you didn't ask to reset your password, you can ignore this email — your current password still works.",
-    ),
+    {
+      heading: "Reset your password",
+      body: "Use the link below to choose a new password. Signing in again will end any other sessions on your account.",
+      ctaLabel: "Choose a new password",
+      ctaUrl: resetUrl,
+      footnote: "This link expires in 1 hour and can only be used once. If you didn't ask to reset your password, you can ignore this email — your current password still works.",
+    },
     "password reset",
   );
 }
@@ -758,16 +830,16 @@ export async function addToMarketingAudience(email: string, firstName?: string |
 }
 
 export async function sendWelcomeEmail(toEmail: string, firstName?: string | null): Promise<void> {
-  await sendAccountEmail(
+  await sendAccountMessage(
     toEmail,
     "Welcome to SecScan",
-    buildAccountHtml(
-      firstName ? `Welcome, ${firstName}` : "Welcome to SecScan",
-      "SecScan runs real vulnerability checks, not a checklist: SQL injection, exposed secrets, misconfigured databases, and more. We'll email you when there's something worth knowing: new features, security research, and the occasional product update. Account and security emails (password resets, scan reports) always go out regardless.",
-      "Run your first scan",
-      `${APP_ORIGIN}/dashboard`,
-      "You can unsubscribe from product updates at any time via the link included in those emails.",
-    ),
+    {
+      heading: firstName ? `Welcome, ${firstName}` : "Welcome to SecScan",
+      body: "SecScan runs real vulnerability checks, not a checklist: SQL injection, exposed secrets, misconfigured databases, and more. We'll email you when there's something worth knowing: new features, security research, and the occasional product update. Account and security emails (password resets, scan reports) always go out regardless.",
+      ctaLabel: "Run your first scan",
+      ctaUrl: `${APP_ORIGIN}/dashboard`,
+      footnote: "You can unsubscribe from product updates at any time via the link included in those emails.",
+    },
     "welcome email",
   );
 }
