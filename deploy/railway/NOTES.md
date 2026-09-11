@@ -141,6 +141,29 @@ becomes irreversible the moment one is: every stored secret is encrypted with it
 - A scan submitted to `web` was picked up by `secscan` through the queue
   and finished: status `complete`, progress 100, grade A
 
+## Static outbound IPs — ENABLED 2026-09-10
+
+`railway outbound-network static-ip enable --service secscan`, then a redeploy.
+Static egress is now on for the worker, high-availability, sfo region. The
+worker egresses from a fixed set — a scan may come from any of the three:
+
+- `162.220.232.252`
+- `152.55.177.181`
+- `152.55.177.193`
+
+Confirmed live: after the activating redeploy, an egress read returned
+`152.55.177.193` (one of the set). Type is **Shared** — these are Railway shared
+egress IPs, stable for this service while the feature stays enabled, but not
+exclusive to SecScan.
+
+These three are published on the public `/bot` page as the IP-allowlist option
+(artifacts/vibescan/src/pages/bot.tsx, SCANNER_IPS). **If the set ever changes,
+update it in both places together.** Note there is a brief window right after a
+redeploy where egress can read an out-of-set address (`162.220.232.103` was seen
+mid-propagation) before static routing attaches — not a cause for alarm.
+
+The section below is the pre-static-IP investigation, kept for the record.
+
 ## Observed egress IPs (not guaranteed static)
 
 Measured 2026-09-10 by SSHing into each service and fetching an IP echo

@@ -15,6 +15,12 @@ const USER_AGENT =
   "Mozilla/5.0 (compatible; SecScan-Security-Bot/1.0; +https://secscan.us/bot)";
 const UA_TOKEN = "SecScan-Security-Bot";
 
+// The scanner's static outbound IPs (Railway static egress, sfo region, high
+// availability — a scan may come from any one of these). Fixed while the
+// static-IP feature stays enabled on the worker; if that set ever changes,
+// change it here and in deploy/railway/NOTES.md together.
+const SCANNER_IPS = ["162.220.232.252", "152.55.177.181", "152.55.177.193"];
+
 function Section({
   icon: Icon,
   title,
@@ -110,13 +116,26 @@ export default function BotPage() {
         </p>
         <ul className="list-disc pl-5 space-y-2">
           <li>
-            <strong className="text-foreground">Allowlist the scanner by User-Agent</strong>{" "}
-            in your WAF or bot rules for the duration of a scan — match the{" "}
+            <strong className="text-foreground">Allowlist by User-Agent</strong> in your
+            WAF or bot rules for the duration of a scan — match the{" "}
             <code className="text-foreground bg-secondary/40 px-1 py-0.5 rounded">{UA_TOKEN}</code>{" "}
-            token. This is the stable identifier; our source IP is not guaranteed
-            fixed, so prefer the User-Agent over an IP allowlist. If your controls
-            can only match by IP, email us and we will confirm the current source
-            address.
+            token. This is the simplest durable rule.
+          </li>
+          <li>
+            <strong className="text-foreground">Or allowlist by source IP.</strong> Our
+            scanner egresses from a fixed set of addresses (high availability, so a
+            scan may come from any of them). Allow all of these:
+            <div className="mt-2 flex flex-wrap gap-2">
+              {SCANNER_IPS.map((ip) => (
+                <code key={ip} className="text-foreground bg-secondary/40 px-2 py-1 rounded text-xs">{ip}</code>
+              ))}
+            </div>
+            <span className="block mt-2 text-[13px]">
+              These are Railway shared egress IPs: allowing them permits SecScan, but
+              not SecScan alone, so the User-Agent rule above is the tighter control.
+              If this set ever changes we will update this page — check here before
+              relying on it long-term.
+            </span>
           </li>
           <li>
             <strong className="text-foreground">Verify domain ownership</strong> in the
