@@ -110,11 +110,13 @@ export default function BotPage() {
         </p>
         <ul className="list-disc pl-5 space-y-2">
           <li>
-            <strong className="text-foreground">Allowlist the scanner</strong> in your
-            WAF or bot rules for the duration of a scan — by the{" "}
+            <strong className="text-foreground">Allowlist the scanner by User-Agent</strong>{" "}
+            in your WAF or bot rules for the duration of a scan — match the{" "}
             <code className="text-foreground bg-secondary/40 px-1 py-0.5 rounded">{UA_TOKEN}</code>{" "}
-            User-Agent, or by source IP. If you need the fixed source IP to allowlist,
-            email us and we will provide it.
+            token. This is the stable identifier; our source IP is not guaranteed
+            fixed, so prefer the User-Agent over an IP allowlist. If your controls
+            can only match by IP, email us and we will confirm the current source
+            address.
           </li>
           <li>
             <strong className="text-foreground">Verify domain ownership</strong> in the
