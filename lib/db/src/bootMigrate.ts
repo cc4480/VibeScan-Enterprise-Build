@@ -83,7 +83,13 @@ export function migrationsDirCandidates(
     path.join(cwd, "lib", "db", "migrations"),
     path.join(cwd, "migrations"),
     path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "migrations"),
-  ].filter((p): p is string => !!p);
+  ]
+    .filter((p): p is string => !!p)
+    // Deduped because the list is printed verbatim when nothing is found, and
+    // the same path appearing twice makes the diagnostic read as though two
+    // different locations were checked. In the bundle, the cwd- and
+    // module-relative candidates often resolve to the same directory.
+    .filter((p, i, all) => all.indexOf(p) === i);
 }
 
 export function resolveMigrationsDir(candidates: string[] = migrationsDirCandidates()): string {

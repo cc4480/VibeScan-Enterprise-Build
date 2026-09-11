@@ -128,6 +128,47 @@ export const pendingLoginsTable = pgTable(
 
 export type PendingLogin = typeof pendingLoginsTable.$inferSelect;
 
+/**
+ * Addresses we must stop mailing, fed by Resend's bounce and complaint webhooks.
+ *
+ * Repeatedly mailing a dead address, or someone who pressed "spam", is how
+ * sender reputation erodes — and reputation is what decides whether the mail
+ * people DO want lands in the inbox. Nothing was recording either signal, so
+ * every bounce was invisible and every complaint was repeated.
+ *
+ * `scope` is the part that matters and is easy to get wrong:
+ *
+ *  - "all" — the address does not exist (a hard bounce). Sending anything to
+ *    it is pointless and counts against us, so everything stops.
+ *  - "bulk" — the person marked mail as spam. Marketing and alerts stop, but
+ *    ACCOUNT mail does not: a sign-in code, a password reset or a receipt is
+ *    something they just asked for by their own action, and suppressing those
+ *    would lock someone out of their account as a side effect of a complaint
+ *    about a newsletter. That is a worse outcome than the reputation cost.
+ *
+ * Soft bounces (mailbox full, temporary failure) deliberately do NOT land here.
+ * They resolve on their own, and suppressing on one would quietly cut off a
+ * real user whose inbox was briefly over quota.
+ */
+export const emailSuppressionsTable = pgTable(
+  "email_suppressions",
+  {
+    // Lower-cased address. The natural key, so a repeat webhook for the same
+    // address updates rather than accumulating rows.
+    email: varchar("email").primaryKey(),
+    scope: varchar("scope", { enum: ["all", "bulk"] }).notNull(),
+    reason: varchar("reason", { enum: ["hard_bounce", "complaint", "manual"] }).notNull(),
+    // The provider's own description, kept for when someone asks why they
+    // stopped receiving mail.
+    detail: varchar("detail"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  },
+  (table) => [index("IDX_email_suppressions_scope").on(table.scope)],
+);
+
+export type EmailSuppression = typeof emailSuppressionsTable.$inferSelect;
+
 export type AuthToken = typeof authTokensTable.$inferSelect;
 
 export type UpsertUser = typeof usersTable.$inferInsert;

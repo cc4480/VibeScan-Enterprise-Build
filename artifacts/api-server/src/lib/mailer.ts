@@ -10,24 +10,38 @@ import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { unsubscribeHeaders } from "./emailPrefs";
 import { htmlToPlainText } from "./htmlToText";
+import { isSuppressed } from "./emailSuppression";
 
 const RESEND_API = "https://api.resend.com/emails";
 const RESEND_AUDIENCES_API = "https://api.resend.com/audiences";
 
 /**
- * Every outbound message goes through here so `from` and `reply_to` are
- * applied uniformly. They were previously spelled out at each call site,
- * which is how a reply-to header goes missing on one email and nobody
- * notices until a customer's reply disappears.
+ * Whether BULK mail may go to this address at all.
+ *
+ * Two independent reasons it may not: the person asked us to stop (the opt-out
+ * in alertEmailsAllowed), or the provider told us to stop (a hard bounce or a
+ * spam complaint — see lib/emailSuppression.ts). Both are checked in one place
+ * so a new alert type cannot ship honouring one and ignoring the other.
+ *
+ * Account mail does NOT come through here: a sign-in code or a password reset
+ * still goes to someone who complained about a newsletter, because suppressing
+ * those would lock them out of their own account.
  */
+async function bulkMailAllowed(userId: string, toEmail: string, label: string): Promise<boolean> {
+  if (await isSuppressed(toEmail, "bulk")) {
+    console.warn(`[mailer] Skipping ${label} — address is suppressed`);
+    return false;
+  }
+  return alertEmailsAllowed(userId);
+}
+
 /**
  * Whether recurring alert mail may be sent to this user.
  *
- * Checked here rather than at each call site so a new alert type cannot ship
- * without honouring the opt-out. Fails OPEN, unlike the scan gate: a missed
- * alert means somebody does not hear that their certificate expires, while an
- * extra email to someone who opted out is an annoyance. A database blip should
- * not silence a security warning.
+ * Fails OPEN, unlike the suppression check: a missed alert means somebody does
+ * not hear that their certificate expires, while an extra email to someone who
+ * opted out is an annoyance. A database blip should not silence a security
+ * warning.
  */
 async function alertEmailsAllowed(userId: string): Promise<boolean> {
   try {
@@ -44,7 +58,12 @@ async function alertEmailsAllowed(userId: string): Promise<boolean> {
 }
 
 /**
- * Build the Resend payload, ALWAYS with a plain-text alternative.
+ * Build the Resend payload. Every outbound message goes through here, so `from`
+ * and `reply_to` are applied uniformly — they were previously spelled out at
+ * each call site, which is how a reply-to header goes missing on one email and
+ * nobody notices until a customer's reply disappears.
+ *
+ * It ALWAYS attaches a plain-text alternative.
  *
  * Every message this service sent used to be HTML-only. Mail with no text part
  * scores worse with spam filters before a human sees it, and renders as nothing
@@ -138,6 +157,14 @@ export async function sendReportReadyEmail(opts: SendReportEmailOptions): Promis
     return;
   }
 
+  // No userId here to check an opt-out against, but the suppression list is
+  // keyed on the address, so a bounced or complained-about recipient is still
+  // honoured.
+  if (await isSuppressed(opts.toEmail, "bulk")) {
+    console.warn("[mailer] Skipping report-ready email — address is suppressed");
+    return;
+  }
+
   try {
     const res = await fetch(RESEND_API, {
       method: "POST",
@@ -200,9 +227,9 @@ export async function sendMonitorCveAlertEmail(opts: SendMonitorCveAlertOptions)
 
 
 
-  if (!(await alertEmailsAllowed(opts.userId))) {
+  if (!(await bulkMailAllowed(opts.userId, opts.toEmail, "CVE alert email"))) {
 
-    console.log("[mailer] Skipping CVE alert email — user opted out", { to: opts.toEmail });
+    console.log("[mailer] Skipping CVE alert email", { to: opts.toEmail });
 
     return;
 
@@ -317,9 +344,9 @@ export async function sendRegressionAlertEmail(opts: SendRegressionAlertOptions)
 
 
 
-  if (!(await alertEmailsAllowed(opts.userId))) {
+  if (!(await bulkMailAllowed(opts.userId, opts.toEmail, "regression alert email"))) {
 
-    console.log("[mailer] Skipping regression alert email — user opted out", { to: opts.toEmail });
+    console.log("[mailer] Skipping regression alert email", { to: opts.toEmail });
 
     return;
 
@@ -407,9 +434,9 @@ export async function sendCertExpiryEmail(opts: SendCertExpiryOptions): Promise<
 
 
 
-  if (!(await alertEmailsAllowed(opts.userId))) {
+  if (!(await bulkMailAllowed(opts.userId, opts.toEmail, "cert expiry email"))) {
 
-    console.log("[mailer] Skipping cert expiry email — user opted out", { to: opts.toEmail });
+    console.log("[mailer] Skipping cert expiry email", { to: opts.toEmail });
 
     return;
 
@@ -480,9 +507,9 @@ export async function sendMonitorScanQueuedEmail(opts: SendMonitorScanQueuedOpti
 
 
 
-  if (!(await alertEmailsAllowed(opts.userId))) {
+  if (!(await bulkMailAllowed(opts.userId, opts.toEmail, "monitor scan queued email"))) {
 
-    console.log("[mailer] Skipping monitor scan queued email — user opted out", { to: opts.toEmail });
+    console.log("[mailer] Skipping monitor scan queued email", { to: opts.toEmail });
 
     return;
 
@@ -595,6 +622,14 @@ async function sendAccountMessage(to: string, subject: string, m: AccountMessage
 }
 
 async function sendAccountEmail(to: string, subject: string, html: string, label: string, text?: string): Promise<void> {
+  // "account" kind: still sent to someone who complained, because these are
+  // messages their own action just asked for — a reset link, a receipt.
+  // Suppressing them over a newsletter complaint would lock people out of
+  // their accounts. A hard-bounced address stops everything, including these.
+  if (await isSuppressed(to, "account")) {
+    console.warn(`[mailer] Skipping ${label} — address is suppressed`);
+    return;
+  }
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     // Matches the rest of this module: a missing key degrades to a warning
@@ -691,6 +726,15 @@ export async function sendLoginCode(toEmail: string, code: string, ttlMinutes: n
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     throw new Error("RESEND_API_KEY is not set — two-factor sign-in codes cannot be sent");
+  }
+
+  // A hard bounce means this mailbox does not exist, so the code has nowhere to
+  // go. THROWS rather than skipping, like the missing-key case above and for
+  // the same reason: silently returning would tell the caller a code is on its
+  // way and strand the user at a prompt they can never satisfy. A complaint
+  // ("bulk" scope) does NOT block this — it is mail they just asked for.
+  if (await isSuppressed(toEmail, "account")) {
+    throw new Error("That address is on the suppression list after a permanent delivery failure");
   }
   const spaced = `${code.slice(0, 3)} ${code.slice(3)}`;
   const html = `<!DOCTYPE html>

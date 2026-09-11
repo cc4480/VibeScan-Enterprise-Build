@@ -199,6 +199,14 @@ app.use(
   express.raw({ type: "application/json" }),
 );
 
+// Same for Resend's delivery events. Svix signs the bytes as sent, so
+// re-serialising parsed JSON changes key order and whitespace and never
+// matches — the raw buffer is what gets verified.
+app.use(
+  "/api/email/webhook",
+  express.raw({ type: "application/json" }),
+);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(authMiddleware);
