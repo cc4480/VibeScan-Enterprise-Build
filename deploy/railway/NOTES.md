@@ -162,6 +162,24 @@ update it in both places together.** Note there is a brief window right after a
 redeploy where egress can read an out-of-set address (`162.220.232.103` was seen
 mid-propagation) before static routing attaches — not a cause for alarm.
 
+### Verified live 2026-09-10
+
+- **Egress uses the set.** After the activating redeploy, an egress read from
+  the worker returned `152.55.177.193` — one of the three assigned IPs. (Right
+  after redeploy, before static routing attached, one read showed the out-of-set
+  `162.220.232.103`; it settled into the set within ~a minute. Expected, not a
+  fault.)
+- **The public page serves them.** `https://secscan.us/bot` returns HTTP 200,
+  and the deployed JS bundle (`/assets/index-BfJUgzzF.js` at time of check)
+  contains all three: `162.220.232.252`, `152.55.177.181`, `152.55.177.193`.
+  Re-check after any frontend redeploy by fetching the bundle and grepping — the
+  bundle hash changes each build, so read it from the served `/bot` HTML first.
+
+To re-verify egress:
+```
+railway ssh --service secscan "node -e \"fetch('https://api.ipify.org').then(r=>r.text()).then(console.log)\""
+```
+
 The section below is the pre-static-IP investigation, kept for the record.
 
 ## Observed egress IPs (not guaranteed static)
