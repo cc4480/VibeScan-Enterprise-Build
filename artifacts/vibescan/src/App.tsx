@@ -18,6 +18,7 @@ import LearnPage from "@/pages/learn";
 import SettingsPage from "@/pages/settings";
 import DomainsPage from "@/pages/domains";
 import LegalPage from "@/pages/legal";
+import BotPage from "@/pages/bot";
 import SignInPage from "@/pages/sign-in";
 import RegisterPage from "@/pages/register";
 import ForgotPasswordPage from "@/pages/forgot-password";
@@ -169,6 +170,9 @@ function Router() {
             <Route path="/report/:id" component={ReportViewer} />
             <Route path="/monitor" component={MonitorPage} />
             <Route path="/learn" component={LearnPage} />
+            {/* Documentation the scanner's User-Agent points at, for site owners
+                who find the bot in their logs. Public, like the legal pages. */}
+            <Route path="/bot" component={BotPage} />
             <Route path="/privacy">{() => <LegalPage kind="privacy" />}</Route>
             <Route path="/terms">{() => <LegalPage kind="terms" />}</Route>
             <Route path="/settings" component={SettingsPage} />

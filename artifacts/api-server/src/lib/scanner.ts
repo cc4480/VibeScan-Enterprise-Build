@@ -138,6 +138,14 @@ export interface ScanResult {
   probedNotFound: string[];
   /** True when the root page was rendered via headless browser (SPA detected) */
   renderedWithBrowser?: boolean;
+  /**
+   * True when a bot-protection layer answered instead of the origin, so every
+   * content-derived check described the challenge page and was withheld. The
+   * consumer must NOT grade such a scan: the surviving findings (DNS, email,
+   * mail transport) are real, but the absence of everything else is an artefact
+   * of not being let in, not evidence the site is clean. See interceptedFinding.
+   */
+  intercepted: boolean;
 }
 
 const FETCH_TIMEOUT_MS = 20_000;
@@ -1182,6 +1190,7 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
     pagesScanned: crawlResult.pagesVisited,
     probedNotFound: crawlResult.probedNotFound,
     renderedWithBrowser,
+    intercepted: challengeVerdict.isChallenge,
   };
 }
 
@@ -1205,4 +1214,21 @@ export function computeGrade(riskScore: number): string {
   if (riskScore <= 45) return "C";
   if (riskScore <= 65) return "D";
   return "F";
+}
+
+/**
+ * The grade sentinel for a scan that must not be graded at all.
+ *
+ * A bot-protection layer that answers instead of the origin drives
+ * computeRiskScore to 0 — the best score — because every finding that could
+ * deduct was withheld, not because the site is clean. Grading it A is the exact
+ * inversion the false-positive audit kept catching: an interstitial's silence
+ * read as the target's merit. The report and dashboard render this value as
+ * "coverage incomplete".
+ */
+export const GRADE_INCOMPLETE = "N/A";
+
+/** computeGrade, except an intercepted scan yields the incomplete sentinel. */
+export function gradeForResult(riskScore: number, intercepted: boolean): string {
+  return intercepted ? GRADE_INCOMPLETE : computeGrade(riskScore);
 }

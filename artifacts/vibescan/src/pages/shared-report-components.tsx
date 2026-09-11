@@ -32,6 +32,8 @@ export interface SharedReportData {
       info: number;
       riskScore: number;
       grade: string;
+      /** True when a bot-protection layer answered; grade is "N/A" and the score is not meaningful. */
+      intercepted?: boolean;
       executiveSummary: string;
     };
     technologies: string[];
@@ -64,7 +66,12 @@ export function GradeRing({ grade, score }: { grade: string; score: number }) {
   const colorMap: Record<string, string> = {
     A: "#34d399", B: "#a3e635", C: "#facc15", D: "#fb923c", F: "#f87171",
   };
-  const color = colorMap[grade] ?? "#94a3b8";
+  // A scan a bot-protection layer answered carries no grade — the worker sets
+  // it to "N/A". Its risk score is 0 only because the findings that would
+  // deduct were withheld, so "Risk 0" here would read as a clean A. Render the
+  // incomplete state instead: a neutral ring, a dash, and the word Incomplete.
+  const graded = grade in colorMap;
+  const color = graded ? colorMap[grade] : "#94a3b8";
   return (
     <div className="relative w-36 h-36 flex items-center justify-center shrink-0">
       <svg className="w-full h-full transform -rotate-90 absolute inset-0">
@@ -72,16 +79,18 @@ export function GradeRing({ grade, score }: { grade: string; score: number }) {
         <circle
           cx="68" cy="68" r="60" fill="none" stroke={color} strokeWidth="6"
           strokeDasharray={`${2 * Math.PI * 60}`}
-          strokeDashoffset={`${2 * Math.PI * 60 * (1 - score / 100)}`}
+          strokeDashoffset={`${2 * Math.PI * 60 * (1 - (graded ? score / 100 : 1))}`}
           strokeLinecap="round"
           className="transition-all duration-1000 ease-out"
         />
       </svg>
       <div className="flex flex-col items-center bg-background w-24 h-24 rounded-full border-4 border-card shadow-xl z-10 relative">
         <div className="flex flex-col items-center justify-center h-full">
-          <span className={cn("text-4xl font-black leading-none", getGradeColor(grade))}>{grade}</span>
+          <span className={cn("text-4xl font-black leading-none", graded ? getGradeColor(grade) : "text-muted-foreground")}>
+            {graded ? grade : "—"}
+          </span>
           <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest mt-0.5">
-            Risk {score}
+            {graded ? `Risk ${score}` : "Incomplete"}
           </span>
         </div>
       </div>

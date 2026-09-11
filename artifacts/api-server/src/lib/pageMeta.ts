@@ -53,6 +53,18 @@ const ROUTES: { match: RegExp; meta: (path: string) => PageMeta }[] = [
         "The terms that apply when you use SecScan, including what you are permitted to scan.",
     }),
   },
+  {
+    // Indexable on purpose: a site owner who finds the bot in their logs
+    // searches the User-Agent or the URL, and this is the page that should
+    // answer them.
+    match: /^\/bot\/?$/,
+    meta: () => ({
+      path: "/bot",
+      title: "SecScan Security Bot — secscan.us/bot",
+      description:
+        "What the SecScan scanner is, how to recognise it in your logs by its User-Agent, and how to allow it to scan a site you own.",
+    }),
+  },
 
   // Everything below is private, thin, or both. A signed-in page has nothing to
   // offer a searcher, and a sign-in form on an indexed URL is the shape that

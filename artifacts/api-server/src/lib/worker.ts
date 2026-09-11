@@ -17,7 +17,7 @@ import { computeNextScanAt } from "./monitorScheduler";
 import { sendRegressionAlertEmail } from "./mailer";
 import { fireWebhook } from "./webhook";
 import { getBoss, SCAN_QUEUE, type ScanJobData } from "./queue";
-import { runScan, computeRiskScore, computeGrade, type ScanVulnerability } from "./scanner";
+import { runScan, computeRiskScore, gradeForResult, type ScanVulnerability } from "./scanner";
 import { purgeExpiredOobTokens } from "./oobServer";
 import { decryptCredentials, toScanHttpCredentials, looksSignedOut } from "./scanCredentials";
 import { runWithScanHttp } from "./http";
@@ -343,7 +343,12 @@ async function processScanJob(job: ScanJob): Promise<void> {
 
   // ── 5. Build report data ──────────────────────────────────────────────
   const riskScore = computeRiskScore(scanResult.vulnerabilities);
-  const grade = computeGrade(riskScore);
+  // A scan a bot-protection layer answered must NOT be graded — see
+  // gradeForResult. The score stays computed and stored for the record; the
+  // grade becomes the sentinel the report and dashboard render as "coverage
+  // incomplete".
+  const intercepted = scanResult.intercepted;
+  const grade = gradeForResult(riskScore, intercepted);
 
   const severityCounts = scanResult.vulnerabilities.reduce(
     (acc, v) => {
@@ -353,13 +358,20 @@ async function processScanJob(job: ScanJob): Promise<void> {
     {} as Record<string, number>,
   );
 
-  const executiveSummary = buildExecutiveSummary(
-    grade,
-    riskScore,
-    targetUrl,
-    scanResult.vulnerabilities.length,
-    severityCounts,
-  );
+  const executiveSummary = intercepted
+    ? `The scan of ${(() => { try { return new URL(targetUrl).hostname; } catch { return targetUrl; } })()} ` +
+      `was answered by a bot-protection layer rather than the site itself, so no grade could be assigned. ` +
+      `Only the checks that do not read the page response — DNS, email authentication and mail transport — ` +
+      `are reported below and are accurate; everything else was withheld. This is an incomplete result, not a ` +
+      `clean one. To grade the site, allow the scanner through the challenge (by source IP or User-Agent) or ` +
+      `verify domain ownership, then re-scan.`
+    : buildExecutiveSummary(
+        grade,
+        riskScore,
+        targetUrl,
+        scanResult.vulnerabilities.length,
+        severityCounts,
+      );
 
   // Probe TLS cert expiry for https:// targets (non-blocking, failures are soft)
   const certExpiry = await getCertExpiry(scanResult.finalUrl || targetUrl).catch(() => null);
@@ -382,6 +394,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
       info: severityCounts["info"] ?? 0,
       riskScore,
       grade,
+      intercepted,
       executiveSummary,
     },
     recon: reconRunResult?.recon ?? undefined,
@@ -456,6 +469,20 @@ async function processScanJob(job: ScanJob): Promise<void> {
           "Monitor subscription updated",
         );
 
+        // A challenge-answered scan is not a valid monitoring datapoint.
+        // Recording its withheld findings as a score posts a false "improved"
+        // reading to the trend and makes every withheld check look "fixed",
+        // which then fires a regression storm on the next real scan. Skip the
+        // snapshot and the regression comparison entirely. The re-scan cadence
+        // already tightens on its own: nextScanDelayDays returns 3 days for any
+        // non-A/B/C grade, and the N/A sentinel is one, so the next attempt is
+        // brought forward rather than left on the 14-day A cadence.
+        if (intercepted) {
+          log.info(
+            { monitorSubscriptionId },
+            "Scan intercepted — skipping score snapshot and regression detection",
+          );
+        } else {
         // ── Score snapshot ──────────────────────────────────────────────
         const criticalCount = severityCounts["critical"] ?? 0;
         const highCount = severityCounts["high"] ?? 0;
@@ -559,6 +586,7 @@ async function processScanJob(job: ScanJob): Promise<void> {
             }
           }
         }
+        } // end else (scan was not intercepted)
 
         // ── Fire scan_complete webhook ──────────────────────────────────
         if (sub?.webhookUrl) {

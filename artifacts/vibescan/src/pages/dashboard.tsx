@@ -20,9 +20,15 @@ const GRADE_COLORS: Record<string, string> = {
 function GradeBadge({ grade }: { grade: string | null | undefined }) {
   const key = grade ?? "";
   const colors = GRADE_COLORS[key] ?? "text-muted-foreground bg-secondary border-white/10";
+  // "N/A" is the sentinel for a bot-intercepted scan that could not be graded;
+  // show it as a dash so the badge does not read as a real letter grade.
+  const label = grade == null ? "?" : key in GRADE_COLORS ? grade : "—";
   return (
-    <div className={cn("w-9 h-9 rounded-lg border flex items-center justify-center font-bold text-lg", colors)}>
-      {grade ?? "?"}
+    <div
+      className={cn("w-9 h-9 rounded-lg border flex items-center justify-center font-bold text-lg", colors)}
+      title={grade === "N/A" ? "Coverage incomplete — scan was intercepted" : undefined}
+    >
+      {label}
     </div>
   );
 }

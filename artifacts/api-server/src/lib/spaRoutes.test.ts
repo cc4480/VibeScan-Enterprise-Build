@@ -15,6 +15,7 @@ describe("isSpaRoute", () => {
       "/scan",
       "/monitor",
       "/learn",
+      "/bot",
       "/domains",
       "/settings",
       "/privacy",

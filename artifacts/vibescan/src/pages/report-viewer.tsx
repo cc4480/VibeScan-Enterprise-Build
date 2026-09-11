@@ -202,7 +202,11 @@ function GradeRing({ grade, score }: { grade: string; score: number }) {
   const colorMap: Record<string, string> = {
     A: "#34d399", B: "#a3e635", C: "#facc15", D: "#fb923c", F: "#f87171",
   };
-  const color = colorMap[grade] || "#94a3b8";
+  // "N/A" from a bot-intercepted scan: its risk score is 0 only because the
+  // findings that deduct were withheld, so grade and "Risk: 0" would both read
+  // as a perfect result. Show the incomplete state instead.
+  const graded = grade in colorMap;
+  const color = graded ? colorMap[grade] : "#94a3b8";
 
   return (
     <div className="relative w-48 h-48 flex items-center justify-center">
@@ -211,18 +215,18 @@ function GradeRing({ grade, score }: { grade: string; score: number }) {
         <circle
           cx="96" cy="96" r="88" fill="none" stroke={color} strokeWidth="8"
           strokeDasharray={`${2 * Math.PI * 88}`}
-          strokeDashoffset={`${2 * Math.PI * 88 * (1 - score / 100)}`}
+          strokeDashoffset={`${2 * Math.PI * 88 * (1 - (graded ? score / 100 : 1))}`}
           strokeLinecap="round"
           className="transition-all duration-1000 ease-out"
         />
       </svg>
       <div className="flex flex-col items-center justify-center bg-background w-36 h-36 rounded-full border-4 border-card shadow-2xl z-10 relative">
         <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent rounded-full" />
-        <span className={cn("text-6xl font-black font-display leading-none", getGradeColor(grade))}>
-          {grade}
+        <span className={cn("text-6xl font-black font-display leading-none", graded ? getGradeColor(grade) : "text-muted-foreground")}>
+          {graded ? grade : "—"}
         </span>
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-widest mt-1">
-          Risk: {score}
+          {graded ? `Risk: ${score}` : "Coverage incomplete"}
         </span>
       </div>
     </div>
@@ -1299,10 +1303,11 @@ function PrintGradeRing({ grade, score }: { grade: string; score: number }) {
   const colorMap: Record<string, string> = {
     A: "#059669", B: "#16a34a", C: "#ca8a04", D: "#ea580c", F: "#dc2626",
   };
-  const color = colorMap[grade] ?? "#6b7280";
+  const graded = grade in colorMap;
+  const color = graded ? colorMap[grade] : "#6b7280";
   const r = 52;
   const circumference = 2 * Math.PI * r;
-  const dash = circumference * (score / 100);
+  const dash = circumference * (graded ? score / 100 : 1);
 
   return (
     <div style={{ position: "relative", width: 120, height: 120, flexShrink: 0 }}>
@@ -1318,8 +1323,8 @@ function PrintGradeRing({ grade, score }: { grade: string; score: number }) {
         position: "absolute", inset: 0, display: "flex", flexDirection: "column",
         alignItems: "center", justifyContent: "center",
       }}>
-        <span style={{ fontSize: 36, fontWeight: 900, lineHeight: 1, color }}>{grade}</span>
-        <span style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>Risk: {score}</span>
+        <span style={{ fontSize: graded ? 36 : 44, fontWeight: 900, lineHeight: 1, color }}>{graded ? grade : "—"}</span>
+        <span style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>{graded ? `Risk: ${score}` : "Incomplete"}</span>
       </div>
     </div>
   );

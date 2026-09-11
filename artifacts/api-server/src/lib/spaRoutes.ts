@@ -19,6 +19,10 @@ export const SPA_ROUTES: RegExp[] = [
   /^\/share\/[A-Za-z0-9_-]+\/?$/,
   /^\/monitor\/?$/,
   /^\/learn\/?$/,
+  // The scanner's own User-Agent points every scanned site at /bot. If it is
+  // missing here the shell 404s on a direct hit — which is the state that
+  // prompted this page to be built in the first place.
+  /^\/bot\/?$/,
   /^\/domains\/?$/,
   /^\/settings\/?$/,
   /^\/privacy\/?$/,
