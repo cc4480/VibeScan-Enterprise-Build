@@ -140,3 +140,28 @@ becomes irreversible the moment one is: every stored secret is encrypted with it
 - Chromium launches on Railway — `Headless browser initialised`
 - A scan submitted to `web` was picked up by `secscan` through the queue
   and finished: status `complete`, progress 100, grade A
+
+## Observed egress IPs (not guaranteed static)
+
+Measured 2026-09-10 by SSHing into each service and fetching an IP echo
+(`railway ssh --service <svc> "node -e \"fetch('https://api.ipify.org').then(r=>r.text()).then(console.log)\""`):
+
+- **`secscan` (worker — the address a scanned site logs): `152.55.178.17`** — 4/4 reads identical
+- `web`: `162.220.232.85` — 1 read
+
+Each service NATs from its own IP; there is no single project-wide egress
+address. The worker IP held across four reads within one deployment, but this
+was NOT tested across a redeploy, and Railway does not contractually pin egress
+unless the service's static-outbound-IP feature is enabled (it is not).
+
+**Do not publish these as "the fixed IP to allowlist."** They are safe to give a
+customer who can only match by source IP and asks — as the CURRENT address, to
+be re-verified with the command above before quoting. The public `/bot` page
+deliberately steers owners to the `SecScan-Security-Bot` User-Agent instead,
+which is stable regardless of where Railway routes egress. See
+artifacts/vibescan/src/pages/bot.tsx.
+
+To make an IP publishable as fixed: either confirm it survives
+`railway redeploy --service secscan --yes`, or enable static outbound IP for the
+service (dashboard → service → Settings → Networking) and record the assigned
+address here.
