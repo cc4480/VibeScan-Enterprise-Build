@@ -18,6 +18,34 @@ DATABASE_URL=postgres://localhost/anything \
 `DATABASE_URL` only has to be *set* — the scanner module imports the db layer at
 load time. It is never read by a passive scan.
 
+## 2026-09-12 — pre-marketing FP sweep
+
+Swept the corpus again ahead of positioning both products on a no-false-positives
+claim. Two actionable findings were false; both are the same underlying error the
+audit keeps recording — **reading the presence of a response as the meaning of
+the response** — and both are now fixed and re-verified against the live targets.
+
+### Fixed
+
+| Finding | Target | Why it was wrong |
+|---|---|---|
+| `Permissive crossdomain.xml Policy` (MEDIUM, CVSS 6.5) | www.nytimes.com | Fired on `<site-control permitted-cross-domain-policies="all">` while the finding's own description claims "access from all domains (*)". nytimes has NO bare `domain="*"` — every `allow-access-from` is scoped to `*.nytimes.com`. `permitted-cross-domain-policies="all"` is a META-policy (it governs whether sub-path policy files may exist), it is Flash's own default when the element is absent, and with Flash EOL since 2020 it warrants no medium CORS finding. The check now fires ONLY on a genuine `domain="*"`. |
+| `Exposed API Documentation — OpenAPI JSON spec` (MEDIUM, CVSS 5.3) | vercel.com, www.cloudflare.com, www.netlify.com | The evidence ("spec structure validated") only confirmed the spec was real, never that exposing it was a mistake. Publishing an OpenAPI spec is mainstream intentional practice — Cloudflare's is literally titled "Cloudflare Public Site API", Vercel's is their 10 MB public API doc — and the endpoints it documents still enforce their own auth, so the spec describes the surface rather than opening it. Reclassified: a spec file is now **INFO** ("confirm this is intended; if it's an internal/admin API, remove it"), an interactive "Try It Out" UI is **LOW**. |
+
+### Checked and correct — 2026-09-12 round
+
+| Finding | Target | Verified |
+|---|---|---|
+| `Content-Security-Policy Missing on 1 Internal Route` — `/healthz` (HIGH) | github.com | Real. `/healthz` returns `text/html` with no CSP while the root serves `default-src 'none'; base-uri 'self'`. An HTML endpoint missing the policy the rest of the site enforces. |
+| `Content-Security-Policy Missing on 9 Internal Routes` — locale paths (HIGH) | www.cloudflare.com | Real. Root serves `default-src 'self'`; `/es-es/`, `/fr-fr/` and the other locale routes carry no CSP header at all. Verified per-path against the live response. |
+| `Session Cookie Missing HttpOnly Flag` — `JSESSIONID` (MEDIUM) | www.linkedin.com | Real. Live `Set-Cookie` is `JSESSIONID=…; SameSite=None; Path=/; Domain=.www.linkedin.com; Secure` — no `HttpOnly`. A session-shaped cookie readable by JS, correctly reported. |
+
+**The crossdomain fix is the same lesson as the PayPal `frame-ancestors` fix and
+the GOV.UK SPF fix: an evidence string that points somewhere the target does not
+match does not merely fail to support the finding — it argues against it.** Here
+the description asserted "access from all domains" against a site that allows
+none.
+
 ## 2026-09-10 — 38-target re-scan
 
 Three actionable findings were new against the earlier rounds. Two were real.

@@ -7,7 +7,7 @@ Every finding the scanner can emit, read out of `artifacts/api-server/src/lib`. 
 complete list; [SCAN_COVERAGE.md](SCAN_COVERAGE.md) is the readable one, grouped by module with
 the Basic/Deep tier and the methodology behind each group.
 
-**281 findings across 26 modules**, in 35 categories. 87 critical, 74 high, 61 medium, 21 low, 38 info.
+**281 findings across 26 modules**, in 35 categories. 87 critical, 74 high, 60 medium, 21 low, 39 info.
 
 A finding is a distinct name the scanner can put in a report, which is not the same as a check
 type: the data-table modules below define many findings from one piece of detection logic —
@@ -21,7 +21,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 | Module | Findings | Lines | Tests | Coverage |
 |---|---:|---:|---:|---|
-| `probes-data.ts` | 78 | 826 | 29 | direct |
+| `probes-data.ts` | 78 | 838 | 29 | direct |
 | `secret-pattern-data.ts` | 34 | 506 | 17 | direct |
 | `probes.ts` | 16 | 919 | 9 | direct |
 | `recon-data.ts` | 14 | 178 | 12 | direct |
@@ -30,7 +30,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `structuredData.ts` | 9 | 415 | 34 | direct |
 | `crawler-data.ts` | 8 | 152 | 26 | direct |
 | `apiProbe.ts` | 7 | 644 | 31 | direct |
-| `crawler.ts` | 7 | 685 | 26 | direct |
+| `crawler.ts` | 7 | 698 | 30 | direct |
 | `supabase-probes.ts` | 7 | 520 | 5 | direct |
 | `jwtAnalysis.ts` | 6 | 262 | 9 | direct |
 | `cveCheck.ts` | 4 | 594 | 3 | direct |
@@ -42,10 +42,10 @@ module does. `none` — neither, so no test exercises it at all.
 | `graphqlProbe.ts` | 2 | 292 | 8 | direct |
 | `injectionProbe.ts` | 2 | 237 | 7 | direct |
 | `sourceMaps.ts` | 2 | 172 | 11 | direct |
-| `apiDocsProbe.ts` | 1 | 284 | 9 | direct |
+| `apiDocsProbe.ts` | 1 | 300 | 9 | direct |
 | `pathTraversal.ts` | 1 | 168 | 4 | direct |
 | `ssrfProbe.ts` | 1 | 192 | 6 | direct |
-| `scanner.ts` | 31 | 1209 | — | indirect, via challengePage.test.ts, firebase-probes.test.ts, scoring.test.ts |
+| `scanner.ts` | 31 | 1235 | — | indirect, via challengePage.test.ts, firebase-probes.test.ts, grading.test.ts, scoring.test.ts |
 | `subdomain-service-data.ts` | 19 | 152 | — | indirect, via subdomainTakeover.test.ts |
 
 ## Findings by module
@@ -62,11 +62,11 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `apiDocsProbe.ts`
 
-*1 findings · 284 lines · 9 tests.*
+*1 findings · 300 lines · 9 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
-| Exposed API Documentation — ${label} at ${path} | Medium | Information Disclosure | 5.3 | CWE-200 | WSTG-CONF-02 |
+| Exposed API Documentation — ${label} at ${path} | Info / Low | Information Disclosure | 0 | CWE-200 | WSTG-CONF-02 |
 
 ### `apiProbe.ts`
 
@@ -93,7 +93,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `crawler.ts`
 
-*7 findings · 685 lines · 26 tests.*
+*7 findings · 698 lines · 30 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -247,7 +247,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `probes-data.ts`
 
-*78 findings · 826 lines · 29 tests.*
+*78 findings · 838 lines · 29 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -353,7 +353,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `scanner.ts`
 
-*31 findings · 1209 lines · no test file.*
+*31 findings · 1235 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|

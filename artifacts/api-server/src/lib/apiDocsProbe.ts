@@ -241,27 +241,43 @@ export async function runApiDocsProbe(targetUrl: string): Promise<ScanVulnerabil
 
       return vuln({
         name: `Exposed API Documentation — ${label} at ${path}`,
-        severity: "medium",
+        // Severity is deliberately low, and this is why: publishing an OpenAPI
+        // spec is mainstream, intentional practice — Stripe, Vercel, Cloudflare,
+        // GitHub and Twilio all serve one at their apex domain on purpose. A
+        // reachable spec is not itself a weakness: the endpoints it documents
+        // still enforce their own auth, so the spec describes the surface rather
+        // than opening it. Reporting it as a MEDIUM "exploit your backend"
+        // vulnerability fired confidently against Vercel, Cloudflare and Netlify,
+        // whose specs are a documented developer resource — a false positive
+        // whose own evidence ("spec structure validated") only confirmed the spec
+        // was real, never that exposing it was a mistake.
+        //
+        // A spec file is therefore INFO — a surface-disclosure note to confirm is
+        // intended. An interactive UI with "Try It Out" is LOW: marginally more,
+        // because it invites unauthenticated probing from the browser, though it
+        // too only exercises endpoints that enforce their own auth.
+        severity: isSpec ? "info" : "low",
         category: "Information Disclosure",
         description: isSpec
-          ? `An ${label} is publicly accessible at ${path}. This exposes your complete ` +
-            `API contract — every endpoint, request/response schema, parameter, and ` +
-            `authentication scheme — dramatically lowering the effort needed to enumerate ` +
-            `and exploit your backend.`
+          ? `An ${label} is publicly reachable at ${path}, exposing your API contract — ` +
+            `endpoints, schemas, parameters and auth schemes — in machine-readable form. ` +
+            `This is frequently intentional; many public APIs publish their spec on purpose. ` +
+            `Confirm the exposure is meant to be public. If the spec describes an internal or ` +
+            `admin API, it lowers the effort to enumerate that surface and should be removed.`
           : `An interactive API documentation UI (${label}) is publicly accessible at ${path}. ` +
-            `This lets anyone explore and test your API endpoints without authentication, ` +
-            `exposing your full backend surface. The bundled "Try It Out" feature may also ` +
-            `allow unauthenticated API calls directly from the browser.`,
+            `Anyone can explore your API endpoints, and a bundled "Try It Out" feature can issue ` +
+            `calls from the browser. Confirm this is intentional; the endpoints behind it still ` +
+            `enforce their own authentication, but the UI invites probing.`,
         evidence: `GET ${url}\nHTTP 200 — ${label} confirmed (${isSpec ? "spec structure validated" : "UI bundle script detected"})`,
         solution:
-          "Disable API documentation in production or restrict access to authenticated users or internal IPs. " +
+          "If this exposure is not intentional, disable API documentation in production or restrict it to authenticated users or internal IPs. " +
           (isSpec
             ? "Remove the spec file from your production deployment or serve it behind an auth middleware. "
             : "FastAPI: set `docs_url=None, redoc_url=None` when `os.getenv('ENV') != 'development'`. ") +
           "Express/Swagger: gate the route with an IP allowlist or require an `Authorization` header. " +
-          "If public docs are intentional, disable the 'Try It Out' feature and remove auth scheme details.",
+          "If public docs are intentional, consider disabling the 'Try It Out' feature and trimming auth-scheme detail.",
         cweId: "CWE-200",
-        cvssScore: 5.3,
+        cvssScore: isSpec ? 0 : 3.1,
         wstgId: "WSTG-CONF-02",
         confidence: 92,
       });

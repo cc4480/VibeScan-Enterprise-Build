@@ -125,8 +125,13 @@ describe("SENSITIVE_PATHS: /crossdomain.xml", () => {
 
   it("matches a wildcard domain policy", () =>
     expect(validate('<cross-domain-policy><allow-access-from domain="*"/></cross-domain-policy>', "text/xml")).toBe(true));
-  it("matches an explicit permitted-cross-domain-policies=\"all\"", () =>
-    expect(validate('<cross-domain-policy><site-control permitted-cross-domain-policies="all"/></cross-domain-policy>', "text/xml")).toBe(true));
+  // permitted-cross-domain-policies="all" is a meta-policy, not wildcard data
+  // access — a well-scoped master (nytimes: site-control "all" with every
+  // allow-access-from bounded to *.nytimes.com) grants nothing universal, and
+  // firing here reported "access from all domains" against a site that allows
+  // none. It no longer fires without a genuine domain="*".
+  it("does NOT fire on site-control \"all\" alone, without a wildcard domain", () =>
+    expect(validate('<cross-domain-policy><site-control permitted-cross-domain-policies="all"/><allow-access-from domain="*.nytimes.com"/></cross-domain-policy>', "text/xml")).toBe(false));
   it("rejects a restrictive master-only policy (e.g. GitHub's)", () =>
     expect(validate('<cross-domain-policy><site-control permitted-cross-domain-policies="master-only"/></cross-domain-policy>', "text/xml")).toBe(false));
   it("rejects a non-wildcard allow-access-from", () =>

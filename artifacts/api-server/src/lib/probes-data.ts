@@ -414,13 +414,25 @@ export const SENSITIVE_PATHS: SensitivePath[] = [
     solution: "Remove crossdomain.xml if Flash is not used. If needed, restrict to specific domains instead of using wildcards.",
     // The mere presence of crossdomain.xml is not a vulnerability — most sites
     // that ship one (including GitHub's, which uses permitted-cross-domain-policies
-    // ="master-only") are intentionally restrictive. Only flag genuine wildcard
-    // access: a "*" domain entry, or a site-control policy of "all".
+    // ="master-only") are intentionally restrictive.
+    //
+    // Fire ONLY on genuine wildcard DATA access: an <allow-access-from domain="*">
+    // entry. This finding's description is "access from all domains (*)", and
+    // that is the only condition that makes it true.
+    //
+    // permitted-cross-domain-policies="all" is deliberately NOT a trigger on its
+    // own. It is a META-policy — it governs whether sub-path policy files may
+    // exist, not who can read data — it is Flash's own default when the element
+    // is absent, and a well-scoped master (e.g. nytimes: site-control "all" with
+    // every allow-access-from bounded to *.nytimes.com) grants no universal
+    // access. Firing on it reported "access from all domains" against a site that
+    // allows nothing of the sort — a false positive whose evidence contradicted
+    // the target. With Flash EOL since 2020, the sub-policy escalation it permits
+    // (which also needs a file-upload primitive and a Flash runtime) does not
+    // warrant a medium-severity CORS finding.
     validate: (body) => {
       if (!/<cross-domain-policy/i.test(body)) return false;
-      const hasWildcardDomain = /<allow-access-from\s+domain\s*=\s*["']\*["']/i.test(body);
-      const siteControl = /permitted-cross-domain-policies\s*=\s*["'](\w[\w-]*)["']/i.exec(body)?.[1];
-      return hasWildcardDomain || siteControl?.toLowerCase() === "all";
+      return /<allow-access-from\s+domain\s*=\s*["']\*["']/i.test(body);
     },
   },
 

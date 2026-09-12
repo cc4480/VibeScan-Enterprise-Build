@@ -50,7 +50,13 @@ describe("runApiDocsProbe — confirms a real spec", () => {
 
     const vulns = await runApiDocsProbe("https://example.com/");
     expect(vulns).toHaveLength(1);
-    expect(vulns[0]!.severity).toBe("medium");
+    // A reachable spec is INFO, not a vulnerability: publishing an OpenAPI spec
+    // is mainstream intentional practice (Stripe, Vercel, Cloudflare all do it),
+    // and the endpoints it documents still enforce their own auth. It is
+    // surface disclosure to confirm is intended, not a MEDIUM "exploit your
+    // backend" finding — which fired confidently against sites whose specs are
+    // a deliberate developer resource.
+    expect(vulns[0]!.severity).toBe("info");
     expect(vulns[0]!.cweId).toBe("CWE-200");
     expect(vulns[0]!.name).toMatch(/openapi\.json/);
     expect(vulns[0]!.evidence).toMatch(/spec structure validated/);
