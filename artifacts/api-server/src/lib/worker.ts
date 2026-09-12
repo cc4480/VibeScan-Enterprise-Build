@@ -30,6 +30,7 @@ import { refreshEolData, loadEolCacheFromDb, EOL_REFRESH_QUEUE } from "./eolFetc
 import { callDeepSeek } from "./deepseek";
 import { checkSslLabs } from "./ssllabs";
 import { sendReportReadyEmail } from "./mailer";
+import { createReportShare, shareUrl } from "./reportShare";
 import { initBrowser, closeBrowser } from "./browser";
 import { logger } from "./logger";
 import { randomUUID } from "node:crypto";
@@ -619,13 +620,36 @@ async function processScanJob(job: ScanJob): Promise<void> {
 
       if (scan?.userEmail) {
         const appOrigin = APP_ORIGIN;
+
+        // The emailed link must resolve WITHOUT a session. /report/:id requires
+        // being signed in as the report's owner, which fails on the most common
+        // way people open mail: on a phone, logged out (401) or signed into a
+        // different account (404) — both of which render as a bare "Failed to
+        // load report", so the person the report was sent to could not read it.
+        // Observed live: one report answered 200 on the device that ran the scan
+        // and 404 on the owner's own phone, signed into their other account.
+        //
+        // A share token resolves through GET /api/share/:token, which takes no
+        // session. It is a bearer credential for that ONE report, which is
+        // acceptable because it is delivered only to the owner's own mailbox —
+        // see lib/reportShare.ts. If minting it fails the email still goes out
+        // with the dashboard link rather than not at all: a link that needs a
+        // login beats no notification.
+        let reportUrl = `${appOrigin}/report/${report.id}`;
+        try {
+          const share = await createReportShare(report.id, report.userId);
+          reportUrl = shareUrl(appOrigin, share.token);
+        } catch (shareErr) {
+          log.warn({ err: shareErr }, "Could not mint a share link for the report email — falling back to the dashboard URL");
+        }
+
         await sendReportReadyEmail({
           toEmail: scan.userEmail,
           targetUrl: scanResult.finalUrl || targetUrl,
           grade,
           riskScore,
           totalVulns: scanResult.vulnerabilities.length,
-          reportUrl: `${appOrigin}/report/${report.id}`,
+          reportUrl,
           tier,
         });
       }

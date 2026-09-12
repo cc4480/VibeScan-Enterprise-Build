@@ -1,7 +1,7 @@
 import {
   useGetReport, getGetReportQueryKey,
   useCreateReportShare, useListReportShares, useRevokeReportShare,
-  getListReportSharesQueryKey,
+  getListReportSharesQueryKey, useGetCurrentAuthUser,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
@@ -1988,6 +1988,9 @@ export default function ReportViewer() {
   useSeo({ title: "Security Report — SecScan", noindex: true });
   const [, params] = useRoute("/report/:id");
   const reportId = params?.id || "";
+  // Read only to NAME the signed-in account in the wrong-account error below.
+  // Called here because a hook cannot run after this component's early returns.
+  const { data: currentUser } = useGetCurrentAuthUser();
   const { data: report, isLoading, error } = useGetReport(reportId, {
     query: {
       queryKey: getGetReportQueryKey(reportId),
@@ -2210,7 +2213,51 @@ export default function ReportViewer() {
       </div>
     );
   }
-  if (error || !report || !summary) return <div className="min-h-[80vh] flex items-center justify-center text-red-400">Failed to load report.</div>;
+  // "Failed to load report." told the reader nothing, and the two most common
+  // causes are both about WHO is signed in rather than anything being broken: a
+  // 401 because this browser has no session, and a 404 because the report
+  // belongs to a different account than the one signed in here. Both happen
+  // routinely when a report link is opened on a phone. Name the actual cause and
+  // the action, so the reader is not left staring at a dead end.
+  if (error || !report || !summary) {
+    const status = (error as { status?: number } | null | undefined)?.status;
+    const signedInAs = currentUser?.user?.email;
+
+    if (status === 401) {
+      return (
+        <div className="min-h-[80vh] flex flex-col items-center justify-center gap-3 px-6 text-center">
+          <p className="text-base font-medium">Sign in to view this report</p>
+          <p className="max-w-md text-sm text-muted-foreground">
+            You're not signed in on this device. Reports are private to the account that ran the scan.
+          </p>
+          <a href="/sign-in" className="text-sm text-primary underline underline-offset-4">Sign in</a>
+        </div>
+      );
+    }
+
+    if (status === 404) {
+      return (
+        <div className="min-h-[80vh] flex flex-col items-center justify-center gap-3 px-6 text-center">
+          <p className="text-base font-medium">This report belongs to a different account</p>
+          <p className="max-w-md text-sm text-muted-foreground">
+            {signedInAs
+              ? `You're signed in as ${signedInAs}. Switch to the account that ran this scan, or open the link from the report email, which works without signing in.`
+              : "Switch to the account that ran this scan, or open the link from the report email, which works without signing in."}
+          </p>
+          <a href="/dashboard" className="text-sm text-primary underline underline-offset-4">Go to your dashboard</a>
+        </div>
+      );
+    }
+
+    return (
+      <div className="min-h-[80vh] flex flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="text-base font-medium">Couldn't load this report</p>
+        <p className="max-w-md text-sm text-muted-foreground">
+          Something went wrong fetching it. Refresh to try again — if it keeps happening, the report may not have finished saving.
+        </p>
+      </div>
+    );
+  }
 
   const { data: { technologies, server, tlsGrade, aiAnalysis, pagesScanned, probedNotFound, recon } } = report;
 

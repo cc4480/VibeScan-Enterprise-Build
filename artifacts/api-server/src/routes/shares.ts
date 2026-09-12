@@ -1,22 +1,14 @@
 import { Router, type IRouter } from "express";
 import { db, reportsTable, reportSharesTable } from "@workspace/db";
 import { eq, and, isNull } from "drizzle-orm";
-import { randomBytes } from "node:crypto";
 import { z } from "zod";
+import { createReportShare } from "../lib/reportShare";
 
 const router: IRouter = Router();
 
 const CreateShareBody = z.object({
   expiresIn: z.enum(["7d", "30d", "never"]).default("never"),
 });
-
-function computeExpiry(expiresIn: "7d" | "30d" | "never"): Date | null {
-  if (expiresIn === "never") return null;
-  const days = expiresIn === "7d" ? 7 : 30;
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d;
-}
 
 // ── POST /api/reports/:id/shares — create a share link ────────────────────────
 router.post("/reports/:id/shares", async (req, res): Promise<void> => {
@@ -47,13 +39,9 @@ router.post("/reports/:id/shares", async (req, res): Promise<void> => {
       return;
     }
 
-    const token = randomBytes(32).toString("hex");
-    const expiresAt = computeExpiry(parsed.data.expiresIn);
-
-    const [share] = await db
-      .insert(reportSharesTable)
-      .values({ reportId, userId: req.user!.id, token, expiresAt })
-      .returning();
+    // Ownership is checked above; createReportShare does the minting so the
+    // worker's emailed link and this route cannot drift apart.
+    const share = await createReportShare(reportId, req.user!.id, parsed.data.expiresIn);
 
     res.status(201).json({
       id: share.id,
