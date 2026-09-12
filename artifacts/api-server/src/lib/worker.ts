@@ -31,6 +31,7 @@ import { callDeepSeek } from "./deepseek";
 import { checkSslLabs } from "./ssllabs";
 import { sendReportReadyEmail } from "./mailer";
 import { createReportShare, shareUrl } from "./reportShare";
+import { summariseCompliance, COMPLIANCE_DISCLAIMER } from "./compliance";
 import { initBrowser, closeBrowser } from "./browser";
 import { logger } from "./logger";
 import { randomUUID } from "node:crypto";
@@ -400,6 +401,16 @@ async function processScanJob(job: ScanJob): Promise<void> {
     },
     recon: reconRunResult?.recon ?? undefined,
     aiAnalysis: aiAnalysis ?? undefined,
+    // Which controls these findings are evidence FOR — not a compliance verdict.
+    // Computed here so the mapping is frozen into the stored report alongside the
+    // findings it describes: re-deriving it at render time would let a later
+    // change to the mapping silently restate what an already-delivered report
+    // said. See lib/compliance.ts, and COMPLIANCE_DISCLAIMER, which any view of
+    // this data must carry.
+    compliance: {
+      frameworks: summariseCompliance(scanResult.vulnerabilities),
+      disclaimer: COMPLIANCE_DISCLAIMER,
+    },
     autoSuppressedCount: autoSuppressedCount > 0 ? autoSuppressedCount : undefined,
   };
 
