@@ -14,6 +14,24 @@ const SHELL = `<!doctype html><html><head>
 <meta name="twitter:description" content="Old twitter description." />
 </head><body></body></html>`;
 
+// Shaped like the real built index.html's <body>, which the plain SHELL above
+// doesn't have — the noscript-rewrite tests need the actual paragraph the
+// rewrite matches against.
+const SHELL_WITH_NOSCRIPT = `<!doctype html><html><head>
+<title>SecScan</title>
+<meta name="description" content="Old." />
+<meta name="robots" content="index, follow" />
+<link rel="canonical" href="https://secscan.us/" />
+</head><body>
+<noscript>
+  <h1>SecScan — black-box security scanning for vibe coders</h1>
+  <p>Paste a URL for a web application you own or are authorised to test.</p>
+  <p>SecScan needs JavaScript to run a scan interactively. These pages read fine without it:</p>
+  <nav><ul><li><a href="/">Home</a></li></ul></nav>
+</noscript>
+<div id="root"></div>
+</body></html>`;
+
 describe("page metadata", () => {
   it("leaves the homepage to its built metadata", () => {
     expect(metaForPath("/")).toBeNull();
@@ -62,6 +80,19 @@ describe("page metadata", () => {
       expect(meta!.noindex, path).toBe(true);
       expect(applyPageMeta(SHELL, meta!), path).toContain('content="noindex, nofollow"');
     }
+  });
+
+  it("gives a non-JS crawler on /learn that route's subject, not just the homepage noscript copy", () => {
+    const html = applyPageMeta(SHELL_WITH_NOSCRIPT, metaForPath("/learn")!);
+    expect(html).toContain("<h2>Security Documentation — SecScan</h2>");
+    expect(html).toContain("<p>Plain-English explanations of every security check SecScan runs");
+    // Still ahead of the nav, so it doesn't look tacked on after the links.
+    expect(html.indexOf("<h2>Security Documentation")).toBeLessThan(html.indexOf("<nav>"));
+  });
+
+  it("leaves noindex routes out of the noscript rewrite", () => {
+    const meta = metaForPath("/dashboard")!;
+    expect(applyPageMeta(SHELL_WITH_NOSCRIPT, meta)).not.toContain("<h2>");
   });
 
   it("does not leave a trailing slash in the canonical", () => {

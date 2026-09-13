@@ -137,6 +137,17 @@ export function applyPageMeta(html: string, meta: PageMeta): string {
       .replace(/<meta\s+name="description"\s+content="[^"]*"\s*\/?>/i, `<meta name="description" content="${d}" />`)
       .replace(/<meta\s+property="og:description"\s+content="[^"]*"\s*\/?>/i, `<meta property="og:description" content="${d}" />`)
       .replace(/<meta\s+name="twitter:description"\s+content="[^"]*"\s*\/?>/i, `<meta name="twitter:description" content="${d}" />`);
+
+    // Give a non-JS crawler this route's actual subject, not just the
+    // homepage's noscript copy repeated under a different <title>. Skipped
+    // for noindex routes, which have no description above to reach here.
+    if (!meta.noindex) {
+      const t = meta.title ? escapeAttr(meta.title) : "";
+      out = out.replace(
+        /(<p>SecScan needs JavaScript to run a scan interactively\. These pages read fine without it:<\/p>)/,
+        `${t ? `<h2>${t}</h2>\n      ` : ""}<p>${d}</p>\n      $1`,
+      );
+    }
   }
 
   if (meta.noindex) {

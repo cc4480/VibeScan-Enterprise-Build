@@ -73,6 +73,14 @@ jobs:
       - name: Build
         run: pnpm -r --if-present --filter '!@workspace/mockup-sandbox' run build
 
+      # Railway deploys from this same push independently of this workflow, so
+      # this doesn't wait on it — IndexNow's own crawl isn't instant either.
+      # Never fails the build: a missed ping just falls back to organic crawl.
+      - name: Ping IndexNow
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        continue-on-error: true
+        run: node artifacts/api-server/scripts/indexnow-ping.mjs https://secscan.us
+
   docker:
     name: Docker image (${{ matrix.target }})
     runs-on: ubuntu-latest
