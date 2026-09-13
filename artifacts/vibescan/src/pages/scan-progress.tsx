@@ -345,17 +345,17 @@ interface TerminalLine {
 
 function lineColor(text: string): string {
   const t = text.trim();
-  if (t.startsWith("$")) return "text-slate-500";
-  if (t.startsWith("✓")) return "text-emerald-400";
+  if (t.startsWith("$")) return "text-zinc-500";
+  if (t.startsWith("✓")) return "text-green-400";
   if (t.startsWith("⚠")) return "text-yellow-400";
   if (t.startsWith("[!]")) return "text-yellow-400";
   if (t.startsWith("[>]") || t.startsWith("[<]") || t.startsWith("[GET]")) return "text-sky-400";
   if (t.startsWith("[+]")) return "text-green-400";
-  if (t.startsWith("[.]") || t.startsWith("[~]")) return "text-slate-500";
+  if (t.startsWith("[.]") || t.startsWith("[~]")) return "text-zinc-500";
   if (t.startsWith("─") || t.startsWith("═") || t.startsWith("VibeScan")) return "text-primary/70";
-  if (t.startsWith("Target") || t.startsWith("Tier") || t.startsWith("Session")) return "text-slate-400";
-  if (t.includes("✓")) return "text-emerald-400/80";
-  return "text-slate-300";
+  if (t.startsWith("Target") || t.startsWith("Tier") || t.startsWith("Session")) return "text-zinc-400";
+  if (t.includes("✓")) return "text-green-400/80";
+  return "text-zinc-300";
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -612,7 +612,7 @@ export default function ScanProgressPage() {
             <span className="w-3 h-3 rounded-full bg-yellow-500/80" />
             <span className="w-3 h-3 rounded-full bg-green-500/80" />
           </div>
-          <span className="flex-1 text-center text-[11px] font-mono text-slate-500 tracking-wide">
+          <span className="flex-1 text-center text-[11px] font-mono text-zinc-500 tracking-wide">
             vibescan — security terminal
             {domain ? ` — ${domain}` : ""}
           </span>
@@ -623,7 +623,7 @@ export default function ScanProgressPage() {
             )}
             {isComplete && <span className="w-2 h-2 rounded-full bg-green-500" />}
             {isFailed && <span className="w-2 h-2 rounded-full bg-red-500" />}
-            <span className="text-[10px] font-mono text-slate-600 uppercase tracking-wider">
+            <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-wider">
               {isComplete ? "done" : isFailed ? "failed" : isQueued ? "waiting" : data?.status ?? "idle"}
             </span>
           </div>
@@ -637,7 +637,7 @@ export default function ScanProgressPage() {
         >
           {/* Queued placeholder */}
           {isQueued && terminalLines.length === 0 && (
-            <div className="text-slate-600 flex flex-col gap-1">
+            <div className="text-zinc-600 flex flex-col gap-1">
               <span className="text-primary/50">VibeScan Enterprise Security Scanner v2.0</span>
               <span>────────────────────────────────────────────────────</span>
               <span>Connecting to job queue...</span>
@@ -646,7 +646,7 @@ export default function ScanProgressPage() {
                   {[0, 1, 2].map((i) => (
                     <span
                       key={i}
-                      className="inline-block w-1 h-1 rounded-full bg-slate-600 animate-pulse"
+                      className="inline-block w-1 h-1 rounded-full bg-zinc-600 animate-pulse"
                       style={{ animationDelay: `${i * 200}ms` }}
                     />
                   ))}
@@ -661,7 +661,7 @@ export default function ScanProgressPage() {
             return (
               <div key={line.id} className="flex gap-3 leading-relaxed min-h-[1.4em]">
                 {line.ts ? (
-                  <span className="shrink-0 text-slate-700 select-none w-[52px]">
+                  <span className="shrink-0 text-zinc-700 select-none w-[52px]">
                     {line.ts}
                   </span>
                 ) : (
@@ -682,10 +682,10 @@ export default function ScanProgressPage() {
 
           {/* Complete banner */}
           {isComplete && (
-            <div className="mt-4 flex flex-col gap-0.5 text-emerald-400">
+            <div className="mt-4 flex flex-col gap-0.5 text-green-400">
               <span>────────────────────────────────────────────────────</span>
               <span>✓  Scan session complete. Report ready.</span>
-              <span className="text-slate-500 text-[11px]">Redirecting to your report…</span>
+              <span className="text-zinc-500 text-[11px]">Redirecting to your report…</span>
             </div>
           )}
 
@@ -701,7 +701,7 @@ export default function ScanProgressPage() {
         {/* Progress footer inside terminal chrome */}
         <div className="bg-[#161b22] border-t border-white/[0.06] px-5 py-3">
           <div className="flex items-center justify-between text-[11px] font-mono mb-2">
-            <span className="text-slate-500">
+            <span className="text-zinc-500">
               {doneCount}/{steps.length} checks
               {currentStep ? (
                 <span className="ml-2 text-primary/70">
@@ -711,7 +711,7 @@ export default function ScanProgressPage() {
             </span>
             <span className={cn(
               "font-semibold",
-              isComplete ? "text-emerald-400" : isFailed ? "text-red-400" : "text-primary",
+              isComplete ? "text-green-400" : isFailed ? "text-red-400" : "text-primary",
             )}>
               {progress}%
             </span>
@@ -720,7 +720,7 @@ export default function ScanProgressPage() {
             <div
               className={cn(
                 "h-full rounded-full transition-all duration-700 ease-out",
-                isComplete ? "bg-emerald-500" : isFailed ? "bg-red-500" : "bg-primary",
+                isComplete ? "bg-green-500" : isFailed ? "bg-red-500" : "bg-primary",
               )}
               style={{ width: `${progress}%` }}
             />

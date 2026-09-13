@@ -74,7 +74,7 @@ export function AuthForm({
         </p>
       ) : null}
       {notice ? (
-        <p role="status" className="text-sm text-emerald-400 leading-relaxed">
+        <p role="status" className="text-sm text-green-400 leading-relaxed">
           {notice}
         </p>
       ) : null}

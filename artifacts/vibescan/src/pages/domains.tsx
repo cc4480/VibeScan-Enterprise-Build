@@ -54,7 +54,7 @@ function CopyField({ label, value }: { label: string; value: string }) {
           aria-label={`Copy ${label}`}
           className="shrink-0 px-3 rounded-lg border border-white/10 hover:bg-white/5 transition-colors"
         >
-          {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+          {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
         </button>
       </div>
     </div>
@@ -95,12 +95,12 @@ function VerificationCard({ v }: { v: DomainVerification }) {
           <div
             className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
               v.verified
-                ? "bg-emerald-500/10 border-emerald-500/25"
+                ? "bg-green-500/10 border-green-500/25"
                 : "bg-amber-500/10 border-amber-500/25"
             }`}
           >
             {v.verified ? (
-              <ShieldCheck className="w-5 h-5 text-emerald-400" />
+              <ShieldCheck className="w-5 h-5 text-green-400" />
             ) : (
               <ShieldAlert className="w-5 h-5 text-amber-400" />
             )}

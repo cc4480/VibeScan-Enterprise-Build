@@ -50,7 +50,7 @@ export default function VerifyEmailPage() {
         title="Email confirmed"
         subtitle="You'll get scan results and security alerts at this address."
       >
-        <div className="flex items-center gap-2 text-sm text-emerald-400 mb-6">
+        <div className="flex items-center gap-2 text-sm text-green-400 mb-6">
           <CheckCircle2 className="w-4 h-4" />
           All set
         </div>

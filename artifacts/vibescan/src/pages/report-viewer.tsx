@@ -95,7 +95,7 @@ const CATEGORY_META: Record<string, CategoryMeta> = {
   "UI Security":                     { label: "UI Security",                     icon: <Monitor className="w-4 h-4" />,       color: "text-purple-400" },
   "Content Sniffing":                { label: "Content Sniffing",                icon: <Eye className="w-4 h-4" />,           color: "text-yellow-400" },
   "Information Disclosure":          { label: "Information Disclosure",          icon: <Info className="w-4 h-4" />,          color: "text-sky-400" },
-  "Browser Feature Control":         { label: "Browser Feature Control",         icon: <Settings className="w-4 h-4" />,      color: "text-slate-400" },
+  "Browser Feature Control":         { label: "Browser Feature Control",         icon: <Settings className="w-4 h-4" />,      color: "text-zinc-400" },
   "CORS Misconfiguration":           { label: "CORS Misconfiguration",           icon: <Network className="w-4 h-4" />,       color: "text-red-400" },
   "Session Management":              { label: "Session Management",              icon: <KeyRound className="w-4 h-4" />,      color: "text-amber-400" },
   "CSRF Protection":                 { label: "CSRF Protection",                 icon: <RefreshCw className="w-4 h-4" />,     color: "text-cyan-400" },
@@ -106,8 +106,8 @@ const CATEGORY_META: Record<string, CategoryMeta> = {
   "Unvalidated Redirects":           { label: "Unvalidated Redirects",           icon: <ExternalLink className="w-4 h-4" />,  color: "text-orange-400" },
   "Supply Chain Security":           { label: "Supply Chain Security",           icon: <Package className="w-4 h-4" />,       color: "text-yellow-500" },
   "Brute Force Protection":          { label: "Brute Force Protection",          icon: <ShieldAlert className="w-4 h-4" />,   color: "text-orange-300" },
-  "Email Security":                  { label: "Email Security",                  icon: <Mail className="w-4 h-4" />,          color: "text-emerald-400" },
-  "DNS Security":                    { label: "DNS Security",                    icon: <Wifi className="w-4 h-4" />,          color: "text-teal-400" },
+  "Email Security":                  { label: "Email Security",                  icon: <Mail className="w-4 h-4" />,          color: "text-green-400" },
+  "DNS Security":                    { label: "DNS Security",                    icon: <Wifi className="w-4 h-4" />,          color: "text-green-400" },
   "Exposed Secrets / Credentials":   { label: "Exposed Secrets",                icon: <AlertTriangle className="w-4 h-4" />, color: "text-red-500" },
   "Security Header Inconsistency":   { label: "Header Inconsistency",           icon: <AlertTriangle className="w-4 h-4" />, color: "text-amber-400" },
   "Outdated Software / Known CVE":   { label: "Outdated Software / CVE",        icon: <GitBranch className="w-4 h-4" />,     color: "text-red-400" },
@@ -200,7 +200,7 @@ const SEVERITY_ORDER: Record<string, number> = {
 
 function GradeRing({ grade, score }: { grade: string; score: number }) {
   const colorMap: Record<string, string> = {
-    A: "#34d399", B: "#a3e635", C: "#facc15", D: "#fb923c", F: "#f87171",
+    A: "#4ade80", B: "#a3e635", C: "#facc15", D: "#fb923c", F: "#f87171",
   };
   // "N/A" from a bot-intercepted scan: its risk score is 0 only because the
   // findings that deduct were withheld, so grade and "Risk: 0" would both read
@@ -462,8 +462,8 @@ function VulnCard({
                           title="Confidence: how certain the scanner is this is a real finding, not a false positive"
                           className={cn(
                             "text-xs px-2 py-1 rounded font-medium",
-                            vuln.confidence >= 85 ? "bg-emerald-950 text-emerald-400" :
-                            vuln.confidence >= 70 ? "bg-teal-950 text-teal-400" :
+                            vuln.confidence >= 85 ? "bg-green-950 text-green-400" :
+                            vuln.confidence >= 70 ? "bg-green-950 text-green-400" :
                             vuln.confidence >= 55 ? "bg-yellow-950 text-yellow-500" :
                             "bg-secondary text-muted-foreground",
                           )}
@@ -489,7 +489,7 @@ function VulnCard({
                     setDismissPending(false);
                   }}
                   disabled={dismissPending}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-500/10 border border-green-500/20 text-green-400 hover:bg-green-500/20 transition-colors disabled:opacity-50"
                 >
                   <RotateCcw className="w-3 h-3" />
                   Undo dismissal
@@ -606,7 +606,7 @@ function ReconCard({ recon }: { recon: ReconData }) {
                   >
                     <span className={cn(
                       "font-mono font-bold shrink-0 min-w-[3rem] text-right tabular-nums",
-                      isDangerous ? "text-red-400" : isMedium ? "text-yellow-400" : "text-emerald-400",
+                      isDangerous ? "text-red-400" : isMedium ? "text-yellow-400" : "text-green-400",
                     )}>
                       {p.port}
                     </span>
@@ -645,7 +645,7 @@ function ReconCard({ recon }: { recon: ReconData }) {
             <div className="space-y-0.5">
               {recon.dnsRecords!.map((r, i) => (
                 <div key={i} className="flex items-start gap-2 py-1.5 border-b border-white/5 last:border-0 text-xs">
-                  <span className="shrink-0 px-1.5 py-0.5 bg-teal-500/10 border border-teal-500/20 text-teal-400 rounded font-mono text-[10px] font-bold min-w-[3rem] text-center leading-none mt-0.5">
+                  <span className="shrink-0 px-1.5 py-0.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded font-mono text-[10px] font-bold min-w-[3rem] text-center leading-none mt-0.5">
                     {r.type}
                   </span>
                   <span className="font-mono text-muted-foreground break-all leading-relaxed">{r.value}</span>
@@ -774,7 +774,7 @@ function AgentFixPromptCard({ prompt }: { prompt: string }) {
           className={cn(
             "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200",
             copied
-              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+              ? "bg-green-500/20 text-green-400 border border-green-500/30"
               : "bg-violet-500/20 text-violet-300 border border-violet-500/30 hover:bg-violet-500/30",
           )}
         >
@@ -1216,7 +1216,7 @@ function OwaspBreakdown({ vulnerabilities }: { vulnerabilities: Vulnerability[] 
     high:     "bg-orange-500",
     medium:   "bg-yellow-500",
     low:      "bg-blue-500",
-    info:     "bg-slate-400",
+    info:     "bg-zinc-400",
   };
 
   const SEV_TEXT: Record<string, string> = {
@@ -1224,7 +1224,7 @@ function OwaspBreakdown({ vulnerabilities }: { vulnerabilities: Vulnerability[] 
     high:     "text-orange-400",
     medium:   "text-yellow-400",
     low:      "text-blue-400",
-    info:     "text-slate-400",
+    info:     "text-zinc-400",
   };
 
   const passed  = OWASP_CATEGORIES.filter((c) => !owaspMap[c.code] || owaspMap[c.code].count === 0).length;
@@ -1242,7 +1242,7 @@ function OwaspBreakdown({ vulnerabilities }: { vulnerabilities: Vulnerability[] 
               {failing} flagged
             </span>
           )}
-          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-medium">
+          <span className="px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 font-medium">
             {passed} passed
           </span>
         </div>
@@ -1277,7 +1277,7 @@ function OwaspBreakdown({ vulnerabilities }: { vulnerabilities: Vulnerability[] 
                   </span>
                 </div>
               ) : (
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500/60 shrink-0" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-green-500/60 shrink-0" />
               )}
             </div>
           );
@@ -1371,7 +1371,7 @@ function PrintVulnCard({ vuln, index }: { vuln: Vulnerability; index: number }) 
         )}
         <div>
           <p className="text-xs font-bold uppercase text-gray-400 mb-1 tracking-wider">How to Fix</p>
-          <div className="bg-emerald-50 border border-emerald-200 rounded p-3 text-sm text-gray-800 whitespace-pre-wrap">{vuln.solution}</div>
+          <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-gray-800 whitespace-pre-wrap">{vuln.solution}</div>
         </div>
         {(vuln.cweId || vuln.cvssScore != null || vuln.wstgId) && (
           <div className="flex gap-2 flex-wrap">
@@ -1479,7 +1479,7 @@ function PrintableReport({
       {/* Confirmed Findings */}
       {confirmedVulns.length > 0 && (
         <div className="mb-8">
-          <h2 className="text-lg font-bold mb-4 text-emerald-700">✅ Confirmed Findings ({confirmedVulns.length})</h2>
+          <h2 className="text-lg font-bold mb-4 text-green-700">✅ Confirmed Findings ({confirmedVulns.length})</h2>
           <div className="space-y-4">
             {confirmedVulns.map((v, i) => <PrintVulnCard key={v.id} vuln={v} index={i + 1} />)}
           </div>
@@ -1949,7 +1949,7 @@ function ShareButton({ reportId }: { reportId: string }) {
                             className={cn(
                               "shrink-0 p-1.5 rounded-lg transition-all",
                               copiedToken === share.token
-                                ? "bg-emerald-500/20 text-emerald-400"
+                                ? "bg-green-500/20 text-green-400"
                                 : "hover:bg-white/10 text-muted-foreground hover:text-foreground",
                             )}
                           >
@@ -2494,7 +2494,7 @@ export default function ReportViewer() {
           {/* Accuracy bar */}
           {filteredVulns.length > 0 && (
             <div className="flex items-center gap-4 p-3 rounded-xl bg-secondary/40 border border-white/5 text-xs">
-              <div className="flex items-center gap-1.5 text-emerald-400 font-medium">
+              <div className="flex items-center gap-1.5 text-green-400 font-medium">
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>{confirmedVulns.length} confirmed</span>
               </div>
@@ -2516,10 +2516,10 @@ export default function ReportViewer() {
           {/* Confirmed findings */}
           {confirmedVulns.length > 0 && (
             <div className="space-y-4">
-              <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-emerald-500/8 border border-emerald-500/20">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span className="text-sm font-bold text-emerald-400">Confirmed findings</span>
-                <span className="ml-auto text-xs text-emerald-400/60 font-medium">{confirmedVulns.length} finding{confirmedVulns.length !== 1 ? "s" : ""} — high confidence, act on these</span>
+              <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-green-500/8 border border-green-500/20">
+                <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                <span className="text-sm font-bold text-green-400">Confirmed findings</span>
+                <span className="ml-auto text-xs text-green-400/60 font-medium">{confirmedVulns.length} finding{confirmedVulns.length !== 1 ? "s" : ""} — high confidence, act on these</span>
               </div>
               {viewMode === "grouped" ? (
                 <div className="space-y-2">
@@ -2597,7 +2597,7 @@ export default function ReportViewer() {
 
           {vulnerabilities.length === 0 && (
             <div className="text-center py-12 glass-card rounded-xl">
-              <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-4" />
+              <CheckCircle2 className="w-12 h-12 text-green-400 mx-auto mb-4" />
               <h3 className="text-xl font-bold mb-2">No vulnerabilities found</h3>
               <p className="text-muted-foreground">Excellent work. Your application appears secure based on our checks.</p>
             </div>
@@ -2689,7 +2689,7 @@ export default function ReportViewer() {
                   <ul className="space-y-2">
                     {aiAnalysis.quickWins.map((w, i) => (
                       <li key={i} className="text-sm flex items-start gap-2">
-                        <span className="text-emerald-400 mt-0.5">✓</span> <span>{w}</span>
+                        <span className="text-green-400 mt-0.5">✓</span> <span>{w}</span>
                       </li>
                     ))}
                   </ul>

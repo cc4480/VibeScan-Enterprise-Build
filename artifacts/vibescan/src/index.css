@@ -42,36 +42,36 @@
 }
 
 :root {
-  /* Dark Security Theme */
-  --background: 222 47% 7%;
-  --foreground: 210 40% 98%;
-  
-  --card: 222 47% 9%;
-  --card-foreground: 210 40% 98%;
-  --card-border: 222 30% 15%;
-  
-  --popover: 222 47% 9%;
-  --popover-foreground: 210 40% 98%;
-  
-  /* Bright Hacker Green/Teal */
-  --primary: 158 64% 52%;
-  --primary-foreground: 222 47% 7%;
-  
-  --secondary: 222 30% 15%;
-  --secondary-foreground: 210 40% 98%;
-  
-  --muted: 222 30% 12%;
-  --muted-foreground: 215 20% 65%;
-  
-  --accent: 222 30% 20%;
-  --accent-foreground: 210 40% 98%;
-  
+  /* Neutral zinc + green — matches seclayer.app's palette */
+  --background: 240 10% 3.9%;
+  --foreground: 0 0% 98%;
+
+  --card: 240 6% 10%;
+  --card-foreground: 0 0% 98%;
+  --card-border: 240 4% 16%;
+
+  --popover: 240 6% 10%;
+  --popover-foreground: 0 0% 98%;
+
+  /* Tailwind green-500, matching seclayer's #22c55e accent */
+  --primary: 142 71% 45%;
+  --primary-foreground: 240 10% 3.9%;
+
+  --secondary: 240 4% 16%;
+  --secondary-foreground: 0 0% 98%;
+
+  --muted: 240 4% 16%;
+  --muted-foreground: 240 5% 65%;
+
+  --accent: 240 4% 16%;
+  --accent-foreground: 0 0% 98%;
+
   --destructive: 0 84% 60%;
-  --destructive-foreground: 210 40% 98%;
-  
-  --border: 222 30% 15%;
-  --input: 222 30% 15%;
-  --ring: 158 64% 52%;
+  --destructive-foreground: 0 0% 98%;
+
+  --border: 240 4% 16%;
+  --input: 240 4% 16%;
+  --ring: 142 71% 45%;
 }
 
 @layer base {
@@ -103,7 +103,7 @@
   }
   
   .text-gradient-primary {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-emerald-300;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-green-300;
   }
 
   .hide-scrollbar::-webkit-scrollbar {

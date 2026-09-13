@@ -30,12 +30,12 @@ const SEVERITY_CONFIG: Record<string, { label: string; color: string; bg: string
   HIGH:     { label: "High",     color: "text-orange-400", bg: "bg-orange-400/10 border-orange-400/20" },
   MEDIUM:   { label: "Medium",   color: "text-yellow-400", bg: "bg-yellow-400/10 border-yellow-400/20" },
   LOW:      { label: "Low",      color: "text-green-400",  bg: "bg-green-400/10 border-green-400/20" },
-  UNKNOWN:  { label: "Unknown",  color: "text-slate-400",  bg: "bg-slate-400/10 border-slate-400/20" },
+  UNKNOWN:  { label: "Unknown",  color: "text-zinc-400",  bg: "bg-zinc-400/10 border-zinc-400/20" },
 };
 
 function gradeColor(grade: string | null) {
   if (!grade) return "text-muted-foreground";
-  if (grade === "A") return "text-emerald-400";
+  if (grade === "A") return "text-green-400";
   if (grade === "B") return "text-green-400";
   if (grade === "C") return "text-yellow-400";
   if (grade === "D") return "text-orange-400";
@@ -100,13 +100,13 @@ function Sparkline({ points, width = 120, height = 36 }: { points: ScoreHistoryP
       <path
         d={pathD}
         fill="none"
-        stroke={improving ? "#34d399" : "#f87171"}
+        stroke={improving ? "#4ade80" : "#f87171"}
         strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       {last && (
-        <circle cx={last.x} cy={last.y} r="2.5" fill={improving ? "#34d399" : "#f87171"} />
+        <circle cx={last.x} cy={last.y} r="2.5" fill={improving ? "#4ade80" : "#f87171"} />
       )}
     </svg>
   );
@@ -119,7 +119,7 @@ function EpssPill({ percentile }: { percentile: number | null }) {
   const pct = Math.round(percentile * 100);
   const color = pct >= 90 ? "text-red-400 bg-red-400/10 border-red-400/30"
     : pct >= 50 ? "text-orange-400 bg-orange-400/10 border-orange-400/30"
-    : "text-slate-400 bg-slate-400/10 border-slate-400/20";
+    : "text-zinc-400 bg-zinc-400/10 border-zinc-400/20";
   return (
     <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border", color)}>
       EPSS {pct}th%
@@ -252,7 +252,7 @@ function SubscriptionCard({ sub, onCancel }: { sub: MonitorSubscription; onCance
         {/* Top row */}
         <div className="flex items-start justify-between gap-4 mb-4">
           <div className="flex items-center gap-3 min-w-0">
-            <div className={cn("w-2 h-2 rounded-full shrink-0 mt-1", isActive ? "bg-emerald-400" : "bg-slate-500")} />
+            <div className={cn("w-2 h-2 rounded-full shrink-0 mt-1", isActive ? "bg-green-400" : "bg-zinc-500")} />
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <a
@@ -267,8 +267,8 @@ function SubscriptionCard({ sub, onCancel }: { sub: MonitorSubscription; onCance
                 <span className={cn(
                   "px-2 py-0.5 rounded-full text-xs font-semibold border",
                   isActive
-                    ? "bg-emerald-400/10 border-emerald-400/20 text-emerald-400"
-                    : "bg-slate-400/10 border-slate-400/20 text-slate-400",
+                    ? "bg-green-400/10 border-green-400/20 text-green-400"
+                    : "bg-zinc-400/10 border-zinc-400/20 text-zinc-400",
                 )}>
                   {sub.status === "active" ? "Active" : sub.status === "cancelled" ? "Cancelled" : "Expired"}
                 </span>
@@ -648,8 +648,8 @@ export default function MonitorPage() {
             icon: RefreshCw,
             title: "Adaptive Rescans",
             desc: "Scan cadence adapts to your risk grade: A grades rescan every 14 days, B/C every 7, D/F every 3.",
-            color: "text-emerald-400",
-            bg: "bg-emerald-400/10",
+            color: "text-green-400",
+            bg: "bg-green-400/10",
           },
           {
             icon: ShieldAlert,
@@ -705,7 +705,7 @@ export default function MonitorPage() {
       {!isLoading && active.length > 0 && (
         <div className="space-y-4">
           <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Active ({active.length})
+            <CheckCircle2 className="w-4 h-4 text-green-400" /> Active ({active.length})
           </h2>
           <AnimatePresence>
             {active.map((sub) => (
@@ -718,7 +718,7 @@ export default function MonitorPage() {
       {!isLoading && inactive.length > 0 && (
         <div className="space-y-4">
           <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-            <XCircle className="w-4 h-4 text-slate-500" /> Inactive ({inactive.length})
+            <XCircle className="w-4 h-4 text-zinc-500" /> Inactive ({inactive.length})
           </h2>
           <AnimatePresence>
             {inactive.map((sub) => (

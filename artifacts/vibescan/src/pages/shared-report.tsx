@@ -212,9 +212,9 @@ export default function SharedReport() {
 
           {confirmed.length > 0 && (
             <div className="space-y-3">
-              <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-emerald-500/8 border border-emerald-500/20 text-sm font-bold text-emerald-400">
+              <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-green-500/8 border border-green-500/20 text-sm font-bold text-green-400">
                 ✓ Confirmed findings
-                <span className="ml-auto text-xs text-emerald-400/60 font-medium">{confirmed.length} finding{confirmed.length !== 1 ? "s" : ""}</span>
+                <span className="ml-auto text-xs text-green-400/60 font-medium">{confirmed.length} finding{confirmed.length !== 1 ? "s" : ""}</span>
               </div>
               {confirmed.map((v, i) => <VulnRow key={v.id} vuln={v} index={i} />)}
             </div>
@@ -232,7 +232,7 @@ export default function SharedReport() {
 
           {vulnerabilities.length === 0 && (
             <div className="text-center py-12 glass-card rounded-xl">
-              <Shield className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
+              <Shield className="w-10 h-10 text-green-400 mx-auto mb-3" />
               <h3 className="text-lg font-bold mb-1">No vulnerabilities found</h3>
               <p className="text-muted-foreground text-sm">This application passed all security checks.</p>
             </div>
@@ -268,7 +268,7 @@ export default function SharedReport() {
                     <ul className="space-y-1.5">
                       {aiAnalysis.quickWins.map((w, i) => (
                         <li key={i} className="flex items-start gap-2 text-foreground/90">
-                          <span className="text-emerald-400 mt-0.5">✓</span> <span>{w}</span>
+                          <span className="text-green-400 mt-0.5">✓</span> <span>{w}</span>
                         </li>
                       ))}
                     </ul>

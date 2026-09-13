@@ -10,7 +10,7 @@ import type { Scan } from "@workspace/api-client-react";
 import { listMonitorSubscriptions } from "@/lib/monitor-api";
 
 const GRADE_COLORS: Record<string, string> = {
-  A: "text-emerald-400 bg-emerald-400/10 border-emerald-400/30",
+  A: "text-green-400 bg-green-400/10 border-green-400/30",
   B: "text-green-400 bg-green-400/10 border-green-400/30",
   C: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30",
   D: "text-orange-400 bg-orange-400/10 border-orange-400/30",
@@ -62,7 +62,7 @@ function ScanRow({ initialScan, highlight }: { initialScan: Scan; highlight?: bo
     switch (status) {
       case 'complete':
         return (
-          <div className="flex items-center gap-1.5 text-emerald-400">
+          <div className="flex items-center gap-1.5 text-green-400">
             <CheckCircle2 className="w-4 h-4" /> Complete
           </div>
         );
@@ -138,7 +138,7 @@ function ScanRow({ initialScan, highlight }: { initialScan: Scan; highlight?: bo
         {(() => {
           const grade = 'grade' in scan ? (scan as { grade?: string | null }).grade : null;
           if (scan.status === 'complete' && grade) return <GradeBadge grade={grade} />;
-          if (scan.status === 'complete') return <Shield className="w-5 h-5 text-emerald-400" />;
+          if (scan.status === 'complete') return <Shield className="w-5 h-5 text-green-400" />;
           if (scan.status === 'failed') return <AlertCircle className="w-5 h-5 text-red-400/50" />;
           return <span className="text-muted-foreground">—</span>;
         })()}
@@ -251,7 +251,7 @@ export default function DashboardPage() {
 
         <div className="glass-card p-6 rounded-2xl flex flex-col gap-2">
           <div className="text-muted-foreground text-sm font-medium flex items-center gap-2">
-            <Shield className="w-4 h-4 text-emerald-400" /> Completed
+            <Shield className="w-4 h-4 text-green-400" /> Completed
           </div>
           <div className="text-4xl font-bold">{completedCount}</div>
         </div>

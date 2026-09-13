@@ -53,7 +53,7 @@ export const SEV_COLORS: Record<string, string> = {
   high:     "bg-orange-950 text-orange-400 border-orange-800",
   medium:   "bg-yellow-950 text-yellow-400 border-yellow-800",
   low:      "bg-blue-950 text-blue-400 border-blue-800",
-  info:     "bg-slate-900 text-slate-400 border-slate-700",
+  info:     "bg-zinc-900 text-zinc-400 border-zinc-700",
 };
 
 export const SEV_ORDER: Record<string, number> = {
@@ -64,7 +64,7 @@ export const VERIFICATION_THRESHOLD = 65;
 
 export function GradeRing({ grade, score }: { grade: string; score: number }) {
   const colorMap: Record<string, string> = {
-    A: "#34d399", B: "#a3e635", C: "#facc15", D: "#fb923c", F: "#f87171",
+    A: "#4ade80", B: "#a3e635", C: "#facc15", D: "#fb923c", F: "#f87171",
   };
   // A scan a bot-protection layer answered carries no grade — the worker sets
   // it to "N/A". Its risk score is 0 only because the findings that would
