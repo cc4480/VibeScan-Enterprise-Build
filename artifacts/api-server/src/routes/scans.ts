@@ -1,4 +1,4 @@
-import { Router, type IRouter, type Request } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { db, scansTable, reportsTable, usersTable } from "@workspace/db";
 import { eq, and, desc, inArray, gte, count } from "drizzle-orm";
 import {
@@ -9,7 +9,7 @@ import {
 import { enqueueScan } from "../lib/queue";
 import { validateCredentials, encryptCredentials } from "../lib/scanCredentials";
 import { checkScanTarget } from "../lib/ssrfGuard";
-import { rateLimitMiddleware, scanRateLimitRules } from "../lib/rateLimit";
+import { rateLimitMiddleware, scanRateLimitRules, scanNetworkRateLimitRules } from "../lib/rateLimit";
 
 // ── Abuse and cost control ───────────────────────────────────────────────────
 // A scan is expensive in a way an API request normally is not: it launches a
@@ -104,12 +104,37 @@ router.get("/scans", async (req, res): Promise<void> => {
   }
 });
 
+// Per USER, not per IP. This limit used to bucket on the client address, which
+// meant every customer behind one office NAT, VPN or campus egress shared a
+// single 5-scans-per-hour allowance: the second colleague to launch a scan was
+// refused because of what the first one did, with an error blaming them for it.
 const scanRateLimit = rateLimitMiddleware({
   rules: scanRateLimitRules(),
   name: "scans",
+  // Only reached after requireScanAuth below, so the user is always present.
+  keyFrom: (req) => (req.isAuthenticated() ? `user:${req.user.id}` : undefined),
 });
 
-router.post("/scans", scanRateLimit, async (req, res): Promise<void> => {
+// Per NETWORK, above the per-user cap. The per-user gate cannot see one host
+// creating accounts to multiply its allowance; this can.
+const scanNetworkRateLimit = rateLimitMiddleware({
+  rules: scanNetworkRateLimitRules(),
+  name: "scans-network",
+});
+
+// Authentication runs BEFORE the limiters, which is a fix in its own right:
+// with the limiter first, unauthenticated requests consumed the bucket, so
+// anyone could spend a signed-in user's scan allowance — or, once keyed per
+// user, would have had no identity to bucket on at all.
+function requireScanAuth(req: Request, res: Response, next: NextFunction): void {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  next();
+}
+
+router.post("/scans", requireScanAuth, scanRateLimit, scanNetworkRateLimit, async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) {
     res.status(401).json({ error: "Unauthorized" });
     return;

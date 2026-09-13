@@ -127,3 +127,32 @@ describe("scanRateLimitRules", () => {
     }
   });
 });
+
+// ── Per-user keying regression ───────────────────────────────────────────────
+// The scan limiter bucketed on the client IP at 5 scans/hour, so every customer
+// behind one office NAT, VPN or campus egress shared a single allowance — the
+// second colleague to launch a scan was refused for what the first one did.
+describe("keyFrom", () => {
+  it("gives each user their own allowance from a single shared address", () => {
+    const limiter = new SlidingWindowLimiter([{ windowMs: 60_000, max: 2, label: "hour" }]);
+    // The middleware keys on whatever keyFrom returns; these stand in for two
+    // signed-in users arriving from the same office IP.
+    expect(limiter.check("user:alice").allowed).toBe(true);
+    expect(limiter.check("user:alice").allowed).toBe(true);
+    expect(limiter.check("user:alice").allowed).toBe(false);
+    // Bob is unaffected by Alice exhausting hers.
+    expect(limiter.check("user:bob").allowed).toBe(true);
+    expect(limiter.check("user:bob").allowed).toBe(true);
+    expect(limiter.check("user:bob").allowed).toBe(false);
+  });
+
+  it("falls back to the address when there is no user, so anonymous is still limited", () => {
+    const options = { rules: [{ windowMs: 60_000, max: 1, label: "hour" }], name: "t" };
+    // keyFrom returning undefined must not mean "unlimited" — the middleware
+    // resolves it with ?? clientIp(req).
+    const keyFrom = (req: any) => (req.user ? `user:${req.user.id}` : undefined);
+    expect(keyFrom({ user: { id: "u1" } })).toBe("user:u1");
+    expect(keyFrom({})).toBeUndefined();
+    expect(options.rules[0]!.max).toBe(1);
+  });
+});

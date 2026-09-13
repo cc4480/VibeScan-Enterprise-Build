@@ -60,10 +60,46 @@ export function scanRateLimitRules(): RateLimitRule[] {
   ];
 }
 
+/**
+ * The per-NETWORK abuse ceiling, applied alongside the per-user limits above.
+ *
+ * The per-user gate is the fair one, but it cannot see one machine registering
+ * many accounts to multiply its allowance. This can. Set well above the
+ * per-user cap, so what it catches is abuse rather than a busy office.
+ */
+export function scanNetworkRateLimitRules(): RateLimitRule[] {
+  return [
+    {
+      windowMs: HOUR_MS,
+      max: parsePositiveInt(process.env.SCAN_LIMIT_PER_HOUR_PER_IP, 40),
+      label: "hour (network)",
+    },
+    {
+      windowMs: DAY_MS,
+      max: parsePositiveInt(process.env.SCAN_LIMIT_PER_DAY_PER_IP, 200),
+      label: "day (network)",
+    },
+  ];
+}
+
 export interface RateLimiterOptions {
   rules: RateLimitRule[];
   /** Distinguishes buckets between endpoints sharing this module. */
   name: string;
+  /**
+   * Bucket on something other than the client IP — for scan limits, the
+   * authenticated user.
+   *
+   * IP is a weak identity in both directions. Everyone behind one office NAT,
+   * VPN or campus egress shares a single bucket and locks each other out: at
+   * the default 5 scans/hour, the second colleague to try is refused because
+   * of what the first one did. Meanwhile a caller on CGNAT or mobile egresses
+   * from several addresses and simply collects an allowance from each.
+   *
+   * Returning undefined falls back to the IP, so an unauthenticated caller is
+   * still limited rather than unlimited.
+   */
+  keyFrom?: (req: Request) => string | undefined;
 }
 
 export interface RateLimitDecision {
@@ -147,7 +183,7 @@ export function rateLimitMiddleware(options: RateLimiterOptions) {
   sweep.unref?.();
 
   return function rateLimit(req: Request, res: Response, next: NextFunction): void {
-    const key = clientIp(req);
+    const key = options.keyFrom?.(req) ?? clientIp(req);
     const decision = limiter.check(key);
 
     if (decision.allowed) {
@@ -157,7 +193,11 @@ export function rateLimitMiddleware(options: RateLimiterOptions) {
 
     res.setHeader("Retry-After", String(decision.retryAfterSeconds ?? 60));
     logger.warn(
-      { ip: key, limiter: options.name, rule: decision.rule?.label },
+      // The key can now be a user id, so it is not labelled `ip` any more —
+      // and it is not logged verbatim: a user id in a log line is an identifier
+      // the log did not previously carry. The IP is what an operator needs to
+      // act on abuse, so that is what is recorded.
+      { ip: clientIp(req), limiter: options.name, rule: decision.rule?.label },
       "Rate limit exceeded",
     );
     res.status(429).json({

@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import {
   db, monitorSubscriptionsTable, cveAlertsTable, reportsTable,
   monitorScoreHistoryTable, monitorRegressionsTable, certExpiryAlertsTable,
@@ -40,12 +40,24 @@ const CreateMonitorBody = z.object({
 // With DISABLE_PAYMENTS=true this is granted immediately.
 
 // A subscription schedules recurring scans, so it draws on the same budget.
+// Per user, for the same reason as the scan route: this was IP-keyed, so
+// colleagues on one office egress shared a single allowance.
 const monitorRateLimit = rateLimitMiddleware({
   rules: scanRateLimitRules(),
   name: "monitor-subscriptions",
+  keyFrom: (req) => (req.isAuthenticated() ? `user:${req.user.id}` : undefined),
 });
 
-router.post("/monitor/subscriptions", monitorRateLimit, async (req, res): Promise<void> => {
+// Auth first, so an unauthenticated caller cannot spend a real user's budget.
+function requireMonitorAuth(req: Request, res: Response, next: NextFunction): void {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  next();
+}
+
+router.post("/monitor/subscriptions", requireMonitorAuth, monitorRateLimit, async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) {
     res.status(401).json({ error: "Unauthorized" });
     return;
