@@ -739,7 +739,28 @@ export async function startWorker(): Promise<void> {
     expireInSeconds: 7200,
   });
 
-  await boss.work<ScanJobData>(SCAN_QUEUE, { localConcurrency: 2 }, async (jobs) => {
+  // How many scans this worker process runs at once.
+  //
+  // Was a hard-coded 2, which made the whole product a two-lane road: with a
+  // median scan of ~26s (p90 38s), 100 people scanning at launch meant 50 waves
+  // and a ~22-minute wait for the last one — long enough that they conclude it
+  // is broken and leave. Meanwhile the container sits at 0.23 GB of a 7.45 GB
+  // limit, so the constraint was arbitrary rather than physical.
+  //
+  // 8 is deliberate, not maximal. A scan holds a headless Chromium plus
+  // hundreds of sockets; at a few hundred MB each, 8 lands near 2 GB and leaves
+  // roughly 3x headroom on this container. The failure mode of guessing too
+  // high is an OOM kill that drops every in-flight scan at once, so this moves
+  // in one step with room to observe rather than straight to the ceiling.
+  //
+  // Env-overridable so the next move needs no deploy: raise
+  // SCAN_WORKER_CONCURRENCY, watch /sys/fs/cgroup/memory.current during a
+  // burst, and only then raise it again. Total fleet capacity is
+  // replicas x this number.
+  const scanConcurrency = Math.max(1, Number(process.env.SCAN_WORKER_CONCURRENCY) || 8);
+  logger.info({ scanConcurrency }, "Scan worker concurrency");
+
+  await boss.work<ScanJobData>(SCAN_QUEUE, { localConcurrency: scanConcurrency }, async (jobs) => {
     for (const job of jobs) {
       try {
         await processScanJob(job);
