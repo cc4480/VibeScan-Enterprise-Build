@@ -66,7 +66,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
 // ── ProtectedRoute ───────────────────────────────────────────────────────────
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { data, isLoading, isFetching, refetch } = useGetCurrentAuthUser();
+  const { data, isLoading, isFetching, isError, refetch } = useGetCurrentAuthUser();
 
   if (isLoading) {
     return (
@@ -76,14 +76,18 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
     );
   }
 
-  // A missing user means the auth request failed or returned nothing. This
-  // previously hard-redirected to /api/login, which is Replit OIDC: anywhere
-  // other than Replit that route cannot complete and answers 500, so one failed
-  // request tore down the SPA, wiped the query cache and left the user on an
-  // error page. Identity is normally an anonymous token the API accepts on
-  // sight, so the realistic cause is a transient failure — say so and let them
-  // retry in place.
-  if (!data?.user) {
+  // GET /auth/user is documented to always answer 200, with `user: null` as
+  // the normal, successful shape of "not signed in" (see openapi.yaml's
+  // AuthUserEnvelope — user is `AuthUser | null`, no 401 is ever declared for
+  // this route). That is NOT the same situation as the request actually
+  // failing, and showing one identical alarming screen for both — as this
+  // used to — meant every ordinary "you aren't signed in on this
+  // browser/device" case (an expired or cleared session, a bookmark to a
+  // protected page, mobile browsers clearing storage more aggressively than
+  // desktop) read as "Can't reach the server... this is usually temporary,"
+  // with a "Try again" button that cannot do anything for that case: retrying
+  // an unauthenticated request just returns the same no-user response.
+  if (isError) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="text-center max-w-md">
@@ -98,14 +102,30 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
           >
             {isFetching ? "Retrying…" : "Try again"}
           </button>
-          {/* Points at the real accounts route. It used to link to /api/login,
-              which is Replit OIDC and answers 500 anywhere else — offering a
-              sign-in that cannot work. */}
           <p className="mt-6 text-xs text-muted-foreground">
             <Link href="/sign-in" className="underline underline-offset-4">
               Sign in instead
             </Link>
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data?.user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="text-center max-w-md">
+          <h1 className="text-2xl font-bold mb-2">Sign in to continue</h1>
+          <p className="text-muted-foreground text-sm mb-6">
+            This page needs an active session. Sign in to pick up where you left off.
+          </p>
+          <Link
+            href="/sign-in"
+            className="inline-block px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium"
+          >
+            Sign in
+          </Link>
         </div>
       </div>
     );
