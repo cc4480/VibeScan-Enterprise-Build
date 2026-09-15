@@ -8,7 +8,7 @@ import {
 import { cn, getGradeColor } from "@/lib/utils";
 import { APP_ORIGIN } from "@/lib/origin";
 import {
-  GradeRing, VulnRow,
+  GradeRing, VulnRow, ComplianceCard,
   SEV_COLORS, SEV_ORDER, VERIFICATION_THRESHOLD,
   type SharedReportData,
 } from "./shared-report-components";
@@ -91,7 +91,7 @@ export default function SharedReport() {
   if (!report) return null;
 
   const { data } = report;
-  const { summary, vulnerabilities, technologies, server, tlsGrade, aiAnalysis } = data;
+  const { summary, vulnerabilities, technologies, server, tlsGrade, aiAnalysis, compliance } = data;
 
   const sorted = [...vulnerabilities].sort(
     (a, b) => (SEV_ORDER[a.severity] ?? 99) - (SEV_ORDER[b.severity] ?? 99),
@@ -310,6 +310,12 @@ export default function SharedReport() {
         </div>
       </div>
 
+      {/* Compliance mapping — full width below the grid; the control lists need
+          the room. Renders nothing when no findings map to a framework. */}
+      <div className="mt-10">
+        <ComplianceCard compliance={compliance} />
+      </div>
+
       <div className="mt-16 pt-8 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="text-center sm:text-left">
           <p className="text-xs text-muted-foreground">
@@ -418,6 +424,38 @@ export default function SharedReport() {
                   </ul>
                 </div>
               )}
+            </div>
+          )}
+
+          {compliance && compliance.frameworks.length > 0 && (
+            <div style={{ marginBottom: "24px", paddingTop: "16px", borderTop: "1px solid #e5e7eb", pageBreakInside: "avoid" }}>
+              <h2 style={{ fontSize: "16px", fontWeight: "bold", marginBottom: "4px" }}>Compliance Mapping</h2>
+              <p style={{ fontSize: "12px", color: "#6b7280", marginBottom: "12px" }}>
+                Which findings are evidence for a recognised framework control — not a compliance verdict.
+              </p>
+              {compliance.frameworks.map((fw) => (
+                <div key={fw.framework.id} style={{ marginBottom: "12px" }}>
+                  <div style={{ marginBottom: "4px" }}>
+                    <strong>{fw.framework.name}</strong>{" "}
+                    <span style={{ fontSize: "11px", color: "#6b7280" }}>{fw.framework.version}</span>
+                  </div>
+                  <ul style={{ margin: "0 0 4px", paddingLeft: "20px" }}>
+                    {fw.controls.map((c) => (
+                      <li key={c.control}>
+                        <span style={{ fontFamily: "monospace", fontSize: "11px" }}>{c.control}</span>{" "}
+                        {c.title}{" "}
+                        <span style={{ color: "#6b7280" }}>
+                          ({c.findings} finding{c.findings === 1 ? "" : "s"})
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p style={{ fontSize: "11px", color: "#9ca3af", margin: 0 }}>{fw.framework.note}</p>
+                </div>
+              ))}
+              <p style={{ fontSize: "10px", color: "#9ca3af", marginTop: "8px", paddingTop: "8px", borderTop: "1px solid #f3f4f6" }}>
+                {compliance.disclaimer}
+              </p>
             </div>
           )}
 

@@ -45,6 +45,13 @@ export interface SharedReportData {
       quickWins: string[];
       complianceNotes?: string | null;
     } | null;
+    compliance?: {
+      frameworks: Array<{
+        framework: { id: string; name: string; version: string; note: string };
+        controls: Array<{ control: string; title: string; findings: number }>;
+      }>;
+      disclaimer: string;
+    } | null;
   };
 }
 
@@ -94,6 +101,60 @@ export function GradeRing({ grade, score }: { grade: string; score: number }) {
           </span>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Renders `report.data.compliance` — which controls this scan's findings are
+ * evidence for, grouped by framework. Renders nothing if the scan produced no
+ * mappable findings (an honest empty state, not a hidden feature).
+ *
+ * The disclaimer is not optional trim: it is the thing that keeps this card
+ * from being read as a compliance verdict. See lib/compliance.ts server-side.
+ */
+export function ComplianceCard({
+  compliance,
+}: {
+  compliance?: SharedReportData["data"]["compliance"];
+}) {
+  if (!compliance || compliance.frameworks.length === 0) return null;
+
+  return (
+    <div className="glass-card rounded-2xl p-6 border-t-4 border-t-primary">
+      <h3 className="text-lg font-bold mb-1 flex items-center gap-2">
+        Compliance Mapping
+      </h3>
+      <p className="text-xs text-muted-foreground mb-6">
+        Which findings are evidence for a recognised framework control — not a compliance verdict.
+      </p>
+
+      <div className="space-y-5">
+        {compliance.frameworks.map((fw) => (
+          <div key={fw.framework.id}>
+            <div className="flex items-baseline gap-2 mb-2">
+              <h4 className="text-sm font-bold">{fw.framework.name}</h4>
+              <span className="text-[11px] text-muted-foreground">{fw.framework.version}</span>
+            </div>
+            <ul className="space-y-1.5 mb-2">
+              {fw.controls.map((c) => (
+                <li key={c.control} className="text-sm flex items-start gap-2">
+                  <span className="text-primary mt-0.5 font-mono text-xs shrink-0">{c.control}</span>
+                  <span className="flex-1">{c.title}</span>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {c.findings} finding{c.findings === 1 ? "" : "s"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted-foreground/70 leading-relaxed">{fw.framework.note}</p>
+          </div>
+        ))}
+      </div>
+
+      <p className="text-xs text-muted-foreground/60 leading-relaxed mt-6 pt-4 border-t border-border">
+        {compliance.disclaimer}
+      </p>
     </div>
   );
 }

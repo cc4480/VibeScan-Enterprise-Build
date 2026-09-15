@@ -19,6 +19,12 @@ import { useState, useMemo, useCallback, useEffect, createContext, useContext, u
 import { useSeo } from "@/lib/seo";
 import type { Vulnerability } from "@workspace/api-client-react";
 import { APP_ORIGIN } from "@/lib/origin";
+import { ComplianceCard, type SharedReportData } from "./shared-report-components";
+
+// The structured compliance mapping the worker freezes into report.data
+// (see api-server lib/compliance.ts). Shared with the public report view so the
+// owner report and the shared link render the same shape from one source.
+type ComplianceData = NonNullable<SharedReportData["data"]["compliance"]>;
 
 // ─── Dismissals context ───────────────────────────────────────────────────────
 
@@ -1389,7 +1395,7 @@ function PrintVulnCard({ vuln, index }: { vuln: Vulnerability; index: number }) 
 
 function PrintableReport({
   targetUrl, scannedAt, summary, confirmedVulns, unverifiedVulns,
-  technologies, server, tlsGrade, aiAnalysis, categoryCounts, pagesScanned,
+  technologies, server, tlsGrade, aiAnalysis, compliance, categoryCounts, pagesScanned,
 }: {
   targetUrl: string;
   scannedAt: string | Date;
@@ -1400,6 +1406,7 @@ function PrintableReport({
   server?: string | null;
   tlsGrade?: string | null;
   aiAnalysis?: { overallRisk: string; topPriorities: string[]; quickWins: string[]; complianceNotes?: string | null } | null;
+  compliance?: ComplianceData | null;
   categoryCounts: Record<string, number>;
   pagesScanned?: string[];
 }) {
@@ -1532,6 +1539,35 @@ function PrintableReport({
         </div>
       )}
 
+      {/* Compliance Mapping */}
+      {compliance && compliance.frameworks.length > 0 && (
+        <div className="mb-8 mt-8 pt-6 border-t-2 border-gray-200">
+          <h2 className="text-lg font-bold mb-1 text-gray-900">Compliance Mapping</h2>
+          <p className="text-xs text-gray-500 mb-4">
+            Which findings are evidence for a recognised framework control — not a compliance verdict.
+          </p>
+          <div className="space-y-4">
+            {compliance.frameworks.map((fw) => (
+              <div key={fw.framework.id}>
+                <h3 className="font-semibold text-gray-800">
+                  {fw.framework.name} <span className="text-xs font-normal text-gray-500">{fw.framework.version}</span>
+                </h3>
+                <ul className="mt-1 mb-1 space-y-0.5">
+                  {fw.controls.map((c) => (
+                    <li key={c.control} className="text-gray-700 text-sm">
+                      <span className="font-mono text-xs">{c.control}</span> {c.title}{" "}
+                      <span className="text-gray-500">({c.findings} finding{c.findings === 1 ? "" : "s"})</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-gray-400">{fw.framework.note}</p>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-gray-400 mt-4 pt-3 border-t border-gray-100">{compliance.disclaimer}</p>
+        </div>
+      )}
+
       {/* Tech Profile */}
       <div className="mb-6 mt-8 pt-6 border-t-2 border-gray-200">
         <h2 className="text-lg font-bold mb-3 text-gray-900">🖥️ Tech Profile</h2>
@@ -1570,6 +1606,7 @@ export interface PrintableReportData {
   server?: string | null;
   tlsGrade?: string | null;
   aiAnalysis?: { overallRisk: string; topPriorities: string[]; quickWins: string[]; complianceNotes?: string | null } | null;
+  compliance?: ComplianceData | null;
   categoryCounts: Record<string, number>;
   pagesScanned?: string[];
 }
@@ -1681,6 +1718,7 @@ interface ReportCopyData {
   server?: string | null;
   tlsGrade?: string | null;
   aiAnalysis?: { overallRisk: string; topPriorities: string[]; quickWins: string[]; complianceNotes?: string | null } | null;
+  compliance?: ComplianceData | null;
 }
 
 function formatReportMarkdown(d: ReportCopyData): string {
@@ -1743,6 +1781,19 @@ function formatReportMarkdown(d: ReportCopyData): string {
     if (d.aiAnalysis.complianceNotes) {
       lines.push(`### Compliance Notes`, ``, d.aiAnalysis.complianceNotes, ``);
     }
+  }
+
+  if (d.compliance && d.compliance.frameworks.length > 0) {
+    lines.push(`## Compliance Mapping`, ``);
+    lines.push(`Which findings are evidence for a recognised framework control — not a compliance verdict.`, ``);
+    d.compliance.frameworks.forEach((fw) => {
+      lines.push(`### ${fw.framework.name} (${fw.framework.version})`, ``);
+      fw.controls.forEach((c) => {
+        lines.push(`- \`${c.control}\` ${c.title} (${c.findings} finding${c.findings === 1 ? "" : "s"})`);
+      });
+      lines.push(``, `_${fw.framework.note}_`, ``);
+    });
+    lines.push(`> ${d.compliance.disclaimer}`, ``);
   }
 
   lines.push(`## 🖥️ Tech Profile`, ``);
@@ -2260,6 +2311,9 @@ export default function ReportViewer() {
   }
 
   const { data: { technologies, server, tlsGrade, aiAnalysis, pagesScanned, probedNotFound, recon } } = report;
+  // report.data is loosely typed by the client; compliance is frozen in by the
+  // worker (see the autoSuppressedCount cast below for the same pattern).
+  const compliance = (report.data as { compliance?: ComplianceData | null }).compliance ?? null;
 
   const severityCounts = {
     critical: summary.critical,
@@ -2289,6 +2343,7 @@ export default function ReportViewer() {
     server: server ?? null,
     tlsGrade: tlsGrade ?? null,
     aiAnalysis: aiAnalysis ?? null,
+    compliance,
   };
 
   return (
@@ -2314,6 +2369,7 @@ export default function ReportViewer() {
           server={server}
           tlsGrade={tlsGrade}
           aiAnalysis={aiAnalysis}
+          compliance={compliance}
           categoryCounts={categoryCounts}
           pagesScanned={pagesScanned ?? []}
         />
@@ -2337,6 +2393,7 @@ export default function ReportViewer() {
             server: server ?? null,
             tlsGrade: tlsGrade ?? null,
             aiAnalysis: aiAnalysis ?? null,
+            compliance,
             categoryCounts,
             pagesScanned: pagesScanned ?? [],
           }} />
@@ -2705,6 +2762,11 @@ export default function ReportViewer() {
             </div>
           )}
 
+          {/* Compliance mapping — which controls these findings are evidence
+              for. Same component the shared report uses; renders nothing when
+              no findings map to a framework. */}
+          <ComplianceCard compliance={compliance} />
+
           {/* Fix with your AI agent */}
           {aiAnalysis?.agentFixPrompt && (
             <AgentFixPromptCard prompt={aiAnalysis.agentFixPrompt} />
@@ -2807,6 +2869,7 @@ export default function ReportViewer() {
             server: server ?? null,
             tlsGrade: tlsGrade ?? null,
             aiAnalysis: aiAnalysis ?? null,
+            compliance,
             categoryCounts,
             pagesScanned: pagesScanned ?? [],
           }} />
