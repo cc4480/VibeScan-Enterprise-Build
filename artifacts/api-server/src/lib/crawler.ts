@@ -13,6 +13,7 @@
 
 import { randomUUID } from "node:crypto";
 import { isLikelySessionCookie, requiresHttpOnly } from "./cookieClassification.js";
+import { detectSerializedCookies } from "./deserializationProbe.js";
 import type { ScanVulnerability } from "./scanner";
 
 const PAGE_TIMEOUT_MS = 8_000;
@@ -266,6 +267,14 @@ function checkPageCookies(
   if (setCookies.length === 0) return [];
   const path = (() => { try { return new URL(pageUrl).pathname; } catch { return pageUrl; } })();
   const findings: ScanVulnerability[] = [];
+
+  // Insecure deserialization: a native serialized object stored in a cookie the
+  // server issues is deserialized on every request (CWE-502). Passive — reads
+  // the same Set-Cookie headers the flag checks below already have. Deduped via
+  // the shared seenCookieIssues set. See lib/deserializationProbe.ts.
+  for (const partial of detectSerializedCookies(setCookies, pageUrl, seenCookieIssues)) {
+    findings.push(vuln(partial));
+  }
   // Prefix added to evidence lines so the report UI can distinguish how the page was found
   const sourcePrefix = discoveredBy === "probe" ? "[Direct probe] " : "";
 

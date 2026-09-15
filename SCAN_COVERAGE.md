@@ -270,9 +270,10 @@ flagged. Both are behaviourally confirmed — confidence 90.*
 ## Module 13 — Site Crawler ⚡ *Deep scans only*
 *Crawls up to 20 internal pages and re-runs header + cookie checks on each.*
 
-| # | Check |
-|---|---|
-| 97+ | All header and cookie checks (#1–22) repeated per crawled page |
+| # | Check | Severity if failing |
+|---|---|---|
+| 97+ | All header and cookie checks (#1–22) repeated per crawled page | — |
+| 99a | Insecure deserialization exposure — a native serialized object (Java `rO0AB`, PHP `O:`/`a:`, Ruby Marshal, Python pickle) in a `Set-Cookie` value the server issues (CWE-502; JWTs excluded) | High |
 
 ---
 
