@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useSeo } from "@/lib/seo";
 import { useListScans, useGetScanStatus, getGetScanStatusQueryKey } from "@workspace/api-client-react";
-import { Shield, Plus, Clock, CheckCircle2, AlertCircle, RefreshCw, FileText, Loader2, ArrowRight, Info, Bell, AlertTriangle } from "lucide-react";
+import { Shield, Clock, CheckCircle2, AlertCircle, RefreshCw, FileText, Loader2, ArrowRight, Info, Bell, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { Scan } from "@workspace/api-client-react";
@@ -227,17 +227,12 @@ export default function DashboardPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground mt-1">Manage your security scans and reports.</p>
-        </div>
-        <Link
-          href="/scan"
-          className="px-5 py-2.5 bg-primary text-primary-foreground text-sm font-semibold rounded-lg shadow-[0_0_15px_rgba(20,184,120,0.3)] hover:shadow-[0_0_25px_rgba(20,184,120,0.5)] hover:-translate-y-0.5 transition-all duration-200 flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" /> New Scan
-        </Link>
+      {/* No page-level "New Scan" CTA here -- the global header nav (Layout)
+          already has one fixed on every page, and having both stacked
+          right on top of each other read as a duplicated button. */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+        <p className="text-muted-foreground mt-1">Manage your security scans and reports.</p>
       </div>
 
       {/* Stats */}
