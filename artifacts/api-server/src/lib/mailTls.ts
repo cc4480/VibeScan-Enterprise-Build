@@ -32,6 +32,20 @@ function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
 const CONNECT_TIMEOUT_MS = 6_000;
 /** How long to wait for the greeting and for each command response. */
 const READ_TIMEOUT_MS = 5_000;
+/**
+ * Absolute ceiling on the whole probe, independent of CONNECT_TIMEOUT_MS /
+ * READ_TIMEOUT_MS.
+ *
+ * Those two are socket.setTimeout() idle timers: they reset on ANY activity,
+ * not just a full reply. A mail server that tarpits -- a standard anti-spam
+ * technique of drip-feeding bytes to waste an automated sender's time -- keeps
+ * resetting the idle clock forever without ever finishing the SMTP exchange,
+ * so the socket never times out at all. Reproduced live against a real
+ * production MX host (IONOS): the idle-timeout version hung 30+ seconds with
+ * no result. This is a separate, unconditional deadline that fires and calls
+ * finish() no matter what the socket is doing.
+ */
+const OVERALL_TIMEOUT_MS = 12_000;
 /** Only the highest-priority hosts are probed; a domain may list many. */
 const MAX_MX_HOSTS = 3;
 
@@ -128,9 +142,16 @@ function probeStartTls(host: string, port: number): Promise<MailPortResult> {
     let stage: "greeting" | "ehlo" | "starttls" = "greeting";
 
     const socket = new net.Socket();
+    // Absolute deadline -- see OVERALL_TIMEOUT_MS. Cleared in finish() only
+    // for hygiene (finish() already destroys the socket either way).
+    const overallDeadline = setTimeout(() => {
+      out.error = out.error ?? "overall probe timeout (server drip-feeding data)";
+      finish();
+    }, OVERALL_TIMEOUT_MS);
     const finish = (): void => {
       if (settled) return;
       settled = true;
+      clearTimeout(overallDeadline);
       socket.destroy();
       resolve(out);
     };

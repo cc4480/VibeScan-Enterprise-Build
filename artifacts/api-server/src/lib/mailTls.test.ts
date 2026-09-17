@@ -181,4 +181,44 @@ describe("probeStartTls (against a local stub)", () => {
     expect(r.starttlsAdvertised).toBeNull();
     expect(mailTlsFindings([host([r])])).toEqual([]);
   });
+
+  /**
+   * Regression for a live hang reproduced against a real production MX host
+   * (IONOS): a server that trickles one byte at a time, never completing a
+   * line, keeps resetting socket.setTimeout()'s IDLE clock forever -- it only
+   * fires on inactivity, and a slow drip is activity. This is a standard
+   * anti-spam tarpit technique, not a hypothetical. Without an absolute
+   * deadline independent of that idle timer, the probe -- and by extension
+   * the whole scan, since Promise.allSettled waits for every probe -- never
+   * completes.
+   */
+  function tarpitStub(): Promise<number> {
+    return new Promise((resolve) => {
+      const server = net.createServer((sock) => {
+        const banner = "220 tarpit.invalid ESMTP ready\r\n";
+        let i = 0;
+        const drip = setInterval(() => {
+          if (i >= banner.length) return; // keep the socket open, say nothing more
+          sock.write(banner[i]!);
+          i += 1;
+        }, 300);
+        sock.on("close", () => clearInterval(drip));
+      });
+      servers.push(server);
+      server.listen(0, "127.0.0.1", () => resolve((server.address() as net.AddressInfo).port));
+    });
+  }
+
+  it("never hangs past the absolute deadline even when the server drip-feeds bytes forever (tarpit)", async () => {
+    const { probeStartTlsForTest } = await import("./mailTls.js");
+    const p = await tarpitStub();
+    const t0 = Date.now();
+    const r = await probeStartTlsForTest("127.0.0.1", p);
+    const elapsedMs = Date.now() - t0;
+    // OVERALL_TIMEOUT_MS is 12s; this proves the absolute deadline fired
+    // rather than the idle timers, which a steady trickle keeps resetting.
+    expect(elapsedMs).toBeLessThan(13_000);
+    expect(r.reachable).toBe(true); // it did connect -- the drip proves that
+    expect(r.error).toMatch(/overall probe timeout/);
+  }, 15_000);
 });
