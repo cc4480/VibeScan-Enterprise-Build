@@ -121,8 +121,18 @@ const CWE_CONTROLS: Record<string, ControlRef[]> = {
     { framework: "soc2", control: "CC6.6", title: "Logical access — protection against external threats" },
   ],
   "CWE-601": [
-    { framework: "asvs", control: "V5.5.1", title: "Redirects and forwards validated" },
+    // V5.5.1 was wrong here -- that control is actually about serialized-object
+    // integrity (see CWE-502 below), not redirects. The real ASVS 4.0.3 control
+    // for allow-listed redirect destinations is V5.1.5. Verified against the
+    // canonical requirement text, not just the section number.
+    { framework: "asvs", control: "V5.1.5", title: "Redirects and forwards validated" },
     { framework: "iso27001", control: "A.8.28", title: "Secure coding" },
+  ],
+  "CWE-502": [
+    { framework: "asvs", control: "V5.5.3", title: "Deserialization of untrusted data avoided or protected" },
+    { framework: "pci", control: "6.2.4", title: "Software engineering techniques prevent injection attacks" },
+    { framework: "iso27001", control: "A.8.28", title: "Secure coding" },
+    { framework: "soc2", control: "CC6.6", title: "Logical access — protection against external threats" },
   ],
   "CWE-915": [
     { framework: "asvs", control: "V5.1.2", title: "Mass assignment / parameter binding controlled" },
