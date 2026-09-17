@@ -182,7 +182,7 @@ const CWE_CONTROLS: Record<string, ControlRef[]> = {
     { framework: "iso27001", control: "A.8.9", title: "Configuration management" },
   ],
   "CWE-552": [
-    { framework: "asvs", control: "V12.1.1", title: "Files outside the web root not served" },
+    { framework: "asvs", control: "V12.4.1", title: "Files outside the web root not served" },
     { framework: "iso27001", control: "A.8.9", title: "Configuration management" },
     { framework: "soc2", control: "CC6.1", title: "Logical access restricted to authorised users" },
   ],
@@ -213,7 +213,7 @@ const CWE_CONTROLS: Record<string, ControlRef[]> = {
     { framework: "iso27001", control: "A.8.24", title: "Use of cryptography — key management" },
   ],
   "CWE-347": [
-    { framework: "asvs", control: "V3.5.2", title: "Token signatures verified" },
+    { framework: "asvs", control: "V3.5.3", title: "Token signatures verified" },
     { framework: "soc2", control: "CC6.1", title: "Logical access — authentication enforced" },
   ],
 
@@ -236,7 +236,12 @@ const CWE_CONTROLS: Record<string, ControlRef[]> = {
     { framework: "soc2", control: "CC6.1", title: "Logical access restricted to authorised users" },
   ],
   "CWE-290": [
-    { framework: "asvs", control: "V2.2.1", title: "Authentication cannot be bypassed or spoofed" },
+    // No ASVS 4.0.3 control actually covers DNS email authentication (SPF/
+    // DMARC) -- these findings (dnsChecks.ts) are entirely about email
+    // spoofing protection, a domain ASVS doesn't address. The prior entry,
+    // V2.2.1, is really about anti-automation/brute-force (see CWE-307/770
+    // below, where it's used correctly) -- dropped rather than kept as a
+    // plausible-looking but wrong citation.
     { framework: "soc2", control: "CC6.1", title: "Logical access — authentication enforced" },
   ],
   "CWE-613": [
@@ -286,7 +291,13 @@ const CWE_CONTROLS: Record<string, ControlRef[]> = {
 
   // ── Configuration and exposure ─────────────────────────────────────────────
   "CWE-16": [
-    { framework: "asvs", control: "V14.4.1", title: "Security headers configured" },
+    // V14.4.1's real text is narrowly about the Content-Type header/charset,
+    // not headers generally -- these findings (missing X-Content-Type-Options,
+    // TRACE enabled, missing Permissions-Policy) are broader HTTP config
+    // issues. V14.1.3 ("server configuration hardened per framework/server
+    // recommendations") is ASVS's own official CWE-16 citation and covers
+    // this as the general-hardening umbrella it actually is.
+    { framework: "asvs", control: "V14.1.3", title: "Security headers configured" },
     { framework: "iso27001", control: "A.8.9", title: "Configuration management" },
     { framework: "soc2", control: "CC6.6", title: "Logical access — protection against external threats" },
   ],
@@ -314,7 +325,7 @@ const CWE_CONTROLS: Record<string, ControlRef[]> = {
     { framework: "soc2", control: "CC6.1", title: "Logical access restricted to authorised users" },
   ],
   "CWE-548": [
-    { framework: "asvs", control: "V12.1.2", title: "Directory listing disabled" },
+    { framework: "asvs", control: "V4.3.2", title: "Directory listing disabled" },
     { framework: "iso27001", control: "A.8.9", title: "Configuration management" },
   ],
   "CWE-942": [
@@ -325,19 +336,37 @@ const CWE_CONTROLS: Record<string, ControlRef[]> = {
     { framework: "asvs", control: "V14.5.3", title: "Origin validated on cross-origin requests" },
   ],
   "CWE-350": [
-    { framework: "asvs", control: "V14.5.1", title: "Host header validated" },
+    // V14.5.1's real text is "the application server only accepts the HTTP
+    // methods in use" -- nothing to do with host headers. These findings
+    // (dnsChecks.ts, subdomainTakeover.ts) are genuinely about subdomain
+    // takeover risk, which V10.3.3 names directly.
+    { framework: "asvs", control: "V10.3.3", title: "Protected against DNS subdomain takeover" },
   ],
   "CWE-345": [
-    { framework: "asvs", control: "V14.5.1", title: "Request authenticity verified" },
+    // ASVS has no DKIM/email-authenticity control -- this finding
+    // (dnsChecks.ts, missing DKIM) is email security, a domain ASVS doesn't
+    // cover. V13.2.6 is the closest real analog (message authenticity via
+    // digital signature) -- true of the same underlying property, not a
+    // literal DKIM/email requirement. Kept rather than dropped only because
+    // it's an honest statement, unlike the prior V14.5.1 citation (HTTP
+    // methods, unrelated).
+    { framework: "asvs", control: "V13.2.6", title: "Message authenticity verified" },
   ],
   "CWE-353": [
-    { framework: "asvs", control: "V14.5.1", title: "Integrity of requests verified" },
+    // V14.5.1 (HTTP methods) doesn't fit; this finding is genuinely about
+    // missing Subresource Integrity on third-party scripts, which V10.3.2
+    // names directly ("must not load or execute code from untrusted
+    // sources... subresource integrity").
+    { framework: "asvs", control: "V10.3.2", title: "Subresource Integrity used for third-party scripts" },
   ],
   "CWE-441": [
     { framework: "asvs", control: "V12.6.1", title: "Server-side request forgery protection" },
   ],
   "CWE-650": [
-    { framework: "asvs", control: "V4.1.1", title: "HTTP methods restricted server-side" },
+    // V4.1.1 is generic access control, not HTTP methods. V13.2.1 is ASVS's
+    // own official CWE-650 citation: "enabled RESTful HTTP methods are a
+    // valid choice for the user or action" -- an exact match.
+    { framework: "asvs", control: "V13.2.1", title: "HTTP methods restricted server-side" },
   ],
   "CWE-778": [
     { framework: "asvs", control: "V7.1.3", title: "Security events logged" },
