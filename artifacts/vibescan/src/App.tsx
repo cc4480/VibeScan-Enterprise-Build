@@ -178,29 +178,39 @@ function Router() {
       <Route path="/reset-password" component={ResetPasswordPage} />
       <Route path="/verify-email" component={VerifyEmailPage} />
 
-      {/* All other routes wrapped in the authenticated Layout */}
+      {/* Every route shares the Layout chrome, which renders a "Sign in" link
+          when there is no session. Signing in is mandatory for the app itself,
+          but these five pages have to stay reachable by someone who does not
+          have an account yet, so the gate is applied per route rather than to
+          the whole Layout:
+
+            /privacy, /terms — linked from the registration form. Putting the
+              terms you are asked to accept behind the account you cannot make
+              without accepting them is a circle.
+            /bot — the address the scanner's own User-Agent gives every host it
+              probes (lib/browser.ts). A site owner who finds the traffic in
+              their logs and comes looking must not meet a login wall.
+            /, /learn — the marketing pages. Gating the pitch at the audience it
+              was written for made the whole site invisible to new visitors. */}
       <Route>
-        <ProtectedRoute>
         <Layout>
           <Switch>
             <Route path="/" component={LandingPage} />
-            <Route path="/dashboard" component={DashboardPage} />
-            <Route path="/scan" component={ScanFormPage} />
-            <Route path="/scan/:id" component={ScanProgressPage} />
-            <Route path="/report/:id" component={ReportViewer} />
-            <Route path="/monitor" component={MonitorPage} />
             <Route path="/learn" component={LearnPage} />
-            {/* Documentation the scanner's User-Agent points at, for site owners
-                who find the bot in their logs. Public, like the legal pages. */}
             <Route path="/bot" component={BotPage} />
             <Route path="/privacy">{() => <LegalPage kind="privacy" />}</Route>
             <Route path="/terms">{() => <LegalPage kind="terms" />}</Route>
-            <Route path="/settings" component={SettingsPage} />
-            <Route path="/domains" component={DomainsPage} />
+
+            <Route path="/dashboard">{() => <ProtectedRoute><DashboardPage /></ProtectedRoute>}</Route>
+            <Route path="/scan">{() => <ProtectedRoute><ScanFormPage /></ProtectedRoute>}</Route>
+            <Route path="/scan/:id">{() => <ProtectedRoute><ScanProgressPage /></ProtectedRoute>}</Route>
+            <Route path="/report/:id">{() => <ProtectedRoute><ReportViewer /></ProtectedRoute>}</Route>
+            <Route path="/monitor">{() => <ProtectedRoute><MonitorPage /></ProtectedRoute>}</Route>
+            <Route path="/settings">{() => <ProtectedRoute><SettingsPage /></ProtectedRoute>}</Route>
+            <Route path="/domains">{() => <ProtectedRoute><DomainsPage /></ProtectedRoute>}</Route>
             <Route component={NotFound} />
           </Switch>
         </Layout>
-        </ProtectedRoute>
       </Route>
     </Switch>
     </>
