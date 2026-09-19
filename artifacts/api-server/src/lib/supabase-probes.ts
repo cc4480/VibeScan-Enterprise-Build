@@ -6,6 +6,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
+import { logger } from "./logger";
 
 const TIMEOUT_MS = 10_000;
 const MAX_TABLES_TO_TEST = 12;
@@ -198,7 +199,10 @@ type WriteResult = "open" | "protected" | "error";
 
 /**
  * Non-destructive INSERT probe. Sends a payload with a synthetic field name
- * that cannot exist in any real schema, so no row is ever created.
+ * that cannot exist in any real schema, so on a table with any NOT NULL column
+ * the write is rejected before a row exists. A table with no such constraint
+ * does accept it, which is the 201 case below: the row is real and is deleted
+ * again immediately.
  *
  *   401 / 403  → auth is checked before schema validation → PROTECTED
  *   400 / 409 / 422 → schema rejected the field name, but auth PASSED → VULNERABLE
@@ -229,20 +233,44 @@ async function testTableWrite(
   // Schema rejected unknown column but auth passed — write access confirmed
   if (result.status === 400 || result.status === 409 || result.status === 422) return "open";
 
-  // Row was actually inserted — clean it up immediately
+  // Row was actually inserted — clean it up immediately.
+  //
+  // The filter column has to be the one the key was actually read FROM. This
+  // used to read the value from id/ID/uuid and then always delete with
+  // "?id=eq.", so a table keyed on "uuid" filtered a column that need not
+  // exist (PostgREST rejects it, row survives), and a table keyed on anything
+  // else — user_id, pk, slug, a composite — found no value at all and skipped
+  // the DELETE entirely while still reporting "open". Both left a row behind in
+  // someone else's database, against a promise we make publicly.
   if (result.status === 201) {
+    let deleted = false;
     try {
       const rows = JSON.parse(result.body) as Array<Record<string, unknown>>;
       const row = (Array.isArray(rows) ? rows[0] : rows) as Record<string, unknown> | undefined;
-      const id = row?.["id"] ?? row?.["ID"] ?? row?.["uuid"];
-      if (id !== undefined) {
-        await safeFetch(
-          `${baseUrl}/rest/v1/${encodeURIComponent(table)}?id=eq.${String(id)}`,
+      const keyColumn = ["id", "ID", "uuid", "uid"].find(
+        (c) => row?.[c] !== undefined && row[c] !== null,
+      );
+      const id = keyColumn ? row?.[keyColumn] : undefined;
+
+      if (keyColumn && (typeof id === "string" || typeof id === "number")) {
+        const del = await safeFetch(
+          `${baseUrl}/rest/v1/${encodeURIComponent(table)}` +
+            `?${encodeURIComponent(keyColumn)}=eq.${encodeURIComponent(String(id))}`,
           { method: "DELETE", headers: { apikey: anonKey } },
           5_000,
         );
+        deleted = del !== null && del.status >= 200 && del.status < 300;
       }
-    } catch { /* cleanup is best-effort */ }
+    } catch { /* fall through to the warning below */ }
+
+    // A row we could not remove is the one outcome here nobody must find out
+    // about from the customer. Louder than a silent best-effort catch.
+    if (!deleted) {
+      logger.warn(
+        { table },
+        "Supabase write probe created a row it could not delete — manual cleanup may be needed",
+      );
+    }
     return "open";
   }
 
