@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useSeo } from "@/lib/seo";
@@ -35,6 +35,10 @@ function GradeBadge({ grade }: { grade: string | null | undefined }) {
 
 function ScanRow({ initialScan, highlight }: { initialScan: Scan; highlight?: boolean }) {
   const rowRef = useRef<HTMLTableRowElement>(null);
+  // Why a scan failed was revealed by CSS hover alone, which no touch device and
+  // no keyboard can produce — the only explanation available was unreachable for
+  // most of the people who needed it.
+  const [showError, setShowError] = useState(false);
   const isPolling = ['pending', 'paid', 'queued', 'scanning', 'analyzing'].includes(initialScan.status);
 
   const { data: statusData } = useGetScanStatus(initialScan.id, {
@@ -155,14 +159,21 @@ function ScanRow({ initialScan, highlight }: { initialScan: Scan; highlight?: bo
         ) : scan.status === 'failed' ? (
           <div className="flex items-center justify-end gap-2">
             {errorMsg && (
-              <div className="relative group/tooltip">
-                <button className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowError((v) => !v)}
+                  aria-expanded={showError}
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
                   <Info className="w-4 h-4" /> Details
                 </button>
-                <div className="absolute right-0 bottom-full mb-2 w-64 p-3 bg-card border border-white/10 rounded-xl shadow-xl text-xs text-muted-foreground opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity z-50 text-left">
-                  <p className="font-semibold text-foreground mb-1">Error Details</p>
-                  <p>{errorMsg}</p>
-                </div>
+                {showError && (
+                  <div className="absolute right-0 bottom-full mb-2 w-64 p-3 bg-card border border-white/10 rounded-xl shadow-xl text-xs text-muted-foreground z-50 text-left">
+                    <p className="font-semibold text-foreground mb-1">Error Details</p>
+                    <p>{errorMsg}</p>
+                  </div>
+                )}
               </div>
             )}
             <Link
@@ -207,7 +218,7 @@ export default function DashboardPage() {
   );
   const highlightScanId = params.get("scan");
 
-  const { data: scans, isLoading: loadingScans } = useListScans();
+  const { data: scans, isLoading: loadingScans, isError: scansFailed, refetch } = useListScans();
   const { data: monitors } = useQuery({
     queryKey: ["monitor-subscriptions"],
     queryFn: listMonitorSubscriptions,
@@ -217,6 +228,32 @@ export default function DashboardPage() {
     return (
       <div className="flex-1 flex items-center justify-center min-h-[60vh]">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // A failed request used to fall through to the counters and the empty state,
+  // so someone with a page full of scans was told they had none — with nothing
+  // to retry. "You have no scans" and "we could not load your scans" cannot
+  // share a rendering.
+  if (scansFailed) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-[60vh] px-4">
+        <div className="text-center max-w-sm">
+          <AlertTriangle className="w-8 h-8 text-yellow-400 mx-auto mb-4" />
+          <h2 className="text-lg font-semibold mb-2">Could not load your scans</h2>
+          <p className="text-sm text-muted-foreground mb-6">
+            This is a problem reaching the server, not a problem with your account —
+            your scans are safe.
+          </p>
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium"
+          >
+            <RefreshCw className="w-4 h-4" /> Try again
+          </button>
+        </div>
       </div>
     );
   }

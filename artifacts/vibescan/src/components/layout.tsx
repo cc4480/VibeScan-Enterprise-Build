@@ -200,9 +200,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </Link>
           </nav>
 
-          {/* Mobile toggle */}
+          {/* Mobile toggle. Labelled because it is icon-only and is the entire
+              navigation on a phone — unlabelled, a screen reader announces it as
+              just "button". */}
           <button
+            type="button"
             className="md:hidden p-2 text-foreground"
+            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileMenuOpen}
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
             {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
