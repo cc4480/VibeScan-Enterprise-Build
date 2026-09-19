@@ -13,6 +13,16 @@ export const scansTable = pgTable("scans", {
   }).notNull().default("pending"),
   stripeSessionId: text("stripe_session_id"),
   stripePaymentIntentId: text("stripe_payment_intent_id"),
+
+  // Who asked for this scan. "monitor" rows are created by the monitor
+  // scheduler and by subscription setup — nobody pressed a button for them —
+  // so they must not be counted against a user's free-scan allowance. Deliberately
+  // not a foreign key to the subscription: a scan is a historical record that
+  // outlives the subscription, and cascading a delete into NULL here would
+  // silently reclassify an old monitor scan as user-initiated and start
+  // charging it against the trial.
+  origin: text("origin", { enum: ["user", "monitor"] }).notNull().default("user"),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   startedAt: timestamp("started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),

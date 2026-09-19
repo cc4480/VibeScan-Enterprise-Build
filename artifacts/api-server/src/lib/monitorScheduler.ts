@@ -107,6 +107,7 @@ async function enqueueMonitorScan(sub: {
         targetUrl: sub.targetUrl,
         tier: "deep",
         status: "paid",
+        origin: "monitor",
       })
       .returning();
 

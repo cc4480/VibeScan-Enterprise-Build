@@ -10,6 +10,7 @@ import { scansTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { checkScanTarget } from "../lib/ssrfGuard";
 import { rateLimitMiddleware, scanRateLimitRules } from "../lib/rateLimit";
+import { trialScansExhausted, TRIAL_LIMIT_MESSAGE } from "../lib/freeTrial";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -70,6 +71,14 @@ router.post("/monitor/subscriptions", requireMonitorAuth, monitorRateLimit, asyn
   }
 
   const { targetUrl, webhookUrl } = parsed.data;
+
+  // Subscribing fires a baseline scan and schedules more, so it has to respect
+  // the free-scan cap. Without this, "subscribe to monitoring" was a way to run
+  // unlimited scans after the trial was spent.
+  if (await trialScansExhausted(req.user.id)) {
+    res.status(403).json({ error: TRIAL_LIMIT_MESSAGE });
+    return;
+  }
 
   // Same guard as POST /scans — a subscription schedules recurring scans, so
   // an internal target here is the SSRF hole on a 3-to-14-day timer.
@@ -132,6 +141,7 @@ router.post("/monitor/subscriptions", requireMonitorAuth, monitorRateLimit, asyn
         targetUrl,
         tier: "deep",
         status: "paid",
+        origin: "monitor",
       })
       .returning();
 
@@ -544,6 +554,14 @@ router.post("/monitor/subscriptions/:id/scan", monitorRateLimit, async (req, res
     return;
   }
 
+  // An on-demand rescan is a scan the user asked for, so the cap applies here
+  // too. The scheduler's own rescans do not go through this route and are not
+  // gated — an existing subscriber keeps getting them after the trial is spent.
+  if (await trialScansExhausted(req.user.id)) {
+    res.status(403).json({ error: TRIAL_LIMIT_MESSAGE });
+    return;
+  }
+
   try {
     const [scan] = await db
       .insert(scansTable)
@@ -553,6 +571,7 @@ router.post("/monitor/subscriptions/:id/scan", monitorRateLimit, async (req, res
         targetUrl: sub.targetUrl,
         tier: "deep",
         status: "paid",
+        origin: "monitor",
       })
       .returning();
 
