@@ -18,6 +18,113 @@ DATABASE_URL=postgres://localhost/anything \
 `DATABASE_URL` only has to be *set* — the scanner module imports the db layer at
 load time. It is never read by a passive scan.
 
+## 2026-09-19 — 20-target sweep, and the reddit CSP question answered
+
+Full corpus, ahead of the deploy. **80 actionable findings across 20 targets, and
+every one of the eight HIGH findings is true.** No false positive was found. The
+three changes below are hardening, not corrections: two close shapes that produce
+a disputable finding, and one fixes a severity that asserted more than the check
+can know. All 19 planted flaws in `detection-check.ts` still detected afterwards.
+
+### The reddit CSP finding — resolved, and it is real
+
+`Content-Security-Policy Missing on N Internal Routes` on reddit was recorded on
+2026-09-10 as **"Did not reproduce… Cause unknown. Left alone… Re-check on the
+next round."** This is that re-check.
+
+Four repeats of seven paths through the scanner's own fetch layer:
+
+```
+/               200 csp=161b | csp=161b | csp=161b | csp=161b
+/wp-admin       200 csp=161b | csp=161b | csp=161b | csp=161b
+/administrator  200 csp=161b | csp=161b | csp=ABSENT | csp=ABSENT
+/graphql        200 csp=ABSENT | csp=161b | csp=161b | csp=161b
+/api            200 csp=161b | csp=161b | csp=161b | csp=ABSENT
+/live           200 csp=ABSENT | csp=ABSENT | csp=ABSENT | csp=ABSENT
+```
+
+reddit's edge emits the header on some responses and not others, on the same path,
+seconds apart, through one UA. So the 2026-09-10 conclusion — a degraded response
+on the night — was half right: the flapping is real, but it is a standing property
+of the target, not that evening's weather. The check was reporting what the server
+actually sent, and `/live` is consistently absent exactly as that round found.
+
+A header present on half of responses protects half of them, so this is a true
+finding. It is also, in its single-observation form, the kind nobody can reproduce
+— which this audit records repeatedly as the worst thing to ship.
+
+**Do not "fix" this check.** `curl` is not a valid way to check it: reddit answers
+a plain curl UA with `403 Blocked` on these paths, which looks like a catch-all
+bug and is not one. Use the scanner's own fetch layer, several times.
+
+### Fixed
+
+| Finding | Target | Why it was wrong |
+|---|---|---|
+| Header-gap findings rested on one observation | www.reddit.com | A gap reported at up to HIGH was recorded from a single response. Against a flapping origin that yields a finding the customer disproves by hand on their first retry. `confirmHeaderGaps` now re-fetches every candidate path and keeps only gaps still there on the second look. reddit went 13 routes → 6; the genuinely-absent routes are untouched — github's `/healthz`, cloudflare's nine locale paths, vercel's eight and bbc's three all still report. Confirmation can only remove a gap, never add one, and an unconfirmable gap (budget spent, network error, error status) keeps the original observation rather than trading this false positive for a silent false negative. |
+| `Insecure Deserialization Exposure` markers were not anchored | none yet — latent | The comment above `MARKERS` claimed they were "anchored to each format's magic bytes, not loose base64". Three were not. `BAh` and `gA[JNQU]` are three characters, so unanchored they match anywhere inside any long base64 cookie, and a HIGH CWE-502 accusation then rests on a coincidence. reddit's `loid` cookie carries a Fernet token whose base64 decodes to `gAAAAAB` — one character off the pickle marker, mid-value. Magic bytes only mean anything at the start of a value, so the three base64 markers now require a non-base64 boundary, and the evidence quotes the magic rather than the boundary character it consumed. Corpus fired this zero times before and after. |
+| `Dangerous HTTP Methods Advertised` was HIGH / CVSS 7.5 | none in corpus — see basis | An `Allow` header says a method EXISTS at a path, never that authorization does not guard it. The finding's own description conceded this ("if not properly guarded by application-level authorization") while scoring 7.5, so every REST API that correctly implements guarded `PUT`/`DELETE` was handed a HIGH for being well-formed — the same error as crossdomain.xml, the OpenAPI spec and the rate-limit check. Confirming it would mean sending an unauthenticated `PUT`/`DELETE` at a stranger's server, which this scanner does not do, so the honest output is the observation plus what to check. Now `Write HTTP Methods Advertised`, MEDIUM / 5.3. **Basis is weaker than the rest of this table:** no corpus target advertises a write method (only dropbox sends `Allow` at all — `GET, HEAD, POST`), so this is calibration from the code and from precedent in this document, not from a reproduction. |
+
+### Checked and correct — 2026-09-19 round
+
+Every HIGH in the corpus, hand-verified. Root vs route compared with the same UA.
+
+| Finding | Target | Verified |
+|---|---|---|
+| `CSP Missing on 8 Internal Routes` | vercel.com | Real, and new to this document. Root sends a CSP; `/home` and `/ai-sdk` send none. The same eight routes also lack XFO, X-Content-Type-Options and Referrer-Policy, which is what a differently-configured edge looks like rather than a scanner artefact. |
+| `CSP Missing on 3 Internal Routes` | www.bbc.co.uk | Real. Root sends a CSP; `/sounds` and `/accessibility/` send none. |
+| `Missing Content-Security-Policy` | www.netlify.com, www.wikipedia.org, www.microsoft.com | Real. All three send zero CSP headers on the root. |
+| `CSP Missing on 1 Internal Route` (`/healthz`) | github.com | Unchanged from 2026-09-07, and survives the new confirmation pass. |
+| `CSP Missing on 9 Internal Routes` | www.cloudflare.com | Unchanged from 2026-09-12, and survives the confirmation pass. |
+
+Counts match the baselines this document already recorded, which is the evidence
+that nothing regressed: github 11/5, stackoverflow 3/0, etsy 4/1, nytimes 3/0,
+npmjs 2/0. google is 15/6 against a recorded 13/6 — the two added findings are
+from probes shipped on 2026-09-15, not a regression.
+
+### Not a false positive — found while generating this round's raw output
+
+**Inner-page cookie findings were quoting the cookie's VALUE in their evidence.**
+Not a detection error, so it does not belong in the table above, but it was found
+by reading this round's `--json` output and it is the more serious defect.
+
+`SCAN-RESULTS.md` states that `Set-Cookie` values in the committed runs "are
+replaced with `<redacted>`; names and flags are untouched, which is all the cookie
+findings are derived from." The committed 2026-09-10 file does show
+`fid=<redacted>`, `loid=<redacted>` — but nothing in the repository performed that
+redaction, so it had been done by hand, and this round's fresh output carried real
+`fid=`, `loid=` and `session_tracker=` values in full.
+
+That matters well beyond these artifacts, because report evidence is durable and
+shareable: it is stored in the `reports` table, rendered into the emailed PDF, and
+readable by anyone holding a share link — which the privacy page tells people to
+treat as public. On a **credentialed** scan the scanner is signed in, so the value
+being quoted is a live authenticated session token.
+
+`crawler.ts` was the only path doing it. `scanner.ts` already reports root-page
+cookie findings by name alone, and `deserializationProbe.ts` redacts explicitly,
+so this was an oversight in one of three sibling paths rather than a decision.
+`redactCookieValue` now replaces the value and keeps every attribute, which is the
+shape SCAN-RESULTS.md already described. Finding counts are unchanged on reddit
+(17/6) and linkedin (16/7) — the flags the findings read are all still there.
+
+The claim in SCAN-RESULTS.md is now true by construction rather than by hand.
+
+### Open
+
+`scanner.ts` swallows sixteen probe families into `[]` on failure with no log and
+no report annotation, so a crashed probe family is indistinguishable from a clean
+result. That is the false-negative mirror of everything in this document and is
+not addressed here.
+
+`External Resources Missing Subresource Integrity` (MEDIUM) fires on 9 of 20
+targets and treats any `hostname !== baseHost` as third-party, so a site's own CDN
+subdomain — `static.licdn.com` on linkedin.com — is judged identically to a
+stranger's script, while the compliance mapping it carries (ASVS V10.3.2) is
+explicitly about *third-party* scripts. Separating the two needs a public-suffix
+list; deriving a registrable domain by hand is what `toEmailDomain` did, and this
+document records deleting it for exactly that. Left alone deliberately.
+
 ## 2026-09-12 — pre-marketing FP sweep
 
 Swept the corpus again ahead of positioning both products on a no-false-positives
