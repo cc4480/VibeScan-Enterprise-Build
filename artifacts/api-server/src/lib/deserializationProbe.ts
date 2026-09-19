@@ -18,12 +18,26 @@ interface Marker {
 
 // Anchored to each format's magic bytes / grammar, not loose base64 — a generic
 // base64 value or a JWT must not match.
+//
+// The anchor is load-bearing, and the three base64 markers did not have it even
+// though the line above already claimed they did. Magic bytes only MEAN anything at the
+// start of the value: "BAh" and "gAJ" are three characters, so unanchored they
+// match anywhere inside any long base64 cookie, and a HIGH-severity CWE-502
+// finding then rests on a coincidence. reddit's `loid` cookie carries a Fernet
+// token whose base64 decodes to "gAAAAAB" — one character from the pickle marker,
+// and it sits mid-value where the anchor is the only thing standing between a
+// real user's session cookie and a false accusation.
+//
+// The boundary excludes +/=_- as well as alphanumerics, so the magic has to begin
+// a base64 run rather than merely follow a symbol inside one.
+const B64_START = String.raw`(?:^|[^A-Za-z0-9+/=_-])`;
+
 const MARKERS: Marker[] = [
-  { format: "Java", rx: /rO0AB[A-Za-z0-9+/=]{8,}/, note: "base64 of the Java serialization stream header (AC ED 00 05)" },
+  { format: "Java", rx: new RegExp(`${B64_START}(rO0AB[A-Za-z0-9+/=]{8,})`), note: "base64 of the Java serialization stream header (AC ED 00 05)" },
   { format: "PHP", rx: /(?:^|[^A-Za-z0-9])O:\d{1,3}:"[^"]{1,120}":\d{1,4}:\{/, note: 'a PHP serialized object (O:len:"Class":n:{…})' },
   { format: "PHP", rx: /(?:^|[^A-Za-z0-9])a:\d{1,4}:\{[isbdOa]:/, note: "a PHP serialized array (a:n:{…})" },
-  { format: "Ruby (Marshal)", rx: /BAh[A-Za-z0-9+/=]{16,}/, note: "base64 of the Ruby Marshal magic (04 08)" },
-  { format: "Python (pickle)", rx: /gA[JNQU][A-Za-z0-9+/=]{12,}/, note: "base64 of a Python pickle protocol opcode (80 0x)" },
+  { format: "Ruby (Marshal)", rx: new RegExp(`${B64_START}(BAh[A-Za-z0-9+/=]{16,})`), note: "base64 of the Ruby Marshal magic (04 08)" },
+  { format: "Python (pickle)", rx: new RegExp(`${B64_START}(gA[JNQU][A-Za-z0-9+/=]{12,})`), note: "base64 of a Python pickle protocol opcode (80 0x)" },
 ];
 
 // A JWT (three base64url segments) is legitimate and not a deserialization sink.
@@ -62,7 +76,10 @@ export function detectSerializedCookies(
         const key = `deser::${name}::${m.format}`;
         if (seen.has(key)) { matched = true; break; }
         seen.add(key);
-        const sample = hit[0].slice(0, 24); // format header only — not the payload/secret
+        // hit[1] where a marker captures the magic, so the boundary character the
+        // anchor consumed does not show up in the evidence. Evidence that does not
+        // match what the value looks like is what makes a true finding disputable.
+        const sample = (hit[1] ?? hit[0]).slice(0, 24); // format header only — not the payload/secret
         out.push({
           name: `Insecure Deserialization Exposure (${m.format} object in cookie "${name}")`,
           severity: "high",

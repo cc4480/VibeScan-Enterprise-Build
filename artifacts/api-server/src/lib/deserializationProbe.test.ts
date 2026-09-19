@@ -37,6 +37,42 @@ describe("detectSerializedCookies", () => {
     expect(detectSerializedCookies(["csrf=aGVsbG8gd29ybGQ"], url, new Set())).toHaveLength(0);
   });
 
+  it("does NOT flag magic bytes buried inside a longer base64 value", () => {
+    // The whole basis of the check is that these bytes appear at the START of a
+    // serialized value. "BAh" and "gAJ" are three characters, so unanchored they
+    // hit inside any sufficiently long analytics or session blob, and a HIGH
+    // CWE-502 finding then rests on a coincidence.
+    expect(
+      detectSerializedCookies(["tracking=Zm9vYmFyBAh7B0kiD3Nlc3Npb25faWQGOgZFVEkiJmV4YW1w"], url, new Set()),
+    ).toHaveLength(0);
+    expect(
+      detectSerializedCookies(["analytics=c29tZXRoaW5nZ0FKOWNRQllCQUFBQUc1aGJXVnhBVmc"], url, new Set()),
+    ).toHaveLength(0);
+    expect(
+      detectSerializedCookies(["blob=YWJjZGVmrO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcA"], url, new Set()),
+    ).toHaveLength(0);
+  });
+
+  it("does NOT flag a Fernet token, which decodes to one character off the pickle marker", () => {
+    // reddit's `loid` really carries this shape: base64 "Z0FBQUFBQn…" decodes to
+    // "gAAAAAB…". A real user's session cookie must not become a HIGH finding.
+    const loid = "000000002n5bkfujkr.2.1789847008124.Z0FBQUFBQnFydVhnYmptMVBjb2FHa0pleGFtcGxl";
+    expect(detectSerializedCookies([`loid=${loid}`], url, new Set())).toHaveLength(0);
+  });
+
+  it("still reports the magic itself as evidence, not the boundary character", () => {
+    // A version-prefixed value: the "." is a legitimate boundary, so the marker
+    // fires, but the evidence must show the magic and not lead with the dot.
+    const f = detectSerializedCookies(
+      ["_session=v1.BAh7B0kiD3Nlc3Npb25faWQGOgZFVEkiJexampleexample"],
+      url,
+      new Set(),
+    );
+    expect(f).toHaveLength(1);
+    expect(f[0]?.evidence).toContain("BAh7B0kiD");
+    expect(f[0]?.evidence).not.toContain(".BAh");
+  });
+
   it("de-duplicates the same cookie+format via the shared seen set", () => {
     const seen = new Set<string>();
     const a = detectSerializedCookies(["state=rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcA"], url, seen);
