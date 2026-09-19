@@ -151,15 +151,27 @@ export async function checkHttpMethods(targetUrl: string): Promise<ScanVulnerabi
     new RegExp(`\\b${m}\\b`, "i").test(allow),
   );
   if (dangerousMethods.length > 0) {
+    // MEDIUM, not HIGH, and named for what was observed rather than for a
+    // conclusion. An Allow header says a method EXISTS at this path; it says
+    // nothing about whether authorization guards it. Every REST API that
+    // correctly implements PUT and DELETE behind auth advertises them here, and
+    // at 7.5 this was handing those APIs a HIGH for being well-formed — the same
+    // error FALSE-POSITIVE-AUDIT.md records against crossdomain.xml, the OpenAPI
+    // spec check and the rate-limit check: reading the presence of a response as
+    // the meaning of the response.
+    //
+    // Confirming it would mean sending an unauthenticated PUT or DELETE at a
+    // stranger's server, which this scanner does not do (see destructive.ts), so
+    // the honest report is the observation plus what the operator should check.
     vulns.push(vuln({
-      name: `Dangerous HTTP Methods Advertised (${dangerousMethods.join(", ")})`,
-      severity: "high",
+      name: `Write HTTP Methods Advertised (${dangerousMethods.join(", ")})`,
+      severity: "medium",
       category: "HTTP Security",
-      description: `The server advertises ${dangerousMethods.join("/")} in the Allow header for the root path. If not properly guarded by application-level authorization, these methods can allow arbitrary file uploads or deletion of server resources.`,
+      description: `The server advertises ${dangerousMethods.join("/")} in the Allow header for the root path. This scan did not attempt them, so it does not show whether they are reachable without authorization — on an API that guards writes, advertising them is expected. Confirm that authorization covers these methods, and that any not in use are turned off.`,
       evidence: `OPTIONS ${targetUrl}\nAllow: ${allow}`,
       solution: "Restrict HTTP methods to only those genuinely required. Use application-level authorization on any write methods. Block unused methods at the web server or load balancer before requests reach application code.",
       cweId: "CWE-650",
-      cvssScore: 7.5,
+      cvssScore: 5.3,
       wstgId: "WSTG-CONF-06",
     }));
   }
