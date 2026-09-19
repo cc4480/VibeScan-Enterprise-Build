@@ -142,6 +142,71 @@ interface HeaderSnapshot {
   rp: boolean;
 }
 
+/**
+ * Drop header gaps that a second request does not reproduce.
+ *
+ * A gap is reported at up to HIGH, so it has to survive being looked at twice.
+ * Some origins emit a security header only intermittently: reddit answers the
+ * SAME path through the scanner's own fetch layer with a 161-byte CSP on one
+ * request and none on the next, seconds apart. A single observation of that is a
+ * true statement about one response and a finding nobody can reproduce — the
+ * customer re-checks by hand, sees the header, and concludes the scanner is
+ * broken. FALSE-POSITIVE-AUDIT.md records that shape repeatedly as the worst
+ * kind of finding to ship, because it argues against itself.
+ *
+ * This can only ever REMOVE a gap, so it cannot invent a finding. A path whose
+ * header is genuinely absent — reddit's /live, github's /healthz, cloudflare's
+ * locale routes — is absent on the retry too and still reports. When the retry
+ * cannot be made at all (budget spent, network error, an error status) the
+ * original observation stands: refusing to report an unconfirmable gap would
+ * trade this false positive for a silent false negative, which is the trade this
+ * audit has already regretted once.
+ */
+export async function confirmHeaderGaps(
+  gapMap: Map<keyof HeaderSnapshot, string[]>,
+  refetch: (url: string) => Promise<{ status: number; headers: Record<string, string> } | null>,
+): Promise<void> {
+  for (const [key, paths] of gapMap) {
+    if (paths.length === 0) continue;
+    const confirmed: string[] = [];
+    for (const url of paths) {
+      const again = await refetch(url);
+      if (!again || again.status === 0 || again.status >= 400) {
+        confirmed.push(url);
+        continue;
+      }
+      if (!snapshotHeaders(again.headers)[key]) confirmed.push(url);
+    }
+    gapMap.set(key, confirmed);
+  }
+}
+
+/**
+ * A Set-Cookie line safe to put in a report: the value replaced, every
+ * attribute kept.
+ *
+ * Cookie findings are derived entirely from the name and the flags, so the value
+ * is the one part that carries no diagnostic weight and all of the risk. It was
+ * being quoted in full, which matters because report evidence is durable and
+ * shareable: it is stored in the reports table, rendered into the emailed PDF,
+ * and readable by anyone holding a share link, which the privacy page tells
+ * people to treat as public. On a CREDENTIALED scan the scanner is signed in, so
+ * the value being quoted is a live authenticated session token.
+ *
+ * scanner.ts already reports root-page cookie findings by name alone, and
+ * deserializationProbe.ts redacts explicitly; this brings the inner-page path in
+ * line with both.
+ */
+export function redactCookieValue(setCookie: string): string {
+  const line = setCookie.trim();
+  const eq = line.indexOf("=");
+  if (eq <= 0) return line;
+  const semi = line.indexOf(";");
+  const valueEnd = semi === -1 ? line.length : semi;
+  if (valueEnd <= eq) return line;
+  return `${line.slice(0, eq)}=<redacted>${line.slice(valueEnd)}`;
+}
+
 function snapshotHeaders(headers: Record<string, string>): HeaderSnapshot {
   const h = (name: string) => {
     const k = Object.keys(headers).find((k) => k.toLowerCase() === name);
@@ -305,7 +370,7 @@ function checkPageCookies(
           description: isSession
             ? `The page "${path}" sets the cookie "${namePart}" without the Secure flag, allowing it to be transmitted over unencrypted HTTP even on an HTTPS site.`
             : `The page "${path}" sets the cookie "${namePart}" without the Secure flag. It doesn't appear to carry session/auth state, so the practical risk is low.`,
-          evidence: `${sourcePrefix}GET ${pageUrl}\nSet-Cookie: ${cookie.trim()}`,
+          evidence: `${sourcePrefix}GET ${pageUrl}\nSet-Cookie: ${redactCookieValue(cookie)}`,
           solution: "Add the Secure attribute to all cookies: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax",
           cweId: "CWE-614",
           cvssScore: isSession ? 6.5 : 3.1,
@@ -328,7 +393,7 @@ function checkPageCookies(
           description: isSession
             ? `The page "${path}" sets the cookie "${namePart}" without the HttpOnly flag, allowing client-side JavaScript to access it. This enables session theft via XSS.`
             : `The page "${path}" sets the cookie "${namePart}" without the HttpOnly flag. It doesn't appear to carry session/auth state — many such cookies (UI-state flags, analytics IDs) are intentionally client-readable.`,
-          evidence: `${sourcePrefix}GET ${pageUrl}\nSet-Cookie: ${cookie.trim()}`,
+          evidence: `${sourcePrefix}GET ${pageUrl}\nSet-Cookie: ${redactCookieValue(cookie)}`,
           solution: "Add the HttpOnly attribute to all session cookies: Set-Cookie: name=value; HttpOnly; Secure; SameSite=Lax",
           cweId: "CWE-1004",
           cvssScore: isSession ? 5.3 : 2.6,
@@ -683,6 +748,12 @@ export async function crawlAndCheck(
     const status = await processPage(url, "probe");
     if (status === 404) probedNotFound.push(url);
   }
+
+  await confirmHeaderGaps(gapMap, async (url) => {
+    const remaining = crawlDeadline - Date.now();
+    if (remaining < MIN_BUDGET_MS) return null;
+    return fetchPage(url, Math.min(PAGE_TIMEOUT_MS, remaining));
+  });
 
   // Aggregate header gap findings (one finding per header type covering all affected paths)
   const headerGapFindings = buildHeaderGapVulns(rootSnapshot, gapMap, probedSet);
