@@ -42,7 +42,7 @@ export default function LandingPage() {
           >
             <motion.div variants={itemVariants} className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary text-sm font-medium mb-8">
               <Activity className="w-4 h-4" />
-              <span>DeepSeek AI Analysis Engine v1.0</span>
+              <span>AI Analysis Engine v1.0</span>
             </motion.div>
 
             <motion.h1 variants={itemVariants} className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6">
@@ -110,7 +110,7 @@ export default function LandingPage() {
             {[
               { step: 1, icon: Code2, title: "Paste Any URL", desc: "Drop in any publicly accessible URL — your own app, a client's site, or any live website." },
               { step: 2, icon: Zap, title: "We Scan", desc: "Our engine crawls your pages, probes for exposed files and secrets, checks SSL, DNS, headers, and runs 20+ active security tests — no agent needed." },
-              { step: 3, icon: CheckCircle2, title: "Get Report", desc: "DeepSeek AI translates the raw findings into a plain-English, actionable report." }
+              { step: 3, icon: CheckCircle2, title: "Get Report", desc: "Our AI translates the raw findings into a plain-English, actionable report." }
             ].map((item, i) => (
               <div key={i} className="relative flex flex-col items-center text-center">
                 <div className="w-24 h-24 rounded-full bg-background border-2 border-primary/30 flex items-center justify-center mb-6 shadow-[0_0_20px_rgba(20,184,120,0.1)] relative z-10">
@@ -308,7 +308,7 @@ export default function LandingPage() {
                 "Headers, TLS and DNS",
                 "Injection, XSS and path traversal",
                 "API surface and access control",
-                "DeepSeek AI analysis",
+                "AI analysis",
                 "Step-by-step fix guides",
               ],
               cta: "Run a Scan",

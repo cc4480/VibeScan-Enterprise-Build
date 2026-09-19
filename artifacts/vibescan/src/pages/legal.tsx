@@ -87,11 +87,11 @@ function Privacy() {
           site, so it sees request metadata including your IP.
         </p>
         <p>
-          <strong className="text-foreground">DeepSeek</strong> — generates the written
-          analysis on deep scans. Your scan findings, including the target URL and evidence
-          fragments, are sent to DeepSeek for that purpose. DeepSeek is based in China, so
-          this is a transfer outside the UK and EEA. If you would rather not have findings
-          leave our infrastructure, do not run deep scans.
+          <strong className="text-foreground">Our AI analysis provider</strong> — generates
+          the written analysis on deep scans. Your scan findings, including the target URL
+          and evidence fragments, are sent to this provider for that purpose. The provider is
+          based in China, so this is a transfer outside the UK and EEA. If you would rather
+          not have findings leave our infrastructure, do not run deep scans.
         </p>
       </Section>
 

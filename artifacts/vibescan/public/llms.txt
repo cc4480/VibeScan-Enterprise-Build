@@ -3,8 +3,8 @@
 > Automated black-box security scanning for web applications — built for vibe coders who ship fast.
 
 SecScan performs automated black-box security scans on web applications you own or are
-authorised to test. Paste a URL and receive a plain-English security report powered by DeepSeek
-AI, usually within ten minutes, with no installs or agents required.
+authorised to test. Paste a URL and receive a plain-English security report powered by AI,
+usually within ten minutes, with no installs or agents required.
 
 Every scan is a full scan. There are no tiers to choose between.
 
@@ -26,7 +26,7 @@ you own or have permission to test.
   bundle, then tests each endpoint for missing authentication, IDOR, BFLA, injection, excessive
   data exposure, rate limiting and mass assignment
 - Assigns a letter grade (A through F) with a numeric risk score (0–100)
-- Generates plain-English reports via DeepSeek that explain findings and prioritise fixes
+- Generates plain-English reports via AI that explain findings and prioritise fixes
 - Provides per-agent fix prompts tailored to Cursor, Claude Code, Lovable, Bolt and Replit AI
 - Offers continuous monitoring with weekly rescans and daily CVE feed matching
 
@@ -38,8 +38,8 @@ every coding session.
 
 ## Pricing
 
-Free during early access. Every scan and continuous monitoring are free while the platform is
-being fine-tuned. There is no checkout and no paid tier at present.
+Every account gets 5 free scans to try the platform. Paid scan packs are coming soon; there is
+no checkout yet.
 
 ## Security checks performed
 
@@ -79,7 +79,7 @@ Components: known-CVE matching and end-of-life version detection
 2. Optionally supply credentials so the scan can test the authenticated surface, and a second
    account so it can test access control between users
 3. The scanner fetches the target, renders it if it is a single-page app, discovers its API
-   surface, runs its probes, and calls DeepSeek for analysis
+   surface, runs its probes, and calls its AI provider for analysis
 4. Receive a report with grade, risk score, findings and fix prompts
 
 ## Scope and safety
@@ -97,7 +97,7 @@ Components: known-CVE matching and end-of-life version detection
 
 - Built on: Node.js / Express, React / Vite, PostgreSQL, pg-boss queue
 - Deployed as two services: a web tier and a separate scanner tier that consumes a job queue
-- AI: DeepSeek (deepseek-chat model)
+- AI: LLM-generated report analysis
 - Auth: email and password with verified email; anonymous scanning is also supported
 - No agents, browser extensions or code changes required
 

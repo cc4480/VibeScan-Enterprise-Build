@@ -312,7 +312,7 @@ const STEP_LOGS: Record<string, string[]> = {
     "  ✓  Verification & deduplication complete",
   ],
   ai: [
-    "$ vibescan analyze --ai --model deepseek-v3 --findings /tmp/vibescan-session/",
+    "$ vibescan analyze --ai --findings /tmp/vibescan-session/",
     "  Loading all collected findings...",
     "  [.] Sending to AI analysis engine...",
     "  [.] Generating executive summary...",
