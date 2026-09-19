@@ -292,10 +292,10 @@ export default function LandingPage() {
       <section id="pricing" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold mb-4 uppercase tracking-wider">
-            <Zap className="w-3.5 h-3.5" /> Free Early Access
+            <Zap className="w-3.5 h-3.5" /> Free Trial
           </div>
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">Everything included, free right now</h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto">We're in early access. All scans and continuous monitoring are free while we fine-tune the platform.</p>
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">5 free scans, everything included</h2>
+          <p className="text-muted-foreground max-w-2xl mx-auto">Every account gets 5 free scans to try the platform — every check, no tier to pick. Paid scan packs are coming soon.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">

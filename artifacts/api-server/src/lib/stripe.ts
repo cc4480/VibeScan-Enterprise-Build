@@ -20,14 +20,14 @@ export const PRICE_MAP: Record<string, { amount: number; name: string; descripti
     description: "Full black-box deep scan with DeepSeek AI report + per-agent fix prompt",
   },
   pack_5: {
-    amount: 7900,
+    amount: 1000,
     name: "SecScan 5-Scan Pack",
-    description: "5 Deep Scan credits — use any time, never expire (save $16 vs 5 singles)",
+    description: "5 Deep Scan credits — use any time, never expire (save $85 vs 5 singles)",
   },
   pack_20: {
-    amount: 19900,
+    amount: 4000,
     name: "SecScan 20-Scan Pack",
-    description: "20 Deep Scan credits — for agencies and dev shops (save $181 vs singles)",
+    description: "20 Deep Scan credits — for agencies and dev shops (save $340 vs singles)",
   },
 };
 

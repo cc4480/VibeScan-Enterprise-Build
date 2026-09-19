@@ -39,6 +39,25 @@ async function scansToday(userId: string): Promise<number> {
   return row?.n ?? 0;
 }
 
+// ── Free trial cap ───────────────────────────────────────────────────────────
+// Temporary, pending checkout: everyone — anonymous or registered — gets a
+// fixed number of scans total, not per day, so people can try the product
+// before paying. This is meant to be replaced by pack_5 purchases (see
+// PRICE_MAP in lib/stripe.ts) once Checkout Session creation exists; until
+// then this is what stands in for "the trial ends." Delete this block, not
+// just raise the number, once that ships — a paying customer must not be
+// capped by it.
+const FREE_TRIAL_SCAN_LIMIT = Number(process.env["FREE_TRIAL_SCAN_LIMIT"] ?? 5);
+
+/** Scans this user has ever started, across all time. */
+async function scansAllTime(userId: string): Promise<number> {
+  const [row] = await db
+    .select({ n: count() })
+    .from(scansTable)
+    .where(eq(scansTable.userId, userId));
+  return row?.n ?? 0;
+}
+
 const router: IRouter = Router();
 
 const STATUS_PROGRESS: Record<string, number> = {
@@ -147,6 +166,16 @@ router.post("/scans", requireScanAuth, scanRateLimit, scanNetworkRateLimit, asyn
   }
 
   const { targetUrl, credentials, secondaryCredentials } = parsed.data;
+
+  const trialScansUsed = await scansAllTime(req.user.id);
+  if (trialScansUsed >= FREE_TRIAL_SCAN_LIMIT) {
+    res.status(403).json({
+      error:
+        `You've used all ${FREE_TRIAL_SCAN_LIMIT} free scans. Paid scans are ` +
+        "coming soon — check back shortly.",
+    });
+    return;
+  }
 
   // There is one kind of scan now: the full one. The request schema still
   // accepts "deep" so existing clients keep working, and ignores it either way.
