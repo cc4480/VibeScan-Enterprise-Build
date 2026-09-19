@@ -18,13 +18,17 @@ DATABASE_URL=postgres://localhost/anything \
 `DATABASE_URL` only has to be *set* — the scanner module imports the db layer at
 load time. It is never read by a passive scan.
 
-## 2026-09-19 — 20-target sweep, and the reddit CSP question answered
+## 2026-09-19 — full sweep, and the reddit CSP question answered
 
-Full corpus, ahead of the deploy. **80 actionable findings across 20 targets, and
-every one of the eight HIGH findings is true.** No false positive was found. The
-three changes below are hardening, not corrections: two close shapes that produce
-a disputable finding, and one fixes a severity that asserted more than the check
-can know. All 19 planted flaws in `detection-check.ts` still detected afterwards.
+Ahead of the deploy, and the first round to cover the active probes as well as the
+passive ones. Three sources of evidence: the 20-target passive corpus, `--active`
+against both owned domains, and the local fixture whose faults are known exactly.
+
+**80 actionable findings across 20 passive targets, eight HIGH, every one true.
+Four more across two active targets, all true. No false positive was found in any
+of the three.** The changes below are hardening, not corrections: two close shapes
+that produce a disputable finding, and one fixes a severity that asserted more than
+the check can know. All 19 planted flaws still detected afterwards.
 
 ### The reddit CSP finding — resolved, and it is real
 
@@ -81,6 +85,58 @@ Counts match the baselines this document already recorded, which is the evidence
 that nothing regressed: github 11/5, stackoverflow 3/0, etsy 4/1, nytimes 3/0,
 npmjs 2/0. google is 15/6 against a recorded 13/6 — the two added findings are
 from probes shipped on 2026-09-15, not a regression.
+
+### The active half, 2026-09-19 — also clean
+
+The passive corpus reports "Active security testing was skipped" on 20 of 20
+targets, so every previous round in this document verified only half the engine.
+The noisiest detectors in any scanner — injection, path traversal, API auth and
+access control — had never been swept for false positives at all.
+
+`--active` against both allowlisted owned domains. **secscan.us: 4 findings,
+3 actionable. seclayer.app: 2 findings, 1 actionable. Zero false positives.**
+Every one checked by hand:
+
+| Finding | Target | Verified |
+|---|---|---|
+| `API Endpoints Without Rate Limiting` (MEDIUM) | secscan.us | Real. `GET /api/auth/user` answered 15 of 15 rapid requests with 200 and never a 429. Note this check EARNS its severity where the old passive one did not: it sends the requests and reports what came back, rather than reading a header's absence as an answer. |
+| `DMARC Policy Set to None` (MEDIUM) | secscan.us, seclayer.app | Real. `_dmarc.secscan.us` is `v=DMARC1; p=none; rua=…; fo=1`, confirmed against Cloudflare DoH independently of the scanner. Monitoring only, no enforcement. |
+| `CSP Allows Inline Styles` (LOW) | secscan.us | Real. The live header carries `style-src 'self' 'unsafe-inline'`. |
+| `DNSSEC Not Enabled` (INFO) | secscan.us | Real. Zero DNSKEY answers, NOERROR. |
+
+**The injection, path-traversal, IDOR, BFLA and mass-assignment probes returned
+nothing against either app.** That is the result worth having from this round: the
+detectors most likely to cry wolf stayed silent on two real applications.
+
+The rate-limit finding is also the round's evidence that the check discriminates
+rather than accusing everything. It did NOT fire on seclayer.app — because
+`/api/auth/user` is a 404 there, so the API surface discovery found no endpoint to
+test. Fires where there is something to test, silent where there is not.
+
+Still unexercised after this round: **SSRF and the out-of-band collector.**
+`live-scan.ts` calls `runScan` with `scanId` null, and SSRF detection is skipped
+when that and a callback host are both absent (scanner.ts). Nothing in any round of
+this document has ever tested it.
+
+### Ground truth, from the fixture
+
+`detection-check.ts` plants 19 flaws and asks only whether each was found. It
+returns **34** findings and has never looked at the other fifteen — which, on a
+target whose faults are known exactly, is the strongest false-positive evidence
+available anywhere in this repo. Run with `--list` it prints them.
+
+Checked: `Nginx 1.14.0 — CVE-2021-23017` and `PHP 5.6.40 is End-of-Life` are both
+true of what the fixture serves, which incidentally verifies CVE and EOL matching
+against known input for the first time. The INFO remainder (COOP/COEP/CORP,
+security.txt, structured data, Open Graph) carries zero weight.
+
+**One thing to weigh, not a false positive:** a single planted hardcoded JWT
+produces three separate HIGH findings — `Hardcoded JWT Token in Source`,
+`JWT Token Has No Expiry` and `JWT Uses HS256 Without Expiry`. That is 45 risk
+points and a two-grade move from one defect, and the last two overlap almost
+entirely, both being about the missing `exp`. Each statement is true; whether one
+token should be three HIGHs is a granularity decision, so it is recorded here
+rather than changed.
 
 ### Not a false positive — found while generating this round's raw output
 
