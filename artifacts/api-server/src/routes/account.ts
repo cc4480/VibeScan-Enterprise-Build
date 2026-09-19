@@ -24,6 +24,8 @@ import {
   dismissedFindingsTable,
   reportSharesTable,
   domainVerificationsTable,
+  authTokensTable,
+  pendingLoginsTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { hashPassword, verifyPassword, needsRehash } from "../lib/password";
@@ -368,9 +370,17 @@ router.delete("/account", async (req, res): Promise<void> => {
     await db.delete(dismissedFindingsTable).where(eq(dismissedFindingsTable.userId, userId));
     await db.delete(domainVerificationsTable).where(eq(domainVerificationsTable.userId, userId));
     await db.delete(creditsTable).where(eq(creditsTable.userId, userId));
+    await db.delete(authTokensTable).where(eq(authTokensTable.userId, userId));
+    await db.delete(pendingLoginsTable).where(eq(pendingLoginsTable.userId, userId));
     await db.delete(usersTable).where(eq(usersTable.id, userId));
 
-    // The session outlives the row it points at unless it is revoked here.
+    // EVERY session, not just this one. getSession reads the session's own JSON
+    // snapshot and never re-checks usersTable, so a session on another device
+    // kept working for its full 7-day TTL after the account it names was
+    // erased: still reading /api/auth/user, still able to start scans that
+    // write rows owned by a deleted id, and — because deleting the account
+    // deletes its scans — still holding a freshly reset free-scan allowance.
+    await deleteSessionsForUser(userId);
     await clearSession(res, getSessionId(req));
 
     req.log.info({ userId }, "Account deleted at user request");
