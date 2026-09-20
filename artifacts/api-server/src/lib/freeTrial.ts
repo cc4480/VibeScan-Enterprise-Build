@@ -23,6 +23,14 @@ export const TRIAL_LIMIT_MESSAGE =
   "coming soon — check back shortly.";
 
 /**
+ * Sent alongside the message so the client can recognise this specific refusal
+ * without matching on prose. The copy above is written for a person and will be
+ * reworded; a UI keyed to it would break silently and show a generic error at
+ * the exact moment someone was ready to pay.
+ */
+export const TRIAL_LIMIT_CODE = "trial_exhausted";
+
+/**
  * Scans this user started themselves, across all time.
  *
  * Monitor rows are excluded deliberately. The scheduler rescans on its own

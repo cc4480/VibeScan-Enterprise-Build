@@ -14,6 +14,7 @@ import emailWebhookRouter from "./emailWebhook";
 import oobRouter from "./oob";
 import domainVerificationRouter from "./domainVerification";
 import emailPreferencesRouter from "./emailPreferences";
+import purchaseIntentRouter from "./purchaseIntent";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use(emailWebhookRouter);
 router.use(oobRouter);
 router.use(domainVerificationRouter);
 router.use(emailPreferencesRouter);
+router.use(purchaseIntentRouter);
 
 export default router;

@@ -10,7 +10,7 @@ import { scansTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { checkScanTarget } from "../lib/ssrfGuard";
 import { rateLimitMiddleware, scanRateLimitRules } from "../lib/rateLimit";
-import { trialScansExhausted, TRIAL_LIMIT_MESSAGE } from "../lib/freeTrial";
+import { trialScansExhausted, TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE } from "../lib/freeTrial";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -76,7 +76,7 @@ router.post("/monitor/subscriptions", requireMonitorAuth, monitorRateLimit, asyn
   // the free-scan cap. Without this, "subscribe to monitoring" was a way to run
   // unlimited scans after the trial was spent.
   if (await trialScansExhausted(req.user.id)) {
-    res.status(403).json({ error: TRIAL_LIMIT_MESSAGE });
+    res.status(403).json({ error: TRIAL_LIMIT_MESSAGE, code: TRIAL_LIMIT_CODE });
     return;
   }
 
@@ -558,7 +558,7 @@ router.post("/monitor/subscriptions/:id/scan", monitorRateLimit, async (req, res
   // too. The scheduler's own rescans do not go through this route and are not
   // gated — an existing subscriber keeps getting them after the trial is spent.
   if (await trialScansExhausted(req.user.id)) {
-    res.status(403).json({ error: TRIAL_LIMIT_MESSAGE });
+    res.status(403).json({ error: TRIAL_LIMIT_MESSAGE, code: TRIAL_LIMIT_CODE });
     return;
   }
 

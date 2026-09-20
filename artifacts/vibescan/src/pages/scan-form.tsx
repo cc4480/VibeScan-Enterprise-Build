@@ -13,8 +13,13 @@ import {
 } from "@/components/scan-credentials-fields";
 import { Shield, Zap, Globe, Lock, CheckCircle2, Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
 import { Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listDomainVerifications } from "@/lib/domain-verification-api";
+import {
+  getPurchaseIntent,
+  registerPurchaseIntent,
+  isTrialExhausted,
+} from "@/lib/purchase-intent-api";
 import { cn } from "@/lib/utils";
 
 /**
@@ -89,6 +94,93 @@ function ActiveTestingStatus({ url }: { url: string }) {
           Verify {domain}
         </Link>{" "}
         with a DNS record or a file, then scan again. Verification is per exact hostname.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * What someone sees when they run out of free scans.
+ *
+ * This replaces a one-line red error telling them to "check back shortly",
+ * which was a dead end at the single best moment the product gets: they have
+ * used it enough to run out. There is no checkout yet, so the honest thing is
+ * to say so, say what it will cost, and offer to tell them when it exists —
+ * rather than implying a purchase page they will go looking for and not find.
+ */
+function TrialExhaustedPanel() {
+  const queryClient = useQueryClient();
+  const status = useQuery({
+    queryKey: ["purchase-intent"],
+    queryFn: getPurchaseIntent,
+    staleTime: 60_000,
+  });
+
+  const register = useMutation({
+    mutationFn: registerPurchaseIntent,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["purchase-intent"] }),
+  });
+
+  const registered = status.data?.registered || register.isSuccess;
+
+  return (
+    <div className="rounded-xl border border-primary/25 bg-primary/5 p-5 space-y-4">
+      <div className="flex items-start gap-3">
+        <Lock className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+        <div className="space-y-1">
+          <p className="font-semibold text-foreground">
+            That was your last free scan
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {status.data
+              ? `You've used all ${status.data.scanLimit} scans on this account.`
+              : "You've used all of the free scans on this account."}{" "}
+            Scan packs will be <span className="text-foreground font-medium">$10 for 5 scans</span>,
+            and there's no way to buy them yet — so rather than send you to a checkout
+            that doesn't exist, we'll email you the moment it does.
+          </p>
+        </div>
+      </div>
+
+      {registered ? (
+        <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-background/40 p-3">
+          <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+          <p className="text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">You're on the list.</span>{" "}
+            We'll email you once scan packs are available. Nothing else — this doesn't
+            sign you up for anything.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => register.mutate()}
+            disabled={register.isPending}
+            className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground font-medium text-sm disabled:opacity-60 flex items-center justify-center gap-2"
+          >
+            {register.isPending ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" /> Adding you…
+              </>
+            ) : (
+              "Email me when I can buy scans"
+            )}
+          </button>
+          {register.isError && (
+            <p className="text-red-400 text-xs text-center">
+              {getFriendlyError(register.error)}
+            </p>
+          )}
+        </div>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        Your existing reports stay available on your{" "}
+        <Link href="/dashboard" className="text-primary underline underline-offset-2">
+          dashboard
+        </Link>
+        .
       </p>
     </div>
   );
@@ -296,11 +388,14 @@ export default function ScanFormPage() {
               )}
             </button>
 
-            {createScan.isError && (
-              <p className="text-red-400 text-sm text-center">
-                {getFriendlyError(createScan.error)}
-              </p>
-            )}
+            {createScan.isError &&
+              (isTrialExhausted(createScan.error) ? (
+                <TrialExhaustedPanel />
+              ) : (
+                <p className="text-red-400 text-sm text-center">
+                  {getFriendlyError(createScan.error)}
+                </p>
+              ))}
 
             <p className="text-xs text-muted-foreground text-center">
               Only scan sites you own or have explicit permission to test.

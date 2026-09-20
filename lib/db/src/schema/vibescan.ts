@@ -107,6 +107,31 @@ export const creditsTable = pgTable("credits", {
 });
 
 /**
+ * Someone who ran out of free scans and said they would pay.
+ *
+ * There is no checkout yet, so the free-scan cap is currently a wall with
+ * nothing behind it: a person who likes the product enough to spend all five
+ * scans hits a message telling them to come back later, and leaves without
+ * trace. This table is what turns that dead end into the one measurement worth
+ * having before building billing — how many people actually wanted to pay.
+ *
+ * One row per user, so pressing the button twice is not two signals. Delete
+ * this table, and the route that writes it, when Checkout Session creation
+ * ships and the cap stops being a wall.
+ */
+export const purchaseIntentsTable = pgTable("purchase_intents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: text("user_id").notNull().unique(),
+  // Copied rather than joined, because it is what we would actually mail, and
+  // a user changing their address later should not silently retarget a signal
+  // recorded against the old one.
+  email: text("email").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type PurchaseIntent = typeof purchaseIntentsTable.$inferSelect;
+
+/**
  * Proof that a user controls a domain, which is what unlocks active offensive
  * probing against it. Without this the scanner would fire attack payloads at
  * any host someone types in, which is both a legal problem for us and an

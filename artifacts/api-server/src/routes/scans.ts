@@ -10,7 +10,7 @@ import { enqueueScan } from "../lib/queue";
 import { validateCredentials, encryptCredentials } from "../lib/scanCredentials";
 import { checkScanTarget } from "../lib/ssrfGuard";
 import { rateLimitMiddleware, scanRateLimitRules, scanNetworkRateLimitRules } from "../lib/rateLimit";
-import { trialScansExhausted, TRIAL_LIMIT_MESSAGE } from "../lib/freeTrial";
+import { trialScansExhausted, TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE } from "../lib/freeTrial";
 
 // ── Abuse and cost control ───────────────────────────────────────────────────
 // A scan is expensive in a way an API request normally is not: it launches a
@@ -150,7 +150,7 @@ router.post("/scans", requireScanAuth, scanRateLimit, scanNetworkRateLimit, asyn
   const { targetUrl, credentials, secondaryCredentials } = parsed.data;
 
   if (await trialScansExhausted(req.user.id)) {
-    res.status(403).json({ error: TRIAL_LIMIT_MESSAGE });
+    res.status(403).json({ error: TRIAL_LIMIT_MESSAGE, code: TRIAL_LIMIT_CODE });
     return;
   }
 
