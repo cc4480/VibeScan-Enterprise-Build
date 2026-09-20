@@ -81,6 +81,7 @@ const ROUTES: { match: RegExp; meta: (path: string) => PageMeta }[] = [
   { match: /^\/monitor\/?$/, meta: () => ({ path: "/monitor", title: "Monitor — SecScan", noindex: true }) },
   { match: /^\/domains\/?$/, meta: () => ({ path: "/domains", title: "Verified domains — SecScan", noindex: true }) },
   { match: /^\/settings\/?$/, meta: () => ({ path: "/settings", title: "Settings — SecScan", noindex: true }) },
+  { match: /^\/feedback\/?$/, meta: () => ({ path: "/feedback", title: "Feedback — SecScan", noindex: true }) },
   { match: /^\/sign-in\/?$/, meta: () => ({ path: "/sign-in", title: "Sign in — SecScan", noindex: true }) },
   { match: /^\/register\/?$/, meta: () => ({ path: "/register", title: "Create an account — SecScan", noindex: true }) },
   { match: /^\/forgot-password\/?$/, meta: () => ({ path: "/forgot-password", title: "Reset your password — SecScan", noindex: true }) },
