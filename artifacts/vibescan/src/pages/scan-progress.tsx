@@ -5,6 +5,7 @@ import {
   CheckCircle2, XCircle, Loader2, Clock, AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useSeo } from "@/lib/seo";
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
 
@@ -395,6 +396,10 @@ export default function ScanProgressPage() {
   const scanId = params.id;
   const search = useSearch();
   const [, setLocation] = useLocation();
+
+  // Somebody else's scan in progress is not a search result, and the canonical
+  // has to name this URL rather than the page the visitor arrived from.
+  useSeo({ title: "Scan in progress", noindex: true });
 
   const analyzingStartRef = useRef<number | null>(null);
   const redirectedRef = useRef(false);

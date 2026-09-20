@@ -1,7 +1,12 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
+import { useSeo } from "@/lib/seo";
 
 export default function NotFound() {
+  // A URL that does not exist must not be offered to a search engine, and the
+  // canonical has to name this URL rather than whatever page was entered on.
+  useSeo({ title: "Page not found", noindex: true });
+
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
       <Card className="w-full max-w-md mx-4">

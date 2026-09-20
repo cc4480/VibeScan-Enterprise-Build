@@ -5,8 +5,15 @@ import {
   Code2, Zap, Bell, Mail, Bot, FileKey, Database, Network,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useSeo } from "@/lib/seo";
 
 export default function LandingPage() {
+  // No title or description: the server already renders the right ones for "/"
+  // in index.html, and a second copy here would be one to keep in step. This is
+  // for the canonical, which client-side routing otherwise leaves pointing at
+  // whichever page the visitor entered on.
+  useSeo({});
+
   const containerVariants = {
     hidden: { opacity: 0 },
     show: {
