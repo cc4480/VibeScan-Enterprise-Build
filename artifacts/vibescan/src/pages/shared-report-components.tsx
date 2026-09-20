@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { cn, getGradeColor } from "@/lib/utils";
+import { cn, getGradeColor, formatSeverity } from "@/lib/utils";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from "recharts";
+import { CheckCircle2 } from "lucide-react";
 
 export interface SharedReportData {
   id: string;
@@ -68,6 +70,105 @@ export const SEV_ORDER: Record<string, number> = {
 };
 
 export const VERIFICATION_THRESHOLD = 65;
+
+/** Hex fills for recharts — Tailwind classes don't reach into SVG fill/stroke,
+ *  so this is the one place severity color is duplicated as a literal, kept in
+ *  sync with SEV_COLORS above by eye since there are only five. */
+export const SEVERITY_HEX: Record<string, string> = {
+  critical: "#f87171",
+  high: "#fb923c",
+  medium: "#facc15",
+  low: "#60a5fa",
+  info: "#9ca3af",
+};
+
+export interface SeverityCounts {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  info: number;
+}
+
+/** Findings by severity, at a glance. Used beside the grade ring because the
+ *  grade is one number derived from this exact breakdown — showing the shape
+ *  behind the score, not just the score. Shared between the owner's report
+ *  view and the public share link so both read the same at a glance. */
+export function SeverityDonut({ counts, size = 192 }: { counts: SeverityCounts; size?: number }) {
+  const data = (["critical", "high", "medium", "low", "info"] as const)
+    .map((sev) => ({ sev, name: formatSeverity(sev), value: counts[sev] }))
+    .filter((d) => d.value > 0);
+
+  const total = data.reduce((sum, d) => sum + d.value, 0);
+
+  if (total === 0) {
+    return (
+      <div style={{ width: size, height: size }} className="flex flex-col items-center justify-center text-center gap-1">
+        <CheckCircle2 className="w-8 h-8 text-green-400/70" />
+        <span className="text-xs text-muted-foreground">No findings</span>
+      </div>
+    );
+  }
+
+  const inner = Math.round(size * 0.32);
+  const outer = Math.round(size * 0.46);
+
+  return (
+    <div className="relative" style={{ width: size, height: size }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie
+            data={data}
+            dataKey="value"
+            nameKey="name"
+            innerRadius={inner}
+            outerRadius={outer}
+            paddingAngle={data.length > 1 ? 3 : 0}
+            stroke="none"
+            isAnimationActive
+          >
+            {data.map((d) => (
+              <Cell key={d.sev} fill={SEVERITY_HEX[d.sev]} />
+            ))}
+          </Pie>
+          <RechartsTooltip
+            formatter={(value: number, name: string) => [`${value} finding${value === 1 ? "" : "s"}`, name]}
+            contentStyle={{
+              background: "rgba(15, 15, 20, 0.95)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 8,
+              fontSize: 12,
+            }}
+          />
+        </PieChart>
+      </ResponsiveContainer>
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <span className="text-3xl font-black leading-none">{total}</span>
+        <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest mt-1">
+          finding{total === 1 ? "" : "s"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** Legend for SeverityDonut — the chart alone doesn't carry the exact numbers
+ *  for someone skimming rather than hovering. */
+export function SeverityLegend({ counts }: { counts: SeverityCounts }) {
+  const sevs = (["critical", "high", "medium", "low", "info"] as const).filter((s) => counts[s] > 0);
+  if (sevs.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-x-4 gap-y-1.5 justify-center sm:justify-start">
+      {sevs.map((sev) => (
+        <div key={sev} className="flex items-center gap-1.5 text-xs">
+          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: SEVERITY_HEX[sev] }} />
+          <span className="font-bold tabular-nums">{counts[sev]}</span>
+          <span className="text-muted-foreground">{formatSeverity(sev)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function GradeRing({ grade, score }: { grade: string; score: number }) {
   const colorMap: Record<string, string> = {

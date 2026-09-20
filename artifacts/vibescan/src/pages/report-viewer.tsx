@@ -19,7 +19,14 @@ import { useState, useMemo, useCallback, useEffect, createContext, useContext, u
 import { useSeo } from "@/lib/seo";
 import type { Vulnerability } from "@workspace/api-client-react";
 import { APP_ORIGIN } from "@/lib/origin";
-import { ComplianceCard, type SharedReportData } from "./shared-report-components";
+import {
+  ComplianceCard, SeverityDonut, SeverityLegend, SEVERITY_HEX,
+  type SharedReportData, type SeverityCounts,
+} from "./shared-report-components";
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
+  Cell, RadialBarChart, RadialBar, PolarAngleAxis,
+} from "recharts";
 
 // The structured compliance mapping the worker freezes into report.data
 // (see api-server lib/compliance.ts). Shared with the public report view so the
@@ -234,6 +241,111 @@ function GradeRing({ grade, score }: { grade: string; score: number }) {
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-widest mt-1">
           {graded ? `Risk: ${score}` : "Coverage incomplete"}
         </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Category breakdown bar chart ─────────────────────────────────────────────
+
+/** Horizontal bars, one per finding category, ranked worst-severity-first so
+ *  the chart reads the same priority order as the findings list below it. */
+function CategoryBarChart({
+  categoryCounts,
+  vulnerabilities,
+  activeCategory,
+  onSelect,
+}: {
+  categoryCounts: Record<string, number>;
+  vulnerabilities: Vulnerability[];
+  activeCategory: string | null;
+  onSelect: (category: string) => void;
+}) {
+  const data = useMemo(() => {
+    const worst: Record<string, string> = {};
+    for (const v of vulnerabilities) {
+      const order = SEVERITY_ORDER[v.severity] ?? 99;
+      const current = worst[v.category] ? (SEVERITY_ORDER[worst[v.category]!] ?? 99) : 100;
+      if (order < current) worst[v.category] = v.severity;
+    }
+    return Object.entries(categoryCounts)
+      .map(([category, count]) => ({
+        category,
+        label: getCategoryMeta(category).label,
+        count,
+        severity: worst[category] ?? "info",
+      }))
+      .sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99) || b.count - a.count)
+      .slice(0, 8);
+  }, [categoryCounts, vulnerabilities]);
+
+  if (data.length === 0) return null;
+
+  return (
+    <div style={{ height: Math.max(120, data.length * 32) }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 24, bottom: 0, left: 0 }}>
+          <CartesianGrid horizontal={false} stroke="rgba(255,255,255,0.06)" />
+          <XAxis type="number" hide />
+          <YAxis
+            type="category"
+            dataKey="label"
+            width={140}
+            tick={{ fill: "#a1a1aa", fontSize: 11 }}
+            tickLine={false}
+            axisLine={false}
+          />
+          <RechartsTooltip
+            cursor={{ fill: "rgba(255,255,255,0.04)" }}
+            formatter={(value: number) => [`${value} finding${value === 1 ? "" : "s"}`, ""]}
+            contentStyle={{
+              background: "rgba(15, 15, 20, 0.95)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 8,
+              fontSize: 12,
+            }}
+          />
+          <Bar dataKey="count" radius={[0, 4, 4, 0]} maxBarSize={16} cursor="pointer">
+            {data.map((d) => (
+              <Cell
+                key={d.category}
+                fill={SEVERITY_HEX[d.severity]}
+                fillOpacity={activeCategory && activeCategory !== d.category ? 0.35 : 1}
+                onClick={() => onSelect(d.category)}
+              />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ─── OWASP coverage radial ─────────────────────────────────────────────────────
+
+/** One ring: how many of the ten OWASP categories came back clean. Sits above
+ *  the per-category list in OwaspBreakdown as the one-glance version of it. */
+function OwaspCoverageRing({ passed, total }: { passed: number; total: number }) {
+  const pct = total === 0 ? 100 : Math.round((passed / total) * 100);
+  const color = pct === 100 ? "#4ade80" : pct >= 70 ? "#facc15" : "#f87171";
+  const data = [{ name: "coverage", value: pct, fill: color }];
+
+  return (
+    <div className="relative w-20 h-20 shrink-0">
+      <ResponsiveContainer width="100%" height="100%">
+        <RadialBarChart
+          data={data}
+          startAngle={90}
+          endAngle={-270}
+          innerRadius="72%"
+          outerRadius="100%"
+        >
+          <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
+          <RadialBar dataKey="value" cornerRadius={8} background={{ fill: "rgba(255,255,255,0.06)" }} />
+        </RadialBarChart>
+      </ResponsiveContainer>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-sm font-black tabular-nums">{pct}%</span>
       </div>
     </div>
   );
@@ -1239,18 +1351,23 @@ function OwaspBreakdown({ vulnerabilities }: { vulnerabilities: Vulnerability[] 
   return (
     <div className="glass-card rounded-2xl p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-bold flex items-center gap-2 text-muted-foreground uppercase tracking-wider">
-          <Activity className="w-4 h-4" /> OWASP Top 10
-        </h3>
-        <div className="flex items-center gap-2 text-xs">
-          {failing > 0 && (
-            <span className="px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 font-medium">
-              {failing} flagged
-            </span>
-          )}
-          <span className="px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 font-medium">
-            {passed} passed
-          </span>
+        <div className="flex items-center gap-3">
+          <OwaspCoverageRing passed={passed} total={OWASP_CATEGORIES.length} />
+          <div>
+            <h3 className="text-sm font-bold flex items-center gap-2 text-muted-foreground uppercase tracking-wider mb-1.5">
+              <Activity className="w-4 h-4" /> OWASP Top 10
+            </h3>
+            <div className="flex items-center gap-2 text-xs">
+              {failing > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 font-medium">
+                  {failing} flagged
+                </span>
+              )}
+              <span className="px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 font-medium">
+                {passed} passed
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2405,7 +2522,10 @@ export default function ReportViewer() {
       <div className="glass-panel p-8 md:p-12 rounded-3xl mb-12 relative overflow-hidden flex flex-col md:flex-row items-center gap-12">
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[120px] pointer-events-none" />
 
-        <GradeRing grade={summary.grade} score={summary.riskScore} />
+        <div className="flex flex-col sm:flex-row items-center gap-4 z-10">
+          <GradeRing grade={summary.grade} score={summary.riskScore} />
+          <SeverityDonut counts={severityCounts} />
+        </div>
 
         <div className="flex-1 text-center md:text-left z-10">
           <div className="flex flex-wrap items-center gap-2 mb-6">
@@ -2423,6 +2543,9 @@ export default function ReportViewer() {
           <p className="text-lg text-muted-foreground/80 leading-relaxed max-w-2xl">
             {summary.executiveSummary}
           </p>
+          <div className="mt-5">
+            <SeverityLegend counts={severityCounts} />
+          </div>
           <SummaryNewFindings categories={categoryCounts} />
           {allUnverifiedVulns.length > 0 && (
             <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-xs text-amber-300">
@@ -2672,6 +2795,14 @@ export default function ReportViewer() {
               <h3 className="text-sm font-bold mb-4 flex items-center gap-2 text-muted-foreground uppercase tracking-wider">
                 <Filter className="w-4 h-4" /> Finding Categories
               </h3>
+              <div className="mb-5 pb-5 border-b border-white/5">
+                <CategoryBarChart
+                  categoryCounts={categoryCounts}
+                  vulnerabilities={visibleVulns}
+                  activeCategory={activeCategory}
+                  onSelect={(cat) => setActiveCategory(activeCategory === cat ? null : cat)}
+                />
+              </div>
               <div className="space-y-1.5">
                 <button
                   onClick={() => setActiveCategory(null)}
