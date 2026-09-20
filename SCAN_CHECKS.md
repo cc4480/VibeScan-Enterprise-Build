@@ -7,7 +7,7 @@ Every finding the scanner can emit, read out of `artifacts/api-server/src/lib`. 
 complete list; [SCAN_COVERAGE.md](SCAN_COVERAGE.md) is the readable one, grouped by module with
 the Basic/Deep tier and the methodology behind each group.
 
-**281 findings across 26 modules**, in 35 categories. 87 critical, 74 high, 60 medium, 21 low, 39 info.
+**283 findings across 27 modules**, in 36 categories. 87 critical, 74 high, 61 medium, 21 low, 40 info.
 
 A finding is a distinct name the scanner can put in a report, which is not the same as a check
 type: the data-table modules below define many findings from one piece of detection logic —
@@ -23,29 +23,30 @@ module does. `none` — neither, so no test exercises it at all.
 |---|---:|---:|---:|---|
 | `probes-data.ts` | 78 | 838 | 29 | direct |
 | `secret-pattern-data.ts` | 34 | 506 | 17 | direct |
-| `probes.ts` | 16 | 919 | 9 | direct |
+| `probes.ts` | 16 | 967 | 15 | direct |
 | `recon-data.ts` | 14 | 178 | 12 | direct |
 | `dnsChecks.ts` | 9 | 490 | 26 | direct |
 | `nextjsProbe.ts` | 9 | 248 | 7 | direct |
 | `structuredData.ts` | 9 | 415 | 34 | direct |
 | `crawler-data.ts` | 8 | 152 | 26 | direct |
 | `apiProbe.ts` | 7 | 644 | 31 | direct |
-| `crawler.ts` | 7 | 698 | 30 | direct |
-| `supabase-probes.ts` | 7 | 520 | 5 | direct |
+| `crawler.ts` | 7 | 778 | 42 | direct |
+| `supabase-probes.ts` | 7 | 548 | 5 | direct |
 | `jwtAnalysis.ts` | 6 | 262 | 9 | direct |
 | `cveCheck.ts` | 4 | 594 | 3 | direct |
 | `accessControlProbe.ts` | 3 | 377 | 18 | direct |
 | `firebase-probes.ts` | 3 | 261 | 5 | direct |
-| `mailTls.ts` | 3 | 316 | 12 | direct |
+| `mailTls.ts` | 3 | 337 | 13 | direct |
 | `storageProbe.ts` | 3 | 262 | 8 | direct |
 | `baasProbes.ts` | 2 | 265 | 6 | direct |
 | `graphqlProbe.ts` | 2 | 292 | 8 | direct |
 | `injectionProbe.ts` | 2 | 237 | 7 | direct |
 | `sourceMaps.ts` | 2 | 172 | 11 | direct |
 | `apiDocsProbe.ts` | 1 | 300 | 9 | direct |
-| `pathTraversal.ts` | 1 | 168 | 4 | direct |
+| `deserializationProbe.ts` | 1 | 105 | 9 | direct |
+| `pathTraversal.ts` | 1 | 195 | 4 | direct |
 | `ssrfProbe.ts` | 1 | 192 | 6 | direct |
-| `scanner.ts` | 31 | 1235 | — | indirect, via challengePage.test.ts, firebase-probes.test.ts, grading.test.ts, scoring.test.ts |
+| `scanner.ts` | 32 | 1297 | — | indirect, via challengePage.test.ts, firebase-probes.test.ts, grading.test.ts, scoring.test.ts |
 | `subdomain-service-data.ts` | 19 | 152 | — | indirect, via subdomainTakeover.test.ts |
 
 ## Findings by module
@@ -93,7 +94,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `crawler.ts`
 
-*7 findings · 698 lines · 30 tests.*
+*7 findings · 778 lines · 42 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -130,6 +131,14 @@ module does. `none` — neither, so no test exercises it at all.
 | PHP ${d.version} is End-of-Life | High | Outdated Software | 7.5 | CWE-1104 | — |
 | Apache HTTPD ${d.version} — End-of-Life Release Branch | Medium | Outdated Software | 6.5 | CWE-1104 | WSTG-INFO-02 |
 | Nginx ${d.version} — End-of-Life Release Cycle | Medium | Outdated Software | 6.5 | CWE-1104 | — |
+
+### `deserializationProbe.ts`
+
+*1 findings · 105 lines · 9 tests.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| Insecure Deserialization Exposure (${m.format} object in cookie "${name}") | High | Insecure Deserialization | 8.1 | CWE-502 | WSTG-BUSL-06 |
 
 ### `dnsChecks.ts`
 
@@ -190,7 +199,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `mailTls.ts`
 
-*3 findings · 316 lines · 12 tests.*
+*3 findings · 337 lines · 13 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -216,7 +225,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `pathTraversal.ts`
 
-*1 findings · 168 lines · 4 tests.*
+*1 findings · 195 lines · 4 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -224,14 +233,13 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `probes.ts`
 
-*16 findings · 919 lines · 9 tests.*
+*16 findings · 967 lines · 15 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
 | CORS Misconfiguration — Credentials Allowed from Arbitrary Origin | Critical | CORS Misconfiguration | 9.1 | CWE-942 | WSTG-CONF-07 |
 | Flask/Werkzeug Interactive Debugger Exposed (Remote Code Execution) / Verbose Error Pages Expose Internal Application Details | Critical / Medium | Information Disclosure | 10 | — | WSTG-CONF-02 |
 | Supabase Tables Exposed — Row Level Security (RLS) Disabled | Critical | Database Security | 9.8 | CWE-862 | WSTG-ATHZ-01 |
-| Dangerous HTTP Methods Advertised (${dangerousMethods.join(", ")}) | High | HTTP Security | 7.5 | CWE-650 | WSTG-CONF-06 |
 | CORS Misconfiguration — Origin Reflected Without Allowlist | Medium | CORS Misconfiguration | 6.5 | CWE-942 | WSTG-CONF-07 |
 | Directory Listing Enabled | Medium | Information Disclosure | 5.3 | CWE-548 | WSTG-CONF-04 |
 | External Resources Missing Subresource Integrity (SRI) | Medium | Supply Chain Security | 6.1 | CWE-353 | WSTG-CONF-04 |
@@ -240,6 +248,7 @@ module does. `none` — neither, so no test exercises it at all.
 | HTTP Traffic Not Redirected to HTTPS | Medium | Transport Security | 5.3 | CWE-319 | WSTG-CONF-07 |
 | Open Redirect Vulnerability | Medium | Unvalidated Redirects | 6.1 | CWE-601 | WSTG-CLNT-04 |
 | Supabase Detected — Verify Row Level Security (RLS) | Medium | Database Security | 6.5 | CWE-862 | WSTG-ATHZ-01 |
+| Write HTTP Methods Advertised (${dangerousMethods.join(", ")}) | Medium | HTTP Security | 5.3 | CWE-650 | WSTG-CONF-06 |
 | X-Frame-Options Header Misconfigured | Medium | UI Security | 4.3 | CWE-1021 | WSTG-CLNT-09 |
 | Missing security.txt (RFC 9116) | Info | Information Disclosure | 0 | CWE-205 | — |
 | Rate Limiting Not Advertised in Response Headers | Info | Brute Force Protection | 0 | CWE-307 | WSTG-ATHN-03 |
@@ -353,7 +362,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `scanner.ts`
 
-*31 findings · 1235 lines · no test file.*
+*32 findings · 1297 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -377,6 +386,7 @@ module does. `none` — neither, so no test exercises it at all.
 | Missing Permissions-Policy Header | Low | Browser Feature Control | 2.4 | CWE-16 | WSTG-CONF-07 |
 | Missing Referrer-Policy Header | Low | Information Disclosure | 3.1 | CWE-200 | WSTG-CONF-07 |
 | Non-Session Cookie Missing Secure Flag | Low | Session Management | 3.1 | CWE-614 | WSTG-SESS-02 |
+| ${unrunFamilies.length} check group${unrunFamilies.length > 1 ? "s" : ""} could not be completed | Info | Scan Coverage | — | — | — |
 | Active security testing was skipped for this scan | Info | Scan Coverage | — | — | — |
 | Missing Cache-Control Headers | Info | Information Disclosure | — | CWE-524 | WSTG-CONF-07 |
 | Missing Cross-Origin-Embedder-Policy (COEP) | Info | Browser Feature Control | — | CWE-346 | WSTG-CONF-07 |
@@ -501,7 +511,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `supabase-probes.ts`
 
-*7 findings · 520 lines · 5 tests.*
+*7 findings · 548 lines · 5 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
