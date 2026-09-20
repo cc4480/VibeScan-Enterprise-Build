@@ -21,6 +21,8 @@ export interface PageMeta {
   title?: string;
   description?: string;
   noindex?: boolean;
+  /** Trail from home to this page, excluding home. Drives BreadcrumbList. */
+  breadcrumb?: { name: string; path: string }[];
 }
 
 const SITE = (process.env["APP_ORIGIN"] ?? "https://secscan.us").replace(/\/$/, "");
@@ -33,6 +35,7 @@ const ROUTES: { match: RegExp; meta: (path: string) => PageMeta }[] = [
       title: "Security Documentation — SecScan",
       description:
         "Plain-English explanations of every security check SecScan runs: HTTPS, HSTS, CSP, X-Frame-Options, CORS, cookie flags, Supabase RLS, and more. With code fixes.",
+      breadcrumb: [{ name: "Security documentation", path: "/learn" }],
     }),
   },
   {
@@ -42,6 +45,7 @@ const ROUTES: { match: RegExp; meta: (path: string) => PageMeta }[] = [
       title: "Privacy Policy — SecScan",
       description:
         "What SecScan collects when you run a scan, who it is shared with, how long it is kept, and how to have it deleted.",
+      breadcrumb: [{ name: "Privacy policy", path: "/privacy" }],
     }),
   },
   {
@@ -51,6 +55,7 @@ const ROUTES: { match: RegExp; meta: (path: string) => PageMeta }[] = [
       title: "Terms of Service — SecScan",
       description:
         "The terms that apply when you use SecScan, including what you are permitted to scan.",
+      breadcrumb: [{ name: "Terms of service", path: "/terms" }],
     }),
   },
   {
@@ -63,6 +68,7 @@ const ROUTES: { match: RegExp; meta: (path: string) => PageMeta }[] = [
       title: "SecScan Security Bot — secscan.us/bot",
       description:
         "What the SecScan scanner is, how to recognise it in your logs by its User-Agent, and how to allow it to scan a site you own.",
+      breadcrumb: [{ name: "SecScan bot", path: "/bot" }],
     }),
   },
 
@@ -104,6 +110,88 @@ export function metaForPath(path: string): PageMeta | null {
 
 function escapeAttr(v: string): string {
   return v.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+const LD_BLOCK = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/i;
+
+/**
+ * Point the structured data at the route being served.
+ *
+ * The shell carries one @graph describing the homepage, and it was sent
+ * unchanged on every route. So /learn returned a canonical of /learn next to a
+ * WebPage node asserting "url": "https://secscan.us/" — the two tags
+ * contradict each other, and the graph is the more specific claim of the pair.
+ * Worse on the private routes, which were handed a FAQPage and an Offer while
+ * also being marked noindex.
+ *
+ * Nodes describing the site rather than the page (Organization, WebSite,
+ * SoftwareApplication) are true everywhere and stay. The page-scoped ones are
+ * rewritten, and the homepage-only marketing nodes are dropped elsewhere.
+ */
+function applyJsonLd(html: string, meta: PageMeta, url: string): string {
+  const block = LD_BLOCK.exec(html);
+  if (!block?.[1]) return html;
+
+  let graph: Record<string, unknown>[];
+  try {
+    const parsed = JSON.parse(block[1]) as { "@graph"?: Record<string, unknown>[] };
+    if (!Array.isArray(parsed["@graph"])) return html;
+    graph = parsed["@graph"];
+  } catch {
+    // Malformed JSON-LD in the shell is a build problem, not a request problem.
+    // Serving the page without touching it beats serving a 500.
+    return html;
+  }
+
+  // A private page makes no claim to search engines at all. Emitting an Offer
+  // and eight FAQ answers under a noindex header is a mixed signal at best.
+  if (meta.noindex) return html.replace(LD_BLOCK, "");
+
+  const isHome = url === SITE || url === `${SITE}/`;
+
+  const next = graph.flatMap((node) => {
+    const type = node["@type"];
+
+    // Homepage-specific. The pitch, the price and the how-to belong on the page
+    // that makes them, not on the terms of service.
+    if (!isHome && (type === "FAQPage" || type === "HowTo" || type === "SoftwareApplication")) {
+      return [];
+    }
+
+    if (type === "WebPage") {
+      return [
+        {
+          ...node,
+          "@id": `${url}#webpage`,
+          url,
+          ...(meta.title ? { name: meta.title } : {}),
+          ...(meta.description ? { description: meta.description } : {}),
+          inLanguage: "en-US",
+          breadcrumb: {
+            "@type": "BreadcrumbList",
+            itemListElement: [
+              { "@type": "ListItem", position: 1, name: "Home", item: `${SITE}/` },
+              ...(meta.breadcrumb ?? []).map((c, i) => ({
+                "@type": "ListItem",
+                position: i + 2,
+                name: c.name,
+                item: `${SITE}${c.path}`,
+              })),
+            ],
+          },
+        },
+      ];
+    }
+
+    return [node];
+  });
+
+  const json = JSON.stringify({ "@context": "https://schema.org", "@graph": next });
+  // `</script>` inside a JSON string would close this block early.
+  return html.replace(
+    LD_BLOCK,
+    `<script type="application/ld+json">${json.replace(/<\//g, "<\\/")}</script>`,
+  );
 }
 
 /**
@@ -157,5 +245,5 @@ export function applyPageMeta(html: string, meta: PageMeta): string {
     );
   }
 
-  return out;
+  return applyJsonLd(out, meta, url);
 }

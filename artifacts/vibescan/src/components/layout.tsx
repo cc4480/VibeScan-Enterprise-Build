@@ -285,6 +285,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
             <nav className="flex items-center gap-5">
+              <Link href="/learn" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Docs
+              </Link>
+              {/* secscan.info is the reference half of the same product and
+                  links here throughout; without a link back the two domains
+                  look related only in one direction. */}
+              <a
+                href="https://secscan.info"
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Reference
+              </a>
               <Link href="/privacy" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 Privacy
               </Link>

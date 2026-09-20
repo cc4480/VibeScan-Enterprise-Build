@@ -124,3 +124,110 @@ describe("page metadata", () => {
     }
   });
 });
+
+/**
+ * The structured data used to describe the homepage on every URL, which
+ * contradicts the canonical tag sitting next to it. The graph is the more
+ * specific of the two claims, so it has to be the one that moves.
+ */
+const SHELL_WITH_LD = `<!doctype html><html><head>
+<title>SecScan</title>
+<meta name="description" content="Old." />
+<meta name="robots" content="index, follow" />
+<link rel="canonical" href="https://secscan.us/" />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    { "@type": "Organization", "@id": "https://secscan.us/#organization", "name": "SecScan" },
+    { "@type": "WebSite", "@id": "https://secscan.us/#website", "url": "https://secscan.us" },
+    { "@type": "WebPage", "@id": "https://secscan.us/#webpage", "url": "https://secscan.us/", "name": "Home" },
+    { "@type": "SoftwareApplication", "@id": "https://secscan.us/#app", "name": "SecScan" },
+    { "@type": "HowTo", "name": "How to scan" },
+    { "@type": "FAQPage", "mainEntity": [] }
+  ]
+}
+</script>
+</head><body></body></html>`;
+
+function graphOf(html: string): Record<string, unknown>[] {
+  const m = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/i.exec(html);
+  if (!m?.[1]) throw new Error("no JSON-LD block");
+  return (JSON.parse(m[1]) as { "@graph": Record<string, unknown>[] })["@graph"];
+}
+
+describe("structured data per route", () => {
+  it("points the WebPage node at the route being served, not the homepage", () => {
+    const out = applyPageMeta(SHELL_WITH_LD, metaForPath("/learn")!);
+    const page = graphOf(out).find((n) => n["@type"] === "WebPage")!;
+
+    expect(page["url"]).toBe("https://secscan.us/learn");
+    expect(page["@id"]).toBe("https://secscan.us/learn#webpage");
+    expect(page["name"]).toBe("Security Documentation — SecScan");
+  });
+
+  it("agrees with the canonical tag on the same page", () => {
+    const out = applyPageMeta(SHELL_WITH_LD, metaForPath("/bot")!);
+    const canonical = /<link rel="canonical" href="([^"]+)"/.exec(out)?.[1];
+    const page = graphOf(out).find((n) => n["@type"] === "WebPage")!;
+
+    expect(page["url"]).toBe(canonical);
+  });
+
+  it("builds a breadcrumb trail from home to the page", () => {
+    const out = applyPageMeta(SHELL_WITH_LD, metaForPath("/learn")!);
+    const page = graphOf(out).find((n) => n["@type"] === "WebPage")!;
+    const crumbs = (page["breadcrumb"] as { itemListElement: { name: string; item: string }[] })
+      .itemListElement;
+
+    expect(crumbs.map((c) => c.name)).toEqual(["Home", "Security documentation"]);
+    expect(crumbs[1]!.item).toBe("https://secscan.us/learn");
+  });
+
+  it("keeps the site-wide nodes, which are true on every page", () => {
+    const types = graphOf(applyPageMeta(SHELL_WITH_LD, metaForPath("/terms")!)).map((n) => n["@type"]);
+    expect(types).toContain("Organization");
+    expect(types).toContain("WebSite");
+  });
+
+  it("drops the homepage's pitch from pages that are not the homepage", () => {
+    // An Offer and a FAQ about pricing do not belong on the privacy policy.
+    const types = graphOf(applyPageMeta(SHELL_WITH_LD, metaForPath("/privacy")!)).map((n) => n["@type"]);
+    expect(types).not.toContain("FAQPage");
+    expect(types).not.toContain("HowTo");
+    expect(types).not.toContain("SoftwareApplication");
+  });
+
+  it("emits no structured data at all on a noindex page", () => {
+    // Marking a page noindex and then describing it in rich detail is a
+    // contradiction; the private routes should simply say nothing.
+    const out = applyPageMeta(SHELL_WITH_LD, metaForPath("/dashboard")!);
+    expect(out).not.toContain("application/ld+json");
+  });
+
+  it("serves the page unchanged rather than throwing on malformed JSON-LD", () => {
+    const broken = SHELL_WITH_LD.replace('"@context": "https://schema.org",', '"@context": ,,,');
+    expect(() => applyPageMeta(broken, metaForPath("/learn")!)).not.toThrow();
+    // The head rewrite still has to happen even when the graph cannot be read.
+    expect(applyPageMeta(broken, metaForPath("/learn")!)).toContain(
+      '<link rel="canonical" href="https://secscan.us/learn" />',
+    );
+  });
+
+  it("escapes a closing script tag it writes into the graph itself", () => {
+    // The title and description are written into the JSON-LD as node values.
+    // Serialising "</script>" raw would end the block early and leave the rest
+    // of the graph as markup in the document.
+    const out = applyPageMeta(SHELL_WITH_LD, {
+      path: "/learn",
+      title: "</script><img src=x onerror=alert(1)>",
+      description: "Also </script> here.",
+    });
+
+    expect(out).not.toContain("</script><img");
+    // Still exactly one JSON-LD block, still parseable.
+    expect(out.match(/application\/ld\+json/g)).toHaveLength(1);
+    const page = graphOf(out).find((n) => n["@type"] === "WebPage")!;
+    expect(page["name"]).toBe("</script><img src=x onerror=alert(1)>");
+  });
+});

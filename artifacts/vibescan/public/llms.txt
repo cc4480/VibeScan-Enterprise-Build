@@ -2,6 +2,13 @@
 
 > Automated black-box security scanning for web applications — built for vibe coders who ship fast.
 
+## Disambiguation
+
+"SecScan" is a name shared by several unrelated projects. This one is the hosted web
+application security scanner at https://secscan.us, with its reference documentation at
+https://secscan.info. It is not the Go secret-scanning CLI of the same name, not
+secscan.io, and not any of the similarly named GitHub projects.
+
 SecScan performs automated black-box security scans on web applications you own or are
 authorised to test. Paste a URL and receive a plain-English security report powered by AI,
 usually within ten minutes, with no installs or agents required.
@@ -101,7 +108,20 @@ Components: known-CVE matching and end-of-life version detection
 - Auth: email and password with verified email; anonymous scanning is also supported
 - No agents, browser extensions or code changes required
 
+## Reference documentation
+
+Full documentation lives on https://secscan.info, which has its own llms.txt at
+https://secscan.info/llms.txt:
+
+- https://secscan.info/coverage — every check, by module, with severities
+- https://secscan.info/how-it-works — how a scan proceeds, and the verification gate
+- https://secscan.info/reports — how to read a report
+- https://secscan.info/monitoring — continuous monitoring and CVE matching
+- https://secscan.info/false-positives — false-positive methodology
+- https://secscan.info/guides — remediation guide per finding
+
 ## Contact
 
 Website: https://secscan.us
+Documentation: https://secscan.info
 Reports email: reports@secscan.us

@@ -106,7 +106,7 @@ function jsonDest(argv: string[]): string | null {
  * be pointed at somebody else's site by a typo or a stray argument. Extending
  * this means editing the list, deliberately.
  */
-const OWNED_DOMAINS = new Set(["seclayer.app", "secscan.us"]);
+const OWNED_DOMAINS = new Set(["seclayer.app", "secscan.us", "secscan.info"]);
 
 function assertOwned(list: string[]): void {
   const foreign = list.filter((u) => {
