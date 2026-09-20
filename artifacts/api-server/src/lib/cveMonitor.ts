@@ -32,7 +32,9 @@ const TECH_KEYWORDS: Record<string, string[]> = {
   "Django":               ["django"],
   "Ruby on Rails":        ["ruby on rails"],
   "Laravel":              ["laravel"],
-  "Express":              ["expressjs", "express.js"],
+  // Keyed on what techFingerprint.ts actually emits, which is "Express.js".
+  // As "Express" this entry could never be hit: the lookup below is exact.
+  "Express.js":           ["expressjs", "express.js"],
   "Vue.js":               ["vue.js", "vuejs"],
   "Angular":              ["angular"],
   "Next.js":              ["next.js", "vercel next"],
@@ -149,8 +151,31 @@ export async function fetchRecentCves(startDate: Date, endDate: Date): Promise<N
 }
 
 /**
+ * The bare technology name, with any trailing version removed.
+ *
+ * scanner.ts enriches detected technologies with versions for display —
+ * its own comment reads `"Nginx" → "Nginx 1.18.0"` — while TECH_KEYWORDS is
+ * keyed on the bare name and the lookup below is exact. So every technology
+ * whose version the scanner managed to detect silently fell out of CVE
+ * matching, and the seven that get enriched (Angular, Apache, IIS, LiteSpeed,
+ * Nginx, OpenResty, PHP) are exactly the ones this feature exists for. Worse,
+ * version disclosure is most likely on old unpatched servers, so the feature
+ * failed hardest on the targets that needed it most.
+ *
+ * Only a trailing version-shaped token is stripped. Splitting on the first
+ * space would break "Ruby on Rails", "AWS CloudFront" and "Google Cloud / GFE".
+ */
+function bareTechName(tech: string): string {
+  return tech.replace(/\s+v?\d[\w.-]*$/i, "").trim();
+}
+
+/**
  * Given a list of detected technologies and a list of recent CVEs,
  * returns the CVEs that are relevant to those technologies.
+ *
+ * Matching is by keyword against the CVE's prose description and carries no
+ * version awareness: a hit means "a CVE mentioning this technology was
+ * published", not "your version is affected". Callers must present it that way.
  */
 export function matchCvesToTechnologies(
   technologies: string[],
@@ -159,7 +184,9 @@ export function matchCvesToTechnologies(
   const results: Array<{ cve: NvdCve; matchedTech: string }> = [];
 
   for (const tech of technologies) {
-    const keywords = TECH_KEYWORDS[tech];
+    // Looked up bare; reported as given, so the alert can still say which
+    // version was detected.
+    const keywords = TECH_KEYWORDS[bareTechName(tech)];
     if (!keywords || keywords.length === 0) continue;
 
     for (const cve of cves) {
