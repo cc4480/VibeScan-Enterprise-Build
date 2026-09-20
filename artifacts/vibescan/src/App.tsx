@@ -17,6 +17,7 @@ import SharedReport from "@/pages/shared-report";
 import LearnPage from "@/pages/learn";
 import SettingsPage from "@/pages/settings";
 import DomainsPage from "@/pages/domains";
+import FeedbackPage from "@/pages/feedback";
 import LegalPage from "@/pages/legal";
 import BotPage from "@/pages/bot";
 import SignInPage from "@/pages/sign-in";
@@ -200,6 +201,7 @@ function Router() {
             <Route path="/bot" component={BotPage} />
             <Route path="/privacy">{() => <LegalPage kind="privacy" />}</Route>
             <Route path="/terms">{() => <LegalPage kind="terms" />}</Route>
+            <Route path="/feedback" component={FeedbackPage} />
 
             <Route path="/dashboard">{() => <ProtectedRoute><DashboardPage /></ProtectedRoute>}</Route>
             <Route path="/scan">{() => <ProtectedRoute><ScanFormPage /></ProtectedRoute>}</Route>

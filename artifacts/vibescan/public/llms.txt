@@ -45,7 +45,7 @@ every coding session.
 
 ## Pricing
 
-Every account gets 5 free scans to try the platform. Paid scan packs are coming soon; there is
+Every account gets 2 free scans to try the platform. Paid scan packs are coming soon; there is
 no checkout yet.
 
 ## Security checks performed

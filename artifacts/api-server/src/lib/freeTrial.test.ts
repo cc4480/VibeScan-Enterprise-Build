@@ -97,13 +97,13 @@ describe("trialScansUsedBy", () => {
 
 describe("trialScansExhausted", () => {
   it("allows a user below the limit", async () => {
-    dbState.rows = [{ n: 4 }];
+    dbState.rows = [{ n: 1 }];
     const { trialScansExhausted } = await load();
     expect(await trialScansExhausted("user-1")).toBe(false);
   });
 
-  it("refuses the scan that would be the sixth", async () => {
-    dbState.rows = [{ n: 5 }];
+  it("refuses the scan that would be the third", async () => {
+    dbState.rows = [{ n: 2 }];
     const { trialScansExhausted } = await load();
     expect(await trialScansExhausted("user-1")).toBe(true);
   });

@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Menu, X, Plus, BookOpen, Bell, Settings, LogOut, LogIn, ShieldCheck} from "lucide-react";
+import { LayoutDashboard, Menu, X, Plus, BookOpen, Bell, Settings, LogOut, LogIn, ShieldCheck, MessageSquare} from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGetCurrentAuthUser } from "@workspace/api-client-react";
@@ -187,6 +187,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
             >
               <Settings className="w-3.5 h-3.5" /> Settings
             </Link>
+            <Link
+              href="/feedback"
+              className={cn(
+                "text-sm font-medium transition-colors hover:text-foreground flex items-center gap-1.5",
+                location === "/feedback" ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              <MessageSquare className="w-3.5 h-3.5" /> Feedback
+            </Link>
 
             <div className="w-px h-6 bg-border" />
 
@@ -258,6 +267,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
               className="px-4 py-2 text-foreground font-medium rounded-lg hover:bg-secondary flex items-center gap-2"
             >
               <Settings className="w-4 h-4" /> Settings
+            </Link>
+            <Link
+              href="/feedback"
+              onClick={() => setMobileMenuOpen(false)}
+              className="px-4 py-2 text-foreground font-medium rounded-lg hover:bg-secondary flex items-center gap-2"
+            >
+              <MessageSquare className="w-4 h-4" /> Feedback
             </Link>
             <div className="h-px bg-border mx-4" />
             <AccountNav mobile onNavigate={() => setMobileMenuOpen(false)} />

@@ -16,7 +16,7 @@ import { and, count, eq } from "drizzle-orm";
  * on-demand rescan is a scan somebody asked for, so leaving those ungated made
  * monitoring an unlimited-scan bypass around the cap.
  */
-export const FREE_TRIAL_SCAN_LIMIT = Number(process.env["FREE_TRIAL_SCAN_LIMIT"] ?? 5);
+export const FREE_TRIAL_SCAN_LIMIT = Number(process.env["FREE_TRIAL_SCAN_LIMIT"] ?? 2);
 
 export const TRIAL_LIMIT_MESSAGE =
   `You've used all ${FREE_TRIAL_SCAN_LIMIT} free scans. Paid scans are ` +
@@ -36,8 +36,8 @@ export const TRIAL_LIMIT_CODE = "trial_exhausted";
  * Monitor rows are excluded deliberately. The scheduler rescans on its own
  * timetable — as often as every 3 days at grade F, plus a daily CVE sweep — so
  * counting those would spend a subscriber's allowance on scans they never asked
- * for and then lock them out with a message claiming they used all five
- * themselves. `scans.origin` is what separates the two.
+ * for and then lock them out with a message claiming they used their free
+ * scans themselves. `scans.origin` is what separates the two.
  */
 export async function trialScansUsedBy(userId: string): Promise<number> {
   const [row] = await db

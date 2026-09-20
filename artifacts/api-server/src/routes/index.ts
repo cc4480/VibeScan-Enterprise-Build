@@ -15,6 +15,7 @@ import oobRouter from "./oob";
 import domainVerificationRouter from "./domainVerification";
 import emailPreferencesRouter from "./emailPreferences";
 import purchaseIntentRouter from "./purchaseIntent";
+import feedbackRouter from "./feedback";
 
 const router: IRouter = Router();
 
@@ -34,5 +35,6 @@ router.use(oobRouter);
 router.use(domainVerificationRouter);
 router.use(emailPreferencesRouter);
 router.use(purchaseIntentRouter);
+router.use(feedbackRouter);
 
 export default router;

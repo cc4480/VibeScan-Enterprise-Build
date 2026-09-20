@@ -110,8 +110,8 @@ export const creditsTable = pgTable("credits", {
  * Someone who ran out of free scans and said they would pay.
  *
  * There is no checkout yet, so the free-scan cap is currently a wall with
- * nothing behind it: a person who likes the product enough to spend all five
- * scans hits a message telling them to come back later, and leaves without
+ * nothing behind it: a person who likes the product enough to spend every free
+ * scan hits a message telling them to come back later, and leaves without
  * trace. This table is what turns that dead end into the one measurement worth
  * having before building billing — how many people actually wanted to pay.
  *
@@ -130,6 +130,31 @@ export const purchaseIntentsTable = pgTable("purchase_intents", {
 });
 
 export type PurchaseIntent = typeof purchaseIntentsTable.$inferSelect;
+
+/**
+ * What someone thought after actually using the product.
+ *
+ * The free-scan cap exists to get this: people scanning apps they own and
+ * telling us what worked. `rating` is a coarse 1-5 self-report, not a metric
+ * anything downstream computes on — it is here so a page of feedback can be
+ * skimmed by how positive it was without opening each row. `context` records
+ * where in the app the form was opened from (a report, the dashboard, the
+ * cap) because "this is confusing" means something different on each.
+ *
+ * userId is nullable on purpose: an anonymous scan is still a real user with a
+ * real opinion, and account creation must never be the price of being heard.
+ */
+export const feedbackTable = pgTable("feedback", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: text("user_id"),
+  email: text("email"),
+  message: text("message").notNull(),
+  rating: integer("rating"),
+  context: text("context"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Feedback = typeof feedbackTable.$inferSelect;
 
 /**
  * Proof that a user controls a domain, which is what unlocks active offensive
