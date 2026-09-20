@@ -1139,6 +1139,74 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
   // Individual checks from inside runAllProbes, already logged as they failed.
   unrunFamilies.push(...innerProbeFailures);
 
+  // ── API surface testing ────────────────────────────────────────────────────
+  // Discovery reads the JS bundles, and the probes spend a few requests per
+  // endpoint. On an API-first SPA this is the only path that finds anything at
+  // all — the HTML carries no forms, links or parameters to collect.
+  //
+  // Each stage used to swallow its own failure with `.catch(() => [])`, the
+  // same defect the coverage note above exists to catch on the passive probes
+  // — a thrown error and a clean "nothing found" produced byte-identical
+  // output. SSRF is the one that matters most here: its whole method is a
+  // negative result ("no callback arrived"), so a failed OOB registration or a
+  // network fault looked exactly like a target that is not vulnerable.
+  if (allowActiveProbes) {
+    const origin = new URL(finalUrl).origin;
+    const endpoints = await collectApiSurface(origin, html).catch((err: unknown) => {
+      unrunFamilies.push("API surface discovery");
+      console.error("[scan] API surface discovery failed", err);
+      return [] as ApiEndpoint[];
+    });
+
+    const apiFindings = await (async () => {
+      if (endpoints.length === 0) return [] as ScanVulnerability[];
+      return runApiProbes({
+        endpoints,
+        ...(auth?.credentials ? { credentials: auth.credentials } : {}),
+        ...(auth?.secondary ? { secondary: auth.secondary } : {}),
+      });
+    })().catch((err: unknown) => {
+      unrunFamilies.push("API endpoint testing (auth, injection, IDOR, mass assignment)");
+      console.error("[scan] API probes failed", err);
+      return [] as ScanVulnerability[];
+    });
+    vulnerabilities.push(...apiFindings);
+
+    // ── A10: SSRF via the out-of-band collector ─────────────────────────────
+    // Runs only when a public callback host is configured, since the target's
+    // server is what has to reach it. Reuses the discovered endpoints.
+    const ssrfFindings = await runSsrfProbes({
+      scanId,
+      targetUrl: finalUrl,
+      endpoints,
+      ...(auth?.credentials ? { credentials: auth.credentials } : {}),
+    }).catch((err: unknown) => {
+      unrunFamilies.push("SSRF (out-of-band callback)");
+      console.error("[scan] SSRF probe failed", err);
+      return [] as ScanVulnerability[];
+    });
+    vulnerabilities.push(...ssrfFindings);
+  }
+
+  // ── A01: broken access control ─────────────────────────────────────────────
+  // Runs last because it needs the crawl's output: the URLs the signed-in
+  // account actually reached are the ones worth asking a second account for.
+  // Requires both accounts — one identity cannot demonstrate an authorisation
+  // boundary between users.
+  if (allowActiveProbes && auth?.secondary) {
+    const candidateUrls = [finalUrl, ...crawlResult.pagesVisited];
+    const accessFindings = await runAccessControlProbes({
+      urls: candidateUrls,
+      primary: auth.credentials,
+      secondary: auth.secondary,
+    }).catch((err: unknown) => {
+      unrunFamilies.push("cross-account access control (IDOR)");
+      console.error("[scan] access control probes failed", err);
+      return [] as ScanVulnerability[];
+    });
+    vulnerabilities.push(...accessFindings);
+  }
+
   if (unrunFamilies.length > 0) {
     vulnerabilities.push(vuln({
       name: `${unrunFamilies.length} check group${unrunFamilies.length > 1 ? "s" : ""} could not be completed`,
@@ -1154,51 +1222,6 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
         "Re-run the scan. If the same group fails repeatedly, the target may be rate-limiting or blocking the scanner, or the check has a genuine fault worth reporting to us.",
       confidence: 100,
     }));
-  }
-
-  // ── API surface testing ────────────────────────────────────────────────────
-  // Discovery reads the JS bundles, and the probes spend a few requests per
-  // endpoint. On an API-first SPA this is the only path that finds anything at
-  // all — the HTML carries no forms, links or parameters to collect.
-  if (allowActiveProbes) {
-    const origin = new URL(finalUrl).origin;
-    const endpoints = await collectApiSurface(origin, html).catch(() => [] as ApiEndpoint[]);
-
-    const apiFindings = await (async () => {
-      if (endpoints.length === 0) return [] as ScanVulnerability[];
-      return runApiProbes({
-        endpoints,
-        ...(auth?.credentials ? { credentials: auth.credentials } : {}),
-        ...(auth?.secondary ? { secondary: auth.secondary } : {}),
-      });
-    })().catch(() => [] as ScanVulnerability[]);
-    vulnerabilities.push(...apiFindings);
-
-    // ── A10: SSRF via the out-of-band collector ─────────────────────────────
-    // Runs only when a public callback host is configured, since the target's
-    // server is what has to reach it. Reuses the discovered endpoints.
-    const ssrfFindings = await runSsrfProbes({
-      scanId,
-      targetUrl: finalUrl,
-      endpoints,
-      ...(auth?.credentials ? { credentials: auth.credentials } : {}),
-    }).catch(() => [] as ScanVulnerability[]);
-    vulnerabilities.push(...ssrfFindings);
-  }
-
-  // ── A01: broken access control ─────────────────────────────────────────────
-  // Runs last because it needs the crawl's output: the URLs the signed-in
-  // account actually reached are the ones worth asking a second account for.
-  // Requires both accounts — one identity cannot demonstrate an authorisation
-  // boundary between users.
-  if (allowActiveProbes && auth?.secondary) {
-    const candidateUrls = [finalUrl, ...crawlResult.pagesVisited];
-    const accessFindings = await runAccessControlProbes({
-      urls: candidateUrls,
-      primary: auth.credentials,
-      secondary: auth.secondary,
-    }).catch(() => [] as ScanVulnerability[]);
-    vulnerabilities.push(...accessFindings);
   }
 
   // Two rate-limit checks can fire on one scan: a header heuristic in
