@@ -78,17 +78,41 @@ import { APP_ORIGIN } from "./appOrigin";
  * Confirmed findings get +10 confidence; contradicted ones get -20.
  */
 
-async function processScanJob(job: ScanJob): Promise<void> {
+/**
+ * Exported for tests. The guards below decide whether a scan runs at all and
+ * whether a billed AI call is made, and reaching them through `startWorker`
+ * would mean standing up pg-boss to assert on a branch that is pure logic.
+ */
+export async function processScanJob(job: ScanJob): Promise<void> {
   const { scanId, userId, targetUrl, tier, monitorSubscriptionId } = job.data;
   const log = logger.child({ scanId, targetUrl, tier, monitorSubscriptionId });
 
   log.info("Scan job started");
 
   // ── 1. Mark as scanning ───────────────────────────────────────────────
-  await db
+  //
+  // The returned rows are an existence check that costs nothing: deleting an
+  // account removes its scans (routes/account.ts) before the user row, so a
+  // scan id that no longer resolves means the owner deleted the account while
+  // this job sat in the queue. Without this the job ran the full scan and then
+  // paid for an AI call, only to fail at the report insert on reports.scan_id's
+  // foreign key — work and money spent on a report that cannot be stored and
+  // nobody can ever read. Found by a concurrency test that deleted its accounts
+  // seconds after queueing: 18 of 20 jobs reached DeepSeek before dying here.
+  //
+  // Safe as a guard because the scan row is committed before the job is
+  // enqueued (routes/scans.ts), so a missing row is always a deletion and never
+  // a job that overtook its own insert.
+  const scanning = await db
     .update(scansTable)
     .set({ status: "scanning", startedAt: new Date() })
-    .where(eq(scansTable.id, scanId));
+    .where(eq(scansTable.id, scanId))
+    .returning({ id: scansTable.id });
+
+  if (scanning.length === 0) {
+    log.info("Scan row no longer exists — owner deleted their account; abandoning job before any work");
+    return;
+  }
 
   // ── 2. Run header scan + SSL Labs check in parallel ───────────────────
   log.info("Starting HTTP scan, SSL Labs check, and reconnaissance in parallel");
@@ -311,10 +335,25 @@ async function processScanJob(job: ScanJob): Promise<void> {
   }
 
   // ── 3. Mark as analyzing (AI phase) ──────────────────────────────────
-  await db
+  //
+  // Checked again for the same reason as step 1, because this is the last
+  // moment before the only step that costs real money. A scan running when its
+  // owner deletes the account gets this far with the deletion already done, and
+  // the AI call would be billed for a report the insert below cannot store.
+  // The window between here and that insert is still open — an account deleted
+  // during the AI call itself lands in the catch at step 6, which fails the
+  // scan cleanly rather than crashing — but that window is seconds wide instead
+  // of the whole scan.
+  const analyzing = await db
     .update(scansTable)
     .set({ status: "analyzing" })
-    .where(eq(scansTable.id, scanId));
+    .where(eq(scansTable.id, scanId))
+    .returning({ id: scansTable.id });
+
+  if (analyzing.length === 0) {
+    log.info("Scan row no longer exists — owner deleted their account; abandoning job before the AI call");
+    return;
+  }
 
   // ── 4. AI analysis ───────────────────────────────────────────────────
   let aiAnalysis = null;
