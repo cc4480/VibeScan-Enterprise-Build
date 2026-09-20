@@ -168,4 +168,68 @@ describe("runSupabaseProbes — RLS checks via REST API", () => {
     expect(rlsFinding).toBeDefined();
     expect(rlsFinding.cweId).toBeTruthy();
   });
+
+  /**
+   * Verified live against a real, freshly-created Supabase project
+   * (2026-09-20), not assumed: GET /rest/v1/ with an anon key now returns
+   * {"message":"Invalid API key","hint":"Only the `service_role` API key can
+   * be used for this endpoint."} on current Supabase, where it used to return
+   * the OpenAPI-shaped schema this probe enumerates tables from. That endpoint
+   * is the ONLY thing enumerateSupabaseTables() reads, so this is not a fixture
+   * edge case — it is what every current Supabase project does, and it made
+   * this exact CVE undetectable until the table name was also read out of the
+   * bundle's own `.from()` calls.
+   */
+  it("finds the open table from .from() calls when REST enumeration is locked to service_role", async () => {
+    mockFetch((url) => {
+      if (url.includes("?select=")) {
+        return jsonResponse([{ id: 1, content: "exposed row" }], 200);
+      }
+      if (url.includes("/rest/v1/notes") && !url.includes("?")) {
+        return jsonResponse({ message: "Unauthorized" }, 401); // write: protected
+      }
+      // The real, current Supabase response for an anon key at this endpoint.
+      return jsonResponse(
+        { message: "Invalid API key", hint: "Only the `service_role` API key can be used for this endpoint." },
+        401,
+      );
+    });
+
+    const html = `<script>
+      const supabase = createClient('https://abcdefgh.supabase.co', '${ANON_KEY}');
+      async function loadNotes() {
+        const { data } = await supabase.from("notes").select("*");
+        return data;
+      }
+    </script>`;
+
+    const findings: any[] = [];
+    await runSupabaseProbes(html, "deep", findings);
+
+    const rlsFinding = findings.find(
+      (f) => f.severity === "critical" && /readable.*auth|CVE-2025-48757/i.test(f.name),
+    );
+    expect(rlsFinding).toBeDefined();
+    expect(rlsFinding.evidence).toContain("notes");
+
+    // Must not have fallen back to the harmless "detected but not enumerable"
+    // note — that is exactly the silent miss this test exists to catch.
+    const infoOnly = findings.find((f) => f.name === "Supabase Backend Detected");
+    expect(infoOnly).toBeUndefined();
+  });
+
+  it("still reports the informational finding when neither REST enumeration nor .from() calls find a table name", async () => {
+    mockFetch(() => jsonResponse({ message: "Invalid API key" }, 401));
+
+    // No .from(...) call anywhere in this bundle — genuinely nothing to test.
+    const html = `<script>
+      const supabase = createClient('https://abcdefgh.supabase.co', '${ANON_KEY}');
+    </script>`;
+
+    const findings: any[] = [];
+    await runSupabaseProbes(html, "deep", findings);
+
+    expect(findings.find((f) => f.name === "Supabase Backend Detected")).toBeDefined();
+    expect(findings.find((f) => f.severity === "critical")).toBeUndefined();
+  });
 });

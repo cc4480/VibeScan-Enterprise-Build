@@ -172,6 +172,39 @@ async function enumerateSupabaseTables(
   return [];
 }
 
+/**
+ * Table names read directly out of the page's own JavaScript, as a fallback
+ * when the PostgREST root spec cannot be read.
+ *
+ * Supabase now restricts `GET /rest/v1/` — the OpenAPI-shaped schema listing
+ * `enumerateSupabaseTables` depends on — to the service_role key. An anon key,
+ * which is what ships in every frontend, gets `{"message":"Invalid API key",
+ * "hint":"Only the \`service_role\` API key can be used for this endpoint."}`.
+ * Verified live against a fresh project, not assumed: enumeration returns
+ * empty on every current Supabase project, so this was the only path to
+ * CVE-2025-48757 and it silently stopped working. The scan degraded to an INFO
+ * "Supabase Backend Detected" note while a table with real, unauthenticated
+ * read access sat one HTTP request away, undetected.
+ *
+ * The supabase-js client calls `.from("table_name")` for every table it
+ * touches, and that call has to be inlined in the shipped JS bundle the same
+ * way the URL and anon key are — there is no way to call it without the
+ * literal name in source. This is not a guess at common table names; it is
+ * reading the same bundle the anon key itself was extracted from for the
+ * tables the app's own code actually names.
+ */
+function extractTableNamesFromContent(content: string): string[] {
+  const names = new Set<string>();
+  // .from("table"), .from('table'), .from(`table`) — optional TS generic
+  // between .from and the parenthesis, e.g. .from<Database>("table").
+  const rx = /\.from\s*(?:<[^>()]*>)?\s*\(\s*["'`]([a-zA-Z_][a-zA-Z0-9_]*)["'`]\s*\)/g;
+  let m: RegExpExecArray | null;
+  while ((m = rx.exec(content)) !== null) {
+    if (m[1]) names.add(m[1]);
+  }
+  return [...names].slice(0, MAX_TABLES_TO_TEST);
+}
+
 type ReadResult = "open" | "empty" | "protected" | "error";
 
 async function testTableRead(
@@ -342,11 +375,18 @@ export async function runSupabaseProbes(
 
   const { projectRef, anonKey, baseUrl } = config;
 
-  // Enumerate tables
-  const tables = await enumerateSupabaseTables(baseUrl, anonKey);
+  // Enumerate tables. The REST schema listing is the more complete source
+  // when it works, but Supabase now restricts it to service_role on new
+  // projects (see extractTableNamesFromContent), so the bundle's own .from()
+  // calls fill the gap rather than being an either/or with it.
+  const specTables = await enumerateSupabaseTables(baseUrl, anonKey);
+  const bundleTables = extractTableNamesFromContent(content);
+  const tables = [...new Set([...specTables, ...bundleTables])].slice(0, MAX_TABLES_TO_TEST);
 
   if (tables.length === 0) {
-    // Supabase detected but API spec not accessible — still informational
+    // Supabase detected but no table name could be found by either route —
+    // still informational, not a finding about the tables themselves, because
+    // there is nothing here to test read access against.
     findings.push(vuln({
       name: "Supabase Backend Detected",
       severity: "info",
@@ -354,7 +394,8 @@ export async function runSupabaseProbes(
       description:
         `Supabase is in use (project: ${projectRef}). The anon key is present in ` +
         "client-side JavaScript — this is expected and not a vulnerability. " +
-        "No tables were enumerable via the REST API (PostgREST schema may be restricted). " +
+        "No table names were found, either via the REST API schema (now restricted " +
+        "to the service_role key on most projects) or in the page's own JavaScript. " +
         "Verify Row Level Security is enabled on all tables in your Supabase dashboard.",
       evidence: `Supabase URL: ${baseUrl}\nAnon key detected (public by design)`,
       solution:

@@ -31,7 +31,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `crawler-data.ts` | 8 | 152 | 26 | direct |
 | `apiProbe.ts` | 7 | 644 | 31 | direct |
 | `crawler.ts` | 7 | 778 | 42 | direct |
-| `supabase-probes.ts` | 7 | 548 | 5 | direct |
+| `supabase-probes.ts` | 7 | 589 | 7 | direct |
 | `jwtAnalysis.ts` | 6 | 262 | 9 | direct |
 | `cveCheck.ts` | 4 | 594 | 3 | direct |
 | `accessControlProbe.ts` | 3 | 377 | 18 | direct |
@@ -511,7 +511,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `supabase-probes.ts`
 
-*7 findings · 548 lines · 5 tests.*
+*7 findings · 589 lines · 7 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
