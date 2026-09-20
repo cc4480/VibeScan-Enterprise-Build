@@ -493,8 +493,26 @@ export async function checkHttpsRedirect(targetUrl: string): Promise<ScanVulnera
   // Follow redirects automatically. Node.js fetch with redirect:"manual" returns
   // an opaque redirect (status 0, no headers) so we can't read the Location header.
   // Using redirect:"follow" and inspecting the final URL is simpler and reliable.
-  const result = await safeGet(`http://${hostname}/`, { redirect: "follow" }, 8_000);
-  if (!result) return []; // network error — don't false-positive
+  // Retried once, because a single miss here is silent and consequential. Under
+  // the concurrency of a full scan this request competes with every other probe
+  // hitting the same host, and one timeout used to mean the finding simply
+  // vanished from the report — verified on archive.org, which genuinely serves
+  // plain HTTP with no redirect, reported it on 2026-09-08, and then did not on
+  // the 2026-09-19 re-run while the same check called in isolation reported it
+  // three times out of three.
+  //
+  // Still fails open if BOTH attempts fail: a network error is not evidence that
+  // a redirect is missing, and claiming one would be a false positive. The
+  // difference is that a transient blip no longer costs a true finding, and a
+  // genuine failure to check now surfaces in the scan-coverage note rather than
+  // reading as "checked, fine".
+  let result = await safeGet(`http://${hostname}/`, { redirect: "follow" }, 8_000);
+  if (!result) {
+    result = await safeGet(`http://${hostname}/`, { redirect: "follow" }, 8_000);
+  }
+  if (!result) {
+    throw new Error(`could not reach http://${hostname}/ to test the HTTPS redirect`);
+  }
 
   // If the final URL landed on HTTPS, the redirect chain is in place — all good.
   if (result.finalUrl.startsWith("https://")) return [];
@@ -897,34 +915,52 @@ export async function runAllProbes(
   targetUrl: string,
   html: string,
   allowActive: boolean,
+  /**
+   * Called with the name of each check that threw instead of answering.
+   *
+   * Without this, a check that failed was dropped by the `fulfilled` filter
+   * below and the scan reported nothing from it — identical, to the reader and
+   * to the grade, to a check that ran and found the site clean. The caller uses
+   * these names to say plainly which checks did not complete, rather than
+   * implying they passed. Optional so existing callers and tests are unaffected.
+   */
+  onFailure?: (checkName: string, reason: unknown) => void,
 ): Promise<ScanVulnerability[]> {
-  const passive = [
-    checkSensitiveFiles(targetUrl),
-    checkRobotsTxt(targetUrl),
-    checkSRI(html, targetUrl),
-    checkErrorDisclosure(targetUrl),
-    checkHttpsRedirect(targetUrl),
+  const passive: Array<[string, Promise<ScanVulnerability[]>]> = [
+    ["sensitive file exposure", checkSensitiveFiles(targetUrl)],
+    ["robots.txt disclosure", checkRobotsTxt(targetUrl)],
+    ["subresource integrity", checkSRI(html, targetUrl)],
+    ["verbose error pages", checkErrorDisclosure(targetUrl)],
+    ["HTTP to HTTPS redirect", checkHttpsRedirect(targetUrl)],
     // Header heuristic only — the behavioural burst lives in apiProbe.ts and
     // is gated there.
-    checkRateLimiting(targetUrl),
-    checkClickjacking(targetUrl),
-    checkDirectoryListing(targetUrl),
-    checkSecurityTxt(targetUrl),
+    ["rate-limit headers", checkRateLimiting(targetUrl)],
+    ["clickjacking headers", checkClickjacking(targetUrl)],
+    ["directory listing", checkDirectoryListing(targetUrl)],
+    ["security.txt", checkSecurityTxt(targetUrl)],
   ];
 
-  const active = allowActive
+  const active: Array<[string, Promise<ScanVulnerability[]>]> = allowActive
     ? [
-        checkHttpMethods(targetUrl),
-        checkActiveCors(targetUrl),
-        checkOpenRedirect(targetUrl),
+        ["HTTP methods", checkHttpMethods(targetUrl)],
+        ["active CORS", checkActiveCors(targetUrl)],
+        ["open redirect", checkOpenRedirect(targetUrl)],
         // Reads rows out of the target's Supabase instance.
-        checkSupabaseRLS(html),
+        ["Supabase RLS", checkSupabaseRLS(html)],
       ]
     : [];
 
-  const settled = await Promise.allSettled([...passive, ...active]);
+  const all = [...passive, ...active];
+  const settled = await Promise.allSettled(all.map(([, p]) => p));
 
-  return settled
-    .filter((r): r is PromiseFulfilledResult<ScanVulnerability[]> => r.status === "fulfilled")
-    .flatMap((r) => r.value);
+  const findings: ScanVulnerability[] = [];
+  settled.forEach((r, i) => {
+    if (r.status === "fulfilled") {
+      findings.push(...r.value);
+      return;
+    }
+    onFailure?.(all[i]![0], r.reason);
+  });
+
+  return findings;
 }

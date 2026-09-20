@@ -1004,94 +1004,156 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
   // Run crawl separately to capture pagesVisited alongside findings
   const crawlPromise = crawlAndCheck(
     finalUrl, html, rawHeaders, initial.setCookies ?? [], CRAWL_PAGE_BUDGET,
-  ).catch(() => ({ vulnerabilities: [], pagesVisited: [], probedNotFound: [] }));
+  )
+    .then((r) => ({ ...r, failed: false }))
+    .catch((err: unknown) => {
+      // Same reasoning as the probe families below: a crawl that died is not a
+      // site without inner pages, and the report has to be able to tell them
+      // apart.
+      console.error("[scan] site crawl failed", err);
+      return { vulnerabilities: [], pagesVisited: [], probedNotFound: [], failed: true };
+    });
 
-  const probePromises: Promise<ScanVulnerability[]>[] = [
-    runAllProbes(finalUrl, html, allowActiveProbes).catch(() => []),
-    checkDnsSecurity(finalUrl).catch(() => []),
+  // Each family is named, and its failure is NOT swallowed here.
+  //
+  // Every entry used to carry its own `.catch(() => [])`, which meant
+  // Promise.allSettled never saw a rejection: a probe family that crashed
+  // returned an empty array and was indistinguishable, in the report and in the
+  // grade, from one that ran and found nothing. Seventeen families, seventeen
+  // ways for a scan to look clean because it broke.
+  //
+  // Failures are collected and reported once, below, as a Scan Coverage finding.
+  // That is deliberately not a vulnerability finding: a probe that could not run
+  // is not evidence of a weakness, and inventing one would be the false positive
+  // this exists to avoid. It says only "this was not checked", which is the one
+  // thing the old behaviour could never say.
+  // runAllProbes bundles thirteen checks behind one promise and filters its own
+  // rejections, so a single failed check inside it would not surface as a
+  // failure of the family. It reports them individually through this callback.
+  const innerProbeFailures: string[] = [];
+
+  const namedProbes: Array<{ family: string; run: Promise<ScanVulnerability[]> }> = [
+    {
+      family: "HTTP probes (headers, files, methods, CORS)",
+      run: runAllProbes(finalUrl, html, allowActiveProbes, (checkName, reason) => {
+        innerProbeFailures.push(checkName);
+        console.error(`[scan] check failed: ${checkName}`, reason);
+      }),
+    },
+    { family: "DNS and email authentication", run: checkDnsSecurity(finalUrl) },
     // Mail transport security: does the domain's MX actually offer STARTTLS,
     // and is its certificate valid. Invisible from the web tier — a site can
     // score perfectly on HTTPS while password-reset mail is relayed in
     // cleartext. SPF/DMARC say who MAY send; they say nothing about encryption.
-    (async () => {
-      try {
+    {
+      family: "mail transport security (STARTTLS, MX certificate)",
+      run: (async () => {
         const { hostname } = new URL(finalUrl);
         const { inspectMailTls, mailTlsFindings } = await import("./mailTls.js");
         return mailTlsFindings(await inspectMailTls(hostname));
-      } catch {
-        return [];
-      }
-    })(),
+      })(),
+    },
     // Structured data, social preview metadata and indexability. No network
     // calls — it reads the document already fetched. Presentation findings are
     // INFO (weight 0) so they cannot move the security grade; only genuine
     // exposure (internal hosts, http assets, foreign canonical) carries weight.
-    (async () => {
-      try {
+    {
+      family: "structured data and social metadata",
+      run: (async () => {
         const { structuredDataFindings } = await import("./structuredData.js");
         return structuredDataFindings(finalUrl, html, { status: initial.status, headers: rawHeaders });
-      } catch {
-        return [];
-      }
-    })(),
-    checkForKnownVulnerabilities(html, rawHeaders).catch(() => []),
+      })(),
+    },
+    { family: "known-CVE and end-of-life versions", run: checkForKnownVulnerabilities(html, rawHeaders) },
     // Passive JWT analysis — no extra HTTP requests
-    analyzeJwts(rawHeaders, html).catch(() => []),
+    { family: "JWT analysis", run: analyzeJwts(rawHeaders, html) },
     // Subdomain takeover — 1-2 DNS + HTTP checks
-    checkSubdomainTakeover(finalUrl).catch(() => []),
+    { family: "subdomain takeover", run: checkSubdomainTakeover(finalUrl) },
     // Source map exposure — checks JS bundles for .map files
-    checkSourceMaps(html, finalUrl).catch(() => []),
+    { family: "source map exposure", run: checkSourceMaps(html, finalUrl) },
     // Exposed API docs: Swagger/OpenAPI/ReDoc — fetching published doc paths
-    runApiDocsProbe(finalUrl).catch(() => []),
+    { family: "exposed API documentation", run: runApiDocsProbe(finalUrl) },
     // Next.js __NEXT_DATA__ prop leaks — read from the page already fetched
-    runNextjsProbe(finalUrl, html).catch(() => []),
+    { family: "Next.js __NEXT_DATA__ secrets", run: runNextjsProbe(finalUrl, html) },
   ];
 
   // Everything below reads data out of a backend the target owns, or fuzzes an
   // endpoint to see what it admits to. That is testing, not visiting.
   if (allowActiveProbes) {
-    probePromises.push(
+    namedProbes.push(
       // Vibe-stack database security — Supabase RLS + Firebase rules (both tiers)
-      checkVibeStackSecurity(html, finalUrl, tier).catch(() => []),
+      { family: "Supabase RLS and Firebase rules", run: checkVibeStackSecurity(html, finalUrl, tier) },
       // BaaS open-data checks not covered above: PocketBase, Appwrite
-      runBaasProbes(finalUrl, html).catch(() => []),
+      { family: "BaaS open data (PocketBase, Appwrite)", run: runBaasProbes(finalUrl, html) },
       // GraphQL introspection + field suggestions
-      runGraphqlProbe(finalUrl, html).catch(() => []),
+      { family: "GraphQL introspection", run: runGraphqlProbe(finalUrl, html) },
       // Public cloud storage listing: S3, GCS, Azure Blob
-      runStorageProbe(finalUrl, html).catch(() => []),
+      { family: "public cloud storage buckets", run: runStorageProbe(finalUrl, html) },
       // Real SCA, when the target publishes its own manifest. The path probe
       // already reports that /package.json is exposed; this reads the
       // dependency tree inside it and matches it against OSV, which is the
       // thing that finding tells the customer an attacker would do.
-      (async () => {
-        const { scaFromExposedManifest } = await import("./manifestSca.js");
-        return scaFromExposedManifest(new URL(finalUrl).origin);
-      })().catch(() => []),
+      {
+        family: "dependency CVEs from an exposed manifest",
+        run: (async () => {
+          const { scaFromExposedManifest } = await import("./manifestSca.js");
+          return scaFromExposedManifest(new URL(finalUrl).origin);
+        })(),
+      },
     );
   }
 
-  probePromises.push(scanJavaScriptForSecrets(html, finalUrl).catch(() => []));
+  namedProbes.push({ family: "JavaScript secret scanning", run: scanJavaScriptForSecrets(html, finalUrl) });
 
   if (allowActiveProbes) {
-    probePromises.push(
+    namedProbes.push(
       // Active path traversal probing — multiple HTTP requests
-      checkPathTraversal(finalUrl, html).catch(() => []),
+      { family: "path traversal", run: checkPathTraversal(finalUrl, html) },
       // A03 Injection — reflected XSS + error-based SQLi active probing
-      runInjectionProbes(finalUrl, html).catch(() => []),
+      { family: "injection (XSS, SQLi)", run: runInjectionProbes(finalUrl, html) },
     );
   }
 
   const [crawlResult, ...probeResults] = await Promise.all([
     crawlPromise,
-    Promise.allSettled(probePromises),
+    Promise.allSettled(namedProbes.map((p) => p.run)),
   ]);
 
   vulnerabilities.push(...crawlResult.vulnerabilities);
+
+  // Families that threw rather than answering. Named, so the coverage note
+  // below can say which — "something failed" is not useful to anyone.
+  const unrunFamilies: string[] = [];
   const settledProbes = probeResults[0] as PromiseSettledResult<ScanVulnerability[]>[];
-  for (const result of settledProbes) {
+  settledProbes.forEach((result, i) => {
     if (result.status === "fulfilled") {
       vulnerabilities.push(...result.value);
+      return;
     }
+    const family = namedProbes[i]?.family ?? `probe #${i}`;
+    unrunFamilies.push(family);
+    console.error(`[scan] probe family failed: ${family}`, result.reason);
+  });
+
+  if (crawlResult.failed) unrunFamilies.push("site crawl (inner pages)");
+  // Individual checks from inside runAllProbes, already logged as they failed.
+  unrunFamilies.push(...innerProbeFailures);
+
+  if (unrunFamilies.length > 0) {
+    vulnerabilities.push(vuln({
+      name: `${unrunFamilies.length} check group${unrunFamilies.length > 1 ? "s" : ""} could not be completed`,
+      severity: "info",
+      category: "Scan Coverage",
+      description:
+        `${unrunFamilies.length} group${unrunFamilies.length > 1 ? "s" : ""} of checks failed to run on this scan — a network error, a timeout, or an internal fault. ` +
+        `This is not a finding about your site, and it does not mean anything is wrong with it. It is here because the alternative is worse: ` +
+        `a check group that dies silently returns nothing, which looks exactly like a check group that ran and found nothing. ` +
+        `Anything those groups would have caught is simply unknown for this scan, so re-run it before treating a clean result in these areas as meaningful.`,
+      evidence: `Not completed:\n${unrunFamilies.map((f) => `  • ${f}`).join("\n")}`,
+      solution:
+        "Re-run the scan. If the same group fails repeatedly, the target may be rate-limiting or blocking the scanner, or the check has a genuine fault worth reporting to us.",
+      confidence: 100,
+    }));
   }
 
   // ── API surface testing ────────────────────────────────────────────────────
