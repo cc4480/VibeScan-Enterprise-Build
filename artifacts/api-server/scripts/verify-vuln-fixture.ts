@@ -20,6 +20,7 @@ process.env["ALLOW_PRIVATE_SCAN_TARGETS"] = "true";
 process.env["DATABASE_URL"] ??= "postgres://localhost/verify-vuln-fixture";
 
 import { runScan } from "../src/lib/scanner.js";
+import { isOobConfigured } from "../src/lib/oobServer.js";
 
 const TARGET = process.argv.slice(2).find((a) => !a.startsWith("--")) ?? "http://127.0.0.1:4100";
 
@@ -123,6 +124,14 @@ const EXPECTED: Array<{ module: string; label: string; match: RegExp }> = [
   // ── pathTraversal.ts (needs --active) ───────────────────────────────────
   { module: "pathTraversal.ts", label: "Path traversal / LFI", match: /Path Traversal.*LFI/i },
 
+  // ── ssrfProbe.ts (needs --active AND a reachable OOB_BASE_URL/APP_ORIGIN —
+  // this is the one check in this file that needs a real second HTTP server
+  // actually listening for the callback, not just runScan called as a library.
+  // See vuln-fixture/README.md, "Not covered" — this was moved out of there
+  // once this fired for real against a live collector, not asserted from
+  // reading the code. ) ─────────────────────────────────────────────────────
+  { module: "ssrfProbe.ts", label: "SSRF confirmed via out-of-band callback", match: /Server-Side Request Forgery \(SSRF\)/i },
+
   // ── apiProbe.ts (needs credentials; cross-account needs --secondary) ────
   { module: "apiProbe.ts", label: "API served without authentication", match: /API Endpoints Served Without Authentication/i },
   { module: "apiProbe.ts", label: "Sensitive fields returned by API", match: /Sensitive Fields Returned by the API/i },
@@ -156,13 +165,29 @@ async function main(): Promise<void> {
   const names = result.vulnerabilities.map((v) => v.name);
   console.log(`\nFindings returned: ${result.vulnerabilities.length}\n`);
 
+  // SSRF needs a second real HTTP server actually listening for the callback
+  // — runScan calling registerOobToken is not enough by itself. Requiring it
+  // unconditionally would turn the README's own quick-verify command (a bogus
+  // DATABASE_URL, no OOB_BASE_URL) into a permanent failure for everyone who
+  // has not also stood up that second server, so it drops out of scope here
+  // rather than counting as missed.
+  const oobReady = isOobConfigured();
+  const expected = EXPECTED.filter((e) => e.module !== "ssrfProbe.ts" || oobReady);
+  const skipped = EXPECTED.filter((e) => e.module === "ssrfProbe.ts" && !oobReady);
+
   const found: typeof EXPECTED = [];
   const missed: typeof EXPECTED = [];
-  for (const e of EXPECTED) {
+  for (const e of expected) {
     (names.some((n) => e.match.test(n)) ? found : missed).push(e);
   }
 
-  console.log(`Detected ${found.length}/${EXPECTED.length}:\n`);
+  if (skipped.length) {
+    console.log(`[verify] OOB_BASE_URL/APP_ORIGIN not configured for a reachable callback — skipping:`);
+    for (const e of skipped) console.log(`  [SKIPPED] ${e.module.padEnd(24)} ${e.label}`);
+    console.log("");
+  }
+
+  console.log(`Detected ${found.length}/${expected.length}:\n`);
   for (const e of found) console.log(`  [FOUND ] ${e.module.padEnd(24)} ${e.label}`);
   if (missed.length) {
     console.log("");

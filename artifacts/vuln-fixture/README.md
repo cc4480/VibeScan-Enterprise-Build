@@ -29,7 +29,7 @@ DATABASE_URL=postgres://localhost/whatever \
 ```
 
 Runs the real scanner — active probing on, two credentialed accounts — against
-the fixture and reports which of the ~60 tracked findings were detected,
+the fixture and reports which of the 71 tracked findings were detected,
 the same shape as `detection-check.ts` and `live-scan.ts`. Exit code is
 non-zero on any miss. `--list` prints every finding actually returned.
 
@@ -67,6 +67,7 @@ just "should, based on reading the code":
 | `graphqlProbe.ts` | Introspection enabled, field-suggestion leak (needs `--active`) |
 | `injectionProbe.ts` | Reflected XSS and error-based SQLi on `/search` (needs `--active`) |
 | `pathTraversal.ts` | `/download?file=../../../etc/passwd` (needs `--active`) |
+| `ssrfProbe.ts` | `GET /api/webhook-preview?url=` does a real server-side fetch of the caller's URL, no allowlist — confirmed via an actual callback to the collector, not asserted from reading the code (needs `--active` AND a reachable `OOB_BASE_URL`/`APP_ORIGIN`; see `verify-vuln-fixture.ts`) |
 | `apiProbe.ts` | Missing auth, over-exposed sensitive fields, BFLA (write reachable unauthenticated), mass assignment (a `role` field the spec declares and the handler actually applies), API-level IDOR, SQL injection in a declared parameter — all via an OpenAPI spec at `/openapi.json` describing `/api/records/{id}`, `/api/search`, `/api/users` |
 | `accessControlProbe.ts` | Page-level IDOR and identifier-enumeration on `/account/:id`, which ignores both the caller's session and the `:id` in the URL |
 
@@ -84,7 +85,6 @@ separately, not a gap in this fixture:
 | `recon-data.ts` | Open ports for MongoDB/Redis/Elasticsearch/etc. | Real listeners on those ports, several privileged (23, 445, 3389) |
 | `storageProbe.ts` | Public S3/GCS/Azure bucket listings | Real cloud storage accounts with public buckets |
 | `baasProbes.ts`, `firebase-probes.ts`, `supabase-probes.ts` | Misconfigured third-party BaaS backends | Real Appwrite/PocketBase/Firebase/Supabase projects, deliberately misconfigured |
-| `ssrfProbe.ts` | Server-side fetch of an attacker-supplied URL, confirmed via an out-of-band callback | The scan's own OOB collector (`scanId`), which `live-scan.ts`-style scripts don't wire up — this fixture has the vulnerable shape (nothing here fetches user URLs server-side yet) but proving it needs the product's own scan pipeline, not a standalone script |
 
 ## Known limitations of what's verified
 

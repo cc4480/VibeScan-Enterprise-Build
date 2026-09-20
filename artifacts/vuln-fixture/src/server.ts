@@ -239,6 +239,24 @@ app.get("/search", searchHandler);
 app.post("/api/search", searchHandler);
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SSRF (ssrfProbe.ts). A real server-side fetch of a caller-supplied URL, no
+// allowlist, no scheme restriction — exactly the shape the probe looks for
+// under a URL-shaped parameter name. The response body is irrelevant to the
+// probe: what proves the vulnerability is the collector recording a callback
+// for the token planted in `url`, which only a server that actually fetched it
+// could produce.
+// ─────────────────────────────────────────────────────────────────────────────
+app.get("/api/webhook-preview", async (req, res) => {
+  const url = String(req.query.url ?? "");
+  try {
+    const upstream = await fetch(url, { signal: AbortSignal.timeout(5_000) });
+    res.json({ status: upstream.status, contentType: upstream.headers.get("content-type") });
+  } catch {
+    res.status(502).json({ error: "could not reach that URL" });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GraphQL (graphqlProbe.ts) — introspection enabled, field-suggestion leak.
 // ─────────────────────────────────────────────────────────────────────────────
 function graphqlIntrospectionResult() {

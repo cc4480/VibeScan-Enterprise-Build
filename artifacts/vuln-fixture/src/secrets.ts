@@ -197,6 +197,12 @@ export const OPENAPI_SPEC = {
         },
       },
     },
+    "/api/webhook-preview": {
+      get: {
+        summary: "Fetch and preview a URL server-side, e.g. for a webhook target",
+        parameters: [{ name: "url", in: "query", required: true, schema: { type: "string" } }],
+      },
+    },
     "/api/users": {
       post: {
         summary: "Create a user",
