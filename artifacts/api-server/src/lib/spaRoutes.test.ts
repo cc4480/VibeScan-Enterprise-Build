@@ -18,6 +18,7 @@ describe("isSpaRoute", () => {
       "/bot",
       "/domains",
       "/settings",
+      "/feedback",
       "/privacy",
       "/terms",
       "/sign-in",

@@ -25,6 +25,7 @@ export const SPA_ROUTES: RegExp[] = [
   /^\/bot\/?$/,
   /^\/domains\/?$/,
   /^\/settings\/?$/,
+  /^\/feedback\/?$/,
   /^\/privacy\/?$/,
   /^\/terms\/?$/,
   /^\/sign-in\/?$/,
