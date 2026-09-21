@@ -74,3 +74,83 @@ describe("sendWelcomeEmail", () => {
     expect(body.html).toContain("Alex");
   });
 });
+
+/**
+ * Account mail and bulk mail must be able to leave from different senders.
+ *
+ * Every message this service sends currently goes out from one address, so a
+ * spam complaint about a CVE alert is a complaint against the address that
+ * delivers sign-in codes — and a sign-in code in Junk is indistinguishable
+ * from a broken login. AUTH_FROM_EMAIL is the seam that lets account mail be
+ * moved to its own verified subdomain, where its reputation is its own.
+ *
+ * The realistic regression is not someone deleting this: it is someone adding
+ * a new account sender and routing it through the bulk `from` without
+ * noticing, which has no symptom until deliverability quietly degrades. These
+ * assert the split by its effect on the actual Resend payload.
+ */
+describe("account mail vs bulk mail sender", () => {
+  const REPORT_OPTS = {
+    toEmail: "user@example.com",
+    targetUrl: "https://example.com",
+    grade: "B",
+    riskScore: 22,
+    totalVulns: 7,
+    reportUrl: "https://secscan.us/report/abc",
+    tier: "deep",
+  };
+
+  /** The `from` on the single Resend call the sender under test made. */
+  function sentFrom(): string {
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [, init] = vi.mocked(fetch).mock.calls[0]!;
+    return JSON.parse((init as RequestInit).body as string).from;
+  }
+
+  beforeEach(() => {
+    process.env.RESEND_API_KEY = "re_test_key";
+    process.env.FROM_EMAIL = "SecScan <reports@secscan.us>";
+    vi.mocked(fetch).mockResolvedValue(new Response("{}", { status: 200 }));
+  });
+
+  it("sends the sign-in code from the account sender", async () => {
+    process.env.AUTH_FROM_EMAIL = "SecScan <codes@mail.secscan.us>";
+    const { sendLoginCode } = await import("./mailer.js");
+
+    await sendLoginCode("user@example.com", "123456", 10);
+
+    expect(sentFrom()).toBe("SecScan <codes@mail.secscan.us>");
+  });
+
+  it("sends a password reset from the account sender", async () => {
+    // Routed through the shared account helper rather than its own request,
+    // so this also covers email verification and purchase receipts.
+    process.env.AUTH_FROM_EMAIL = "SecScan <codes@mail.secscan.us>";
+    const { sendPasswordReset } = await import("./mailer.js");
+
+    await sendPasswordReset("user@example.com", "https://secscan.us/reset?t=x");
+
+    expect(sentFrom()).toBe("SecScan <codes@mail.secscan.us>");
+  });
+
+  it("keeps bulk mail on the notification sender, so the two reputations stay apart", async () => {
+    // The assertion that gives the split its point: with an account sender
+    // configured, a notification must NOT inherit it.
+    process.env.AUTH_FROM_EMAIL = "SecScan <codes@mail.secscan.us>";
+    const { sendReportReadyEmail } = await import("./mailer.js");
+
+    await sendReportReadyEmail(REPORT_OPTS);
+
+    expect(sentFrom()).toBe("SecScan <reports@secscan.us>");
+  });
+
+  it("falls back to the notification sender when no account sender is configured", async () => {
+    // The deployed state today: AUTH_FROM_EMAIL unset must change nothing.
+    delete process.env.AUTH_FROM_EMAIL;
+    const { sendLoginCode } = await import("./mailer.js");
+
+    await sendLoginCode("user@example.com", "123456", 10);
+
+    expect(sentFrom()).toBe("SecScan <reports@secscan.us>");
+  });
+});

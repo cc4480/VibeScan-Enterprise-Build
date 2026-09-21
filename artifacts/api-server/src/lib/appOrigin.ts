@@ -29,6 +29,26 @@ export const FROM_EMAIL: string =
   process.env.FROM_EMAIL ?? `SecScan <reports@${APP_DOMAIN}>`;
 
 /**
+ * From address for account mail — sign-in codes, password resets, email
+ * verification, receipts. Everything whose failure locks someone out.
+ *
+ * Defaults to FROM_EMAIL, so leaving it unset changes nothing.
+ *
+ * It exists to be pointed at a SEPARATE SUBDOMAIN once one is verified with
+ * Resend, because that is the only split that actually isolates reputation:
+ * inbox providers score a sending domain (and IP), not the local-part, so
+ * auth@ and reports@ on one domain share one reputation. Today every message
+ * this service sends — a sign-in code, a CVE alert, the marketing welcome —
+ * leaves from the same address, which means a spam complaint about a
+ * notification is a complaint against the address that delivers sign-in
+ * codes. Splitting the local-part alone would look like a fix and buy almost
+ * nothing, so this is deliberately just the seam; the isolation arrives with
+ * the DNS.
+ */
+export const AUTH_FROM_EMAIL: string =
+  process.env.AUTH_FROM_EMAIL?.trim() || FROM_EMAIL;
+
+/**
  * Address replies go to. FROM_EMAIL is a send-only mailbox on the Resend
  * domain — mail sent to it is not delivered anywhere — so without this every
  * reply a customer writes is silently lost. Set REPLY_TO_EMAIL to an inbox a

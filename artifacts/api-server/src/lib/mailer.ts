@@ -5,7 +5,7 @@
  * Requires RESEND_API_KEY environment variable.
  */
 
-import { FROM_EMAIL, REPLY_TO_EMAIL, APP_ORIGIN } from "./appOrigin";
+import { FROM_EMAIL, AUTH_FROM_EMAIL, REPLY_TO_EMAIL, APP_ORIGIN } from "./appOrigin";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { unsubscribeHeaders } from "./emailPrefs";
@@ -642,7 +642,8 @@ async function sendAccountEmail(to: string, subject: string, html: string, label
     const res = await fetch(RESEND_API, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: resendBody({ to: [to], subject, html, ...(text ? { text } : {}) }),
+      // Account mail, so it leaves from the account sender — see AUTH_FROM_EMAIL.
+      body: resendBody({ from: AUTH_FROM_EMAIL, to: [to], subject, html, ...(text ? { text } : {}) }),
     });
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
@@ -756,6 +757,7 @@ export async function sendLoginCode(toEmail: string, code: string, ttlMinutes: n
     // The code is in the subject too: most clients preview enough of it to read
     // without opening the mail, which is the fastest way back to the waiting tab.
     body: resendBody({
+      from: AUTH_FROM_EMAIL,
       to: [toEmail],
       subject: `${spaced} is your SecScan sign-in code`,
       html,
