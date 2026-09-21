@@ -46,7 +46,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `deserializationProbe.ts` | 1 | 105 | 9 | direct |
 | `pathTraversal.ts` | 1 | 195 | 4 | direct |
 | `ssrfProbe.ts` | 1 | 192 | 6 | direct |
-| `worker.ts` | 1 | 876 | 3 | direct |
+| `worker.ts` | 1 | 906 | 3 | direct |
 | `scanner.ts` | 32 | 1320 | — | indirect, via challengePage.test.ts, firebase-probes.test.ts, grading.test.ts, scoring.test.ts |
 | `subdomain-service-data.ts` | 19 | 152 | — | indirect, via subdomainTakeover.test.ts |
 
@@ -526,7 +526,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `worker.ts`
 
-*1 findings · 876 lines · 3 tests.*
+*1 findings · 906 lines · 3 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|

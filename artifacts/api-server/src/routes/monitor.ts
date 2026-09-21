@@ -3,7 +3,7 @@ import {
   db, monitorSubscriptionsTable, cveAlertsTable, reportsTable,
   monitorScoreHistoryTable, monitorRegressionsTable, certExpiryAlertsTable,
 } from "@workspace/db";
-import { eq, and, desc, count, sql } from "drizzle-orm";
+import { eq, and, desc, count, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { enqueueScan } from "../lib/queue";
 import { scansTable } from "@workspace/db";
@@ -311,6 +311,30 @@ router.get("/monitor/subscriptions", async (req, res): Promise<void> => {
 
       const certExpiryDays = latestCertAlert?.daysRemaining ?? null;
 
+      // Whether a scan for this target is running right now.
+      //
+      // Without this the card had no way to know, so it showed the values from
+      // before the scan and never changed: a subscription created seconds ago
+      // read "Last scan: Never" while its baseline scan was already finishing,
+      // and nothing refetched. A working product that looks broken is worse
+      // than a broken one, because there is no reason to trust it afterwards.
+      //
+      // Matched on user + target rather than a subscription id because scans
+      // deliberately carry no foreign key to a subscription (see scansTable) —
+      // a scan is a historical record that outlives the subscription.
+      const [inFlight] = await db
+        .select({ id: scansTable.id, status: scansTable.status })
+        .from(scansTable)
+        .where(
+          and(
+            eq(scansTable.userId, sub.userId),
+            eq(scansTable.targetUrl, sub.targetUrl),
+            inArray(scansTable.status, ["queued", "scanning", "analyzing"]),
+          ),
+        )
+        .orderBy(desc(scansTable.createdAt))
+        .limit(1);
+
       // Use the resolved scanAt so the card shows the correct date even before
       // the subscription row was backfilled.
       const lastScanAt = sub.lastScanAt ?? resolvedReport?.scannedAt ?? null;
@@ -322,6 +346,8 @@ router.get("/monitor/subscriptions", async (req, res): Promise<void> => {
         alertCount,
         regressionCount: Number(regressionCount),
         certExpiryDays,
+        scanInProgress: Boolean(inFlight),
+        scanStatus: inFlight?.status ?? null,
       };
     }),
   );

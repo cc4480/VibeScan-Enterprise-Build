@@ -17,6 +17,10 @@ export interface MonitorSubscription {
   alertCount: number;
   regressionCount: number;
   certExpiryDays: number | null;
+  /** A scan for this target is queued or running right now. */
+  scanInProgress: boolean;
+  /** Which stage it is at, when one is running: queued | scanning | analyzing. */
+  scanStatus: string | null;
 }
 
 export interface CveAlert {

@@ -323,6 +323,22 @@ function SubscriptionCard({ sub, onCancel }: { sub: MonitorSubscription; onCance
           </div>
         </div>
 
+        {/* A scan is running right now. Shown because the alternative — the
+            card sitting on stale values with no sign of life — is what made a
+            working baseline scan look like nothing had happened at all. */}
+        {sub.scanInProgress && (
+          <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-xl bg-primary/10 border border-primary/20">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary shrink-0" />
+            <span className="text-xs text-primary font-medium">
+              {sub.scanStatus === "analyzing"
+                ? "Analysing results…"
+                : sub.scanStatus === "scanning"
+                ? "Scanning now — this usually takes 1–2 minutes"
+                : "Scan queued…"}
+            </span>
+          </div>
+        )}
+
         {/* Stats grid */}
         <div className="grid grid-cols-4 gap-2 mb-4">
           <div className="bg-background/40 rounded-xl p-3 text-center">
@@ -609,6 +625,23 @@ export default function MonitorPage() {
   const { data: subscriptions, isLoading, error } = useQuery({
     queryKey: ["monitor-subscriptions"],
     queryFn: listMonitorSubscriptions,
+    // Poll only while something is actually running.
+    //
+    // Without this the page fetched once and never again, so a subscription
+    // created seconds earlier sat showing "Last scan: Never" while its
+    // baseline scan finished half a minute later and the card never moved.
+    // The data was being written correctly the whole time — it just never
+    // arrived on screen, which is indistinguishable from broken.
+    //
+    // Conditional rather than a blanket interval because this endpoint runs
+    // several queries per subscription; polling it forever would be a steady
+    // cost for a page that is usually static.
+    refetchInterval: (query) => {
+      const subs = query.state.data;
+      if (!subs?.length) return false;
+      const busy = subs.some((s) => s.status === "active" && (s.scanInProgress || !s.lastScanAt));
+      return busy ? 5_000 : false;
+    },
   });
 
   function handleCancelled(_id: string) {
