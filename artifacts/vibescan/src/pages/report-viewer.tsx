@@ -2963,7 +2963,7 @@ export default function ReportViewer() {
         <div className="flex-1 text-center sm:text-left">
           <h3 className="font-bold text-lg mb-1">Keep watching this URL</h3>
           <p className="text-sm text-muted-foreground">
-            Weekly automated rescans + instant CVE alerts when new vulnerabilities match your tech stack. <span className="text-indigo-400 font-semibold">$129/yr</span>
+            Risk-adaptive rescans + instant CVE alerts when new vulnerabilities match your tech stack. <span className="text-indigo-400 font-semibold">Free during early access</span>
           </p>
         </div>
         <Link
