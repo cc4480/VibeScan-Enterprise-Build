@@ -7,7 +7,7 @@ Every finding the scanner can emit, read out of `artifacts/api-server/src/lib`. 
 complete list; [SCAN_COVERAGE.md](SCAN_COVERAGE.md) is the readable one, grouped by module with
 the Basic/Deep tier and the methodology behind each group.
 
-**283 findings across 27 modules**, in 36 categories. 87 critical, 74 high, 61 medium, 21 low, 40 info.
+**284 findings across 28 modules**, in 36 categories. 87 critical, 74 high, 61 medium, 21 low, 41 info.
 
 A finding is a distinct name the scanner can put in a report, which is not the same as a check
 type: the data-table modules below define many findings from one piece of detection logic —
@@ -46,6 +46,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `deserializationProbe.ts` | 1 | 105 | 9 | direct |
 | `pathTraversal.ts` | 1 | 195 | 4 | direct |
 | `ssrfProbe.ts` | 1 | 192 | 6 | direct |
+| `worker.ts` | 1 | 867 | 3 | direct |
 | `scanner.ts` | 32 | 1320 | — | indirect, via challengePage.test.ts, firebase-probes.test.ts, grading.test.ts, scoring.test.ts |
 | `subdomain-service-data.ts` | 19 | 152 | — | indirect, via subdomainTakeover.test.ts |
 
@@ -522,6 +523,14 @@ module does. `none` — neither, so no test exercises it at all.
 | Supabase Storage Bucket List Exposed Without Authentication | Medium | Information Disclosure | 5.3 | CWE-200 | WSTG-CONF-04 |
 | Supabase Backend Detected | Info | Technology Fingerprint | 0 | — | — |
 | Supabase Backend Detected — RLS Appears Configured | Info | Technology Fingerprint | 0 | — | — |
+
+### `worker.ts`
+
+*1 findings · 867 lines · 3 tests.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| AI analysis could not be completed for this scan | Info | Scan Coverage | — | — | — |
 
 ## How this was read
 

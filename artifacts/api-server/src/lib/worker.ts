@@ -379,6 +379,33 @@ export async function processScanJob(job: ScanJob): Promise<void> {
       log.info("DeepSeek analysis complete");
     } else {
       log.warn("DeepSeek analysis skipped or failed — continuing without AI");
+
+      // Tell the reader, not just the log. The written analysis is the part of
+      // a report a developer without a security team actually acts on, and
+      // when it is missing the report does not look degraded — it looks like a
+      // report with less to say. Under load that is exactly when this happens:
+      // the AI call has a 30s timeout and no retry, so one rate-limited
+      // response costs a scan its entire analysis.
+      //
+      // Only when a key is configured. Where none is set the deployment simply
+      // does not have this feature, and saying so on every scan would be noise.
+      if (process.env["DEEPSEEK_API_KEY"]) {
+        scanResult.vulnerabilities.push({
+          id: randomUUID(),
+          name: "AI analysis could not be completed for this scan",
+          severity: "info",
+          category: "Scan Coverage",
+          description:
+            "Every security check ran and the findings below are complete — but the written analysis that normally accompanies them (the plain-English risk summary, the prioritised fixes and the per-agent fix prompts) could not be generated for this scan. The AI provider did not answer in time. This says nothing about your site: it is a gap in the explanation, not in the testing.",
+          evidence: "The AI provider did not return an analysis within the 30-second budget.",
+          solution:
+            "Re-run the scan to get the written analysis. The findings themselves do not change — only the commentary on them is missing — so you can also act on the list below as it stands.",
+          cweId: null,
+          cvssScore: null,
+          wstgId: null,
+          confidence: 100,
+        } satisfies ScanVulnerability);
+      }
     }
   }
 
