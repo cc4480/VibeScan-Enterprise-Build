@@ -202,6 +202,27 @@ router.post("/account/register", async (req, res): Promise<void> => {
 // See lib/loginCode.ts for why a six-digit secret is safe here at all.
 
 router.post("/account/login", async (req, res): Promise<void> => {
+  // TEMPORARY DIAGNOSTIC — remove once the rate-limit key is fixed.
+  //
+  // 25 consecutive failed logins from one address never tripped a limiter set
+  // to 10 per 15 minutes, with the process never restarting (same pid, unbroken
+  // request ids), which leaves the key itself changing per request. This prints
+  // the inputs clientIp() resolves from so the fix is made against what the
+  // origin actually receives rather than against a guess about the proxy chain.
+  req.log.warn(
+    {
+      xForwardedFor: req.headers["x-forwarded-for"] ?? null,
+      reqIp: req.ip ?? null,
+      socketRemote: req.socket.remoteAddress ?? null,
+      hasCfConnectingIp: Boolean(req.headers["cf-connecting-ip"]),
+      cfConnectingIp: req.headers["cf-connecting-ip"] ?? null,
+      hasOriginSecretHeader: Boolean(req.headers["x-origin-secret"]),
+      originSecretConfigured: Boolean(process.env["CLOUDFLARE_ORIGIN_SECRET"]),
+      resolvedKey: clientIp(req),
+    },
+    "[diagnostic] rate-limit key resolution",
+  );
+
   if (isRateLimited(`login:${clientIp(req)}`)) {
     res.status(429).json({ error: "Too many attempts. Try again in a few minutes." });
     return;
