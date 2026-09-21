@@ -2,7 +2,7 @@ import { Link } from "wouter";
 import { motion } from "framer-motion";
 import {
   ShieldAlert, Key, Globe, CheckCircle2, ArrowRight, Activity,
-  Code2, Zap, Bell, Mail, Bot, FileKey, Database, Network,
+  Code2, Zap, Bell, Mail, Bot, FileKey, Database, Network, Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSeo } from "@/lib/seo";
@@ -302,7 +302,7 @@ export default function LandingPage() {
             <Zap className="w-3.5 h-3.5" /> Free Trial
           </div>
           <h2 className="text-3xl md:text-4xl font-bold mb-4">2 free scans, everything included</h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto">Every account gets 2 free scans to try the platform — every check, no tier to pick. Paid scan packs are coming soon.</p>
+          <p className="text-muted-foreground max-w-2xl mx-auto">Every account gets 2 free scans to try the platform — every check, no tier to pick. After that, buy credits — they never expire.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
@@ -376,6 +376,47 @@ export default function LandingPage() {
               </Link>
             </div>
           ))}
+        </div>
+
+        <div className="mt-14 max-w-4xl mx-auto">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary border border-white/10 text-muted-foreground text-xs font-semibold mb-4 uppercase tracking-wider">
+              <Package className="w-3.5 h-3.5" /> Scan Credits
+            </div>
+            <h3 className="text-2xl md:text-3xl font-bold mb-3">Buy more, once your free scans are gone</h3>
+            <p className="text-muted-foreground max-w-xl mx-auto text-sm">Credits never expire and cover the full scan — same checks, same AI report, same fix guides.</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+            {[
+              { label: "1 Scan Credit", price: "$12", per: "$12.00 / scan", note: null },
+              { label: "5 Scan Pack", price: "$50", per: "$10.00 / scan", note: "17% off", popular: true },
+              { label: "20 Scan Pack", price: "$160", per: "$8.00 / scan", note: "33% off" },
+            ].map((tier, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "glass-panel p-6 rounded-xl flex flex-col items-center text-center gap-1 relative",
+                  tier.popular ? "border-primary/50" : "border-white/10",
+                )}
+              >
+                {tier.popular && (
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-primary text-primary-foreground px-3 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider">
+                    Best Value
+                  </div>
+                )}
+                <span className="text-sm text-muted-foreground mt-1">{tier.label}</span>
+                <span className="text-3xl font-bold">{tier.price}</span>
+                <span className="text-xs text-muted-foreground">
+                  {tier.per}
+                  {tier.note && <span className="text-primary font-semibold"> · {tier.note}</span>}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="text-center text-xs text-muted-foreground mt-6">
+            Purchasing isn't live yet — <Link href="/scan" className="underline hover:text-foreground">start with your 2 free scans</Link> and we'll email you when credits are ready to buy.
+          </p>
         </div>
       </section>
     </div>
