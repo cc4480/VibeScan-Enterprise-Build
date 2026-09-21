@@ -135,7 +135,7 @@ function TrialExhaustedPanel() {
             {status.data
               ? `You've used all ${status.data.scanLimit} scans on this account.`
               : "You've used all of the free scans on this account."}{" "}
-            Scan packs will be <span className="text-foreground font-medium">$10 for 5 scans</span>,
+            Scan credits will be <span className="text-foreground font-medium">$12 each, or $50 for 5</span>,
             and there's no way to buy them yet — so rather than send you to a checkout
             that doesn't exist, we'll email you the moment it does.
           </p>
