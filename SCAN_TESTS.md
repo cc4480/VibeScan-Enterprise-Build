@@ -41,7 +41,7 @@ Target URL
           ├─ ssllabs.ts           ★  SSL Labs API TLS assessment (starts in
           │                          parallel with Stage 1, waits up to 120s)
           └─ recon.ts             ★  DNS enumeration, subdomain discovery via
-                                     crt.sh + brute-force, TCP port scan (34 ports)
+                                     crt.sh + brute-force, TCP port scan (33 ports)
 ```
 
 False-positive philosophy: every check requires a **positive confirmation signal** — not just a non-200 absence or a keyword match. Findings cite the exact HTTP response, header value, or decoded data that triggered them. Path-existence probes additionally fingerprint the target's catch-all/SPA routing behavior before trusting any HTTP 200 (see §2.1) — without this, multi-tenant platforms and client-routed SPAs false-positive on nearly every probed path.
@@ -622,7 +622,7 @@ Results (hostname + IP + CNAME if applicable + source) are stored in the report.
 
 ### 17.3 Port Scan
 
-TCP-connect scan of 34 ports with banner grabbing. Each connection is capped at 2 seconds. **Dangerous** ports produce first-class vulnerabilities merged into the scan findings:
+TCP-connect scan of 33 ports with banner grabbing. Each connection is capped at 2 seconds. **Dangerous** ports produce first-class vulnerabilities merged into the scan findings:
 
 | Port | Service | Severity | Reason |
 |------|---------|----------|--------|
