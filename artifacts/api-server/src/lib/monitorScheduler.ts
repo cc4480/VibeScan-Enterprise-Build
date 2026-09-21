@@ -39,6 +39,7 @@ import {
 import { fireWebhook } from "./webhook";
 import { APP_ORIGIN } from "./appOrigin";
 import { monitorEntitlement } from "./entitlements";
+import { highestSeverity } from "./notificationPrefs";
 
 const SWEEP_QUEUE      = "monitor-sweep";
 const CVE_QUEUE        = "monitor-cve-check";
@@ -230,7 +231,7 @@ async function runSweep(): Promise<void> {
       await fireWebhook(sub.webhookUrl, "scan_complete", sub.targetUrl, sub.id, {
         scanId,
         reason: "adaptive",
-      });
+      }, { userId: sub.userId });
     }
   }
 }
@@ -356,6 +357,11 @@ async function runCveCheck(): Promise<void> {
             };
           }),
           scanId,
+        }, {
+          userId: sub.userId,
+          // The worst CVE in the batch. Judging by the first would drop a mail
+          // containing a critical because it happened to lead with a low.
+          severity: highestSeverity(sortedMatches.map(({ cve }) => ({ severity: cve.severity }))),
         });
       }
     } catch (err) {
@@ -473,7 +479,9 @@ async function runCertExpiryCheck(): Promise<void> {
             daysRemaining,
             expiryDate: expiryDate.toISOString(),
             alertThreshold: threshold,
-          });
+          // No severity: days-remaining is not one, and passing a made-up
+          // value here would let a raised floor hide expiry warnings.
+          }, { userId: sub.userId });
         }
 
         // One threshold per run, so a subscription added late — or one that

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, jsonb, pgTable, timestamp, varchar, boolean} from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, text, timestamp, varchar, boolean} from "drizzle-orm/pg-core";
 
 // (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
 export const sessionsTable = pgTable(
@@ -31,6 +31,27 @@ export const usersTable = pgTable("users", {
   // people out of their own account.
   marketingOptedOut: boolean("marketing_opted_out").notNull().default(false),
   alertEmailsOptedOut: boolean("alert_emails_opted_out").notNull().default(false),
+
+  // Per-alert-type control, added because the single flag above is all or
+  // nothing: the only way to stop one noisy alert was to stop every alert,
+  // including the ones that matter. alertEmailsOptedOut stays the master
+  // switch — it is what the one-click List-Unsubscribe header toggles, and
+  // RFC 8058 requires that to work without a preferences screen.
+  //
+  // These apply to webhooks too. The master switch does not: it is named for
+  // email, and someone who silenced their inbox has not asked us to stop
+  // posting to their team's Slack.
+  notifyCveOptedOut: boolean("notify_cve_opted_out").notNull().default(false),
+  notifyRegressionOptedOut: boolean("notify_regression_opted_out").notNull().default(false),
+  notifyCertExpiryOptedOut: boolean("notify_cert_expiry_opted_out").notNull().default(false),
+  notifyScanCompleteOptedOut: boolean("notify_scan_complete_opted_out").notNull().default(false),
+
+  // Floor for alerts that carry a severity (CVE matches and regressions).
+  // "info" means everything, which is today's behaviour and so the default —
+  // nobody's notifications change until they choose to change them.
+  notifyMinSeverity: text("notify_min_severity", {
+    enum: ["info", "low", "medium", "high", "critical"],
+  }).notNull().default("info"),
 
   // ── Account credentials ────────────────────────────────────────────────────
   // Null for anonymous identities: a row whose id is the UUID the browser

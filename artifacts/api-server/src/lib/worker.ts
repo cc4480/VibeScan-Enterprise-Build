@@ -15,6 +15,7 @@ import {
 import { eq, and, desc } from "drizzle-orm";
 import { computeNextScanAt } from "./monitorScheduler";
 import { sendRegressionAlertEmail } from "./mailer";
+import { highestSeverity } from "./notificationPrefs";
 import { fireWebhook } from "./webhook";
 import { getBoss, SCAN_QUEUE, type ScanJobData } from "./queue";
 import { runScan, computeRiskScore, gradeForResult, type ScanVulnerability } from "./scanner";
@@ -657,6 +658,13 @@ export async function processScanJob(job: ScanJob): Promise<void> {
                     grade,
                     riskScore,
                   },
+                  {
+                    userId,
+                    // Worst of the batch — see highestSeverity.
+                    severity: highestSeverity(
+                      newRegressions.map((v) => ({ severity: v.severity })),
+                    ),
+                  },
                 ).catch((err) =>
                   log.warn({ err }, "Failed to fire regression webhook (non-fatal)"),
                 );
@@ -681,6 +689,7 @@ export async function processScanJob(job: ScanJob): Promise<void> {
               riskScore,
               reportUrl: `${appOrigin}/report/${report.id}`,
             },
+            { userId },
           ).catch((err) => log.warn({ err }, "Failed to fire scan_complete webhook (non-fatal)"));
         }
       } catch (monitorErr) {

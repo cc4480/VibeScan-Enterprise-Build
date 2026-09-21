@@ -8,6 +8,7 @@
 import { logger } from "./logger";
 import { checkHostname } from "./ssrfGuard";
 import { APP_DOMAIN } from "./appOrigin";
+import { notificationPrefs, shouldNotify, type AlertKind } from "./notificationPrefs";
 
 // ── SSRF guard ────────────────────────────────────────────────────────────────
 // Host rules live in ssrfGuard.ts, shared with the scan-target path so the two
@@ -131,15 +132,40 @@ async function postWebhook(url: string, body: Record<string, unknown>): Promise<
  * Fire a Slack-compatible webhook. Retries once on failure.
  * Silently logs errors — never throws.
  */
+/**
+ * Webhook events map one-to-one onto notification kinds, so the kind is
+ * derived rather than passed — one less argument a caller can get wrong, and
+ * adding an event type will not compile until it is classified here.
+ */
+const EVENT_TO_KIND: Record<WebhookEventType, AlertKind> = {
+  cve_alert: "cve",
+  regression_detected: "regression",
+  cert_expiry: "cert_expiry",
+  scan_complete: "scan_complete",
+};
+
 export async function fireWebhook(
   webhookUrl: string,
   event: WebhookEventType,
   targetUrl: string,
   subscriptionId: string,
   data: Record<string, unknown>,
+  // Required, deliberately. Webhooks honoured no preference at all before
+  // this, and an optional argument is one a future call site forgets — which
+  // would silently reintroduce exactly that.
+  notify: { userId: string; severity?: string | null },
 ): Promise<void> {
   // Do NOT log the webhook URL — it may contain secret tokens in the path/query.
   const log = logger.child({ event, subscriptionId });
+
+  // Checked before the SSRF guard: no point resolving DNS for a delivery the
+  // user has asked not to receive. Note the email master switch does NOT
+  // apply here — see notificationPrefs.ts.
+  const prefs = await notificationPrefs(notify.userId);
+  if (!shouldNotify(prefs, { kind: EVENT_TO_KIND[event], severity: notify.severity, channel: "webhook" })) {
+    log.info("Webhook skipped — user's notification preferences");
+    return;
+  }
 
   const safe = await isWebhookUrlSafe(webhookUrl);
   if (!safe) {

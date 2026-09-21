@@ -11,6 +11,12 @@ import { eq } from "drizzle-orm";
 import { unsubscribeHeaders } from "./emailPrefs";
 import { htmlToPlainText } from "./htmlToText";
 import { isSuppressed } from "./emailSuppression";
+import {
+  notificationPrefs,
+  shouldNotify,
+  highestSeverity,
+  type AlertKind,
+} from "./notificationPrefs";
 
 const RESEND_API = "https://api.resend.com/emails";
 const RESEND_AUDIENCES_API = "https://api.resend.com/audiences";
@@ -27,34 +33,27 @@ const RESEND_AUDIENCES_API = "https://api.resend.com/audiences";
  * still goes to someone who complained about a newsletter, because suppressing
  * those would lock them out of their own account.
  */
-async function bulkMailAllowed(userId: string, toEmail: string, label: string): Promise<boolean> {
+async function bulkMailAllowed(
+  userId: string,
+  toEmail: string,
+  label: string,
+  alert: { kind: AlertKind; severity?: string | null },
+): Promise<boolean> {
   if (await isSuppressed(toEmail, "bulk")) {
     console.warn(`[mailer] Skipping ${label} — address is suppressed`);
     return false;
   }
-  return alertEmailsAllowed(userId);
-}
 
-/**
- * Whether recurring alert mail may be sent to this user.
- *
- * Fails OPEN, unlike the suppression check: a missed alert means somebody does
- * not hear that their certificate expires, while an extra email to someone who
- * opted out is an annoyance. A database blip should not silence a security
- * warning.
- */
-async function alertEmailsAllowed(userId: string): Promise<boolean> {
-  try {
-    const [row] = await db
-      .select({ optedOut: usersTable.alertEmailsOptedOut })
-      .from(usersTable)
-      .where(eq(usersTable.id, userId))
-      .limit(1);
-    return !row?.optedOut;
-  } catch (err) {
-    console.error("[mailer] Could not read alert preference; sending anyway:", err);
-    return true;
+  // Per-kind and severity preferences, on top of the master opt-out. Both are
+  // resolved here rather than at each sender, so a new alert type cannot ship
+  // honouring the suppression list and ignoring what the user asked for.
+  const prefs = await notificationPrefs(userId);
+  if (!shouldNotify(prefs, { kind: alert.kind, severity: alert.severity, channel: "email" })) {
+    console.warn(`[mailer] Skipping ${label} — user's notification preferences`);
+    return false;
   }
+
+  return true;
 }
 
 /**
@@ -227,7 +226,7 @@ export async function sendMonitorCveAlertEmail(opts: SendMonitorCveAlertOptions)
 
 
 
-  if (!(await bulkMailAllowed(opts.userId, opts.toEmail, "CVE alert email"))) {
+  if (!(await bulkMailAllowed(opts.userId, opts.toEmail, "CVE alert email", { kind: "cve", severity: highestSeverity(opts.cveMatches) }))) {
 
     console.log("[mailer] Skipping CVE alert email", { to: opts.toEmail });
 
@@ -344,7 +343,7 @@ export async function sendRegressionAlertEmail(opts: SendRegressionAlertOptions)
 
 
 
-  if (!(await bulkMailAllowed(opts.userId, opts.toEmail, "regression alert email"))) {
+  if (!(await bulkMailAllowed(opts.userId, opts.toEmail, "regression alert email", { kind: "regression", severity: highestSeverity(opts.regressions) }))) {
 
     console.log("[mailer] Skipping regression alert email", { to: opts.toEmail });
 
@@ -434,7 +433,7 @@ export async function sendCertExpiryEmail(opts: SendCertExpiryOptions): Promise<
 
 
 
-  if (!(await bulkMailAllowed(opts.userId, opts.toEmail, "cert expiry email"))) {
+  if (!(await bulkMailAllowed(opts.userId, opts.toEmail, "cert expiry email", { kind: "cert_expiry" }))) {
 
     console.log("[mailer] Skipping cert expiry email", { to: opts.toEmail });
 
@@ -507,7 +506,7 @@ export async function sendMonitorScanQueuedEmail(opts: SendMonitorScanQueuedOpti
 
 
 
-  if (!(await bulkMailAllowed(opts.userId, opts.toEmail, "monitor scan queued email"))) {
+  if (!(await bulkMailAllowed(opts.userId, opts.toEmail, "monitor scan queued email", { kind: "scan_complete" }))) {
 
     console.log("[mailer] Skipping monitor scan queued email", { to: opts.toEmail });
 

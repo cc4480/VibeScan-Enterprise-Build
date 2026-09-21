@@ -17,6 +17,14 @@ import { fireWebhook } from "./webhook";
  * These assert the guard by its effect: whether fetch was reached at all.
  */
 
+// These tests are about the SSRF guard, not about preferences. Mocked so a
+// real database lookup (which would fail to the placeholder DATABASE_URL and
+// fall through) cannot slow them down or change what they assert.
+vi.mock("./notificationPrefs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./notificationPrefs")>();
+  return { ...actual, notificationPrefs: async () => actual.defaultPrefs() };
+});
+
 const fetchMock = vi.fn();
 
 beforeEach(() => {
@@ -30,7 +38,9 @@ afterEach(() => {
 });
 
 async function fire(url: string) {
-  await fireWebhook(url, "scan_complete", "https://example.com", "sub-1", { grade: "A" });
+  await fireWebhook(url, "scan_complete", "https://example.com", "sub-1", { grade: "A" }, {
+    userId: "user-1",
+  });
 }
 
 describe("fireWebhook — hosts the guard must refuse", () => {
@@ -123,5 +133,56 @@ describe("fireWebhook — failure is never the caller's problem", () => {
     // not turn a completed scan into a failed one.
     fetchMock.mockRejectedValue(new Error("ECONNREFUSED"));
     await expect(fire("https://hooks.slack.com/services/T000/B000/xxxx")).resolves.toBeUndefined();
+  });
+});
+
+describe("fireWebhook — notification preferences", () => {
+  const SLACK = "https://hooks.slack.com/services/T000/B000/xxxx";
+
+  async function fireWith(
+    prefs: Parameters<typeof import("./notificationPrefs").shouldNotify>[0],
+    event: Parameters<typeof fireWebhook>[1],
+    severity?: string,
+  ) {
+    const mod = await import("./notificationPrefs");
+    vi.spyOn(mod, "notificationPrefs").mockResolvedValue(prefs);
+    await fireWebhook(SLACK, event, "https://example.com", "sub-1", {}, {
+      userId: "user-1",
+      severity,
+    });
+  }
+
+  it("does not deliver a kind the user turned off", async () => {
+    const { defaultPrefs } = await import("./notificationPrefs");
+    await fireWith(
+      { ...defaultPrefs(), optedOutKinds: new Set(["scan_complete"] as const) },
+      "scan_complete",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("still delivers the kinds they kept", async () => {
+    const { defaultPrefs } = await import("./notificationPrefs");
+    await fireWith(
+      { ...defaultPrefs(), optedOutKinds: new Set(["scan_complete"] as const) },
+      "cve_alert",
+      "high",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops an alert under the severity floor", async () => {
+    const { defaultPrefs } = await import("./notificationPrefs");
+    await fireWith({ ...defaultPrefs(), minSeverity: "high" }, "cve_alert", "low");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores the EMAIL opt-out — that switch is not about webhooks", async () => {
+    // One-click List-Unsubscribe sets alertEmailsOptedOut. If that also killed
+    // webhooks, a user tidying their inbox would silently break their team's
+    // Slack integration, and nothing would say why.
+    const { defaultPrefs } = await import("./notificationPrefs");
+    await fireWith({ ...defaultPrefs(), emailOptedOut: true }, "cve_alert", "high");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
