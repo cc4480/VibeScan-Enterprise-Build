@@ -55,7 +55,7 @@ just "should, based on reading the code":
 | Module | What's planted |
 |---|---|
 | `scanner.ts` | Weak/wildcard CSP, missing directive checks, every missing security header (HSTS, XCTO, Referrer-Policy, Permissions-Policy, COOP/COEP/CORP, Cache-Control), a session cookie missing every flag, wildcard CORS, EOL `Server`/`X-Powered-By` banners |
-| `cveCheck.ts` | nginx 1.14.0 (CVE-2021-23017), PHP 5.6.40 (EOL) |
+| `cveCheck.ts` | nginx 1.14.0 (flagged against the current top entry in `NGINX_VULN_RANGES` — CVE-2026-42533 as of the 2026-09-21 review, since that entry's threshold is checked first and 1.14.0 falls below it too), PHP 5.6.40 (EOL) |
 | `probes.ts` | Active-CORS credentials-from-arbitrary-origin, TRACE/CONNECT/write methods advertised, open redirect (on the scan target URL itself — see note below), sensitive `robots.txt` disclosure, missing SRI, the Werkzeug debugger fingerprint, directory listing, missing `security.txt`, no rate-limit headers |
 | `crawler.ts` / `crawler-data.ts` | An inner route (`/app/dashboard`) missing a header the root has, plus `.env`/git/config/API-docs/debug-log/GraphQL exposure nested under it |
 | `probes-data.ts` | All 78 sensitive paths, each serving content shaped to pass that path's own `validate()` (verified: `sensitive-paths.ts` diffs to an exact match against the source list) |

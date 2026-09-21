@@ -293,7 +293,7 @@ export function cveIds(osvVuln: OsvVuln): string[] {
  * APACHE_VULN_RANGES, IIS_EOL_MAJOR) were last reviewed and updated.
  * Update this whenever you add, modify, or verify the data below.
  */
-const LOCAL_VULN_DATA_UPDATED = "2026-05-05";
+const LOCAL_VULN_DATA_UPDATED = "2026-09-21";
 
 const LOCAL_DATA_STALE_DAYS = 90;
 

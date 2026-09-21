@@ -130,6 +130,12 @@ true of what the fixture serves, which incidentally verifies CVE and EOL matchin
 against known input for the first time. The INFO remainder (COOP/COEP/CORP,
 security.txt, structured data, Open Graph) carries zero weight.
 
+(As checked on the date above. `NGINX_VULN_RANGES` was reviewed 2026-09-21 and
+now reports nginx 1.14.0 against a newer CVE, CVE-2026-42533, whose fix-version
+threshold is higher and is checked first — the finding still fires on the same
+input, this is a record of which specific CVE ID it named that day, not a
+current claim.)
+
 **One thing to weigh, not a false positive:** a single planted hardcoded JWT
 produces three separate HIGH findings — `Hardcoded JWT Token in Source`,
 `JWT Token Has No Expiry` and `JWT Uses HS256 Without Expiry`. That is 45 risk

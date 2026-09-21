@@ -43,9 +43,9 @@ describe("warnIfLocalDataStale", () => {
   // warning that exists to nag about them stayed silent for as long as the
   // daily job kept succeeding.
   it("warns about the hand-maintained tables even when the EOL refresh is fresh", async () => {
-    // Bundled tables last reviewed 2026-05-05; well past the 90-day threshold.
-    vi.setSystemTime(new Date("2026-09-03T12:00:00Z"));
-    getEolDataFetchedAt.mockReturnValue(new Date("2026-09-03T03:00:00Z"));
+    // Bundled tables last reviewed 2026-09-21; well past the 90-day threshold.
+    vi.setSystemTime(new Date("2027-01-20T12:00:00Z"));
+    getEolDataFetchedAt.mockReturnValue(new Date("2027-01-20T03:00:00Z"));
 
     const { warnIfLocalDataStale } = await import("./cveCheck.js");
     warnIfLocalDataStale();
@@ -57,7 +57,7 @@ describe("warnIfLocalDataStale", () => {
   });
 
   it("warns about EOL data when the nightly job has stopped running", async () => {
-    vi.setSystemTime(new Date("2026-09-03T12:00:00Z"));
+    vi.setSystemTime(new Date("2027-01-20T12:00:00Z"));
     getEolDataFetchedAt.mockReturnValue(new Date("2026-01-01T03:00:00Z"));
 
     const { warnIfLocalDataStale } = await import("./cveCheck.js");
@@ -68,8 +68,8 @@ describe("warnIfLocalDataStale", () => {
 
   it("stays silent when both halves are inside the threshold", async () => {
     // A date shortly after the bundled review date keeps both halves fresh.
-    vi.setSystemTime(new Date("2026-05-20T12:00:00Z"));
-    getEolDataFetchedAt.mockReturnValue(new Date("2026-05-20T03:00:00Z"));
+    vi.setSystemTime(new Date("2026-10-05T12:00:00Z"));
+    getEolDataFetchedAt.mockReturnValue(new Date("2026-10-05T03:00:00Z"));
 
     const { warnIfLocalDataStale } = await import("./cveCheck.js");
     warnIfLocalDataStale();

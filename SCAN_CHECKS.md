@@ -33,7 +33,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `crawler.ts` | 7 | 778 | 42 | direct |
 | `supabase-probes.ts` | 7 | 589 | 7 | direct |
 | `jwtAnalysis.ts` | 6 | 262 | 9 | direct |
-| `cveCheck.ts` | 4 | 594 | 3 | direct |
+| `cveCheck.ts` | 4 | 594 | 10 | direct |
 | `accessControlProbe.ts` | 3 | 377 | 18 | direct |
 | `firebase-probes.ts` | 3 | 261 | 5 | direct |
 | `mailTls.ts` | 3 | 337 | 13 | direct |
@@ -124,7 +124,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `cveCheck.ts`
 
-*4 findings · 594 lines · 3 tests.*
+*4 findings · 594 lines · 10 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
