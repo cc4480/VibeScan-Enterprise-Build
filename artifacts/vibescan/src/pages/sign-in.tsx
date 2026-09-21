@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSeo } from "@/lib/seo";
-import { AuthShell, AuthForm, Field } from "@/components/auth-shell";
+import { AuthShell, AuthForm, Field, CheckSpamNote } from "@/components/auth-shell";
 import { signIn, verifySignIn, accountErrorMessage } from "@/lib/account-api";
 import { GoogleButton, AuthDivider } from "@/components/google-button";
 
@@ -143,6 +143,7 @@ export default function SignInPage() {
             onChange={(e) => setCode(e.target.value)}
           />
         </AuthForm>
+        <CheckSpamNote what="code" />
       </AuthShell>
     );
   }

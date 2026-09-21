@@ -8,7 +8,35 @@
 
 import { type FormEvent, type ReactNode } from "react";
 import { Link } from "wouter";
-import { Loader2, ShieldCheck } from "lucide-react";
+import { Loader2, ShieldCheck, MailSearch } from "lucide-react";
+
+/**
+ * Shown wherever the next step depends on an email actually arriving.
+ *
+ * secscan.us is a young sending domain, so mail authenticates correctly
+ * (SPF, DKIM and DMARC all pass) and still lands in Junk for some recipients
+ * on reputation alone — most often Outlook and Hotmail. A sign-in code in the
+ * spam folder is indistinguishable from a broken login, and the person is
+ * already locked out, so telling them where to look costs nothing and is the
+ * difference between signing in and giving up.
+ *
+ * The "not spam" ask is not filler: it is the one action the recipient can
+ * take that actually improves where our next message lands for them, and it
+ * feeds the provider's own reputation signal for the domain.
+ */
+export function CheckSpamNote({ what = "email" }: { what?: string }) {
+  return (
+    <div className="mt-5 flex gap-2.5 rounded-lg border border-border bg-muted/40 px-3.5 py-3">
+      <MailSearch className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        <span className="font-medium text-foreground">Don't see the {what}?</span>{" "}
+        Check your spam or junk folder — we're a new sender, so mail sometimes
+        lands there. Marking it <span className="font-medium text-foreground">"Not spam"</span>{" "}
+        helps the next one reach your inbox.
+      </p>
+    </div>
+  );
+}
 
 export function AuthShell({
   title,

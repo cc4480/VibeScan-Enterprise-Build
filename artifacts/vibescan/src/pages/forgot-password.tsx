@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "wouter";
 import { useSeo } from "@/lib/seo";
-import { AuthShell, AuthForm, Field } from "@/components/auth-shell";
+import { AuthShell, AuthForm, Field, CheckSpamNote } from "@/components/auth-shell";
 import { requestPasswordReset, accountErrorMessage } from "@/lib/account-api";
 
 export default function ForgotPasswordPage() {
@@ -40,16 +40,17 @@ export default function ForgotPasswordPage() {
         }
       >
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Nothing arrived after a few minutes? Check your spam folder, then{" "}
+          Still nothing after a few minutes?{" "}
           <button
             type="button"
             onClick={() => setSent(false)}
             className="text-primary hover:underline underline-offset-4"
           >
-            try again
+            Try again
           </button>
           .
         </p>
+        <CheckSpamNote what="link" />
       </AuthShell>
     );
   }
