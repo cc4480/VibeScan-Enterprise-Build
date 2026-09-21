@@ -15,6 +15,51 @@ import { setMarketingSubscription } from "../lib/mailer";
 
 const router: IRouter = Router();
 
+/** Alert kinds a user can switch off, mapped to their column. */
+const ALERT_COLUMNS = {
+  cve: "notifyCveOptedOut",
+  regression: "notifyRegressionOptedOut",
+  certExpiry: "notifyCertExpiryOptedOut",
+  scanComplete: "notifyScanCompleteOptedOut",
+} as const;
+
+type AlertField = keyof typeof ALERT_COLUMNS;
+
+const SEVERITIES = ["info", "low", "medium", "high", "critical"] as const;
+
+interface PrefsRow {
+  marketingOptedOut?: boolean;
+  alertEmailsOptedOut?: boolean;
+  cve?: boolean;
+  regression?: boolean;
+  certExpiry?: boolean;
+  scanComplete?: boolean;
+  minSeverity?: string | null;
+}
+
+/**
+ * Stored as opt-OUTs, presented as opt-INs.
+ *
+ * The database records what someone turned off, because the default for every
+ * flag is "send it" and a false default is the one that survives a new column
+ * being added. A UI that asked people to tick boxes to NOT receive things
+ * would be its own bug report, so the inversion happens here, once, rather
+ * than in each client.
+ */
+function presentPrefs(row: PrefsRow | undefined) {
+  return {
+    productUpdates: !row?.marketingOptedOut,
+    monitorAlerts: !row?.alertEmailsOptedOut,
+    alerts: {
+      cve: !row?.cve,
+      regression: !row?.regression,
+      certExpiry: !row?.certExpiry,
+      scanComplete: !row?.scanComplete,
+    },
+    minSeverity: row?.minSeverity ?? "info",
+  };
+}
+
 router.get("/account/email-preferences", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) {
     res.status(401).json({ error: "Unauthorized" });
@@ -26,14 +71,16 @@ router.get("/account/email-preferences", async (req, res): Promise<void> => {
       .select({
         marketingOptedOut: usersTable.marketingOptedOut,
         alertEmailsOptedOut: usersTable.alertEmailsOptedOut,
+        cve: usersTable.notifyCveOptedOut,
+        regression: usersTable.notifyRegressionOptedOut,
+        certExpiry: usersTable.notifyCertExpiryOptedOut,
+        scanComplete: usersTable.notifyScanCompleteOptedOut,
+        minSeverity: usersTable.notifyMinSeverity,
       })
       .from(usersTable)
       .where(eq(usersTable.id, req.user.id));
 
-    res.json({
-      productUpdates: !row?.marketingOptedOut,
-      monitorAlerts: !row?.alertEmailsOptedOut,
-    });
+    res.json(presentPrefs(row));
   } catch (err) {
     req.log.error({ err }, "Failed to read email preferences");
     res.status(500).json({ error: "Failed to read email preferences" });
@@ -46,17 +93,35 @@ router.put("/account/email-preferences", async (req, res): Promise<void> => {
     return;
   }
 
-  const { productUpdates, monitorAlerts } = req.body ?? {};
-  if (typeof productUpdates !== "boolean" && typeof monitorAlerts !== "boolean") {
-    res.status(400).json({ error: "productUpdates or monitorAlerts (boolean) is required" });
+  const { productUpdates, monitorAlerts, alerts, minSeverity } = req.body ?? {};
+
+  const changes: Record<string, boolean | string> = {};
+  if (typeof productUpdates === "boolean") changes["marketingOptedOut"] = !productUpdates;
+  if (typeof monitorAlerts === "boolean") changes["alertEmailsOptedOut"] = !monitorAlerts;
+
+  if (alerts && typeof alerts === "object") {
+    for (const field of Object.keys(ALERT_COLUMNS) as AlertField[]) {
+      const wanted = (alerts as Record<string, unknown>)[field];
+      if (typeof wanted === "boolean") changes[ALERT_COLUMNS[field]] = !wanted;
+    }
+  }
+
+  if (minSeverity !== undefined) {
+    // Rejected rather than coerced: silently storing an unrecognised floor
+    // would decide, invisibly, which security alerts a person stops receiving.
+    if (!SEVERITIES.includes(minSeverity)) {
+      res.status(400).json({ error: `minSeverity must be one of: ${SEVERITIES.join(", ")}` });
+      return;
+    }
+    changes["notifyMinSeverity"] = minSeverity;
+  }
+
+  if (Object.keys(changes).length === 0) {
+    res.status(400).json({ error: "Nothing to update" });
     return;
   }
 
   try {
-    const changes: Record<string, boolean> = {};
-    if (typeof productUpdates === "boolean") changes["marketingOptedOut"] = !productUpdates;
-    if (typeof monitorAlerts === "boolean") changes["alertEmailsOptedOut"] = !monitorAlerts;
-
     const [row] = await db
       .update(usersTable)
       .set(changes)
@@ -65,6 +130,11 @@ router.put("/account/email-preferences", async (req, res): Promise<void> => {
         email: usersTable.email,
         marketingOptedOut: usersTable.marketingOptedOut,
         alertEmailsOptedOut: usersTable.alertEmailsOptedOut,
+        cve: usersTable.notifyCveOptedOut,
+        regression: usersTable.notifyRegressionOptedOut,
+        certExpiry: usersTable.notifyCertExpiryOptedOut,
+        scanComplete: usersTable.notifyScanCompleteOptedOut,
+        minSeverity: usersTable.notifyMinSeverity,
       });
 
     // The audience is the list a broadcast actually sends to, so a preference
@@ -76,10 +146,7 @@ router.put("/account/email-preferences", async (req, res): Promise<void> => {
       void setMarketingSubscription(row.email, productUpdates);
     }
 
-    res.json({
-      productUpdates: !row?.marketingOptedOut,
-      monitorAlerts: !row?.alertEmailsOptedOut,
-    });
+    res.json(presentPrefs(row));
   } catch (err) {
     req.log.error({ err }, "Failed to update email preferences");
     res.status(500).json({ error: "Failed to update email preferences" });

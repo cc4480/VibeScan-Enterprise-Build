@@ -3,11 +3,27 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSeo } from "@/lib/seo";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2, Loader2, AlertTriangle, Mail } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+/**
+ * Ordered least to most urgent, so the row reads as a threshold rather than a
+ * set of options. "Everything" rather than "Info" because that is what
+ * choosing it does — the stored value is still "info".
+ */
+const SEVERITY_CHOICES: { value: AlertSeverity; label: string }[] = [
+  { value: "info", label: "Everything" },
+  { value: "low", label: "Low and up" },
+  { value: "medium", label: "Medium and up" },
+  { value: "high", label: "High and up" },
+  { value: "critical", label: "Critical only" },
+];
 import {
   deleteAccount,
   getEmailPreferences,
   setEmailPreferences,
   type EmailPreferences,
+  type EmailPreferenceUpdate,
+  type AlertSeverity,
 } from "@/lib/account-api";
 
 /** Row with a switch. Optimistic: the toggle moves on click and reverts if the
@@ -76,10 +92,13 @@ export default function SettingsPage() {
     queryFn: getEmailPreferences,
   });
 
-  const updatePref = async (changes: Partial<EmailPreferences>) => {
+  const updatePref = async (changes: EmailPreferenceUpdate) => {
     const previous = queryClient.getQueryData<EmailPreferences>(["email-preferences"]);
     queryClient.setQueryData<EmailPreferences>(["email-preferences"], (old) =>
-      old ? { ...old, ...changes } : old,
+      // `alerts` is merged rather than replaced: the optimistic update sends
+      // one toggle, and spreading the parent would blank the other three
+      // until the server responded.
+      old ? { ...old, ...changes, alerts: { ...old.alerts, ...(changes.alerts ?? {}) } } : old,
     );
     setSaving(true);
     try {
@@ -151,12 +170,75 @@ export default function SettingsPage() {
               onChange={(next) => updatePref({ productUpdates: next })}
             />
             <PreferenceToggle
-              label="Monitor alerts"
-              description="CVE matches, security regressions and certificate expiry warnings for the targets you monitor. Turning these off means we will not tell you when something breaks."
+              label="Monitor alert emails"
+              description="The master switch for alert email. Your webhooks keep firing either way — turning this off quietens your inbox, not your Slack."
               checked={prefs.monitorAlerts}
               disabled={saving}
               onChange={(next) => updatePref({ monitorAlerts: next })}
             />
+
+            <div className="mt-8 pt-6 border-t border-white/10">
+              <h3 className="font-semibold mb-1">Which alerts</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Applies to email and webhooks. Turn off the ones you don't act on rather
+                than silencing everything.
+              </p>
+
+              <PreferenceToggle
+                label="New CVEs affecting your stack"
+                description="A newly published vulnerability matches a technology detected on a site you monitor, ranked by exploit probability."
+                checked={prefs.alerts.cve}
+                disabled={saving || !prefs.monitorAlerts}
+                onChange={(next) => updatePref({ alerts: { cve: next } })}
+              />
+              <PreferenceToggle
+                label="Regressions"
+                description="Something that was fixed has come back, or a new issue appeared since the last scan."
+                checked={prefs.alerts.regression}
+                disabled={saving || !prefs.monitorAlerts}
+                onChange={(next) => updatePref({ alerts: { regression: next } })}
+              />
+              <PreferenceToggle
+                label="Certificate expiry"
+                description="Warnings at 30, 14 and 7 days before a TLS certificate expires. These carry no severity, so the threshold below never hides them."
+                checked={prefs.alerts.certExpiry}
+                disabled={saving || !prefs.monitorAlerts}
+                onChange={(next) => updatePref({ alerts: { certExpiry: next } })}
+              />
+              <PreferenceToggle
+                label="Scan finished"
+                description="A routine confirmation each time a scheduled rescan completes. The one most people turn off first."
+                checked={prefs.alerts.scanComplete}
+                disabled={saving || !prefs.monitorAlerts}
+                onChange={(next) => updatePref({ alerts: { scanComplete: next } })}
+              />
+            </div>
+
+            <div className="mt-8 pt-6 border-t border-white/10">
+              <h3 className="font-semibold mb-1">Minimum severity</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Only send CVE and regression alerts at or above this level. Certificate
+                expiry is never filtered out by this.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {SEVERITY_CHOICES.map((choice) => (
+                  <button
+                    key={choice.value}
+                    type="button"
+                    disabled={saving}
+                    onClick={() => updatePref({ minSeverity: choice.value })}
+                    className={cn(
+                      "px-3.5 py-2 rounded-xl text-sm font-medium border transition-colors disabled:opacity-50",
+                      prefs.minSeverity === choice.value
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-secondary text-muted-foreground border-white/10 hover:text-foreground",
+                    )}
+                  >
+                    {choice.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         ) : null}
       </div>

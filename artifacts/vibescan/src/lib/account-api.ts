@@ -143,16 +143,38 @@ export interface EmailPreferences {
    *  Account mail (resets, verification, receipts) is not covered by either
    *  flag and always sends. */
   productUpdates: boolean;
-  /** Monitor alerts: CVE matches, regressions, certificate expiry. */
+  /** Master switch for monitor alert EMAIL. Does not affect webhooks. */
   monitorAlerts: boolean;
+  /** Per-kind control. Applies to email and webhooks alike. */
+  alerts: {
+    cve: boolean;
+    regression: boolean;
+    certExpiry: boolean;
+    scanComplete: boolean;
+  };
+  /** Only alerts at or above this severity are sent. "info" means everything. */
+  minSeverity: AlertSeverity;
 }
+
+export type AlertSeverity = "info" | "low" | "medium" | "high" | "critical";
 
 export async function getEmailPreferences(): Promise<EmailPreferences> {
   return customFetch("/api/account/email-preferences");
 }
 
+/**
+ * Partial by design, including inside `alerts`: the settings screen sends one
+ * toggle at a time, and the server changes only the fields it receives.
+ */
+export interface EmailPreferenceUpdate {
+  productUpdates?: boolean;
+  monitorAlerts?: boolean;
+  alerts?: Partial<EmailPreferences["alerts"]>;
+  minSeverity?: AlertSeverity;
+}
+
 export async function setEmailPreferences(
-  changes: Partial<EmailPreferences>,
+  changes: EmailPreferenceUpdate,
 ): Promise<EmailPreferences> {
   return customFetch("/api/account/email-preferences", {
     method: "PUT",
