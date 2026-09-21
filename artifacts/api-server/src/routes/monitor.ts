@@ -11,6 +11,7 @@ import { logger } from "../lib/logger";
 import { checkScanTarget } from "../lib/ssrfGuard";
 import { rateLimitMiddleware, scanRateLimitRules } from "../lib/rateLimit";
 import { trialScansExhausted, TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE } from "../lib/freeTrial";
+import { monitorEntitlement } from "../lib/entitlements";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -77,6 +78,44 @@ router.post("/monitor/subscriptions", requireMonitorAuth, monitorRateLimit, asyn
   // unlimited scans after the trial was spent.
   if (await trialScansExhausted(req.user.id)) {
     res.status(403).json({ error: TRIAL_LIMIT_MESSAGE, code: TRIAL_LIMIT_CODE });
+    return;
+  }
+
+  // How many sites this user's plan covers. Inert until
+  // MONITORING_REQUIRES_PLAN is set — see lib/entitlements.ts — so today this
+  // resolves to "unlimited" and refuses nobody.
+  const entitlement = await monitorEntitlement(req.user.id);
+  if (!entitlement.monitoringActive) {
+    res.status(403).json({
+      error:
+        entitlement.reason === "paused"
+          ? "Monitoring is paused while your plan is unpaid. Your history is still here."
+          : "Monitoring needs an active plan.",
+      code: "monitor_plan_required",
+      reason: entitlement.reason,
+    });
+    return;
+  }
+
+  // Counted rather than trusted from the plan: a limit lowered on a downgrade,
+  // or a row added by an admin, must both be reflected without a backfill.
+  const [{ value: activeCount }] = await db
+    .select({ value: count() })
+    .from(monitorSubscriptionsTable)
+    .where(
+      and(
+        eq(monitorSubscriptionsTable.userId, req.user.id),
+        eq(monitorSubscriptionsTable.status, "active"),
+      ),
+    );
+
+  if (Number(activeCount) >= entitlement.urlLimit) {
+    res.status(403).json({
+      error: `Your plan covers ${entitlement.urlLimit} monitored site${entitlement.urlLimit === 1 ? "" : "s"}. Upgrade or stop monitoring one to add another.`,
+      code: "monitor_url_limit",
+      urlLimit: entitlement.urlLimit,
+      monitoring: Number(activeCount),
+    });
     return;
   }
 
@@ -566,10 +605,15 @@ router.post("/monitor/subscriptions/:id/scan", monitorRateLimit, async (req, res
     return;
   }
 
-  // An on-demand rescan is a scan the user asked for, so the cap applies here
-  // too. The scheduler's own rescans do not go through this route and are not
-  // gated — an existing subscriber keeps getting them after the trial is spent.
-  if (await trialScansExhausted(req.user.id)) {
+  // An on-demand rescan is a scan the user asked for, so the free-scan cap
+  // applies — UNLESS they are paying to monitor this exact URL, in which case
+  // refusing is nonsense: the scheduler will rescan it on its own cadence
+  // anyway, and the only thing the cap achieves is blocking the button that
+  // does it sooner. Checked before the cap so a plan holder never sees it.
+  const rescanEntitlement = await monitorEntitlement(req.user.id);
+  const coveredByPlan = rescanEntitlement.monitoringActive && rescanEntitlement.plan !== null;
+
+  if (!coveredByPlan && (await trialScansExhausted(req.user.id))) {
     res.status(403).json({ error: TRIAL_LIMIT_MESSAGE, code: TRIAL_LIMIT_CODE });
     return;
   }

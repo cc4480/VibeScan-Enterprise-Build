@@ -38,6 +38,7 @@ import {
 } from "./mailer";
 import { fireWebhook } from "./webhook";
 import { APP_ORIGIN } from "./appOrigin";
+import { monitorEntitlement } from "./entitlements";
 
 const SWEEP_QUEUE      = "monitor-sweep";
 const CVE_QUEUE        = "monitor-cve-check";
@@ -170,9 +171,33 @@ async function runSweep(): Promise<void> {
     .from(monitorSubscriptionsTable)
     .where(eq(monitorSubscriptionsTable.status, "active"));
 
-  const due = subscriptions.filter((sub) => isSubscriptionDue(sub, now));
+  const dueByCadence = subscriptions.filter((sub) => isSubscriptionDue(sub, now));
 
-  log.info({ total: subscriptions.length, due: due.length }, "Subscriptions due for rescan");
+  // Entitlement is resolved per USER, not per subscription, so an agency with
+  // forty monitored sites costs one lookup rather than forty. Inert until
+  // MONITORING_REQUIRES_PLAN is set, where monitorEntitlement short-circuits
+  // before touching the database at all.
+  const entitlementByUser = new Map<string, boolean>();
+  const due: typeof dueByCadence = [];
+  let skippedUnentitled = 0;
+
+  for (const sub of dueByCadence) {
+    let allowed = entitlementByUser.get(sub.userId);
+    if (allowed === undefined) {
+      allowed = (await monitorEntitlement(sub.userId)).monitoringActive;
+      entitlementByUser.set(sub.userId, allowed);
+    }
+    if (allowed) {
+      due.push(sub);
+    } else {
+      skippedUnentitled++;
+    }
+  }
+
+  log.info(
+    { total: subscriptions.length, due: due.length, skippedUnentitled },
+    "Subscriptions due for rescan",
+  );
 
   const appOrigin = APP_ORIGIN;
 

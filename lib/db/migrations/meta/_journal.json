@@ -71,6 +71,13 @@
       "when": 1789921895150,
       "tag": "0009_fast_falcon",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790026023999,
+      "tag": "0010_fair_namor",
+      "breakpoints": true
     }
   ]
 }

@@ -98,6 +98,10 @@ vi.mock("@workspace/db", () => {
     monitorRegressionsTable: table("monitor_regressions"),
     certExpiryAlertsTable: table("cert_expiry_alerts"),
     scansTable: table("scans"),
+    // Omitting this is not a harmless gap: entitlements.ts fails OPEN on a
+    // database error, so an undefined table here throws, the catch allows the
+    // request, and every plan-limit test silently passes for the wrong reason.
+    billingSubscriptionsTable: table("billing_subscriptions"),
   };
 });
 
@@ -182,6 +186,10 @@ beforeEach(() => {
   wheres.length = 0;
   inserted.length = 0;
   queuedResults.length = 0;
+  // Reset rather than leave set: a test that turns enforcement on would
+  // otherwise silently change the behaviour of every test after it, and the
+  // default-off case is the one that matters most right now.
+  delete process.env["MONITORING_REQUIRES_PLAN"];
   vi.resetModules();
 });
 
@@ -256,6 +264,11 @@ describe("POST /monitor/subscriptions — closing the race with the 6-hourly swe
     // landing in that window enqueued a second baseline scan for the same
     // subscription. Asserting the value written here, rather than re-deriving
     // it, is what would catch someone removing the field again.
+    // The handler counts the caller's existing subscriptions against their
+    // plan limit before creating. COUNT always returns a row in Postgres; the
+    // shared mock answers every query with [], so it needs one supplied.
+    queuedResults.push([{ value: 0 }]);
+
     const handle = await handlerFor("post", "/monitor/subscriptions");
     const res = makeRes();
     const before = Date.now();
@@ -269,6 +282,69 @@ describe("POST /monitor/subscriptions — closing the race with the 6-hourly swe
     // Must be in the future, and specifically past the point a same-day sweep
     // tick could reach — not just "not undefined".
     expect(nextScanAt.getTime()).toBeGreaterThan(before + 24 * 60 * 60 * 1000);
+  });
+});
+
+describe("POST /monitor/subscriptions — plan limits", () => {
+  it("creates without complaint while enforcement is off, however many they already have", async () => {
+    // The property that matters on the day this ships: MONITORING_REQUIRES_PLAN
+    // is unset in production, so an existing user with any number of monitored
+    // sites must be unaffected. A high count here would refuse if the limit
+    // were being applied.
+    delete process.env["MONITORING_REQUIRES_PLAN"];
+    queuedResults.push([{ value: 99 }]);
+
+    const handle = await handlerFor("post", "/monitor/subscriptions");
+    const res = makeRes();
+    await handle(makeReq({ body: { targetUrl: "https://example.com" }, params: {} }), res);
+
+    expect(res.statusCode).toBe(201);
+  });
+
+  it("refuses once the caller is at their plan's URL limit", async () => {
+    process.env["MONITORING_REQUIRES_PLAN"] = "true";
+    // Billing row lookup, then the count of what they already monitor.
+    queuedResults.push([{ plan: "solo", status: "active", urlLimit: 3, grandfathered: false }]);
+    queuedResults.push([{ value: 3 }]);
+
+    const handle = await handlerFor("post", "/monitor/subscriptions");
+    const res = makeRes();
+    await handle(makeReq({ body: { targetUrl: "https://example.com" }, params: {} }), res);
+
+    expect(res.statusCode).toBe(403);
+    expect((res.body as { code: string }).code).toBe("monitor_url_limit");
+    // Nothing may be created once refused — the check is worthless if the row
+    // still lands.
+    expect(inserted.find((v) => "targetUrl" in v && "expiresAt" in v)).toBeUndefined();
+  });
+
+  it("allows the last slot under the limit", async () => {
+    // Guards the boundary: >= vs > is the classic off-by-one here, and getting
+    // it wrong sells someone three sites and gives them two.
+    process.env["MONITORING_REQUIRES_PLAN"] = "true";
+    queuedResults.push([{ plan: "solo", status: "active", urlLimit: 3, grandfathered: false }]);
+    queuedResults.push([{ value: 2 }]);
+
+    const handle = await handlerFor("post", "/monitor/subscriptions");
+    const res = makeRes();
+    await handle(makeReq({ body: { targetUrl: "https://example.com" }, params: {} }), res);
+
+    expect(res.statusCode).toBe(201);
+  });
+
+  it("refuses a paused plan before counting anything", async () => {
+    process.env["MONITORING_REQUIRES_PLAN"] = "true";
+    queuedResults.push([{ plan: "studio", status: "paused", urlLimit: 10, grandfathered: false }]);
+
+    const handle = await handlerFor("post", "/monitor/subscriptions");
+    const res = makeRes();
+    await handle(makeReq({ body: { targetUrl: "https://example.com" }, params: {} }), res);
+
+    expect(res.statusCode).toBe(403);
+    expect((res.body as { code: string }).code).toBe("monitor_plan_required");
+    // Says their history survives, because it does — that is the lapse
+    // behaviour, and the message is the only place the user learns it.
+    expect((res.body as { error: string }).error).toContain("history");
   });
 });
 

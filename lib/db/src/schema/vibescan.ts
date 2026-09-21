@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, integer, timestamp, jsonb, real, index, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, integer, timestamp, jsonb, real, index, uniqueIndex, varchar, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -198,6 +198,47 @@ export const monitorSubscriptionsTable = pgTable("monitor_subscriptions", {
   index("idx_monitor_status").on(table.status),
   index("idx_monitor_target").on(table.targetUrl),
   index("idx_monitor_next_scan").on(table.nextScanAt),
+]);
+
+/**
+ * What a user is entitled to, as distinct from what they are monitoring.
+ *
+ * One row per USER. `monitor_subscriptions` stays one row per monitored URL,
+ * and this is the plan those rows live under — so "how many URLs may they
+ * watch" and "may we still scan for them" are answered in one place instead of
+ * being inferred from payment history at every call site.
+ *
+ * `urlLimit` is stored rather than derived from `plan` on purpose. Grandfathered
+ * accounts and one-off arrangements then need no special case in code, and
+ * changing a published tier's allowance later does not silently rewrite what an
+ * existing customer was sold.
+ *
+ * `currentPeriodEnd` is null for rows that do not renew — grandfathered
+ * accounts have no billing period to end.
+ */
+export const billingSubscriptionsTable = pgTable("billing_subscriptions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // Unique: a user has at most one plan. A second row would make "which limit
+  // applies" ambiguous at exactly the moment it matters.
+  userId: text("user_id").notNull().unique(),
+  plan: text("plan", { enum: ["solo", "studio", "agency", "grandfathered"] }).notNull(),
+  // past_due is deliberately distinct from paused: Stripe is still retrying the
+  // card, so access continues through the grace window. paused is the state
+  // after that window, where scanning stops but history stays readable.
+  status: text("status", {
+    enum: ["active", "past_due", "paused", "cancelled"],
+  }).notNull().default("active"),
+  urlLimit: integer("url_limit").notNull(),
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  grandfathered: boolean("grandfathered").notNull().default(false),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("idx_billing_sub_user_id").on(table.userId),
+  index("idx_billing_sub_status").on(table.status),
+  uniqueIndex("uq_billing_sub_stripe_sub").on(table.stripeSubscriptionId),
 ]);
 
 export const cveAlertsTable = pgTable("cve_alerts", {
