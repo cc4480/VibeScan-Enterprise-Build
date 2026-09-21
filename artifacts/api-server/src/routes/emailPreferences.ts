@@ -15,8 +15,15 @@ import { setMarketingSubscription } from "../lib/mailer";
 
 const router: IRouter = Router();
 
-/** Alert kinds a user can switch off, mapped to their column. */
-const ALERT_COLUMNS = {
+/**
+ * Alert kinds a user can switch off, mapped to their column.
+ *
+ * Exported only so emailPreferences.columns.test.ts can check these names
+ * against the real schema. They are written as strings into an untyped update
+ * object, so the compiler cannot — and a typo here stores nothing while the
+ * UI happily animates the toggle.
+ */
+export const ALERT_COLUMNS = {
   cve: "notifyCveOptedOut",
   regression: "notifyRegressionOptedOut",
   certExpiry: "notifyCertExpiryOptedOut",
