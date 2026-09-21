@@ -16,6 +16,7 @@ import domainVerificationRouter from "./domainVerification";
 import emailPreferencesRouter from "./emailPreferences";
 import purchaseIntentRouter from "./purchaseIntent";
 import feedbackRouter from "./feedback";
+import checkoutRouter from "./checkout";
 
 const router: IRouter = Router();
 
@@ -36,5 +37,6 @@ router.use(domainVerificationRouter);
 router.use(emailPreferencesRouter);
 router.use(purchaseIntentRouter);
 router.use(feedbackRouter);
+router.use(checkoutRouter);
 
 export default router;

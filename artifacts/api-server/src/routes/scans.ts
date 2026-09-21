@@ -11,6 +11,7 @@ import { validateCredentials, encryptCredentials } from "../lib/scanCredentials"
 import { checkScanTarget } from "../lib/ssrfGuard";
 import { rateLimitMiddleware, scanRateLimitRules, scanNetworkRateLimitRules } from "../lib/rateLimit";
 import { trialScansExhausted, TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE } from "../lib/freeTrial";
+import { spendOneCredit, refundOneCredit } from "../lib/credits";
 
 // ── Abuse and cost control ───────────────────────────────────────────────────
 // A scan is expensive in a way an API request normally is not: it launches a
@@ -149,10 +150,37 @@ router.post("/scans", requireScanAuth, scanRateLimit, scanNetworkRateLimit, asyn
 
   const { targetUrl, credentials, secondaryCredentials } = parsed.data;
 
+  // Free scans first, then paid credits. Spending a credit while free scans
+  // remain would charge someone for something they already had.
+  //
+  // The credit is taken here, before the scan row exists, because the
+  // alternative — validate, create, then charge — leaves a window in which a
+  // scan exists that nobody paid for. The cost of taking it first is that every
+  // rejection below has to give it back, which is what refundIfCharged is for.
+  let creditUsed = false;
   if (await trialScansExhausted(req.user.id)) {
-    res.status(403).json({ error: TRIAL_LIMIT_MESSAGE, code: TRIAL_LIMIT_CODE });
-    return;
+    const remaining = await spendOneCredit(req.user.id);
+    if (remaining === null) {
+      res.status(403).json({ error: TRIAL_LIMIT_MESSAGE, code: TRIAL_LIMIT_CODE });
+      return;
+    }
+    creditUsed = true;
+    req.log.info({ remaining }, "Scan paid for with a credit");
   }
+
+  /** Give back the credit this request took, when it took one. */
+  const refundIfCharged = async (): Promise<void> => {
+    if (!creditUsed) return;
+    try {
+      await refundOneCredit(req.user.id);
+      req.log.info("Credit refunded — scan was not created");
+    } catch (err) {
+      // Worth a loud log rather than a 500: the caller's request already
+      // failed for its own reason, and burying that under a refund error
+      // would report the wrong problem.
+      req.log.error({ err }, "Could not refund a credit after a rejected scan");
+    }
+  };
 
   // There is one kind of scan now: the full one. The request schema still
   // accepts "deep" so existing clients keep working, and ignores it either way.
@@ -173,6 +201,7 @@ router.post("/scans", requireScanAuth, scanRateLimit, scanNetworkRateLimit, asyn
   const targetCheck = await checkScanTarget(targetUrl);
   if (!targetCheck.ok) {
     req.log.warn({ targetUrl, reason: targetCheck.reason }, "Blocked scan target");
+    await refundIfCharged();
     res.status(400).json({
       error:
         targetCheck.reason === "not a valid URL" ||
@@ -210,6 +239,7 @@ router.post("/scans", requireScanAuth, scanRateLimit, scanNetworkRateLimit, asyn
       .limit(1);
 
     if (!account?.passwordHash) {
+      await refundIfCharged();
       res.status(403).json({
         error:
           "Authenticated scanning needs a registered account. Create one to " +
@@ -219,6 +249,7 @@ router.post("/scans", requireScanAuth, scanRateLimit, scanNetworkRateLimit, asyn
     }
 
     if (!account.emailVerifiedAt) {
+      await refundIfCharged();
       res.status(403).json({
         error:
           "Verify your email address before storing login details for a scan.",
@@ -228,6 +259,7 @@ router.post("/scans", requireScanAuth, scanRateLimit, scanNetworkRateLimit, asyn
 
     const check = validateCredentials(credentials);
     if (!check.ok) {
+      await refundIfCharged();
       res.status(400).json({ error: check.error });
       return;
     }
@@ -243,6 +275,7 @@ router.post("/scans", requireScanAuth, scanRateLimit, scanNetworkRateLimit, asyn
     if (secondaryCredentials) {
       const secondCheck = validateCredentials(secondaryCredentials);
       if (!secondCheck.ok) {
+        await refundIfCharged();
         res.status(400).json({ error: `Second account: ${secondCheck.error}` });
         return;
       }
@@ -250,6 +283,7 @@ router.post("/scans", requireScanAuth, scanRateLimit, scanNetworkRateLimit, asyn
       req.log.info("Access-control testing enabled — second account supplied");
     }
   } else if (secondaryCredentials) {
+    await refundIfCharged();
     res.status(400).json({
       error: "A second account only works alongside a first one. Add primary credentials too.",
     });
@@ -266,6 +300,7 @@ router.post("/scans", requireScanAuth, scanRateLimit, scanNetworkRateLimit, asyn
   const dailyMax = quotaRow?.passwordHash ? DAILY_MAX_ACCOUNT : DAILY_MAX_ANON;
 
   if ((await scansToday(req.user.id)) >= dailyMax) {
+    await refundIfCharged();
     res.status(429).json({
       error: quotaRow?.passwordHash
         ? `Daily scan limit reached (${dailyMax}). It resets 24 hours after each scan.`
@@ -295,7 +330,7 @@ router.post("/scans", requireScanAuth, scanRateLimit, scanNetworkRateLimit, asyn
     .set({ status: "queued", startedAt: new Date() })
     .where(eq(scansTable.id, scan.id));
 
-  res.status(201).json({ scanId: scan.id, checkoutUrl: null, creditUsed: false });
+  res.status(201).json({ scanId: scan.id, checkoutUrl: null, creditUsed });
 });
 
 router.get("/scans/:id/status", async (req, res): Promise<void> => {
