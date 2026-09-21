@@ -6,7 +6,14 @@ Complete catalogue of every security check performed by the engine. Organised by
 
 ## Stage Architecture
 
-**Tier legend:** ★ = both Basic & Deep  |  ◆ = Deep only
+> **The Basic/Deep tier split no longer exists.** `routes/scans.ts` pins every scan to
+> the full run — "there is one kind of scan now: the full one" — and what varies between
+> two scans is how much of the target the scanner is *allowed* to reach: domain
+> verification, supplied credentials, a second account, and an out-of-band collector.
+> The ★ / ◆ markers below are kept as a record of which stage ran in which tier while
+> tiers existed; read them as history, not as current behaviour.
+
+**Tier legend (historical):** ★ = ran in both Basic & Deep  |  ◆ = Deep only
 
 ```
 Target URL
@@ -34,7 +41,7 @@ Target URL
           ├─ ssllabs.ts           ★  SSL Labs API TLS assessment (starts in
           │                          parallel with Stage 1, waits up to 120s)
           └─ recon.ts             ★  DNS enumeration, subdomain discovery via
-                                     crt.sh + brute-force, TCP port scan (30 ports)
+                                     crt.sh + brute-force, TCP port scan (34 ports)
 ```
 
 False-positive philosophy: every check requires a **positive confirmation signal** — not just a non-200 absence or a keyword match. Findings cite the exact HTTP response, header value, or decoded data that triggered them. Path-existence probes additionally fingerprint the target's catch-all/SPA routing behavior before trusting any HTTP 200 (see §2.1) — without this, multi-tenant platforms and client-routed SPAs false-positive on nearly every probed path.
@@ -615,7 +622,7 @@ Results (hostname + IP + CNAME if applicable + source) are stored in the report.
 
 ### 17.3 Port Scan
 
-TCP-connect scan of 30 ports with banner grabbing. Each connection is capped at 2 seconds. **Dangerous** ports produce first-class vulnerabilities merged into the scan findings:
+TCP-connect scan of 34 ports with banner grabbing. Each connection is capped at 2 seconds. **Dangerous** ports produce first-class vulnerabilities merged into the scan findings:
 
 | Port | Service | Severity | Reason |
 |------|---------|----------|--------|
