@@ -56,6 +56,33 @@ export function computeNextScanAt(grade: string, from: Date = new Date()): Date 
   return new Date(from.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
+/**
+ * Whether the sweep should enqueue a rescan for this subscription right now.
+ * This is the one decision that makes monitoring "automatic" — get it wrong
+ * in one direction and paying customers stop being rescanned; get it wrong in
+ * the other and the same subscription gets enqueued twice in one sweep tick.
+ *
+ * Pulled out of runSweep as its own pure function specifically so it can be
+ * tested without standing up the db, the queue and the mailer — the sweep body
+ * itself had zero tests before this, despite deciding when every automatic
+ * scan in the product fires.
+ */
+export function isSubscriptionDue(
+  sub: { expiresAt: Date; nextScanAt: Date | null; lastScanAt: Date | null },
+  now: Date = new Date(),
+): boolean {
+  if (sub.expiresAt <= now) return false;
+  if (!sub.nextScanAt) {
+    // No cadence set yet — this is the brand-new-subscription and the
+    // legacy-row shape. Treat "never scanned" as due (the baseline scan)
+    // and otherwise fall back to a 7-day floor so a row that predates
+    // nextScanAt being written on every path doesn't wait forever.
+    if (!sub.lastScanAt) return true;
+    return sub.lastScanAt.getTime() < now.getTime() - 7 * 24 * 60 * 60 * 1000;
+  }
+  return sub.nextScanAt <= now;
+}
+
 // ─── EPSS enrichment ──────────────────────────────────────────────────────────
 
 interface EpssEntry { cve: string; epss: string; percentile: string }
@@ -143,15 +170,7 @@ async function runSweep(): Promise<void> {
     .from(monitorSubscriptionsTable)
     .where(eq(monitorSubscriptionsTable.status, "active"));
 
-  const due = subscriptions.filter((sub) => {
-    if (sub.expiresAt <= now) return false;
-    if (!sub.nextScanAt) {
-      // No nextScanAt set yet — schedule if also no lastScanAt, or lastScanAt > 7 days ago
-      if (!sub.lastScanAt) return true;
-      return sub.lastScanAt.getTime() < now.getTime() - 7 * 24 * 60 * 60 * 1000;
-    }
-    return sub.nextScanAt <= now;
-  });
+  const due = subscriptions.filter((sub) => isSubscriptionDue(sub, now));
 
   log.info({ total: subscriptions.length, due: due.length }, "Subscriptions due for rescan");
 

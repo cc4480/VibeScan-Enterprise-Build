@@ -125,6 +125,15 @@ router.post("/monitor/subscriptions", requireMonitorAuth, monitorRateLimit, asyn
       expiresAt,
       lastReportId: seedReportId,
       lastScanAt: seedScanAt,
+      // Same sentinel the sweep itself writes before enqueueing (see
+      // monitorScheduler.ts) — the worker overwrites it with the real
+      // grade-based value once the baseline scan below completes. Leaving
+      // this null, as before, meant a subscription with no lastScanAt read
+      // as "due" to the sweep's own eyes: if the 6-hourly sweep ticked
+      // before this baseline scan finished, it enqueued a second one for
+      // the same subscription. Setting it here closes that race the same
+      // way the sweep already closes it against itself.
+      nextScanAt: new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000),
       webhookUrl: webhookUrl ?? null,
     })
     .returning();
@@ -359,7 +368,7 @@ router.get("/monitor/subscriptions/:id/history", async (req, res): Promise<void>
 
   const history = reports.map((r) => {
     const data = r.data as {
-      summary?: { grade?: string; riskScore?: number; vulnCount?: number };
+      summary?: { grade?: string; riskScore?: number; totalVulnerabilities?: number };
     };
     return {
       id: r.id,
@@ -368,7 +377,10 @@ router.get("/monitor/subscriptions/:id/history", async (req, res): Promise<void>
       tier: r.tier,
       grade: data.summary?.grade ?? null,
       riskScore: data.summary?.riskScore ?? null,
-      vulnCount: data.summary?.vulnCount ?? null,
+      // The stored field is totalVulnerabilities (see worker.ts's reportData) —
+      // this read `vulnCount`, a name that has never existed on a report, so
+      // every history entry ever returned this null regardless of the real count.
+      vulnCount: data.summary?.totalVulnerabilities ?? null,
     };
   });
 

@@ -20,6 +20,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 /** Every `where(...)` clause the route handlers built, in order. */
 const wheres: unknown[] = [];
+/** Every `values(...)` object passed to an insert, in order. */
+const inserted: Record<string, unknown>[] = [];
+/** Canned rows to hand back to successive awaited queries, in call order. */
+const queuedResults: unknown[][] = [];
 
 type Eq = { op: "eq"; col: unknown; val: unknown };
 
@@ -40,6 +44,9 @@ vi.mock("@workspace/db", () => {
   // needing to know which shape each route uses.
   const chain: Record<string, unknown> = {};
   const self = () => chain;
+  let pendingReturning = false;
+  let lastValues: Record<string, unknown> | null = null;
+  let idCounter = 0;
   Object.assign(chain, {
     select: self,
     from: self,
@@ -54,9 +61,31 @@ vi.mock("@workspace/db", () => {
     leftJoin: self,
     groupBy: self,
     set: self,
-    values: self,
-    returning: self,
-    then: (resolve: (v: unknown) => unknown) => resolve([]),
+    values: (v: Record<string, unknown>) => {
+      inserted.push(v);
+      lastValues = v;
+      return chain;
+    },
+    returning: () => {
+      pendingReturning = true;
+      return chain;
+    },
+    then: (resolve: (v: unknown) => unknown) => {
+      // A test-supplied row wins over the generic fallbacks below, for
+      // handlers that make more than one sequential query and need each
+      // one to answer differently (e.g. "found the subscription" then
+      // "here are its reports").
+      if (queuedResults.length > 0) {
+        resolve(queuedResults.shift());
+        return;
+      }
+      if (pendingReturning) {
+        pendingReturning = false;
+        resolve([{ id: `mock-id-${++idCounter}`, ...lastValues }]);
+        return;
+      }
+      resolve([]);
+    },
   });
   const table = (name: string) =>
     new Proxy({}, { get: (_t, prop) => `${name}.${String(prop)}` });
@@ -82,7 +111,12 @@ vi.mock("drizzle-orm", () => ({
 
 vi.mock("../lib/queue", () => ({ enqueueScan: vi.fn(async () => undefined) }));
 vi.mock("../lib/logger", () => ({
-  logger: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) },
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+  },
 }));
 vi.mock("../lib/ssrfGuard", () => ({ checkScanTarget: async () => ({ ok: true }) }));
 vi.mock("../lib/rateLimit", () => ({
@@ -146,8 +180,21 @@ async function idRoutes(): Promise<Array<{ label: string; handle: Handler }>> {
 
 beforeEach(() => {
   wheres.length = 0;
+  inserted.length = 0;
+  queuedResults.length = 0;
   vi.resetModules();
 });
+
+/** The terminal handler for one exact method+path, for routes idRoutes() won't match. */
+async function handlerFor(method: string, path: string): Promise<Handler> {
+  const mod = await import("./monitor.js");
+  const router = mod.default as unknown as { stack: RouteLayer[] };
+  const layer = router.stack.find(
+    (l) => l.route?.path === path && l.route.methods[method],
+  );
+  if (!layer?.route) throw new Error(`no ${method} ${path} route`);
+  return layer.route.stack[layer.route.stack.length - 1]!.handle;
+}
 
 describe("/monitor/subscriptions/:id — ownership", () => {
   it("finds the :id endpoints this file is meant to guard", async () => {
@@ -198,5 +245,58 @@ describe("/monitor/subscriptions/:id — ownership", () => {
       // rescan endpoint, a real user's scan budget.
       expect(wheres, `${label} queried the db while unauthenticated`).toHaveLength(0);
     }
+  });
+});
+
+describe("POST /monitor/subscriptions — closing the race with the 6-hourly sweep", () => {
+  it("sets a future nextScanAt at creation, so the sweep can't read a fresh subscription as already due", async () => {
+    // Before this fix, a brand-new subscription had nextScanAt: null and
+    // lastScanAt: null until its baseline scan finished — the exact shape
+    // isSubscriptionDue() (monitorScheduler.ts) treats as due. A sweep tick
+    // landing in that window enqueued a second baseline scan for the same
+    // subscription. Asserting the value written here, rather than re-deriving
+    // it, is what would catch someone removing the field again.
+    const handle = await handlerFor("post", "/monitor/subscriptions");
+    const res = makeRes();
+    const before = Date.now();
+
+    await handle(makeReq({ body: { targetUrl: "https://example.com" }, params: {} }), res);
+
+    const subInsert = inserted.find((v) => "targetUrl" in v && "expiresAt" in v);
+    expect(subInsert, "no insert into monitor_subscriptions was recorded").toBeDefined();
+    expect(subInsert!.nextScanAt).toBeInstanceOf(Date);
+    const nextScanAt = subInsert!.nextScanAt as Date;
+    // Must be in the future, and specifically past the point a same-day sweep
+    // tick could reach — not just "not undefined".
+    expect(nextScanAt.getTime()).toBeGreaterThan(before + 24 * 60 * 60 * 1000);
+  });
+});
+
+describe("GET /monitor/subscriptions/:id/history — trend data", () => {
+  it("maps vulnCount from the report's real totalVulnerabilities field", async () => {
+    // The route used to read `data.summary.vulnCount`, a key that has never
+    // existed on a stored report (worker.ts writes `totalVulnerabilities`) —
+    // every history entry, for every subscription, returned vulnCount: null.
+    queuedResults.push([{ id: "sub-1" }]); // ownership lookup
+    queuedResults.push([
+      {
+        id: "report-1",
+        scanId: "scan-1",
+        scannedAt: new Date("2026-09-01T00:00:00.000Z"),
+        tier: "deep",
+        data: { summary: { grade: "B", riskScore: 22, totalVulnerabilities: 7 } },
+      },
+    ]); // the reports query
+
+    const routes = await idRoutes();
+    const history = routes.find((r) => r.label.includes("/history"));
+    expect(history, "no GET .../history route found").toBeDefined();
+
+    const res = makeRes();
+    await history!.handle(makeReq(), res);
+
+    const body = res.body as Array<{ vulnCount: number | null; grade: string | null }>;
+    expect(body[0]?.grade).toBe("B");
+    expect(body[0]?.vulnCount).toBe(7);
   });
 });

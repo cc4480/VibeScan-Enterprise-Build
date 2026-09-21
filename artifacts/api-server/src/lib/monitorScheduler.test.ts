@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { nextScanDelayDays, computeNextScanAt } from "./monitorScheduler";
+import { nextScanDelayDays, computeNextScanAt, isSubscriptionDue } from "./monitorScheduler";
 
 /**
  * The rescan cadence is a published claim — secscan.info tells people an A is
@@ -84,5 +84,49 @@ describe("computeNextScanAt", () => {
     const beforeDst = new Date("2026-10-25T00:30:00.000Z");
     const expected = beforeDst.getTime() + 14 * 24 * 60 * 60 * 1000;
     expect(computeNextScanAt("A", beforeDst).getTime()).toBe(expected);
+  });
+});
+
+describe("isSubscriptionDue — the decision that makes rescans automatic", () => {
+  const now = new Date("2026-09-20T12:00:00.000Z");
+  const past = (days: number) => new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  const future = (days: number) => new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+
+  it("is due once nextScanAt has passed", () => {
+    expect(isSubscriptionDue({ expiresAt: future(300), nextScanAt: past(1), lastScanAt: past(8) }, now)).toBe(true);
+  });
+
+  it("is not due while nextScanAt is still in the future", () => {
+    expect(isSubscriptionDue({ expiresAt: future(300), nextScanAt: future(1), lastScanAt: past(1) }, now)).toBe(false);
+  });
+
+  it("is never due once the subscription has expired, even if nextScanAt says otherwise", () => {
+    expect(isSubscriptionDue({ expiresAt: past(1), nextScanAt: past(5), lastScanAt: past(8) }, now)).toBe(false);
+  });
+
+  it("is due for a subscription that has never been scanned and has no cadence set", () => {
+    // The exact shape of a subscription the moment POST /monitor/subscriptions
+    // inserts it — before its baseline scan has finished — MUST still read as
+    // due once nextScanAt is genuinely absent (the legacy/no-cadence case),
+    // or a subscription could stall forever with nothing to advance it.
+    expect(isSubscriptionDue({ expiresAt: future(300), nextScanAt: null, lastScanAt: null }, now)).toBe(true);
+  });
+
+  it("without a cadence, is not due again within 7 days of the last scan", () => {
+    expect(isSubscriptionDue({ expiresAt: future(300), nextScanAt: null, lastScanAt: past(3) }, now)).toBe(false);
+  });
+
+  it("without a cadence, becomes due again after 7 days", () => {
+    expect(isSubscriptionDue({ expiresAt: future(300), nextScanAt: null, lastScanAt: past(8) }, now)).toBe(true);
+  });
+
+  it("closes the race this function was pulled out to fix: a fresh subscription with a sentinel nextScanAt is not due yet", () => {
+    // routes/monitor.ts sets nextScanAt = now + 3 days at creation, precisely
+    // so a subscription whose baseline scan is still in flight does not also
+    // read as "due" to this same day's sweep tick. Before that fix, this exact
+    // shape — no lastScanAt, no nextScanAt — returned true here, and a sweep
+    // landing between subscribe and baseline-scan-completion double-enqueued.
+    const justCreated = { expiresAt: future(300), nextScanAt: future(3), lastScanAt: null };
+    expect(isSubscriptionDue(justCreated, now)).toBe(false);
   });
 });
