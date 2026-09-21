@@ -29,7 +29,7 @@ DATABASE_URL=postgres://localhost/whatever \
 ```
 
 Runs the real scanner — active probing on, two credentialed accounts — against
-the fixture and reports which of the 71 tracked findings were detected,
+the fixture and reports which of the 73 tracked findings were detected,
 the same shape as `detection-check.ts` and `live-scan.ts`. Exit code is
 non-zero on any miss. `--list` prints every finding actually returned.
 
@@ -70,6 +70,7 @@ just "should, based on reading the code":
 | `ssrfProbe.ts` | `GET /api/webhook-preview?url=` does a real server-side fetch of the caller's URL, no allowlist — confirmed via an actual callback to the collector, not asserted from reading the code (needs `--active` AND a reachable `OOB_BASE_URL`/`APP_ORIGIN`; see `verify-vuln-fixture.ts`) |
 | `apiProbe.ts` | Missing auth, over-exposed sensitive fields, BFLA (write reachable unauthenticated), mass assignment (a `role` field the spec declares and the handler actually applies), API-level IDOR, SQL injection in a declared parameter — all via an OpenAPI spec at `/openapi.json` describing `/api/records/{id}`, `/api/search`, `/api/users` |
 | `accessControlProbe.ts` | Page-level IDOR and identifier-enumeration on `/account/:id`, which ignores both the caller's session and the `:id` in the URL |
+| `deserializationProbe.ts` | Four `Set-Cookie` values on `/app/dashboard`, each a real serialized object carrying `{"user":"admin"}` — Java (`AC ED 00 05`), Ruby Marshal (`04 08`), Python pickle (protocol 2), and a URL-encoded PHP object. Planted on a crawled inner route because the probe is only reached from `crawler.ts`; a root-page cookie never passes through it |
 
 ## Not covered, and why — this needs infrastructure an app cannot provide
 

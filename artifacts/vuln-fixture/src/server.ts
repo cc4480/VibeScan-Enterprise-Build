@@ -314,6 +314,31 @@ app.get("/app/dashboard", (_req, res) => {
   // Also misses a header the root has (CSP), for crawler.ts's own
   // "Content-Security-Policy Missing on Internal Routes" finding.
   res.removeHeader("Content-Security-Policy");
+
+  // deserializationProbe.ts — a native serialized object in a cookie the server
+  // issues (CWE-502). Planted HERE rather than on the root because the probe is
+  // only reached from crawler.ts, which inspects crawled and probed pages; a
+  // root-page cookie never passes through it.
+  //
+  // Every value below is a REAL serialized object, not a lookalike shaped to the
+  // regex: they decode to the genuine magic bytes (Java AC ED 00 05, Ruby Marshal
+  // 04 08, pickle protocol-2 80 02), each carrying {"user":"admin"}. A fixture
+  // that matched the marker without being the thing the marker stands for would
+  // verify the regex and nothing else. None is a gadget chain — the probe is
+  // detection-only, and so is this.
+  //
+  // Four separate cookie names because the probe reports one format per cookie
+  // and dedupes on name+format, so a single cookie could only ever prove one
+  // marker. Between them these exercise both paths: the three base64 markers
+  // that depend on the start-of-value anchor, and the PHP grammar marker that is
+  // only reachable after URL-decoding.
+  res.setHeader("Set-Cookie", [
+    "jsession_state=rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcAUH2sHDFmDRAwACRgAKbG9hZEZhY3RvckkACXRocmVzaG9sZHhwP0AAAAAAAAx3CAAAABAAAAABdAAEdXNlcnQABWFkbWlueA==; Path=/",
+    "_rails_session=BAh7BjoJdXNlciIKYWRtaW4GOgZFVA==; Path=/",
+    "py_state=gAJ9cQBYBAAAAHVzZXJxAVgFAAAAYWRtaW5xAnMu; Path=/",
+    `php_prefs=${encodeURIComponent('O:8:"stdClass":1:{s:4:"user";s:5:"admin";}')}; Path=/`,
+  ]);
+
   res.type("text/html").send(`<!doctype html><html><head><title>Dashboard</title></head><body><h1>Dashboard</h1></body></html>`);
 });
 app.get("/app/.env", (_req, res) => {

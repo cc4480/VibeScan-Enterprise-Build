@@ -68,6 +68,20 @@ const EXPECTED: Array<{ module: string; label: string; match: RegExp }> = [
 
   // ── crawler.ts / crawler-data.ts (inner routes) ─────────────────────────
   { module: "crawler.ts", label: "CSP missing on internal route", match: /Content-Security-Policy Missing on.*Internal Route/i },
+
+  // ── deserializationProbe.ts (CWE-502) ───────────────────────────────────
+  // Tracked here rather than under scanner.ts because the probe is only
+  // reached from crawler.ts, so the cookies are planted on /app/dashboard.
+  //
+  // Added 2026-09-20, closing the last check in SCAN_CHECKS.md that had never
+  // been observed firing anywhere: not in this fixture, and zero times across
+  // all 50 corpus runs. It had only ever been exercised by unit tests, which
+  // made it indistinguishable from a check that no longer worked — the same
+  // shape as the two production false negatives this fixture exists to catch.
+  { module: "deserializationProbe.ts", label: "Java serialized object in a cookie", match: /Insecure Deserialization Exposure \(Java object/i },
+  { module: "deserializationProbe.ts", label: "Ruby Marshal object in a cookie", match: /Insecure Deserialization Exposure \(Ruby \(Marshal\) object/i },
+  { module: "deserializationProbe.ts", label: "Python pickle object in a cookie", match: /Insecure Deserialization Exposure \(Python \(pickle\) object/i },
+  { module: "deserializationProbe.ts", label: "PHP serialized object in a cookie (URL-decoded)", match: /Insecure Deserialization Exposure \(PHP object/i },
   { module: "crawler-data.ts", label: ".env exposed on inner route", match: /Environment File Exposed on Inner Route/i },
   { module: "crawler-data.ts", label: "git exposed on inner route", match: /Git Repository Exposed on Inner Route/i },
   { module: "crawler-data.ts", label: "config exposed on inner route", match: /Configuration File Exposed on Inner Route/i },
