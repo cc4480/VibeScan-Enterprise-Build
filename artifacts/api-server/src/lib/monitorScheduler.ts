@@ -432,7 +432,13 @@ async function runCertExpiryCheck(): Promise<void> {
           });
         }
 
-        break; // Only fire one threshold per run (the lowest applicable one)
+        // One threshold per run, so a subscription added late — or one that
+        // missed runs while the worker was down — sends a reminder a day
+        // rather than three at once. CERT_THRESHOLDS is ordered [30, 14, 7],
+        // so this fires the WIDEST unalerted band first, not the narrowest;
+        // the email still quotes the real daysRemaining, so its content is
+        // correct either way and only the recorded threshold differs.
+        break;
       }
     } catch (err) {
       log.error({ err, subscriptionId: sub.id }, "Cert expiry check failed for subscription");
