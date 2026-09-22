@@ -21,36 +21,28 @@ beyond the pricing copy.
 
 ---
 
-## 0. Push order
+## 0. Order
 
-Push `VibeScan-Enterprise-Build` (secscan.us) and `secscan-info` (secscan.info)
-**together**, once Stripe test mode works end to end. secscan.info's pricing
-copy (commit "Replace \"free during early access\" with the real pricing")
-quotes SecScan Pro; published before checkout is live, it would advertise a
-plan nobody can buy.
+1. **Test locally** with Stripe test keys (step 1) — nothing is pushed yet.
+2. **Push both repos together**: `VibeScan-Enterprise-Build` (secscan.us) and
+   `secscan-info` (secscan.info). secscan.info's pricing copy quotes SecScan
+   Pro; pushed alone, it would advertise a plan secscan.us cannot sell.
+3. **Go live** on secscan.us with live keys (step 3).
 
-## 1. Test mode first (do not skip)
+## 1. Test mode, locally (do not skip)
 
 1. Stripe dashboard → toggle **Test mode** on (top right).
 2. **Developers → API keys** → copy the **Secret key** (`sk_test_…`).
-3. **Developers → Webhooks → Add endpoint**
-   - URL: `https://secscan.us/api/scan/webhook`
-   - Events — select exactly these five:
-     - `checkout.session.completed`
-     - `checkout.session.async_payment_succeeded`
-     - `invoice.paid`
-     - `customer.subscription.updated`
-     - `customer.subscription.deleted`
-   - Save, then **Reveal** the signing secret (`whsec_…`).
-4. **Settings → Billing → Customer portal** → turn on: cancel subscriptions,
-   update payment methods, view invoices → **Save**. (Without this, "Manage or
-   cancel" in Settings cannot open.)
-5. Railway → project → **web** service → **Variables**, add:
-   - `STRIPE_SECRET_KEY` = the `sk_test_…` key
-   - `STRIPE_WEBHOOK_SECRET` = the `whsec_…` secret
-
-   Set **both** at the same time. With only the key, customers could pay and
-   never be credited — the server logs an error at boot if that happens.
+3. Install the Stripe CLI, run `stripe login`, then
+   `stripe listen --forward-to localhost:<PORT>/api/scan/webhook`. It prints a
+   webhook signing secret (`whsec_…`) and forwards every test event to your
+   machine.
+4. Run SecScan locally with `STRIPE_SECRET_KEY=sk_test_…` and that
+   `STRIPE_WEBHOOK_SECRET`. Set **both** at once — a key alone takes money it
+   cannot credit, and the server logs an error at boot if you do that.
+5. Still in test mode: **Settings → Billing → Customer portal** → turn on
+   cancel subscriptions (at end of billing period), update payment methods,
+   view invoices → **Save**. Test and live mode keep separate portal settings.
 
 ## 2. Test every path with Stripe's test card
 
@@ -63,12 +55,25 @@ Card `4242 4242 4242 4242`, any future date, any CVC.
 - [ ] Stripe → Webhooks → your endpoint: every delivery shows **200**.
 - [ ] Declined card `4000 0000 0000 0002` → nothing is granted.
 
-## 3. Go live
+## 3. Go live (after pushing both repos)
 
-1. Toggle **Test mode off** and repeat steps 1.2–1.4 in live mode (live mode
-   has its own keys, webhook endpoint and portal settings).
-2. Replace both Railway variables with the **live** `sk_live_…` and `whsec_…`.
-3. Buy one real $12 credit with your own card, confirm it lands, refund it from
+1. Toggle **Test mode off**. **Developers → API keys** → copy the live secret
+   key (`sk_live_…`).
+2. **Developers → Webhooks → Add endpoint**
+   - URL: `https://secscan.us/api/scan/webhook`
+   - Events — select exactly these five:
+     - `checkout.session.completed`
+     - `checkout.session.async_payment_succeeded`
+     - `invoice.paid`
+     - `customer.subscription.updated`
+     - `customer.subscription.deleted`
+   - Save, then **Reveal** the signing secret (`whsec_…`).
+3. **Settings → Billing → Customer portal** → turn on: cancel subscriptions
+   (at end of billing period), update payment methods, view invoices → **Save**.
+   Without this, "Manage or cancel" in Settings cannot open.
+4. Railway → **web** service → **Variables**: add `STRIPE_SECRET_KEY` and
+   `STRIPE_WEBHOOK_SECRET` (the live values), both at once.
+5. Buy one real $12 credit with your own card, confirm it lands, refund it from
    the Stripe dashboard.
 
 ## 4. Decide before switching monitoring to paid
