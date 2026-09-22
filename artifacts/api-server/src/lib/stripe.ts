@@ -43,6 +43,11 @@ export const CREDITS_MAP: Record<string, number> = {
 };
 
 export function getOrigin(req: { headers: Record<string, string | string[] | undefined> }): string {
+  // The configured origin wins. The headers below are client-influenced, and
+  // this builds the URLs Stripe sends a paying customer back to — a forged
+  // X-Forwarded-Host would bounce them somewhere else after they paid.
+  const configured = process.env["APP_ORIGIN"]?.trim().replace(/\/+$/, "");
+  if (configured) return configured;
   const proto = req.headers["x-forwarded-proto"] || "https";
   const host = req.headers["x-forwarded-host"] || req.headers["host"] || "localhost";
   return `${proto}://${host}`;

@@ -17,7 +17,12 @@
  * webhook will verify the payment and credit nobody.
  */
 import { Router, type IRouter } from "express";
+import { db, billingSubscriptionsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import { stripe, PRICE_MAP, CREDITS_MAP, getOrigin } from "../lib/stripe";
+import { DEFAULT_PLAN } from "../lib/plans";
+import { creditBalance } from "../lib/credits";
+import { trialScansUsedBy, FREE_TRIAL_SCAN_LIMIT } from "../lib/freeTrial";
 
 const router: IRouter = Router();
 
@@ -35,6 +40,16 @@ router.get("/checkout/packs", (_req, res): void => {
       name: PRICE_MAP[tier]?.name ?? tier,
       description: PRICE_MAP[tier]?.description ?? "",
     })),
+    // The subscription, priced from the same place the session reads.
+    plan: {
+      key: DEFAULT_PLAN.key,
+      name: DEFAULT_PLAN.name,
+      amountCents: DEFAULT_PLAN.amountCents,
+      interval: "month",
+      urlLimit: DEFAULT_PLAN.urlLimit,
+      includedScans: DEFAULT_PLAN.includedScans,
+      description: DEFAULT_PLAN.description,
+    },
     enabled: stripe !== null,
   });
 });
@@ -105,6 +120,157 @@ router.post("/checkout/credits", async (req, res): Promise<void> => {
     // Never surface Stripe's message: it can name internal configuration.
     req.log.error({ err, tier }, "Failed to create a checkout session");
     res.status(502).json({ error: "Could not start checkout. Please try again." });
+  }
+});
+
+/** The user's plan row, or null. */
+async function currentPlan(userId: string) {
+  const [row] = await db
+    .select()
+    .from(billingSubscriptionsTable)
+    .where(eq(billingSubscriptionsTable.userId, userId))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Start the $50/month subscription.
+ *
+ * The price is built inline (price_data with a monthly recurring interval)
+ * rather than referencing a Price created in the Stripe dashboard, for the same
+ * reason the packs are: the amount lives in exactly one place in this repo, so
+ * the pricing page cannot advertise a number the session will not charge.
+ *
+ * user_id is set on BOTH the session and the subscription. The session's copy
+ * reaches checkout.session.completed; the subscription's copy is snapshotted
+ * onto every invoice, which is how invoice.paid finds the customer even when it
+ * arrives before checkout.session.completed does.
+ */
+router.post("/checkout/subscription", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  if (!stripe) {
+    res.status(503).json({ error: "Payments are not configured on this deployment." });
+    return;
+  }
+
+  // One plan per user (billing_subscriptions.user_id is unique). Someone who
+  // already has a live one is sent to manage it, not charged a second time.
+  const existing = await currentPlan(req.user.id);
+  if (existing && existing.status !== "cancelled") {
+    res.status(409).json({ error: "You already have an active subscription.", code: "already_subscribed" });
+    return;
+  }
+
+  const origin = getOrigin(req as unknown as { headers: Record<string, string | string[] | undefined> });
+  const metadata = { type: "subscription", user_id: req.user.id, plan: DEFAULT_PLAN.key };
+
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: "usd",
+            unit_amount: DEFAULT_PLAN.amountCents,
+            recurring: { interval: "month" },
+            product_data: { name: DEFAULT_PLAN.name, description: DEFAULT_PLAN.description },
+          },
+        },
+      ],
+      // A returning subscriber reuses their Stripe customer, so their payment
+      // history and card stay in one place.
+      ...(existing?.stripeCustomerId
+        ? { customer: existing.stripeCustomerId }
+        : { customer_email: req.user.email ?? undefined }),
+      metadata,
+      subscription_data: { metadata },
+      success_url: `${origin}/dashboard?purchase=subscribed`,
+      cancel_url: `${origin}/dashboard?purchase=cancelled`,
+    });
+
+    if (!session.url) {
+      req.log.error({ sessionId: session.id }, "Stripe returned a subscription session with no URL");
+      res.status(502).json({ error: "Could not start checkout. Please try again." });
+      return;
+    }
+    req.log.info({ sessionId: session.id }, "Subscription checkout session created");
+    res.status(201).json({ checkoutUrl: session.url });
+  } catch (err) {
+    req.log.error({ err }, "Failed to create a subscription checkout session");
+    res.status(502).json({ error: "Could not start checkout. Please try again." });
+  }
+});
+
+/**
+ * Stripe's hosted customer portal: cancel, change card, download invoices.
+ * Built by Stripe rather than here, so cancelling is never harder than
+ * subscribing — and the webhook hears about whatever the customer does there.
+ */
+router.post("/billing/portal", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  if (!stripe) {
+    res.status(503).json({ error: "Payments are not configured on this deployment." });
+    return;
+  }
+  const existing = await currentPlan(req.user.id);
+  if (!existing?.stripeCustomerId) {
+    res.status(404).json({ error: "No subscription to manage." });
+    return;
+  }
+  try {
+    const origin = getOrigin(req as unknown as { headers: Record<string, string | string[] | undefined> });
+    const portal = await stripe.billingPortal.sessions.create({
+      customer: existing.stripeCustomerId,
+      return_url: `${origin}/dashboard`,
+    });
+    res.status(201).json({ url: portal.url });
+  } catch (err) {
+    req.log.error({ err }, "Failed to create a billing portal session");
+    res.status(502).json({ error: "Could not open billing. Please try again." });
+  }
+});
+
+/**
+ * Everything the account page needs to say what someone can do next: free
+ * scans left, included scans left, credits, and the plan's state.
+ */
+router.get("/billing/status", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  try {
+    const [row, credits, used] = await Promise.all([
+      currentPlan(req.user.id),
+      creditBalance(req.user.id),
+      trialScansUsedBy(req.user.id),
+    ]);
+    res.json({
+      freeScansRemaining: Math.max(0, FREE_TRIAL_SCAN_LIMIT - used),
+      freeScanLimit: FREE_TRIAL_SCAN_LIMIT,
+      credits,
+      subscription: row
+        ? {
+            plan: row.plan,
+            status: row.status,
+            includedScansRemaining: row.includedScansRemaining,
+            urlLimit: row.urlLimit,
+            currentPeriodEnd: row.currentPeriodEnd?.toISOString() ?? null,
+            canManage: row.stripeCustomerId !== null,
+          }
+        : null,
+      paymentsEnabled: stripe !== null,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to read billing status");
+    res.status(500).json({ error: "Failed to read billing status" });
   }
 });
 
