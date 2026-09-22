@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSeo } from "@/lib/seo";
+import { BuyOptions } from "@/components/billing-options";
 
 export default function LandingPage() {
   // No title or description: the server already renders the right ones for "/"
@@ -302,7 +303,7 @@ export default function LandingPage() {
             <Zap className="w-3.5 h-3.5" /> Free Trial
           </div>
           <h2 className="text-3xl md:text-4xl font-bold mb-4">2 free scans, everything included</h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto">Every account gets 2 free scans to try the platform — every check, no tier to pick. After that, buy credits — they never expire.</p>
+          <p className="text-muted-foreground max-w-2xl mx-auto">Every account gets 2 free scans to try the platform — every check, no tier to pick. After that, subscribe to SecScan Pro for monitoring plus monthly scans, or buy credits that never expire.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
@@ -327,16 +328,18 @@ export default function LandingPage() {
             },
             {
               icon: Bell,
-              title: "Continuous Monitor",
-              desc: "Automated rescans + CVE alerts.",
+              title: "SecScan Pro — $50/month",
+              desc: "Continuous monitoring, plus 5 full scans every month.",
               features: [
+                "Monitoring for up to 3 sites",
+                "5 full scans every month",
+                "Hourly uptime, header and certificate checks",
+                "Hourly CVE matching, ranked by EPSS",
                 "Rescans that follow your grade (A: 14d → F: 3d)",
-                "Daily CVE matching, ranked by EPSS",
-                "Certificate expiry alerts at 30/14/7 days",
                 "Regression alerts and Slack webhooks",
               ],
-              cta: "Start Monitoring",
-              href: "/monitor",
+              cta: "See plans",
+              href: "#buy",
               color: "text-indigo-400",
               bg: "bg-indigo-400/10",
               border: "border-indigo-500/30",
@@ -363,11 +366,18 @@ export default function LandingPage() {
               </ul>
               <Link
                 href={item.href}
+                onClick={(e) => {
+                  // In-page anchor: scroll to the plans rather than route.
+                  if (item.href.startsWith("#")) {
+                    e.preventDefault();
+                    document.getElementById(item.href.slice(1))?.scrollIntoView({ behavior: "smooth" });
+                  }
+                }}
                 className={cn(
                   "w-full py-3 rounded-xl font-bold transition-all text-center block",
                   item.popular
                     ? "bg-primary text-primary-foreground hover:shadow-[0_0_20px_rgba(20,184,120,0.4)]"
-                    : item.href === "/monitor"
+                    : item.href === "#buy"
                     ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30"
                     : "bg-secondary text-foreground hover:bg-white/10",
                 )}
@@ -378,47 +388,60 @@ export default function LandingPage() {
           ))}
         </div>
 
-        <div className="mt-14 max-w-4xl mx-auto">
+        <div id="buy" className="mt-14 max-w-5xl mx-auto scroll-mt-24">
           <div className="text-center mb-8">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary border border-white/10 text-muted-foreground text-xs font-semibold mb-4 uppercase tracking-wider">
-              <Package className="w-3.5 h-3.5" /> Scan Credits
+              <Package className="w-3.5 h-3.5" /> Plans & Credits
             </div>
-            <h3 className="text-2xl md:text-3xl font-bold mb-3">Buy more, once your free scans are gone</h3>
-            <p className="text-muted-foreground max-w-xl mx-auto text-sm">Credits never expire and cover the full scan — same checks, same AI report, same fix guides.</p>
+            <h3 className="text-2xl md:text-3xl font-bold mb-3">Keep going once your free scans are gone</h3>
+            <p className="text-muted-foreground max-w-xl mx-auto text-sm">Subscribe for monitoring plus monthly scans, or buy credits for one-off scans — same checks, same AI report, same fix guides.</p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-            {[
-              { label: "1 Scan Credit", price: "$12", per: "$12.00 / scan", note: null },
-              { label: "5 Scan Pack", price: "$50", per: "$10.00 / scan", note: "17% off", popular: true },
-              { label: "20 Scan Pack", price: "$160", per: "$8.00 / scan", note: "33% off" },
-            ].map((tier, i) => (
-              <div
-                key={i}
-                className={cn(
-                  "glass-panel p-6 rounded-xl flex flex-col items-center text-center gap-1 relative",
-                  tier.popular ? "border-primary/50" : "border-white/10",
-                )}
-              >
-                {tier.popular && (
-                  <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-primary text-primary-foreground px-3 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider">
-                    Best Value
-                  </div>
-                )}
-                <span className="text-sm text-muted-foreground mt-1">{tier.label}</span>
-                <span className="text-3xl font-bold">{tier.price}</span>
-                <span className="text-xs text-muted-foreground">
-                  {tier.per}
-                  {tier.note && <span className="text-primary font-semibold"> · {tier.note}</span>}
-                </span>
-              </div>
-            ))}
-          </div>
-          <p className="text-center text-xs text-muted-foreground mt-6">
-            Purchasing isn't live yet — <Link href="/scan" className="underline hover:text-foreground">start with your 2 free scans</Link> and we'll email you when credits are ready to buy.
-          </p>
+          {/* Live Buy / Subscribe buttons once Stripe is configured; until then,
+              the prices as information and an honest "not live yet". Prices in
+              the live view come from the server, not from this file. */}
+          <BuyOptions fallback={<StaticPricing />} />
         </div>
       </section>
     </div>
+  );
+}
+
+/** Prices as information only — shown until checkout is switched on. */
+function StaticPricing() {
+  return (
+    <>
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-5">
+        {[
+          { label: "SecScan Pro", price: "$50", per: "per month · 3 sites · 5 scans", note: null, popular: true },
+          { label: "1 Scan Credit", price: "$12", per: "$12.00 / scan", note: null },
+          { label: "5 Scan Pack", price: "$50", per: "$10.00 / scan", note: "17% off" },
+          { label: "20 Scan Pack", price: "$160", per: "$8.00 / scan", note: "33% off" },
+        ].map((tier, i) => (
+          <div
+            key={i}
+            className={cn(
+              "glass-panel p-6 rounded-xl flex flex-col items-center text-center gap-1 relative",
+              tier.popular ? "border-primary/50" : "border-white/10",
+            )}
+          >
+            {tier.popular && (
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-primary text-primary-foreground px-3 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider">
+                Best Value
+              </div>
+            )}
+            <span className="text-sm text-muted-foreground mt-1">{tier.label}</span>
+            <span className="text-3xl font-bold">{tier.price}</span>
+            <span className="text-xs text-muted-foreground">
+              {tier.per}
+              {tier.note && <span className="text-primary font-semibold"> · {tier.note}</span>}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="text-center text-xs text-muted-foreground mt-6">
+        Purchasing isn't live yet — <Link href="/scan" className="underline hover:text-foreground">start with your 2 free scans</Link> and we'll email you when plans and credits are ready to buy.
+      </p>
+    </>
   );
 }

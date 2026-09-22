@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSeo } from "@/lib/seo";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Loader2, AlertTriangle, Mail } from "lucide-react";
+import { Trash2, Loader2, AlertTriangle, Mail, CreditCard } from "lucide-react";
+import { BillingSummary } from "@/components/billing-options";
 import { cn } from "@/lib/utils";
 
 /**
@@ -140,6 +141,21 @@ export default function SettingsPage() {
       <div className="mb-10">
         <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-3">Settings</h1>
         <p className="text-muted-foreground text-lg">Manage your account.</p>
+      </div>
+
+      <div id="billing" className="glass-panel p-6 sm:p-10 rounded-3xl mb-8 scroll-mt-24">
+        <div className="flex items-start gap-4 mb-6">
+          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20 shrink-0">
+            <CreditCard className="w-6 h-6 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold mb-1">Plan & billing</h2>
+            <p className="text-sm text-muted-foreground">
+              What you can scan, and how it is paid for. Payments are handled by Stripe — we never see your card.
+            </p>
+          </div>
+        </div>
+        <BillingSummary />
       </div>
 
       <div className="glass-panel p-6 sm:p-10 rounded-3xl mb-8">

@@ -20,6 +20,7 @@ import {
   registerPurchaseIntent,
   isTrialExhausted,
 } from "@/lib/purchase-intent-api";
+import { BuyOptions, useBillingCatalog } from "@/components/billing-options";
 import { cn } from "@/lib/utils";
 
 /**
@@ -104,11 +105,38 @@ function ActiveTestingStatus({ url }: { url: string }) {
  *
  * This replaces a one-line red error telling them to "check back shortly",
  * which was a dead end at the single best moment the product gets: they have
- * used it enough to run out. There is no checkout yet, so the honest thing is
- * to say so, say what it will cost, and offer to tell them when it exists —
- * rather than implying a purchase page they will go looking for and not find.
+ * used it enough to run out. With payments configured it sells the plan and
+ * the packs right here; without, it says what they will cost and offers to
+ * email when they can be bought — never a purchase page that is not there.
  */
 function TrialExhaustedPanel() {
+  // Once Stripe is configured this is where people buy — the single best
+  // moment the product gets, because they have used it enough to run out.
+  // Until then the server reports payments disabled and the "tell me when"
+  // flow below still runs, so the panel is never a dead end either way.
+  const catalog = useBillingCatalog();
+  if (!catalog.data?.enabled) return <NotifyWhenBuyablePanel />;
+
+  return (
+    <div className="rounded-xl border border-primary/25 bg-primary/5 p-5 space-y-5">
+      <div className="flex items-start gap-3">
+        <Lock className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+        <div className="space-y-1">
+          <p className="font-semibold text-foreground">That was your last free scan</p>
+          <p className="text-sm text-muted-foreground">
+            Keep going with SecScan Pro — monitoring plus scans every month — or buy credits
+            that never expire. Your existing reports stay on your{" "}
+            <Link href="/dashboard" className="text-primary underline underline-offset-2">dashboard</Link>.
+          </p>
+        </div>
+      </div>
+      <BuyOptions compact />
+    </div>
+  );
+}
+
+/** The pre-checkout fallback: say what it will cost, offer to email them. */
+function NotifyWhenBuyablePanel() {
   const queryClient = useQueryClient();
   const status = useQuery({
     queryKey: ["purchase-intent"],
@@ -135,9 +163,11 @@ function TrialExhaustedPanel() {
             {status.data
               ? `You've used all ${status.data.scanLimit} scans on this account.`
               : "You've used all of the free scans on this account."}{" "}
-            Scan credits will be <span className="text-foreground font-medium">$12 each, or $50 for 5</span>,
-            and there's no way to buy them yet — so rather than send you to a checkout
-            that doesn't exist, we'll email you the moment it does.
+            SecScan Pro will be <span className="text-foreground font-medium">$50/month</span> for
+            monitoring plus 5 scans a month, and credits{" "}
+            <span className="text-foreground font-medium">$12 each or $50 for 5</span>. There's
+            no way to buy yet — so rather than send you to a checkout that doesn't exist,
+            we'll email you the moment there is.
           </p>
         </div>
       </div>

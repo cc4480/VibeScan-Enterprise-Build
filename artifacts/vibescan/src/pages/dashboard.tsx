@@ -8,6 +8,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { Scan } from "@workspace/api-client-react";
 import { listMonitorSubscriptions } from "@/lib/monitor-api";
+import { PurchaseResultBanner } from "@/components/billing-options";
 
 const GRADE_COLORS: Record<string, string> = {
   A: "text-green-400 bg-green-400/10 border-green-400/30",
@@ -271,6 +272,9 @@ export default function DashboardPage() {
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground mt-1">Manage your security scans and reports.</p>
       </div>
+
+      {/* Stripe returns people here with ?purchase=…; say what happened. */}
+      <PurchaseResultBanner />
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
