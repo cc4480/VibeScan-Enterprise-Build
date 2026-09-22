@@ -21,6 +21,14 @@ beyond the pricing copy.
 
 ---
 
+## 0. Push order
+
+Push `VibeScan-Enterprise-Build` (secscan.us) and `secscan-info` (secscan.info)
+**together**, once Stripe test mode works end to end. secscan.info's pricing
+copy (commit "Replace \"free during early access\" with the real pricing")
+quotes SecScan Pro; published before checkout is live, it would advertise a
+plan nobody can buy.
+
 ## 1. Test mode first (do not skip)
 
 1. Stripe dashboard → toggle **Test mode** on (top right).
