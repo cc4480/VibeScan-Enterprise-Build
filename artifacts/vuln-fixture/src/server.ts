@@ -7,11 +7,30 @@
  * This is infrastructure for testing the scanner, not a product to ship: it is
  * never built by the root `build` script and its dist is never copied into the
  * Docker image (see Dockerfile — only api-server/dist and vibescan/dist/public
- * are copied out of the builder stage). Deploy it only somewhere you control,
- * scan it only with the ownership-verification flow this product already
- * requires for active probing, and never point it at a shared or public host.
+ * are copied out of the builder stage).
+ *
+ * TWO deployment modes, not one:
+ *
+ *   1. Local / CI (the default, no extra env vars). Unrestricted — including
+ *      the SSRF endpoint, which is how scripts/verify-vuln-fixture.ts and the
+ *      cross-scanner benchmark in scripts/benchmark/ prove that finding today.
+ *      Never point this mode at a shared or public host.
+ *
+ *   2. Public benchmark target (secscan-me/, not this package). Same code,
+ *      started with SSRF_PROBE_ALLOWLIST set — see the comment on
+ *      /api/webhook-preview below. That is the ONLY behavioural difference; a
+ *      route added here without checking whether it can reach the network on
+ *      a caller-supplied host is a mode-2 regression, not just a mode-1 one.
+ *
+ * Every route's endpoint AND parameter name are also either linked from the
+ * homepage nav or deliberately left unlinked — see the comment above <nav> —
+ * because a public benchmark target that only SecScan's own wordlist can find
+ * in full is not a neutral one. Keep that split intact when adding a route.
  */
 import express, { type Request, type Response } from "express";
+import { readFileSync, existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { SENSITIVE_PATHS } from "./sensitive-paths.js";
 import {
   SECRETS_JS,
@@ -27,6 +46,51 @@ import {
 const app = express();
 app.use(express.json());
 app.disable("x-powered-by"); // Express's own default; we set our own EOL banner below.
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Public benchmark infrastructure — /manifest.json and /about.
+//
+// Not a planted finding. This is the actual point of the secscan-me
+// deployment: a stranger fetches the fault list here, scans the app with
+// whatever tool they like, and checks the result themselves — the entire
+// argument for a public target instead of a vendor-published number is that
+// nobody has to trust this file's PROVENANCE, only read it.
+//
+// /about doubles as the authorisation notice (see deploy/secscan-me/README.md
+// — the conventional places for that, /security.txt and /robots.txt, are each
+// a planted finding here, so putting it there would break the fault it is
+// supposed to coexist with).
+// ─────────────────────────────────────────────────────────────────────────────
+const HERE = dirname(fileURLToPath(import.meta.url));
+// dist/server.js in the built image, src/server.ts under tsx — either way the
+// generated manifest sits one level up, at the package root.
+const MANIFEST_PATH = join(HERE, "..", "manifest.json");
+
+app.get("/manifest.json", (_req, res) => {
+  if (!existsSync(MANIFEST_PATH)) {
+    res.status(503).json({
+      error: "manifest not generated for this instance",
+      hint: "npx tsx artifacts/api-server/scripts/benchmark/generate-manifest.ts",
+    });
+    return;
+  }
+  res.type("application/json").send(readFileSync(MANIFEST_PATH, "utf8"));
+});
+
+app.get("/about", (_req, res) => {
+  res.type("text/html").send(`<!doctype html>
+<html><head><title>About this host</title></head><body>
+<h1>This host is a public security-scanner benchmark target</h1>
+<p>Scanning it is authorised — that is the whole point of it existing. Every
+planted fault is listed, with no exploit details withheld, at
+<a href="/manifest.json">/manifest.json</a>.</p>
+<p>None of the planted vulnerabilities are real in the sense of granting an
+attacker anything beyond this container: there is no real database behind the
+SQL injection, no real file read behind the path traversal, and every "leaked"
+secret is a fake literal. See the project this target belongs to for the full
+methodology and the benchmark results it produced.</p>
+</body></html>`);
+});
 
 // ── In-memory "accounts", so a two-account credentialed scan has something to
 // compare. Session tokens are fixed strings rather than anything issued at
@@ -141,6 +205,34 @@ const OPEN_REDIRECT_PARAM_NAMES = [
   "r", "redirect_uri", "callback", "continue", "dest", "destination", "forward",
 ];
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Discoverability policy — read this before adding or unlinking a route.
+//
+// Found the hard way: a cross-scanner benchmark run against this fixture
+// scored ZAP at 18/74 and Nuclei at 9/74 against SecScan's 68/74, and the gap
+// looked like a detection story until the raw ZAP crawl log was checked. ZAP
+// never requested /download, /login or /app/graphql at all — not "found and
+// missed", never asked for the URL — because nothing on the page linked to
+// them. SecScan "found" them from a hardcoded wordlist in pathTraversal.ts.
+// That is not a detection win; it is SecScan knowing its own fixture's paths.
+//
+// So every route here is EITHER:
+//   - a real app feature, linked from <nav> below so any ordinary crawler
+//     (ZAP's spider, Nuclei's crawl mode, a stranger scoring this target)
+//     finds it the same way SecScan does; OR
+//   - a deliberately unlinked "hidden" path — admin/backup/staging/internal-*
+//     and the SENSITIVE_PATHS block — findable only by forced-browsing a
+//     wordlist, which is exactly how a real attacker finds a real backup
+//     directory nobody meant to expose. ZAP and Nuclei can both do this (ZAP
+//     via its Forced Browse add-on, not enabled in our default scan config;
+//     Nuclei via its own path-fuzzing templates) — the three tools' differing
+//     wordlists there are a genuine, fair, publishable capability difference.
+//     Linking these from the nav would misrepresent what they are.
+//
+// A route that is a real feature and gets left unlinked "for now" silently
+// turns back into the ZAP/Nuclei-crawl-never-visits-it bug this comment
+// exists to prevent. If in doubt, link it.
+// ─────────────────────────────────────────────────────────────────────────────
 app.get("/", (req, res) => {
   const target = (Object.entries(req.query).find(([k]) => OPEN_REDIRECT_PARAM_NAMES.includes(k)) ?? [])[1];
   if (typeof target === "string") {
@@ -158,7 +250,11 @@ app.get("/", (req, res) => {
   <a href="/account/1001">My account</a>
   <a href="/uploads/">Uploads</a>
   <a href="/search?q=test">Search</a>
+  <a href="/download?file=invoice-2026-01.pdf">Download invoice</a>
+  <a href="/login">Sign in</a>
+  <a href="/app/graphql">API explorer</a>
 </nav>
+<footer><a href="/about">About this host</a> &middot; <a href="/manifest.json">Fault manifest</a></footer>
 <!-- Session tokens, visible in page HTML: jwtAnalysis.ts reads headers + html -->
 <span data-token="${JWT_ALG_NONE}"></span>
 <span data-token="${JWT_NO_EXPIRY}"></span>
@@ -245,9 +341,46 @@ app.post("/api/search", searchHandler);
 // probe: what proves the vulnerability is the collector recording a callback
 // for the token planted in `url`, which only a server that actually fetched it
 // could produce.
+//
+// SSRF_PROBE_ALLOWLIST, if set, is a comma-separated list of exact
+// "hostname" or "hostname:port" values. When set, this endpoint fetches ONLY
+// those hosts and refuses everything else — including private, loopback and
+// link-local addresses — before this file is ever exposed on a public host.
+//
+// Unset (the default) is what every existing local run depends on: the SSRF
+// finding is proved by a callback to this repo's own OOB collector
+// (lib/oobServer.ts), which in local/CI runs lives at APP_ORIGIN on
+// loopback. A blanket "block private ranges" rule would silently break that
+// collector callback along with the finding. So the restriction is opt-in,
+// set only on the public deployment (scripts/benchmark and secscan-me/),
+// naming that deployment's own collector host explicitly — never opt-out.
 // ─────────────────────────────────────────────────────────────────────────────
+const SSRF_ALLOWLIST = (process.env.SSRF_PROBE_ALLOWLIST ?? "")
+  .split(",")
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+
+function ssrfTargetAllowed(rawUrl: string): boolean {
+  if (SSRF_ALLOWLIST.length === 0) return true; // unrestricted: local/CI default
+  try {
+    const u = new URL(rawUrl);
+    const host = u.hostname.toLowerCase();
+    const hostPort = `${host}:${u.port || (u.protocol === "https:" ? "443" : "80")}`;
+    return SSRF_ALLOWLIST.includes(host) || SSRF_ALLOWLIST.includes(hostPort);
+  } catch {
+    return false;
+  }
+}
+
 app.get("/api/webhook-preview", async (req, res) => {
   const url = String(req.query.url ?? "");
+  if (!ssrfTargetAllowed(url)) {
+    // Same shape as a real failed fetch — a public deployment must not
+    // distinguish "blocked by us" from "unreachable" in its response, or the
+    // allowlist itself becomes an oracle for mapping the network from outside.
+    res.status(502).json({ error: "could not reach that URL" });
+    return;
+  }
   try {
     const upstream = await fetch(url, { signal: AbortSignal.timeout(5_000) });
     res.json({ status: upstream.status, contentType: upstream.headers.get("content-type") });

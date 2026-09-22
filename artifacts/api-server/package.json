@@ -11,6 +11,9 @@
     "start:secscan": "node --env-file-if-exists=../../.env --enable-source-maps ./dist/secscan.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "docs:checks": "node ./scripts/check-index.mjs",
+    "benchmark": "npx tsx ./scripts/benchmark/run-benchmark.ts",
+    "benchmark:packet": "npx tsx ./scripts/benchmark/build-judge-packet.ts",
+    "benchmark:score": "npx tsx ./scripts/benchmark/score-consensus.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"

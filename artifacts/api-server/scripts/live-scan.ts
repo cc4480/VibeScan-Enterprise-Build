@@ -106,7 +106,19 @@ function jsonDest(argv: string[]): string | null {
  * be pointed at somebody else's site by a typo or a stray argument. Extending
  * this means editing the list, deliberately.
  */
-const OWNED_DOMAINS = new Set(["seclayer.app", "secscan.us", "secscan.info"]);
+const OWNED_DOMAINS = new Set([
+  "seclayer.app", "secscan.us", "secscan.info",
+  // Loopback, added deliberately for the cross-scanner benchmark
+  // (scripts/benchmark/). The target there is artifacts/vuln-fixture running on
+  // 127.0.0.1:4100 — an application in this repository, built to be attacked,
+  // on the developer's own machine. verify-vuln-fixture.ts already drives the
+  // same offensive traffic at the same port; this only lets live-scan.ts do it
+  // too, so the benchmark can capture SecScan's RAW finding list rather than
+  // the tracked subset.
+  //
+  // Loopback is not a wildcard: it cannot resolve to anybody else's host.
+  "127.0.0.1", "localhost",
+]);
 
 function assertOwned(list: string[]): void {
   const foreign = list.filter((u) => {
