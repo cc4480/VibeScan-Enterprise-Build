@@ -17,22 +17,22 @@ export const PRICE_MAP: Record<string, { amount: number; name: string; descripti
   deep: {
     amount: 1900,
     name: "SecScan Deep",
-    description: "Full black-box deep scan with DeepSeek AI report + per-agent fix prompt",
+    description: "Retired tier — not sold",
   },
   single: {
     amount: 1200,
     name: "SecScan Scan Credit",
-    description: "1 Deep Scan credit — use any time, never expires",
+    description: "1 scan credit — the full scan, use any time, never expires",
   },
   pack_5: {
     amount: 5000,
     name: "SecScan 5-Scan Pack",
-    description: "5 Deep Scan credits — use any time, never expire (17% off buying singles)",
+    description: "5 scan credits — the full scan, never expire (17% off buying singles)",
   },
   pack_20: {
     amount: 16000,
     name: "SecScan 20-Scan Pack",
-    description: "20 Deep Scan credits — for agencies and dev shops (33% off buying singles)",
+    description: "20 scan credits — for agencies and dev shops, never expire (33% off buying singles)",
   },
 };
 
@@ -54,35 +54,38 @@ export function getOrigin(req: { headers: Record<string, string | string[] | und
 }
 
 /**
- * Whether the deployment believes it is charging for scans.
+ * Refuse to stay quiet about a payment setup that takes money it cannot credit.
  *
- * It is not, and cannot be yet. The receiving half of payments exists — the
- * Stripe webhook in routes/stripe.ts credits an account and queues the scan it
- * paid for — but nothing creates a Checkout Session, so there is no way for a
- * customer to reach that webhook. POST /api/scans returns
- * `checkoutUrl: null, creditUsed: false` unconditionally and queues the scan.
+ * With STRIPE_SECRET_KEY set, checkout works and customers can pay. Without
+ * STRIPE_WEBHOOK_SECRET, the webhook refuses every event (503) — so the money
+ * is taken and the credits or plan never arrive. That is the worst state
+ * payments can be in, and nothing else would surface it until a customer did.
  *
- * DISABLE_PAYMENTS was documented as the switch that turns charging on, and
- * .env.production.example told operators to set it to "false" in production.
- * Nothing read it. That combination is worse than having no flag: it reads like
- * a gate that is closed while every scan is free.
- *
- * This does not invent a pricing decision — it makes the configuration honest,
- * loudly, at startup, until checkout is either built or the flag is retired.
+ * (This replaced a warning written before checkout existed, which said that
+ * DISABLE_PAYMENTS=false was a lie because "no checkout flow exists". Both
+ * halves exist now; DISABLE_PAYMENTS is read by nothing and never was.)
  */
 export function warnIfPaymentsMisconfigured(
-  log: { warn: (obj: object, msg: string) => void },
+  log: { warn: (obj: object, msg: string) => void; error?: (obj: object, msg: string) => void },
 ): void {
-  if (process.env["DISABLE_PAYMENTS"] === "false") {
+  const hasKey = !!process.env["STRIPE_SECRET_KEY"];
+  const hasWebhookSecret = !!process.env["STRIPE_WEBHOOK_SECRET"];
+
+  if (hasKey && !hasWebhookSecret) {
+    const fields = { STRIPE_SECRET_KEY: "set", STRIPE_WEBHOOK_SECRET: "MISSING" };
+    const msg =
+      "Checkout is live but the Stripe webhook secret is not set: customers can pay, " +
+      "and every payment webhook will be refused, so no credits or plans will be granted. " +
+      "Set STRIPE_WEBHOOK_SECRET from the Stripe dashboard's webhook endpoint.";
+    // Called as methods, never detached: pino's log functions need their `this`.
+    if (log.error) log.error(fields, msg);
+    else log.warn(fields, msg);
+  }
+  if (process.env["DISABLE_PAYMENTS"] !== undefined) {
     log.warn(
-      {
-        setting: "DISABLE_PAYMENTS=false",
-        actual: "every scan is free",
-        missing: "Checkout Session creation",
-      },
-      "DISABLE_PAYMENTS=false implies scans are charged for, but no checkout " +
-      "flow exists — scans are queued free of charge. Set DISABLE_PAYMENTS=true " +
-      "to match reality, or build checkout before relying on this.",
+      { setting: "DISABLE_PAYMENTS" },
+      "DISABLE_PAYMENTS is set but nothing reads it. Payments are on exactly when " +
+        "STRIPE_SECRET_KEY is set; remove the variable to avoid implying otherwise.",
     );
   }
 }

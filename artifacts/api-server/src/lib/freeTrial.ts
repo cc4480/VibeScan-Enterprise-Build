@@ -18,9 +18,12 @@ import { and, count, eq } from "drizzle-orm";
  */
 export const FREE_TRIAL_SCAN_LIMIT = Number(process.env["FREE_TRIAL_SCAN_LIMIT"] ?? 2);
 
-export const TRIAL_LIMIT_MESSAGE =
-  `You've used all ${FREE_TRIAL_SCAN_LIMIT} free scans. Paid scans are ` +
-  "coming soon — check back shortly.";
+// Two wordings, chosen by whether this deployment can take payment. Telling
+// someone to buy what cannot be bought is the dead end this message used to be
+// the other way round ("coming soon") once checkout existed.
+export const TRIAL_LIMIT_MESSAGE = process.env["STRIPE_SECRET_KEY"]
+  ? `You've used all ${FREE_TRIAL_SCAN_LIMIT} free scans. Subscribe to SecScan Pro or buy scan credits to keep scanning.`
+  : `You've used all ${FREE_TRIAL_SCAN_LIMIT} free scans. Paid scans are coming soon — check back shortly.`;
 
 /**
  * Sent alongside the message so the client can recognise this specific refusal

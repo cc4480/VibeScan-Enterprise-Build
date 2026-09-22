@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { PRICE_MAP, CREDITS_MAP } from "./stripe";
 
 /**
@@ -72,5 +72,55 @@ describe("a pack is never priced worse than buying that many singles", () => {
       expect(perCredit(sorted[i]!), `${sorted[i]} should not cost more per credit than ${sorted[i - 1]}`)
         .toBeLessThanOrEqual(perCredit(sorted[i - 1]!));
     }
+  });
+});
+
+describe("warnIfPaymentsMisconfigured", () => {
+  // The one payment state worth shouting about at boot: checkout can take money
+  // (key set) while the webhook refuses every event (no secret), so nobody who
+  // pays is ever credited — and nothing else would surface it but a customer.
+  const saved = { ...process.env };
+  afterEach(() => {
+    process.env = { ...saved };
+  });
+
+  it("errors when payments can be taken but never credited", async () => {
+    const { warnIfPaymentsMisconfigured } = await import("./stripe");
+    process.env["STRIPE_SECRET_KEY"] = "sk_test_x";
+    delete process.env["STRIPE_WEBHOOK_SECRET"];
+    delete process.env["DISABLE_PAYMENTS"];
+    const log = { warn: vi.fn(), error: vi.fn() };
+    warnIfPaymentsMisconfigured(log);
+    expect(log.error).toHaveBeenCalledTimes(1);
+    expect(log.error.mock.calls[0]![1]).toMatch(/customers can pay/);
+  });
+
+  it("stays quiet when both halves are configured, or neither is", async () => {
+    const { warnIfPaymentsMisconfigured } = await import("./stripe");
+    delete process.env["DISABLE_PAYMENTS"];
+    for (const [key, secret] of [["sk_test_x", "whsec_x"], [undefined, undefined]] as const) {
+      if (key) process.env["STRIPE_SECRET_KEY"] = key; else delete process.env["STRIPE_SECRET_KEY"];
+      if (secret) process.env["STRIPE_WEBHOOK_SECRET"] = secret; else delete process.env["STRIPE_WEBHOOK_SECRET"];
+      const log = { warn: vi.fn(), error: vi.fn() };
+      warnIfPaymentsMisconfigured(log);
+      expect(log.error).not.toHaveBeenCalled();
+      expect(log.warn).not.toHaveBeenCalled();
+    }
+  });
+
+  it("calls the logger as a method, so pino keeps its `this`", async () => {
+    const { warnIfPaymentsMisconfigured } = await import("./stripe");
+    process.env["STRIPE_SECRET_KEY"] = "sk_test_x";
+    delete process.env["STRIPE_WEBHOOK_SECRET"];
+    const seen: unknown[] = [];
+    const log = {
+      tag: "logger",
+      warn() {},
+      error(this: { tag: string }) {
+        seen.push(this?.tag);
+      },
+    };
+    warnIfPaymentsMisconfigured(log);
+    expect(seen).toEqual(["logger"]);
   });
 });

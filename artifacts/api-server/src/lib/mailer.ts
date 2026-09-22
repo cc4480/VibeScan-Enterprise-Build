@@ -865,7 +865,7 @@ export async function sendPurchaseReceiptEmail(opts: {
 }): Promise<void> {
   const amount = `$${(opts.amountCents / 100).toFixed(2)}`;
   const detail = opts.creditsAdded
-    ? `${opts.creditsAdded} deep-scan credit${opts.creditsAdded === 1 ? "" : "s"} have been added to your account and never expire.`
+    ? `${opts.creditsAdded} scan credit${opts.creditsAdded === 1 ? "" : "s"} ${opts.creditsAdded === 1 ? "has" : "have"} been added to your account and never expire.`
     : "Your scan has been queued and you'll get a separate email as soon as the report is ready.";
 
   await sendAccountMessage(
