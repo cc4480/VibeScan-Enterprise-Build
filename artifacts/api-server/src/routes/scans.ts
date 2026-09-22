@@ -12,7 +12,7 @@ import { checkScanTarget } from "../lib/ssrfGuard";
 import { rateLimitMiddleware, scanRateLimitRules, scanNetworkRateLimitRules } from "../lib/rateLimit";
 import { trialScansExhausted, TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE } from "../lib/freeTrial";
 import { spendOneCredit, refundOneCredit } from "../lib/credits";
-import { spendIncludedScan, refundIncludedScan } from "../lib/billing";
+import { spendIncludedScan, refundIncludedScan, refundFailedScan } from "../lib/billing";
 
 // ── Abuse and cost control ───────────────────────────────────────────────────
 // A scan is expensive in a way an API request normally is not: it launches a
@@ -323,7 +323,9 @@ router.post("/scans", requireScanAuth, scanRateLimit, scanNetworkRateLimit, asyn
     return;
   }
 
-  const [scan] = await db
+  let scan: typeof scansTable.$inferSelect;
+  try {
+    [scan] = await db
     .insert(scansTable)
     .values({
       userId: req.user.id,
@@ -337,9 +339,26 @@ router.post("/scans", requireScanAuth, scanRateLimit, scanNetworkRateLimit, asyn
       // Recorded so a scan that fails later is refunded to the same place.
       paidWith,
     })
-    .returning();
+    .returning() as [typeof scansTable.$inferSelect];
+  } catch (err) {
+    // Paid for, not created: give it back before failing the request.
+    req.log.error({ err }, "Could not create the scan row");
+    await refundIfCharged();
+    res.status(500).json({ error: "Could not start the scan. You were not charged — please try again." });
+    return;
+  }
 
-  await enqueueScan({ scanId: scan.id, userId: req.user.id, targetUrl, tier });
+  try {
+    await enqueueScan({ scanId: scan.id, userId: req.user.id, targetUrl, tier });
+  } catch (err) {
+    // The row exists and is paid for but will never run. Fail it and refund
+    // through the same exactly-once path the worker uses.
+    req.log.error({ err, scanId: scan.id }, "Could not queue the scan");
+    await db.update(scansTable).set({ status: "failed", error: "Could not be queued" }).where(eq(scansTable.id, scan.id));
+    await refundFailedScan(scan.id).catch((e) => req.log.error({ err: e, scanId: scan.id }, "Refund after queue failure failed"));
+    res.status(503).json({ error: "Could not start the scan. You were not charged — please try again." });
+    return;
+  }
 
   await db
     .update(scansTable)

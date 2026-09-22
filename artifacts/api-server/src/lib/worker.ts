@@ -12,7 +12,7 @@ import {
   db, scansTable, reportsTable, monitorSubscriptionsTable, dismissedFindingsTable,
   monitorScoreHistoryTable, monitorRegressionsTable, usersTable,
 } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, ne } from "drizzle-orm";
 import { computeNextScanAt } from "./monitorScheduler";
 import { sendRegressionAlertEmail } from "./mailer";
 import { highestSeverity } from "./notificationPrefs";
@@ -103,6 +103,7 @@ export function resolveNextScanAt(
 }
 
 const OOB_PURGE_QUEUE = "oob-purge";
+const STUCK_SCAN_QUEUE = "stuck-scan-cleanup";
 
 type ScanJob = Job<ScanJobData>;
 
@@ -110,7 +111,7 @@ type ScanJob = Job<ScanJobData>;
 
 import { reprobe } from "./reprobe";
 import { APP_ORIGIN } from "./appOrigin";
-import { refundFailedScan } from "./billing";
+import { refundFailedScan, reapStuckScans } from "./billing";
 
 /**
  * For borderline findings (50 ≤ confidence < 70), makes a second HTTP request
@@ -143,14 +144,17 @@ export async function processScanJob(job: ScanJob): Promise<void> {
   // Safe as a guard because the scan row is committed before the job is
   // enqueued (routes/scans.ts), so a missing row is always a deletion and never
   // a job that overtook its own insert.
+  // Also refuses a scan already marked failed: the stuck-scan cleanup
+  // (billing.ts reapStuckScans) fails and REFUNDS scans that never finished,
+  // and a late retry must not then run one for free.
   const scanning = await db
     .update(scansTable)
     .set({ status: "scanning", startedAt: new Date() })
-    .where(eq(scansTable.id, scanId))
+    .where(and(eq(scansTable.id, scanId), ne(scansTable.status, "failed")))
     .returning({ id: scansTable.id });
 
   if (scanning.length === 0) {
-    log.info("Scan row no longer exists — owner deleted their account; abandoning job before any work");
+    log.info("Scan row is gone (account deleted) or already failed and refunded; abandoning job before any work");
     return;
   }
 
@@ -912,6 +916,17 @@ export async function startWorker(): Promise<void> {
   });
 
   logger.info({ queue: SCAN_QUEUE }, "Scan worker registered and listening");
+
+  // ── Stuck-scan cleanup ────────────────────────────────────────────────────
+  // Fails and refunds scans whose job died without reaching a failure path.
+  // See reapStuckScans. Every 15 minutes; schedule() upserts by name, so
+  // replicas share one schedule.
+  await boss.createQueue(STUCK_SCAN_QUEUE);
+  await boss.schedule(STUCK_SCAN_QUEUE, "*/15 * * * *", {});
+  await boss.work(STUCK_SCAN_QUEUE, async () => {
+    const { failed, refunded } = await reapStuckScans();
+    if (failed > 0) logger.warn({ failed, refunded }, "Failed and refunded scans that never finished");
+  });
 
   // ── EOL data auto-refresh ─────────────────────────────────────────────────
   // Scheduled daily at 03:00 UTC to keep PHP / Nginx / Apache EOL tables

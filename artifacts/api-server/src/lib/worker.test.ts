@@ -66,6 +66,7 @@ vi.mock("drizzle-orm", () => ({
   eq: () => ({}),
   and: () => ({}),
   desc: () => ({}),
+  ne: () => ({}),
 }));
 
 vi.mock("./scanner", () => ({

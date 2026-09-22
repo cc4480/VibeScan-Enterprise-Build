@@ -100,7 +100,9 @@ suite("billing (real Postgres)", () => {
     const { db } = m.db;
     const { sql } = await import("drizzle-orm");
     await db.execute(sql`TRUNCATE stripe_events, credits, billing_subscriptions, scans CASCADE`);
-  });
+    // TRUNCATE takes an exclusive lock; under a loaded machine the default 10s
+    // hook limit is too tight for it, and a timeout here is not a billing bug.
+  }, 30_000);
 
   afterAll(async () => {
     await m?.db.pool?.end?.();
@@ -280,5 +282,55 @@ suite("billing (real Postgres)", () => {
     const scanId = await insertScan("u11", "free");
     expect(await m.billing.refundFailedScan(scanId)).toBeNull();
     expect(await balance("u11")).toBe(0);
+  });
+
+  it("returns a failed scan as a CREDIT when the plan it came from has since been cancelled", async () => {
+    await m.webhook.processStripeEvent(subscriptionCompleted("u12", "sub_G"));
+    await m.webhook.processStripeEvent(invoicePaid("sub_G", "u12"));
+    await m.billing.spendIncludedScan("u12");
+    const scanId = await insertScan("u12", "included");
+    await m.webhook.processStripeEvent(subscriptionEvent("customer.subscription.deleted", "sub_G", "canceled"));
+
+    expect(await m.billing.refundFailedScan(scanId)).toBe("included");
+    // Not lost into a cancelled plan: returned as something they can still use.
+    expect(await balance("u12")).toBe(1);
+  });
+
+  // ── Scans that never finish ────────────────────────────────────────────────
+  async function insertScanAt(userId: string, status: string, paidWith: "free" | "included" | "credit", hoursAgo: number) {
+    const { db, scansTable } = m.db;
+    const [scan] = await db
+      .insert(scansTable)
+      .values({
+        userId, userEmail: "", targetUrl: "https://example.com", tier: "deep",
+        status: status as never, paidWith, createdAt: new Date(Date.now() - hoursAgo * 3600_000),
+      })
+      .returning();
+    return scan!.id;
+  }
+  const statusOf = async (id: string) => {
+    const { db, scansTable } = m.db;
+    const { eq } = await import("drizzle-orm");
+    const [row] = await db.select({ status: scansTable.status }).from(scansTable).where(eq(scansTable.id, id));
+    return row?.status;
+  };
+
+  it("fails and refunds a paid scan stuck for hours, and leaves live and finished ones alone", async () => {
+    const stuckPaid = await insertScanAt("u13", "scanning", "credit", 9);
+    const stuckFree = await insertScanAt("u13", "queued", "free", 9);
+    const recent = await insertScanAt("u13", "scanning", "credit", 1);
+    const done = await insertScanAt("u13", "complete", "credit", 20);
+
+    const first = await m.billing.reapStuckScans();
+    expect(first).toEqual({ failed: 2, refunded: 1 });
+    expect(await statusOf(stuckPaid)).toBe("failed");
+    expect(await statusOf(stuckFree)).toBe("failed");
+    expect(await statusOf(recent)).toBe("scanning"); // slow, not dead
+    expect(await statusOf(done)).toBe("complete");
+    expect(await balance("u13")).toBe(1);
+
+    // Running it again refunds nothing twice.
+    expect(await m.billing.reapStuckScans()).toEqual({ failed: 0, refunded: 0 });
+    expect(await balance("u13")).toBe(1);
   });
 });

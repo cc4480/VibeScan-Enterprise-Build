@@ -18,7 +18,7 @@ import {
   scansTable,
   stripeEventsTable,
 } from "@workspace/db";
-import { and, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, lt, sql } from "drizzle-orm";
 import { DEFAULT_PLAN, includedScansForPlan } from "./plans";
 
 /** A transaction handle, or the pool itself — every helper accepts either. */
@@ -219,23 +219,33 @@ export async function spendIncludedScan(userId: string): Promise<number | null> 
   return rows[0]?.remaining ?? null;
 }
 
-/** Give an included scan back (a launch that was rejected, or a scan that failed). */
+/**
+ * Give an included scan back (a launch that was rejected, or a scan that failed).
+ *
+ * Only a live plan can take it back. If the plan has since been cancelled or
+ * paused, the scan is returned as a credit instead — otherwise a refund to a
+ * cancelled plan would vanish, and someone charged for a scan that failed
+ * would get nothing back.
+ */
 export async function refundIncludedScan(tx: Executor, userId: string): Promise<void> {
-  await tx
+  const restored = await tx
     .update(billingSubscriptionsTable)
     .set({
       includedScansRemaining: sql`${billingSubscriptionsTable.includedScansRemaining} + 1`,
       updatedAt: new Date(),
     })
-    .where(and(eq(billingSubscriptionsTable.userId, userId), inArray(billingSubscriptionsTable.status, ["active", "past_due"])));
+    .where(and(eq(billingSubscriptionsTable.userId, userId), inArray(billingSubscriptionsTable.status, ["active", "past_due"])))
+    .returning({ id: billingSubscriptionsTable.id });
+  if (restored.length === 0) await addCredits(tx, userId, 1);
 }
 
 /**
  * A scan failed after it was paid for: give the payment back, exactly once.
  *
- * The scan row's `paid_with` is cleared in the same statement that reads it,
- * so however many times the failure path runs — a job retried, two workers
- * racing a timeout — only the first call sees a payment to return. Free trial
+ * The scan row is read under a row lock and its `paid_with` cleared in the
+ * same transaction, so however many times the failure path runs — a job
+ * retried, two workers racing a timeout — only the first call sees a payment
+ * to return. Free trial
  * scans are left alone: returning one would need un-counting a scan that did
  * happen, and the trial is not money.
  */
@@ -264,12 +274,40 @@ export async function refundFailedScan(scanId: string): Promise<"credit" | "incl
   });
 }
 
-/** Record what paid for a scan, so a later failure can refund the right thing. */
-export async function recordScanPayment(
-  scanId: string,
-  paidWith: "free" | "included" | "credit",
-): Promise<void> {
-  await db.update(scansTable).set({ paidWith }).where(eq(scansTable.id, scanId));
+/**
+ * Fail and refund scans that will never finish.
+ *
+ * A scan whose job dies outright — the worker OOM-killed mid-scan, every
+ * retry exhausted — never reaches the worker's own failure path, so nothing
+ * marked it failed and nothing refunded it: it sat "scanning" forever, and a
+ * paid scan kept the customer's money. A scan job gets at most 3 attempts of
+ * up to 2 hours each (queue.ts), so anything unfinished after
+ * STUCK_SCAN_AFTER_MS is dead, not slow.
+ *
+ * The status update is guarded on the status still being unfinished, so a
+ * scan that completes at the same moment is left alone; the worker, for its
+ * part, refuses to start a scan already marked failed (worker.ts).
+ */
+export const STUCK_SCAN_AFTER_MS = 8 * 60 * 60 * 1000;
+
+export async function reapStuckScans(now = new Date()): Promise<{ failed: number; refunded: number }> {
+  const cutoff = new Date(now.getTime() - STUCK_SCAN_AFTER_MS);
+  const stuck = await db
+    .update(scansTable)
+    .set({ status: "failed", error: "The scan did not finish. Anything it cost has been returned.", completedAt: now })
+    .where(
+      and(
+        inArray(scansTable.status, ["paid", "queued", "scanning", "analyzing"]),
+        lt(scansTable.createdAt, cutoff),
+      ),
+    )
+    .returning({ id: scansTable.id });
+
+  let refunded = 0;
+  for (const { id } of stuck) {
+    if (await refundFailedScan(id)) refunded++;
+  }
+  return { failed: stuck.length, refunded };
 }
 
 export { includedScansForPlan };
