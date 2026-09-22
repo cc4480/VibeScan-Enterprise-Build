@@ -110,6 +110,7 @@ type ScanJob = Job<ScanJobData>;
 
 import { reprobe } from "./reprobe";
 import { APP_ORIGIN } from "./appOrigin";
+import { refundFailedScan } from "./billing";
 
 /**
  * For borderline findings (50 ≤ confidence < 70), makes a second HTTP request
@@ -274,6 +275,7 @@ export async function processScanJob(job: ScanJob): Promise<void> {
       // a customer's password is exactly the row that should not keep it.
       .set({ status: "failed", error: errMsg, completedAt: new Date(), credentialsEncrypted: null, secondaryCredentialsEncrypted: null })
       .where(eq(scansTable.id, scanId));
+    await refundIfPaid(scanId, log);
     return;
   }
 
@@ -796,6 +798,23 @@ export async function processScanJob(job: ScanJob): Promise<void> {
         completedAt,
       })
       .where(eq(scansTable.id, scanId));
+    await refundIfPaid(scanId, log);
+  }
+}
+
+/**
+ * A scan that failed gives back what paid for it — a bought credit, or one of
+ * the subscription's included scans. Customers were previously charged for
+ * scans the system never delivered. Idempotent (see refundFailedScan), and
+ * never throws: the scan has already failed for its own reason, and a refund
+ * error must not bury that.
+ */
+async function refundIfPaid(scanId: string, log: { info: (o: object, m: string) => void; error: (o: object, m: string) => void }): Promise<void> {
+  try {
+    const refunded = await refundFailedScan(scanId);
+    if (refunded) log.info({ scanId, refunded }, "Refunded the payment for a failed scan");
+  } catch (err) {
+    log.error({ err, scanId }, "Could not refund a failed scan — needs manual credit");
   }
 }
 

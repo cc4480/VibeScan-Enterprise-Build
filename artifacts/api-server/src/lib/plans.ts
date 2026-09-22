@@ -1,56 +1,56 @@
 /**
- * Monitoring plans.
+ * The monitoring subscription.
  *
- * Kept beside the credit pricing in stripe.ts rather than inside it, because
- * these are a different product with a different billing mode: credits are a
- * one-time purchase, a plan is a recurring subscription. Phase 3 adds the
- * Stripe price ids here; nothing reads them yet.
+ * One plan, by decision (2026-09-22): $50/month buys continuous monitoring for
+ * up to 3 sites plus 5 full scans each billing period. It replaced a
+ * Solo/Studio/Agency ladder that was designed but never sold — one plan is
+ * easier to sell and to explain, and tiers can come back if agencies ask.
  *
- * `urlLimit` is the published allowance for the tier. It is copied onto a
- * billing_subscriptions row at signup rather than read from here at check
- * time, so that changing a tier later does not silently rewrite what an
- * existing customer was already sold.
+ * Kept beside the credit pricing in stripe.ts rather than inside it, because a
+ * plan is a different product with a different billing mode: credits are a
+ * one-time purchase, a plan is a recurring subscription.
+ *
+ * `urlLimit` and `includedScans` are the published allowance. `urlLimit` is
+ * copied onto the billing_subscriptions row at signup rather than read from
+ * here at check time, so that changing the plan later does not silently
+ * rewrite what an existing customer was already sold. `includedScans` is
+ * applied on each paid invoice.
  */
 
 export interface MonitorPlan {
   /** Stable key stored on the subscription row. */
-  key: "solo" | "studio" | "agency";
+  key: "pro";
   name: string;
   /** Monthly price in the smallest currency unit, as Stripe wants it. */
   amountCents: number;
+  /** Sites that may be monitored at once. */
   urlLimit: number;
+  /** Full scans included per billing period. Unused scans do not roll over. */
+  includedScans: number;
   description: string;
 }
 
 export const MONITOR_PLANS: Record<MonitorPlan["key"], MonitorPlan> = {
-  solo: {
-    key: "solo",
-    name: "Solo",
-    amountCents: 1900,
+  pro: {
+    key: "pro",
+    name: "SecScan Pro",
+    amountCents: 5000,
     urlLimit: 3,
-    description: "Continuous monitoring for up to 3 sites",
-  },
-  studio: {
-    key: "studio",
-    name: "Studio",
-    amountCents: 4900,
-    urlLimit: 10,
-    description: "Continuous monitoring for up to 10 sites",
-  },
-  agency: {
-    key: "agency",
-    name: "Agency",
-    amountCents: 14900,
-    urlLimit: 40,
-    description: "Continuous monitoring for up to 40 sites — for agencies and dev shops",
+    includedScans: 5,
+    description: "Continuous monitoring for up to 3 sites, plus 5 full scans every month",
   },
 };
 
-/** Ordered cheapest first, for rendering a pricing table. */
-export const MONITOR_PLAN_ORDER: MonitorPlan["key"][] = ["solo", "studio", "agency"];
+/** The one plan that is sold. */
+export const DEFAULT_PLAN: MonitorPlan = MONITOR_PLANS.pro;
 
 /** The allowance for a plan key, or null if the key is not a sellable plan. */
 export function urlLimitForPlan(plan: string): number | null {
   const found = MONITOR_PLANS[plan as MonitorPlan["key"]];
   return found ? found.urlLimit : null;
+}
+
+/** Scans a plan includes per period, or 0 for anything that is not a sold plan. */
+export function includedScansForPlan(plan: string): number {
+  return MONITOR_PLANS[plan as MonitorPlan["key"]]?.includedScans ?? 0;
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { resolveEntitlement, type BillingRow } from "./entitlements";
-import { MONITOR_PLANS, MONITOR_PLAN_ORDER, urlLimitForPlan } from "./plans";
+import { MONITOR_PLANS, DEFAULT_PLAN, urlLimitForPlan, includedScansForPlan } from "./plans";
+import { PRICE_MAP } from "./stripe";
 
 /**
  * This is the rule that decides whether a paying customer's site keeps being
@@ -102,39 +103,35 @@ describe("resolveEntitlement — grandfathered accounts", () => {
 });
 
 describe("MONITOR_PLANS", () => {
-  it("prices every tier in whole cents, as Stripe requires", () => {
-    for (const key of MONITOR_PLAN_ORDER) {
-      const amount = MONITOR_PLANS[key].amountCents;
-      expect(Number.isInteger(amount), key).toBe(true);
-      expect(amount, key).toBeGreaterThan(0);
-    }
+  // The plan decided 2026-09-22. These numbers are what the pricing page
+  // promises, so a change here is a change to what customers are sold — it
+  // should fail a test and be made on purpose.
+  it("sells one plan: $50/month, 3 sites, 5 scans a month", () => {
+    expect(Object.keys(MONITOR_PLANS)).toEqual(["pro"]);
+    expect(DEFAULT_PLAN.amountCents).toBe(5000);
+    expect(DEFAULT_PLAN.urlLimit).toBe(3);
+    expect(DEFAULT_PLAN.includedScans).toBe(5);
   });
 
-  it("gives a bigger plan a better per-URL rate, never a worse one", () => {
-    // The same volume-discount property already pinned on the credit packs in
-    // stripe.test.ts. A price edit that makes the larger tier worse value is
-    // the mistake this catches, and it is invisible until a customer does the
-    // arithmetic themselves.
-    const perUrl = (k: (typeof MONITOR_PLAN_ORDER)[number]) =>
-      MONITOR_PLANS[k].amountCents / MONITOR_PLANS[k].urlLimit;
-
-    for (let i = 1; i < MONITOR_PLAN_ORDER.length; i++) {
-      const bigger = MONITOR_PLAN_ORDER[i]!;
-      const smaller = MONITOR_PLAN_ORDER[i - 1]!;
-      expect(MONITOR_PLANS[bigger].urlLimit, `${bigger} should allow more URLs than ${smaller}`)
-        .toBeGreaterThan(MONITOR_PLANS[smaller].urlLimit);
-      expect(perUrl(bigger), `${bigger} costs more per URL than ${smaller}`)
-        .toBeLessThanOrEqual(perUrl(smaller));
-    }
+  it("is priced in whole cents, as Stripe requires", () => {
+    expect(Number.isInteger(DEFAULT_PLAN.amountCents)).toBe(true);
   });
 
-  it("resolves a limit for every sellable plan, and nothing else", () => {
-    for (const key of MONITOR_PLAN_ORDER) {
-      expect(urlLimitForPlan(key)).toBe(MONITOR_PLANS[key].urlLimit);
+  it("makes the included scans worth more than buying them as credits", () => {
+    // The subscription is the way to save. If a pack ever beat it on the
+    // scans alone, the pricing page would be arguing against itself.
+    const perIncludedScan = DEFAULT_PLAN.amountCents / DEFAULT_PLAN.includedScans;
+    expect(perIncludedScan).toBeLessThanOrEqual(PRICE_MAP["single"]!.amount);
+  });
+
+  it("resolves limits for the sold plan, and nothing else", () => {
+    expect(urlLimitForPlan("pro")).toBe(3);
+    expect(includedScansForPlan("pro")).toBe(5);
+    // Designed-but-never-sold tiers and grandfathered rows get their allowance
+    // from the row, never from this table.
+    for (const k of ["solo", "studio", "agency", "grandfathered", "enterprise"]) {
+      expect(urlLimitForPlan(k), k).toBeNull();
+      expect(includedScansForPlan(k), k).toBe(0);
     }
-    // "grandfathered" is a stored plan value but not a sellable tier — its
-    // allowance comes off the row, never from this table.
-    expect(urlLimitForPlan("grandfathered")).toBeNull();
-    expect(urlLimitForPlan("enterprise")).toBeNull();
   });
 });

@@ -23,6 +23,14 @@ export const scansTable = pgTable("scans", {
   // charging it against the trial.
   origin: text("origin", { enum: ["user", "monitor"] }).notNull().default("user"),
 
+  // What paid for this scan, recorded at launch so a scan that fails later can
+  // be refunded to the SAME place. Without it a failure could not tell a free
+  // trial scan (nothing to give back) from a bought credit (must give back)
+  // from a subscription's included scan (give back to this month's allowance).
+  // Null for rows created before this column, and for monitor scans, which
+  // nothing pays for.
+  paidWith: text("paid_with", { enum: ["free", "included", "credit"] }),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   startedAt: timestamp("started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
@@ -221,7 +229,10 @@ export const billingSubscriptionsTable = pgTable("billing_subscriptions", {
   // Unique: a user has at most one plan. A second row would make "which limit
   // applies" ambiguous at exactly the moment it matters.
   userId: text("user_id").notNull().unique(),
-  plan: text("plan", { enum: ["solo", "studio", "agency", "grandfathered"] }).notNull(),
+  // "pro" is the one plan sold today ($50/month: 3 monitored sites + 5 scans a
+  // month). solo/studio/agency were designed but never sold; kept in the enum so
+  // no historical row can fail to parse.
+  plan: text("plan", { enum: ["pro", "solo", "studio", "agency", "grandfathered"] }).notNull(),
   // past_due is deliberately distinct from paused: Stripe is still retrying the
   // card, so access continues through the grace window. paused is the state
   // after that window, where scanning stops but history stays readable.
@@ -230,6 +241,10 @@ export const billingSubscriptionsTable = pgTable("billing_subscriptions", {
   }).notNull().default("active"),
   urlLimit: integer("url_limit").notNull(),
   currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  // Scans the plan includes, remaining in the current billing period. Reset to
+  // the plan's allowance on every paid invoice — not incremented — so unused
+  // scans do not roll over and a redelivered invoice.paid cannot stack them.
+  includedScansRemaining: integer("included_scans_remaining").notNull().default(0),
   grandfathered: boolean("grandfathered").notNull().default(false),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
@@ -240,6 +255,22 @@ export const billingSubscriptionsTable = pgTable("billing_subscriptions", {
   index("idx_billing_sub_status").on(table.status),
   uniqueIndex("uq_billing_sub_stripe_sub").on(table.stripeSubscriptionId),
 ]);
+
+/**
+ * Stripe events already applied — the idempotency ledger for the webhook.
+ *
+ * Stripe delivers every event at least once, and redelivers on any slow or
+ * failed acknowledgement. Without this, a redelivered checkout.session.completed
+ * credited the account a second time. The webhook inserts the event id here in
+ * the SAME transaction as the effect it applies: a duplicate hits the primary
+ * key and applies nothing, and a failure part-way rolls back both, so the
+ * retry is applied exactly once.
+ */
+export const stripeEventsTable = pgTable("stripe_events", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
+  processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const cveAlertsTable = pgTable("cve_alerts", {
   id: uuid("id").primaryKey().defaultRandom(),

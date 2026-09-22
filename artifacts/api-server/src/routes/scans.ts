@@ -12,6 +12,7 @@ import { checkScanTarget } from "../lib/ssrfGuard";
 import { rateLimitMiddleware, scanRateLimitRules, scanNetworkRateLimitRules } from "../lib/rateLimit";
 import { trialScansExhausted, TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE } from "../lib/freeTrial";
 import { spendOneCredit, refundOneCredit } from "../lib/credits";
+import { spendIncludedScan, refundIncludedScan } from "../lib/billing";
 
 // ── Abuse and cost control ───────────────────────────────────────────────────
 // A scan is expensive in a way an API request normally is not: it launches a
@@ -157,28 +158,41 @@ router.post("/scans", requireScanAuth, scanRateLimit, scanNetworkRateLimit, asyn
   // alternative — validate, create, then charge — leaves a window in which a
   // scan exists that nobody paid for. The cost of taking it first is that every
   // rejection below has to give it back, which is what refundIfCharged is for.
-  let creditUsed = false;
+  // Spend order: free trial, then the subscription's included scans, then
+  // bought credits. Included scans go before credits because they expire at
+  // the end of the billing period and credits never do — spending a credit
+  // while included scans sit unused would quietly waste what the customer
+  // already paid for this month.
+  let paidWith: "free" | "included" | "credit" = "free";
   if (await trialScansExhausted(req.user.id)) {
-    const remaining = await spendOneCredit(req.user.id);
-    if (remaining === null) {
-      res.status(403).json({ error: TRIAL_LIMIT_MESSAGE, code: TRIAL_LIMIT_CODE });
-      return;
+    const includedLeft = await spendIncludedScan(req.user.id);
+    if (includedLeft !== null) {
+      paidWith = "included";
+      req.log.info({ includedLeft }, "Scan paid for with an included subscription scan");
+    } else {
+      const remaining = await spendOneCredit(req.user.id);
+      if (remaining === null) {
+        res.status(403).json({ error: TRIAL_LIMIT_MESSAGE, code: TRIAL_LIMIT_CODE });
+        return;
+      }
+      paidWith = "credit";
+      req.log.info({ remaining }, "Scan paid for with a credit");
     }
-    creditUsed = true;
-    req.log.info({ remaining }, "Scan paid for with a credit");
   }
+  const creditUsed = paidWith === "credit";
 
-  /** Give back the credit this request took, when it took one. */
+  /** Give back what this request took, to the place it came from. */
   const refundIfCharged = async (): Promise<void> => {
-    if (!creditUsed) return;
+    if (paidWith === "free") return;
     try {
-      await refundOneCredit(req.user.id);
-      req.log.info("Credit refunded — scan was not created");
+      if (paidWith === "credit") await refundOneCredit(req.user.id);
+      else await refundIncludedScan(db, req.user.id);
+      req.log.info({ paidWith }, "Scan payment refunded — scan was not created");
     } catch (err) {
       // Worth a loud log rather than a 500: the caller's request already
       // failed for its own reason, and burying that under a refund error
       // would report the wrong problem.
-      req.log.error({ err }, "Could not refund a credit after a rejected scan");
+      req.log.error({ err, paidWith }, "Could not refund a rejected scan");
     }
   };
 
@@ -320,6 +334,8 @@ router.post("/scans", requireScanAuth, scanRateLimit, scanNetworkRateLimit, asyn
       credentialsEncrypted,
       secondaryCredentialsEncrypted,
       credentialsAuthorizedAt,
+      // Recorded so a scan that fails later is refunded to the same place.
+      paidWith,
     })
     .returning();
 
@@ -330,7 +346,7 @@ router.post("/scans", requireScanAuth, scanRateLimit, scanNetworkRateLimit, asyn
     .set({ status: "queued", startedAt: new Date() })
     .where(eq(scansTable.id, scan.id));
 
-  res.status(201).json({ scanId: scan.id, checkoutUrl: null, creditUsed });
+  res.status(201).json({ scanId: scan.id, checkoutUrl: null, creditUsed, paidWith });
 });
 
 router.get("/scans/:id/status", async (req, res): Promise<void> => {
