@@ -22,7 +22,7 @@ import { eq } from "drizzle-orm";
 /**
  * Floor for a grandfathered allowance.
  *
- * Set to the Solo tier's limit rather than to each user's current count: a
+ * Set to SecScan Pro's site limit (3) rather than to each user's current count: a
  * grandfathered user who happens to be watching one site today would otherwise
  * be unable to add a second, which reads as a downgrade on the day we start
  * charging other people. Anyone already above this keeps their higher number.

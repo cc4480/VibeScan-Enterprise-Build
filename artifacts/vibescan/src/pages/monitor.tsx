@@ -25,6 +25,8 @@ import {
   type MonitorRegression,
 } from "@/lib/monitor-api";
 import { useToast } from "@/hooks/use-toast";
+import { ApiError } from "@workspace/api-client-react";
+import { BuyOptions } from "@/components/billing-options";
 
 const SEVERITY_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   CRITICAL: { label: "Critical", color: "text-red-400",    bg: "bg-red-400/10 border-red-400/20" },
@@ -948,11 +950,16 @@ function AddSubscriptionForm({ onSuccess }: { onSuccess: () => void }) {
   const [showWebhook, setShowWebhook] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set when the server says monitoring needs SecScan Pro (only once
+  // MONITORING_REQUIRES_PLAN is on). The moment someone asks to monitor is the
+  // moment to offer the plan — a bare error there loses the sale.
+  const [refusal, setRefusal] = useState<"plan" | "limit" | null>(null);
   const { toast } = useToast();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setRefusal(null);
     setLoading(true);
     try {
       const result = await createMonitorSubscription(
@@ -966,6 +973,10 @@ function AddSubscriptionForm({ onSuccess }: { onSuccess: () => void }) {
       }
       onSuccess();
     } catch (err: unknown) {
+      // Keyed on the server's code, never on the prose, which will be reworded.
+      const code = err instanceof ApiError ? (err.data as { code?: unknown } | null)?.code : undefined;
+      if (code === "monitor_plan_required") setRefusal("plan");
+      else if (code === "monitor_url_limit") setRefusal("limit");
       const msg = err instanceof Error ? err.message : "Failed to create subscription";
       setError(msg.replace(/^HTTP \d+ [^:]+: /, ""));
     } finally {
@@ -1032,6 +1043,17 @@ function AddSubscriptionForm({ onSuccess }: { onSuccess: () => void }) {
       </AnimatePresence>
 
       {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
+      {refusal === "plan" && (
+        <div className="mt-5">
+          <BuyOptions compact />
+        </div>
+      )}
+      {refusal === "limit" && (
+        <p className="mt-2 text-sm text-muted-foreground">
+          SecScan Pro covers 3 sites. Stop monitoring one below to add another, or{" "}
+          <Link href="/settings#billing" className="text-primary underline underline-offset-2">see your plan</Link>.
+        </p>
+      )}
     </form>
   );
 }

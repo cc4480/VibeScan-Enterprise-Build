@@ -42,7 +42,7 @@ const CreateMonitorBody = z.object({
 
 // ── POST /api/monitor/subscriptions ──────────────────────────────────────────
 // Create a new monitoring subscription for a URL.
-// With DISABLE_PAYMENTS=true this is granted immediately.
+// Free unless MONITORING_REQUIRES_PLAN is on; then it needs SecScan Pro (see lib/entitlements.ts).
 
 // A subscription schedules recurring scans, so it draws on the same budget.
 // Per user, for the same reason as the scan route: this was IP-keyed, so

@@ -37,7 +37,7 @@ export const TRIAL_LIMIT_CODE = "trial_exhausted";
  * Scans this user started themselves, across all time.
  *
  * Monitor rows are excluded deliberately. The scheduler rescans on its own
- * timetable — as often as every 3 days at grade F, plus a daily CVE sweep — so
+ * timetable — as often as every 3 days at grade F, plus an hourly CVE sweep — so
  * counting those would spend a subscriber's allowance on scans they never asked
  * for and then lock them out with a message claiming they used their free
  * scans themselves. `scans.origin` is what separates the two.

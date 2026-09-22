@@ -35,7 +35,7 @@ you own or have permission to test.
 - Assigns a letter grade (A through F) with a numeric risk score (0–100)
 - Generates plain-English reports via AI that explain findings and prioritise fixes
 - Provides per-agent fix prompts tailored to Cursor, Claude Code, Lovable, Bolt and Replit AI
-- Offers continuous monitoring with weekly rescans and daily CVE feed matching
+- Offers continuous monitoring (SecScan Pro): hourly uptime and header checks, rescans on a schedule set by your grade, and hourly CVE matching
 
 ## Who SecScan is for
 
@@ -45,8 +45,13 @@ every coding session.
 
 ## Pricing
 
-Every account gets 2 free scans to try the platform. Paid scan packs are coming soon; there is
-no checkout yet.
+Every account gets 2 free scans to try the platform, every check included.
+
+- SecScan Pro — $50/month: continuous monitoring for up to 3 sites, plus 5 full scans every
+  month (unused scans do not roll over). Cancel any time.
+- Scan credits — $12 for 1, $50 for 5, $160 for 20. Credits never expire.
+
+Payments are handled by Stripe.
 
 ## Security checks performed
 

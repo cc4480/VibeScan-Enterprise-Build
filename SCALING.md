@@ -134,7 +134,7 @@ Do not go straight to 5. Scale to **2** first and confirm two things in
    `hostname` values.
 2. **Scheduled jobs still fire once.** `boss.schedule()` upserts by queue name,
    so N replicas produce one schedule row and one worker runs each job. Confirm
-   exactly one `Running daily CVE check` per day, not one per replica. If that
+   exactly one `Running CVE check` per hour, not one per replica. If that
    ever doubles, every monitored customer gets duplicate alert emails.
 
 Then go to 5.

@@ -19,7 +19,7 @@ Required env vars (secrets):
 - `DEEPSEEK_API_KEY` — the AI analysis key. `callDeepSeek` reads this and only this; without it the scan completes and the report simply carries no AI section.
 - `ENCRYPTION_KEY` — 32-byte base64 AES-256-GCM key. Seals **scan credentials** at rest (`lib/crypto.ts`, used by `lib/scanCredentials.ts`); the worker nulls the column once the scan ends, on both the success and failure paths. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. Without it, credentialed scanning is unavailable; anonymous scanning is unaffected.
 - `RESEND_API_KEY` — Email notifications (report ready, CVE alerts)
-- `STRIPE_SECRET_KEY` — Stripe client for the webhook half of payments; no checkout flow exists yet
+- `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` — payments; set both or neither (see `deploy/PAYMENTS-GO-LIVE.md`)
 
 ### Local (non-Replit) development
 
@@ -74,14 +74,14 @@ lib/
 - **Artifact router handles external routing**: The Replit artifact router (`REPLIT_ARTIFACT_ROUTER`) proxies `/api` to Express (port 8080) and `/` to Vite (port 18425). The `Start application` webview workflow runs Vite on port 5000 for the Replit preview pane.
 - **No login required**: Auth is a UUID token auto-generated in `localStorage` (`vibescan_client_token`). The `authMiddleware` reads it from the `Authorization: Bearer` header.
 - **Graceful degradation**: All three external services (DeepSeek, Resend, Stripe) check for their env var and skip with a warning if not set — the app remains fully functional.
-- **Payments not implemented**: the Stripe webhook exists but no Checkout Session is ever created, so scans are always free. `DISABLE_PAYMENTS` is read only to warn when it is set to `false`, which misdescribes the behaviour.
+- **Payments**: on exactly when `STRIPE_SECRET_KEY` (and `STRIPE_WEBHOOK_SECRET`) are set. Checkout sells SecScan Pro ($50/month) and credit packs; the webhook applies each Stripe event exactly once (see `lib/billing.ts`). Setup: `deploy/PAYMENTS-GO-LIVE.md`.
 - **Two processes, one image**: `src/index.ts` (the `web` tier) serves the API and frontend and only enqueues; `src/secscan.ts` runs the pg-boss worker, the monitor scheduler, the EOL/CVE refresh, and owns Chromium. The only channel between them is the `scan-job` queue in Postgres. Do not add Playwright imports to anything reachable from `index.ts`.
 
 ## Product
 
-Everything is free during early access — `POST /scans` queues immediately and
-returns `checkoutUrl: null`; the `pack_5`/`pack_20` tiers are rejected at the
-route. The tier column and Stripe plumbing remain for a future revival.
+2 free scans per account; then SecScan Pro's included scans, then credits.
+`POST /scans` spends in that order and records the source on `scans.paid_with`;
+a scan that fails later is refunded to it. The `tier` column is legacy.
 
 - **One scan, not tiers**: `routes/scans.ts` pins every run to `tier = "deep"`.
   What varies is *access* — domain verification unlocks active probing,
@@ -92,7 +92,6 @@ route. The tier column and Stripe plumbing remain for a future revival.
 
 ## User preferences
 
-- Keep `DISABLE_PAYMENTS=true` in development `.replit` userenv
 
 ## Scanner false-positive prevention
 

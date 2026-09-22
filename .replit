@@ -48,11 +48,9 @@ timeoutMs = 20000
 [userenv]
 
 [userenv.development]
-DISABLE_PAYMENTS = "true"
 NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
 [userenv.production]
-DISABLE_PAYMENTS = "true"
 
 [nix]
 channel = "stable-25_05"

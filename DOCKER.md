@@ -181,11 +181,12 @@ Two consequences worth knowing before you debug either one:
   own origin. Nothing warns you that the check was skipped, so if SSRF
   findings never appear, check this first.
 
-- **Payments are not implemented.** Every scan is queued free of charge, and
-  `DISABLE_PAYMENTS` does not change that — the Stripe webhook that credits an
-  account exists, but nothing creates a Checkout Session for a customer to pay
-  through. Setting it to `false` only logs a warning at startup. Build checkout
-  before advertising a paid tier.
+- **Payments are on exactly when `STRIPE_SECRET_KEY` is set** — the SecScan
+  Pro subscription ($50/month) and the credit packs become buyable. Set
+  `STRIPE_WEBHOOK_SECRET` with it, and register the webhook at
+  `/api/scan/webhook`; `deploy/PAYMENTS-GO-LIVE.md` lists the five events.
+  Without either, every surface shows prices as "not live yet" and nothing can
+  be bought.
 
 ## Operations
 

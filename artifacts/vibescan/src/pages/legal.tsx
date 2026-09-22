@@ -10,7 +10,11 @@ import { useSeo } from "@/lib/seo";
 //
 // Deliberately plain: these are read, not marketed at.
 
-const LAST_UPDATED = "September 5, 2026";
+// Per document: a change to one must not re-date the other.
+const LAST_UPDATED: Record<"privacy" | "terms", string> = {
+  privacy: "September 5, 2026",
+  terms: "September 22, 2026", // SecScan Pro subscription terms added
+};
 const CONTACT = "hello@secscan.us";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -204,13 +208,35 @@ function Terms() {
 
       <Section title="Credits and payment">
         <p>
-          Scans are bought individually or in credit packs. Credits do not expire. Prices are
-          shown before you pay, and payment is taken by Stripe.
+          Every account gets 2 free scans. After that, scans are paid for with a SecScan Pro
+          subscription or with scan credits. Prices are shown before you pay, and payment is
+          taken by Stripe.
         </p>
         <p>
-          Because a scan is delivered immediately and cannot be un-run, a completed scan is
-          not refundable. If a scan fails for a reason on our side, tell us and we will
-          restore the credit. Unused credits can be refunded within 30 days of purchase.
+          Scan credits are sold singly or in packs and do not expire. Because a scan is
+          delivered immediately and cannot be un-run, a completed scan is not refundable. If a
+          scan fails for a reason on our side, the credit is returned to your account
+          automatically. Unused credits can be refunded within 30 days of purchase.
+        </p>
+      </Section>
+
+      <Section title="SecScan Pro subscription">
+        <p>
+          SecScan Pro is billed monthly in advance and renews automatically each month until you
+          cancel. It includes continuous monitoring for up to 3 sites and 5 full scans per
+          billing month. Included scans reset at each renewal and do not carry over; while you
+          have included scans left, they are used before any scan credits.
+        </p>
+        <p>
+          You can cancel at any time from Settings. Cancelling stops the next renewal: you keep
+          SecScan Pro until the end of the month you have paid for, and are not charged again.
+          We do not refund partial months. If a renewal payment fails, Stripe retries it for a
+          short period during which your plan stays active; if it still fails, monitoring and
+          included scans pause until the payment is updated.
+        </p>
+        <p>
+          If we change the price of SecScan Pro, we will email you before the change applies to
+          your subscription, and it will take effect from a renewal after that notice.
         </p>
       </Section>
 
@@ -260,7 +286,7 @@ export default function LegalPage({ kind }: { kind: "privacy" | "terms" }) {
         </div>
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{title}</h1>
       </div>
-      <p className="text-sm text-muted-foreground mb-10">Last updated {LAST_UPDATED}</p>
+      <p className="text-sm text-muted-foreground mb-10">Last updated {LAST_UPDATED[kind]}</p>
 
       {isPrivacy ? <Privacy /> : <Terms />}
 
