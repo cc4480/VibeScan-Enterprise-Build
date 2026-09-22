@@ -100,8 +100,12 @@ describe("GET /account/email-preferences", () => {
     await (await handlerFor("get", "/account/email-preferences"))(makeReq(), res);
 
     expect(res.body.monitorAlerts).toBe(true);
+    // Exhaustive on purpose. A new alert kind added without a default of
+    // "send it" would change what existing users receive without anyone
+    // choosing that, and this assertion is what makes the omission fail.
     expect(res.body.alerts).toEqual({
       cve: true, regression: true, certExpiry: true, scanComplete: true,
+      availability: true, drift: true,
     });
     expect(res.body.minSeverity).toBe("info");
   });
@@ -118,6 +122,26 @@ describe("PUT /account/email-preferences", () => {
 
     // Asked NOT to receive scan_complete, so the opt-out column goes true.
     expect(updated[0]).toMatchObject({ notifyScanCompleteOptedOut: true });
+  });
+
+  it("stores the two pulse-check toggles in their own columns", async () => {
+    // The lesson from the last round: a toggle that animates and stores nothing
+    // is invisible to the compiler and to every other test here, because the
+    // column name is a string in an untyped update object. These two are new,
+    // so they get the check the older four earned the hard way.
+    queued.push([{}]);
+    await (await handlerFor("put", "/account/email-preferences"))(
+      makeReq({ alerts: { availability: false } }),
+      makeRes(),
+    );
+    expect(Object.keys(updated[0]!)).toEqual(["notifyAvailabilityOptedOut"]);
+
+    queued.push([{}]);
+    await (await handlerFor("put", "/account/email-preferences"))(
+      makeReq({ alerts: { drift: false } }),
+      makeRes(),
+    );
+    expect(Object.keys(updated[1]!)).toEqual(["notifyDriftOptedOut"]);
   });
 
   it("changes only the fields supplied", async () => {

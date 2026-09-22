@@ -46,6 +46,14 @@ export const usersTable = pgTable("users", {
   notifyCertExpiryOptedOut: boolean("notify_cert_expiry_opted_out").notNull().default(false),
   notifyScanCompleteOptedOut: boolean("notify_scan_complete_opted_out").notNull().default(false),
 
+  // The hourly pulse check's two alerts. They are separate kinds on purpose:
+  // downtime is the one alert that can flap, and someone silencing a site that
+  // drops a request every other hour must not thereby silence "your HSTS
+  // header disappeared" — which is exactly the all-or-nothing failure the
+  // per-kind columns above exist to avoid.
+  notifyAvailabilityOptedOut: boolean("notify_availability_opted_out").notNull().default(false),
+  notifyDriftOptedOut: boolean("notify_drift_opted_out").notNull().default(false),
+
   // Floor for alerts that carry a severity (CVE matches and regressions).
   // "info" means everything, which is today's behaviour and so the default —
   // nobody's notifications change until they choose to change them.

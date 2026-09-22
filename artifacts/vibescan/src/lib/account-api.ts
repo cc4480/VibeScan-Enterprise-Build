@@ -151,6 +151,10 @@ export interface EmailPreferences {
     regression: boolean;
     certExpiry: boolean;
     scanComplete: boolean;
+    /** Site went down, or came back, per the hourly check. */
+    availability: boolean;
+    /** A security header disappeared, HSTS weakened, redirect target changed. */
+    drift: boolean;
   };
   /** Only alerts at or above this severity are sent. "info" means everything. */
   minSeverity: AlertSeverity;

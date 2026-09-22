@@ -30,7 +30,12 @@ export type WebhookEventType =
   | "cve_alert"
   | "regression_detected"
   | "cert_expiry"
-  | "scan_complete";
+  | "scan_complete"
+  // Raised by the hourly pulse check, which sees things a scan every fortnight
+  // cannot: an outage, or a security header that quietly went away.
+  | "site_down"
+  | "site_recovered"
+  | "security_drift";
 
 export interface WebhookPayload {
   event: WebhookEventType;
@@ -38,6 +43,17 @@ export interface WebhookPayload {
   subscriptionId: string;
   timestamp: string;
   data: Record<string, unknown>;
+}
+
+/** Drift kinds are stored as slugs; nobody wants to read "hsts_weakened" in Slack. */
+export function describeDriftKind(kind: string): string {
+  switch (kind) {
+    case "header_removed":    return "Security header removed";
+    case "hsts_weakened":     return "HSTS weakened";
+    case "final_url_changed": return "Redirect target changed";
+    case "tls_downgrade":     return "HTTPS downgraded to HTTP";
+    default:                  return kind;
+  }
 }
 
 function buildSlackBody(payload: WebhookPayload): Record<string, unknown> {
@@ -48,6 +64,9 @@ function buildSlackBody(payload: WebhookPayload): Record<string, unknown> {
     regression_detected: "🔴 Security Regression Detected",
     cert_expiry: "🔒 TLS Certificate Expiring",
     scan_complete: "✅ Security Scan Complete",
+    site_down: "🛑 Site Unreachable",
+    site_recovered: "✅ Site Back Online",
+    security_drift: "🔍 Security Configuration Changed",
   };
 
   const label = eventLabels[event] ?? event;
@@ -97,8 +116,31 @@ function buildSlackBody(payload: WebhookPayload): Record<string, unknown> {
     if (data.reportUrl) attachmentFields.push({ title: "Report", value: String(data.reportUrl), short: false });
   }
 
-  const color = event === "cve_alert" || event === "regression_detected" ? "danger"
-    : event === "cert_expiry" ? "warning"
+  if (event === "site_down") {
+    if (data.failureReason) attachmentFields.push({ title: "Reason", value: String(data.failureReason), short: false });
+    if (data.consecutiveFailures != null) {
+      attachmentFields.push({ title: "Failed checks", value: String(data.consecutiveFailures), short: true });
+    }
+  }
+
+  if (event === "site_recovered" && data.httpStatus != null) {
+    attachmentFields.push({ title: "Status", value: `HTTP ${data.httpStatus}`, short: true });
+  }
+
+  if (event === "security_drift" && Array.isArray(data.changes)) {
+    const changes = data.changes as Array<{ kind: string; detail: string; severity: string }>;
+    attachmentFields.push({
+      title: `${changes.length} change${changes.length > 1 ? "s" : ""} detected`,
+      value: changes
+        .slice(0, 5)
+        .map((c) => `*${describeDriftKind(c.kind)}* — ${c.detail} (${c.severity})`)
+        .join("\n"),
+      short: false,
+    });
+  }
+
+  const color = event === "cve_alert" || event === "regression_detected" || event === "site_down" ? "danger"
+    : event === "cert_expiry" || event === "security_drift" ? "warning"
     : "good";
 
   return {
@@ -142,6 +184,9 @@ const EVENT_TO_KIND: Record<WebhookEventType, AlertKind> = {
   regression_detected: "regression",
   cert_expiry: "cert_expiry",
   scan_complete: "scan_complete",
+  site_down: "availability",
+  site_recovered: "availability",
+  security_drift: "drift",
 };
 
 export async function fireWebhook(

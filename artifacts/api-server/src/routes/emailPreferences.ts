@@ -28,6 +28,8 @@ export const ALERT_COLUMNS = {
   regression: "notifyRegressionOptedOut",
   certExpiry: "notifyCertExpiryOptedOut",
   scanComplete: "notifyScanCompleteOptedOut",
+  availability: "notifyAvailabilityOptedOut",
+  drift: "notifyDriftOptedOut",
 } as const;
 
 type AlertField = keyof typeof ALERT_COLUMNS;
@@ -41,6 +43,8 @@ interface PrefsRow {
   regression?: boolean;
   certExpiry?: boolean;
   scanComplete?: boolean;
+  availability?: boolean;
+  drift?: boolean;
   minSeverity?: string | null;
 }
 
@@ -62,6 +66,8 @@ function presentPrefs(row: PrefsRow | undefined) {
       regression: !row?.regression,
       certExpiry: !row?.certExpiry,
       scanComplete: !row?.scanComplete,
+      availability: !row?.availability,
+      drift: !row?.drift,
     },
     minSeverity: row?.minSeverity ?? "info",
   };
@@ -82,6 +88,8 @@ router.get("/account/email-preferences", async (req, res): Promise<void> => {
         regression: usersTable.notifyRegressionOptedOut,
         certExpiry: usersTable.notifyCertExpiryOptedOut,
         scanComplete: usersTable.notifyScanCompleteOptedOut,
+        availability: usersTable.notifyAvailabilityOptedOut,
+        drift: usersTable.notifyDriftOptedOut,
         minSeverity: usersTable.notifyMinSeverity,
       })
       .from(usersTable)
@@ -141,6 +149,8 @@ router.put("/account/email-preferences", async (req, res): Promise<void> => {
         regression: usersTable.notifyRegressionOptedOut,
         certExpiry: usersTable.notifyCertExpiryOptedOut,
         scanComplete: usersTable.notifyScanCompleteOptedOut,
+        availability: usersTable.notifyAvailabilityOptedOut,
+        drift: usersTable.notifyDriftOptedOut,
         minSeverity: usersTable.notifyMinSeverity,
       });
 

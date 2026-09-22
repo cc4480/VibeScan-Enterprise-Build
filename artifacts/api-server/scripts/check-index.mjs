@@ -52,10 +52,29 @@ const CENTRAL = {
   nextjsProbe: { cat: "Secret Exposed in Page HTML", emitter: "nextjsProbe.ts" },
 };
 
+/**
+ * Modules that carry `severity:` for something that is NOT a scan finding.
+ *
+ * The rule this script works by — "an object literal with severity: is a
+ * finding" — is a good heuristic for probe modules and wrong for anything else
+ * that happens to rank things by severity. monitorPulse.ts classifies
+ * notification alerts (a removed header, an HSTS downgrade); those never appear
+ * in a report, and counting them inflated the published total from 284 to 288.
+ *
+ * The number in this file's header is a claim on secscan.info about what the
+ * scanner detects, so a module belongs here the moment its severities describe
+ * alerts, preferences or scheduling rather than findings in a report.
+ */
+const NOT_A_SCANNER = new Set([
+  "monitorPulse.ts",
+]);
+
 const SEV_ORDER = ["critical", "high", "medium", "low", "info"];
 const SEV_RANK = Object.fromEntries(SEV_ORDER.map((s, i) => [s, SEV_ORDER.length - i]));
 
-const files = readdirSync(LIB).filter((f) => f.endsWith(".ts"));
+const files = readdirSync(LIB)
+  .filter((f) => f.endsWith(".ts"))
+  .filter((f) => !NOT_A_SCANNER.has(f));
 const sourceFiles = files.filter((f) => !f.endsWith(".test.ts"));
 const testFiles = files.filter((f) => f.endsWith(".test.ts"));
 

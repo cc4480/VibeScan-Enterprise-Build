@@ -559,7 +559,15 @@ export async function processScanJob(job: ScanJob): Promise<void> {
         const gradeCadenceAt = computeNextScanAt(grade, completedAt);
         const nextScanAt = resolveNextScanAt(sub?.nextScanAt ?? null, gradeCadenceAt, completedAt);
 
-        await db
+        // .returning() so the log reflects what actually happened.
+        //
+        // Without it this logged "Monitor subscription updated" identically
+        // whether the WHERE matched a row or nothing at all — so when a user
+        // reported that monitoring "isn't saving the scan", the logs were
+        // useless as evidence either way. The WHERE carries a userId as well as
+        // an id, so a subscription cancelled or reassigned mid-scan matches
+        // nothing, and that is worth a warning rather than a success line.
+        const updatedSubs = await db
           .update(monitorSubscriptionsTable)
           .set({
             lastScanAt: completedAt,
@@ -571,12 +579,20 @@ export async function processScanJob(job: ScanJob): Promise<void> {
               eq(monitorSubscriptionsTable.id, monitorSubscriptionId),
               eq(monitorSubscriptionsTable.userId, userId),
             ),
-          );
+          )
+          .returning({ id: monitorSubscriptionsTable.id });
 
-        log.info(
-          { monitorSubscriptionId, reportId: report.id, grade, nextScanAt },
-          "Monitor subscription updated",
-        );
+        if (updatedSubs.length === 0) {
+          log.warn(
+            { monitorSubscriptionId, reportId: report.id },
+            "Monitor subscription NOT updated — no row matched this id and user",
+          );
+        } else {
+          log.info(
+            { monitorSubscriptionId, reportId: report.id, grade, nextScanAt },
+            "Monitor subscription updated",
+          );
+        }
 
         // A challenge-answered scan is not a valid monitoring datapoint.
         // Recording its withheld findings as a score posts a false "improved"

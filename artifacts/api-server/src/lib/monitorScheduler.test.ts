@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { nextScanDelayDays, computeNextScanAt, isSubscriptionDue } from "./monitorScheduler";
+import {
+  nextScanDelayDays,
+  computeNextScanAt,
+  isSubscriptionDue,
+  selectNewCveMatches,
+} from "./monitorScheduler";
 
 /**
  * The rescan cadence is a published claim — secscan.info tells people an A is
@@ -128,5 +133,75 @@ describe("isSubscriptionDue — the decision that makes rescans automatic", () =
     // landing between subscribe and baseline-scan-completion double-enqueued.
     const justCreated = { expiresAt: future(300), nextScanAt: future(3), lastScanAt: null };
     expect(isSubscriptionDue(justCreated, now)).toBe(false);
+  });
+});
+
+/**
+ * The CVE check moved from daily to hourly so a vulnerability matching a
+ * customer's stack is not sitting unreported for most of a day. That is only
+ * viable if the same match does not alert twice — the lookback window overlaps
+ * the schedule on purpose, so every CVE is seen on several consecutive runs.
+ *
+ * Getting this wrong is not a crash. It is a paying customer receiving the same
+ * email twenty-four times a day, and a full rescan fired at their site each
+ * time.
+ */
+describe("selectNewCveMatches — what makes an hourly CVE check safe", () => {
+  const match = (id: string, tech = "nginx") => ({ cve: { id }, matchedTech: tech });
+
+  it("returns every match when nothing has been alerted yet", () => {
+    const matches = [match("CVE-2026-0001"), match("CVE-2026-0002")];
+    expect(selectNewCveMatches(matches, [])).toEqual(matches);
+  });
+
+  it("drops a CVE this subscription was already told about", () => {
+    const fresh = selectNewCveMatches(
+      [match("CVE-2026-0001"), match("CVE-2026-0002")],
+      ["CVE-2026-0001"],
+    );
+    expect(fresh.map((m) => m.cve.id)).toEqual(["CVE-2026-0002"]);
+  });
+
+  it("returns nothing when every match is already known", () => {
+    // The common case on the second and every subsequent hourly run. Nothing
+    // should be emailed and no rescan should be enqueued.
+    const fresh = selectNewCveMatches(
+      [match("CVE-2026-0001"), match("CVE-2026-0002")],
+      ["CVE-2026-0002", "CVE-2026-0001"],
+    );
+    expect(fresh).toEqual([]);
+  });
+
+  it("collapses a CVE that matched two technologies in ONE run", () => {
+    // The case a database check cannot catch: the already-alerted set is read
+    // before any of this run's rows are written, so a repeat inside a single
+    // batch would be inserted twice and counted twice in the email.
+    const fresh = selectNewCveMatches(
+      [
+        match("CVE-2026-0001", "nginx 1.24"),
+        match("CVE-2026-0001", "nginx"),
+        match("CVE-2026-0002"),
+      ],
+      [],
+    );
+
+    expect(fresh.map((m) => m.cve.id)).toEqual(["CVE-2026-0001", "CVE-2026-0002"]);
+    // The first match wins: matchCvesToTechnologies returns the most specific
+    // technology first, and that is the more useful one to show.
+    expect(fresh[0]!.matchedTech).toBe("nginx 1.24");
+  });
+
+  it("preserves the order it was given", () => {
+    // The caller sorts by EPSS x severity before this runs, so reordering here
+    // would silently demote the most exploitable CVE out of the email's summary.
+    const ids = ["CVE-2026-0009", "CVE-2026-0003", "CVE-2026-0007"];
+    const fresh = selectNewCveMatches(ids.map((id) => match(id)), []);
+    expect(fresh.map((m) => m.cve.id)).toEqual(ids);
+  });
+
+  it("does not mutate the array it was given", () => {
+    const matches = [match("CVE-2026-0001"), match("CVE-2026-0002")];
+    selectNewCveMatches(matches, ["CVE-2026-0001"]);
+    expect(matches).toHaveLength(2);
   });
 });

@@ -21,6 +21,41 @@ export interface MonitorSubscription {
   scanInProgress: boolean;
   /** Which stage it is at, when one is running: queued | scanning | analyzing. */
   scanStatus: string | null;
+
+  // ── The hourly pulse check ──
+  // A full rescan happens every 3–14 days depending on grade, so everything
+  // above can legitimately be a fortnight old. These are never more than an
+  // hour old, and they are what tells a user the product is still watching.
+  /** When the site was last checked. Null until the first hourly pulse runs. */
+  lastPulseAt: string | null;
+  /** Whether it answered. Null if no pulse has run yet. */
+  pulseReachable: boolean | null;
+  pulseStatus: number | null;
+  pulseFailureReason: string | null;
+  responseTimeMs: number | null;
+  /** Percentage of the last 24 hours' checks that reached the site. */
+  uptime24h: number | null;
+  medianResponseMs: number | null;
+  pulseChecks24h: number;
+  /** The last 24 hours of checks, oldest first, for the uptime strip. */
+  pulseTimeline: Array<{ checkedAt: string; reachable: boolean; responseTimeMs: number | null }>;
+}
+
+export interface PulseCheck {
+  id: string;
+  checkedAt: string;
+  reachable: boolean;
+  httpStatus: number | null;
+  responseTimeMs: number | null;
+  certDaysRemaining: number | null;
+  failureReason: string | null;
+  presentHeaders: string[] | null;
+}
+
+export interface PulseWindow {
+  pulses: PulseCheck[];
+  summary: { uptimePct: number | null; medianResponseMs: number | null; checks: number };
+  windowHours: number;
 }
 
 export interface CveAlert {
@@ -101,6 +136,12 @@ export async function getScoreHistory(subscriptionId: string): Promise<ScoreHist
 
 export async function getRecentRegressions(subscriptionId: string): Promise<MonitorRegression[]> {
   return customFetch<MonitorRegression[]>(`/api/monitor/subscriptions/${subscriptionId}/regressions`);
+}
+
+export async function getPulseHistory(subscriptionId: string, hours = 48): Promise<PulseWindow> {
+  return customFetch<PulseWindow>(
+    `/api/monitor/subscriptions/${subscriptionId}/pulses?hours=${hours}`,
+  );
 }
 
 export async function triggerManualScan(subscriptionId: string): Promise<{ scanId: string }> {

@@ -2,8 +2,9 @@ import { Router, type IRouter, type Request, type Response, type NextFunction } 
 import {
   db, monitorSubscriptionsTable, cveAlertsTable, reportsTable,
   monitorScoreHistoryTable, monitorRegressionsTable, certExpiryAlertsTable,
+  monitorPulseChecksTable,
 } from "@workspace/db";
-import { eq, and, desc, count, sql, inArray } from "drizzle-orm";
+import { eq, and, gte, desc, count, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { enqueueScan } from "../lib/queue";
 import { scansTable } from "@workspace/db";
@@ -12,8 +13,10 @@ import { checkScanTarget } from "../lib/ssrfGuard";
 import { rateLimitMiddleware, scanRateLimitRules } from "../lib/rateLimit";
 import { trialScansExhausted, TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE } from "../lib/freeTrial";
 import { monitorEntitlement } from "../lib/entitlements";
+import { summariseUptime } from "../lib/monitorPulse";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
 /** Fetch the most recent completed report for a user+URL pair. */
 async function fetchLatestReport(userId: string, targetUrl: string) {
@@ -335,6 +338,30 @@ router.get("/monitor/subscriptions", async (req, res): Promise<void> => {
         .orderBy(desc(scansTable.createdAt))
         .limit(1);
 
+      // The hourly pulse. This is what the dashboard shows between scans: the
+      // grade may be eleven days old, but "checked 12 minutes ago, answering in
+      // 180ms, certificate good for 63 days" is current.
+      const pulses24h = await db
+        .select({
+          reachable: monitorPulseChecksTable.reachable,
+          responseTimeMs: monitorPulseChecksTable.responseTimeMs,
+          checkedAt: monitorPulseChecksTable.checkedAt,
+          httpStatus: monitorPulseChecksTable.httpStatus,
+          certDaysRemaining: monitorPulseChecksTable.certDaysRemaining,
+          failureReason: monitorPulseChecksTable.failureReason,
+        })
+        .from(monitorPulseChecksTable)
+        .where(
+          and(
+            eq(monitorPulseChecksTable.subscriptionId, sub.id),
+            gte(monitorPulseChecksTable.checkedAt, new Date(Date.now() - TWENTY_FOUR_HOURS_MS)),
+          ),
+        )
+        .orderBy(desc(monitorPulseChecksTable.checkedAt));
+
+      const uptime = summariseUptime(pulses24h);
+      const newestPulse = pulses24h[0] ?? null;
+
       // Use the resolved scanAt so the card shows the correct date even before
       // the subscription row was backfilled.
       const lastScanAt = sub.lastScanAt ?? resolvedReport?.scannedAt ?? null;
@@ -345,9 +372,31 @@ router.get("/monitor/subscriptions", async (req, res): Promise<void> => {
         lastReport,
         alertCount,
         regressionCount: Number(regressionCount),
-        certExpiryDays,
+        // Prefer the live certificate reading over the one recorded when an
+        // alert last fired: the alert row only exists inside 30 days, so
+        // without this the dashboard could show nothing for a healthy cert.
+        certExpiryDays: newestPulse?.certDaysRemaining ?? certExpiryDays,
         scanInProgress: Boolean(inFlight),
         scanStatus: inFlight?.status ?? null,
+        lastPulseAt: newestPulse?.checkedAt ?? null,
+        pulseReachable: newestPulse?.reachable ?? null,
+        pulseStatus: newestPulse?.httpStatus ?? null,
+        pulseFailureReason: newestPulse?.failureReason ?? null,
+        responseTimeMs: newestPulse?.responseTimeMs ?? null,
+        uptime24h: uptime.uptimePct,
+        medianResponseMs: uptime.medianResponseMs,
+        pulseChecks24h: uptime.checks,
+        // Oldest-first, so the card can draw the last day left-to-right without
+        // reversing it. Included here rather than fetched per card because the
+        // rows are already in hand — one extra query per subscription on page
+        // load, to draw a strip, would be a poor trade.
+        pulseTimeline: [...pulses24h]
+          .reverse()
+          .map((p) => ({
+            checkedAt: p.checkedAt,
+            reachable: p.reachable,
+            responseTimeMs: p.responseTimeMs,
+          })),
       };
     }),
   );
@@ -595,6 +644,68 @@ router.get("/monitor/subscriptions/:id/regressions", async (req, res): Promise<v
     .orderBy(desc(monitorRegressionsTable.detectedAt));
 
   res.json(regressions);
+});
+
+// ── GET /api/monitor/subscriptions/:id/pulses ────────────────────────────────
+// The hourly pulse history, newest first. Powers the uptime strip and the
+// response-time chart — the part of the dashboard that has something to say on
+// the thirteen days between scans.
+
+const MAX_PULSE_HOURS = 30 * 24;
+
+router.get("/monitor/subscriptions/:id/pulses", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const subId = req.params.id;
+
+  const [sub] = await db
+    .select({ id: monitorSubscriptionsTable.id })
+    .from(monitorSubscriptionsTable)
+    .where(
+      and(
+        eq(monitorSubscriptionsTable.id, subId),
+        eq(monitorSubscriptionsTable.userId, req.user.id),
+      ),
+    );
+
+  if (!sub) {
+    res.status(404).json({ error: "Subscription not found" });
+    return;
+  }
+
+  // Clamped rather than rejected: a caller asking for a year gets the thirty
+  // days that exist, which is the honest answer, not an error.
+  const requested = Number(req.query["hours"]);
+  const hours = Number.isFinite(requested) && requested > 0
+    ? Math.min(Math.floor(requested), MAX_PULSE_HOURS)
+    : 48;
+
+  const pulses = await db
+    .select({
+      id: monitorPulseChecksTable.id,
+      checkedAt: monitorPulseChecksTable.checkedAt,
+      reachable: monitorPulseChecksTable.reachable,
+      httpStatus: monitorPulseChecksTable.httpStatus,
+      responseTimeMs: monitorPulseChecksTable.responseTimeMs,
+      certDaysRemaining: monitorPulseChecksTable.certDaysRemaining,
+      failureReason: monitorPulseChecksTable.failureReason,
+      presentHeaders: monitorPulseChecksTable.presentHeaders,
+    })
+    .from(monitorPulseChecksTable)
+    .where(
+      and(
+        eq(monitorPulseChecksTable.subscriptionId, subId),
+        gte(monitorPulseChecksTable.checkedAt, new Date(Date.now() - hours * 60 * 60 * 1000)),
+      ),
+    )
+    .orderBy(desc(monitorPulseChecksTable.checkedAt));
+
+  const summary = summariseUptime(pulses);
+
+  res.json({ pulses, summary, windowHours: hours });
 });
 
 // ── POST /api/monitor/subscriptions/:id/scan ─────────────────────────────────

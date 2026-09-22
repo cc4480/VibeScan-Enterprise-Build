@@ -21,7 +21,16 @@
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
-export type AlertKind = "cve" | "regression" | "cert_expiry" | "scan_complete";
+export type AlertKind =
+  | "cve"
+  | "regression"
+  | "cert_expiry"
+  | "scan_complete"
+  // The hourly pulse check's two alerts. Separate kinds because downtime is the
+  // one alert that can flap, and muting a site that drops a request every other
+  // hour must not also mute "your HSTS header disappeared".
+  | "availability"
+  | "drift";
 export type Severity = "info" | "low" | "medium" | "high" | "critical";
 export type Channel = "email" | "webhook";
 
@@ -113,6 +122,8 @@ export async function notificationPrefs(userId: string): Promise<NotificationPre
         regression: usersTable.notifyRegressionOptedOut,
         certExpiry: usersTable.notifyCertExpiryOptedOut,
         scanComplete: usersTable.notifyScanCompleteOptedOut,
+        availability: usersTable.notifyAvailabilityOptedOut,
+        drift: usersTable.notifyDriftOptedOut,
         minSeverity: usersTable.notifyMinSeverity,
       })
       .from(usersTable)
@@ -126,6 +137,8 @@ export async function notificationPrefs(userId: string): Promise<NotificationPre
     if (row.regression) optedOutKinds.add("regression");
     if (row.certExpiry) optedOutKinds.add("cert_expiry");
     if (row.scanComplete) optedOutKinds.add("scan_complete");
+    if (row.availability) optedOutKinds.add("availability");
+    if (row.drift) optedOutKinds.add("drift");
 
     return {
       emailOptedOut: row.emailOptedOut,

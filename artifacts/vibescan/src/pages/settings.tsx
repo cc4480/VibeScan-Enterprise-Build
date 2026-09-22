@@ -206,6 +206,20 @@ export default function SettingsPage() {
                 onChange={(next) => updatePref({ alerts: { certExpiry: next } })}
               />
               <PreferenceToggle
+                label="Site unreachable"
+                description="Your site stopped answering the hourly check, and again when it comes back. Confirmed over two consecutive checks, so a single dropped request does not alert."
+                checked={prefs.alerts.availability}
+                disabled={saving || !prefs.monitorAlerts}
+                onChange={(next) => updatePref({ alerts: { availability: next } })}
+              />
+              <PreferenceToggle
+                label="Configuration changed"
+                description="A security header disappeared, HSTS was weakened, or the site started redirecting somewhere new — caught within the hour instead of at the next scan."
+                checked={prefs.alerts.drift}
+                disabled={saving || !prefs.monitorAlerts}
+                onChange={(next) => updatePref({ alerts: { drift: next } })}
+              />
+              <PreferenceToggle
                 label="Scan finished"
                 description="A routine confirmation each time a scheduled rescan completes. The one most people turn off first."
                 checked={prefs.alerts.scanComplete}

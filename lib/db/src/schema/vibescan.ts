@@ -312,6 +312,61 @@ export const certExpiryAlertsTable = pgTable("cert_expiry_alerts", {
 export type CertExpiryAlert = typeof certExpiryAlertsTable.$inferSelect;
 export type InsertCertExpiryAlert = typeof certExpiryAlertsTable.$inferInsert;
 
+// ── Hourly pulse checks ────────────────────────────────────────────────────────
+
+/**
+ * One cheap check per monitored URL per hour.
+ *
+ * A full rescan is minutes of work, several paid API calls and real traffic at
+ * the customer's site, which is why the cadence is measured in days. That left
+ * a monitoring product with nothing to show between rescans: a site could go
+ * down, lose its HSTS header or start redirecting somewhere new, and the
+ * dashboard would keep displaying a grade from eleven days ago with no
+ * indication anyone had looked since.
+ *
+ * A pulse is one request plus one TLS handshake. It cannot grade a site, and it
+ * is not meant to — it answers "is it up, is the certificate still good, and
+ * has anything visible changed since the last hour", and it gives the dashboard
+ * a last-checked time that is never more than an hour old.
+ *
+ * Rows are purged after PULSE_RETENTION_DAYS. They are a rolling window for
+ * uptime and response-time trends, not a permanent record; the permanent record
+ * is monitor_score_history.
+ */
+export const monitorPulseChecksTable = pgTable("monitor_pulse_checks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  subscriptionId: uuid("subscription_id").notNull().references(() => monitorSubscriptionsTable.id, { onDelete: "cascade" }),
+  checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
+  /** Answered with a status below 500. A 404 is reachable; a 503 is not. */
+  reachable: boolean("reachable").notNull(),
+  httpStatus: integer("http_status"),
+  responseTimeMs: integer("response_time_ms"),
+  /** Where the request ended up. A changed redirect target is its own signal. */
+  finalUrl: text("final_url"),
+  /** Hash over the security headers listed in monitorPulse.ts, for change detection. */
+  headerFingerprint: text("header_fingerprint"),
+  /** Which of those headers were present, so a diff can name what went missing. */
+  presentHeaders: jsonb("present_headers").$type<string[]>(),
+  /**
+   * HSTS strength, bucketed. Stored separately from presentHeaders because a
+   * Strict-Transport-Security header with max-age=0 is still present while
+   * doing nothing — presence alone cannot see that being switched off.
+   */
+  hstsBucket: text("hsts_bucket", { enum: ["none", "short", "ok"] }),
+  certExpiresAt: timestamp("cert_expires_at", { withTimezone: true }),
+  certDaysRemaining: integer("cert_days_remaining"),
+  /** Why the request failed, when it did. Null on success. */
+  failureReason: text("failure_reason"),
+}, (table) => [
+  // Every read is "the newest N for one subscription", so the index carries the
+  // sort as well as the filter.
+  index("idx_pulse_sub_checked").on(table.subscriptionId, table.checkedAt),
+  index("idx_pulse_checked_at").on(table.checkedAt),
+]);
+
+export type MonitorPulseCheck = typeof monitorPulseChecksTable.$inferSelect;
+export type InsertMonitorPulseCheck = typeof monitorPulseChecksTable.$inferInsert;
+
 export const insertScanSchema = createInsertSchema(scansTable).omit({
   id: true,
   createdAt: true,

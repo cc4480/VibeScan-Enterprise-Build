@@ -17,8 +17,25 @@ import {
   highestSeverity,
   type AlertKind,
 } from "./notificationPrefs";
+import { describeDriftKind } from "./webhook";
 
 const RESEND_API = "https://api.resend.com/emails";
+
+/**
+ * Escape text that came from a monitored site before it goes into email HTML.
+ *
+ * Drift details quote real header names and hostnames read off somebody else's
+ * server. None of them should contain markup, which is exactly why an
+ * unescaped one would be worth an attacker's time.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 const RESEND_AUDIENCES_API = "https://api.resend.com/audiences";
 
 /**
@@ -487,6 +504,183 @@ export async function sendCertExpiryEmail(opts: SendCertExpiryOptions): Promise<
     console.log("[mailer] Cert expiry email sent", { to: opts.toEmail, daysRemaining });
   } catch (err) {
     console.error("[mailer] Failed to send cert expiry email:", err);
+  }
+}
+
+// ── Pulse-check alerts ────────────────────────────────────────────────────────
+
+interface SendAvailabilityOptions {
+  toEmail: string;
+  userId: string;
+  targetUrl: string;
+  /** "down" once an outage is confirmed, "recovered" when it ends. */
+  event: "down" | "recovered";
+  failureReason: string | null;
+  /** How many consecutive hourly checks failed, for the down mail. */
+  consecutiveFailures: number;
+  /** When the site was last seen answering. Null if it never has been. */
+  lastSeenUpAt: Date | null;
+  dashboardUrl: string;
+}
+
+/**
+ * Site went down, or came back.
+ *
+ * Deliberately plain. This mail exists to be read on a phone at an awkward
+ * hour, so it leads with the domain and the reason and nothing else.
+ */
+export async function sendAvailabilityEmail(opts: SendAvailabilityOptions): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return;
+
+  if (!(await bulkMailAllowed(opts.userId, opts.toEmail, "availability email", { kind: "availability" }))) {
+    console.log("[mailer] Skipping availability email", { to: opts.toEmail });
+    return;
+  }
+
+  const { targetUrl, event, failureReason, consecutiveFailures, lastSeenUpAt, dashboardUrl } = opts;
+  const down = event === "down";
+
+  const heading = down ? "Site Unreachable" : "Site Back Online";
+  const icon = down ? "🛑" : "✅";
+  const accent = down ? "#ef4444" : "#22c55e";
+  const detail = down
+    ? `${failureReason ?? "No response"} — failed ${consecutiveFailures} consecutive hourly check${consecutiveFailures !== 1 ? "s" : ""}.`
+    : "The site is answering again. Monitoring continues as normal.";
+  const lastSeen = lastSeenUpAt
+    ? `Last seen up ${lastSeenUpAt.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" })}.`
+    : "";
+
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#0f1117;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#f8fafc;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f1117;">
+    <tr><td align="center" style="padding:40px 16px;">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+        <tr><td style="padding-bottom:32px;text-align:center;">
+          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Sec<span style="color:#6366f1;">Scan</span></span>
+        </td></tr>
+        <tr><td style="background:#1a1d27;border-radius:16px;border:1px solid rgba(255,255,255,0.08);padding:40px;text-align:center;">
+          <div style="display:inline-block;font-size:48px;margin-bottom:16px;">${icon}</div>
+          <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;">${heading}</h2>
+          <p style="margin:0 0 8px;font-size:18px;font-weight:700;color:${accent};">${targetUrl}</p>
+          <p style="margin:0 0 8px;color:#94a3b8;font-size:14px;">${detail}</p>
+          ${lastSeen ? `<p style="margin:0 0 24px;color:#64748b;font-size:13px;">${lastSeen}</p>` : ""}
+          <p style="margin:0 0 32px;color:#64748b;font-size:12px;">SecScan checks every monitored URL once an hour. This is an availability check, not a security scan — your scan cadence is unchanged.</p>
+          <a href="${dashboardUrl}" style="display:inline-block;background:#6366f1;color:#fff;font-weight:700;font-size:15px;padding:14px 32px;border-radius:10px;text-decoration:none;">Open Monitoring →</a>
+        </td></tr>
+        <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
+          <p style="margin:0;">© 2026 SecScan · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  try {
+    const res = await fetch(RESEND_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: resendBody({
+        headers: unsubscribeHeaders(APP_ORIGIN, opts.userId),
+        to: [opts.toEmail],
+        subject: down
+          ? `🛑 ${targetUrl} is not responding`
+          : `✅ ${targetUrl} is back online`,
+        html,
+      }),
+    });
+    if (!res.ok) throw new Error(`Resend API ${res.status}`);
+    console.log("[mailer] Availability email sent", { to: opts.toEmail, event });
+  } catch (err) {
+    console.error("[mailer] Failed to send availability email:", err);
+  }
+}
+
+interface SendDriftOptions {
+  toEmail: string;
+  userId: string;
+  targetUrl: string;
+  changes: Array<{ kind: string; detail: string; severity: string }>;
+  /** Worst severity in the batch — the floor is applied to this, not the first. */
+  severity: string;
+  dashboardUrl: string;
+}
+
+/**
+ * Something about the site's security configuration changed between scans.
+ *
+ * This is the alert that justifies checking hourly at all: a header removed on
+ * a Tuesday afternoon used to go unnoticed until the next scheduled scan, which
+ * on an A-grade site is up to fourteen days later.
+ */
+export async function sendDriftEmail(opts: SendDriftOptions): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return;
+
+  if (!(await bulkMailAllowed(opts.userId, opts.toEmail, "drift email", { kind: "drift", severity: opts.severity }))) {
+    console.log("[mailer] Skipping drift email", { to: opts.toEmail });
+    return;
+  }
+
+  const { targetUrl, changes, dashboardUrl } = opts;
+
+  const rows = changes
+    .map(
+      (c) => `<tr>
+        <td style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.06);color:#f8fafc;font-size:14px;font-weight:600;">${describeDriftKind(c.kind)}</td>
+        <td style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.06);color:#94a3b8;font-size:13px;text-align:right;">${escapeHtml(c.detail)}</td>
+      </tr>`,
+    )
+    .join("");
+
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#0f1117;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#f8fafc;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f1117;">
+    <tr><td align="center" style="padding:40px 16px;">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+        <tr><td style="padding-bottom:32px;text-align:center;">
+          <span style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-1px;">Sec<span style="color:#6366f1;">Scan</span></span>
+        </td></tr>
+        <tr><td style="background:#1a1d27;border-radius:16px;border:1px solid rgba(255,255,255,0.08);padding:40px;">
+          <div style="text-align:center;font-size:48px;margin-bottom:16px;">🔍</div>
+          <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;text-align:center;">Security Configuration Changed</h2>
+          <p style="margin:0 0 24px;font-size:16px;font-weight:700;color:#facc15;text-align:center;">${targetUrl}</p>
+          <p style="margin:0 0 20px;color:#94a3b8;font-size:14px;">The hourly check found ${changes.length} change${changes.length !== 1 ? "s" : ""} that weaken${changes.length === 1 ? "s" : ""} this site's security posture since the last check:</p>
+          <table width="100%" cellpadding="0" cellspacing="0">${rows}</table>
+          <p style="margin:24px 0 32px;color:#64748b;font-size:12px;">Only changes that reduce protection are reported — a header being added is not an alert. If this was a deliberate deployment change, no action is needed.</p>
+          <div style="text-align:center;">
+            <a href="${dashboardUrl}" style="display:inline-block;background:#6366f1;color:#fff;font-weight:700;font-size:15px;padding:14px 32px;border-radius:10px;text-decoration:none;">Open Monitoring →</a>
+          </div>
+        </td></tr>
+        <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
+          <p style="margin:0;">© 2026 SecScan · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  try {
+    const res = await fetch(RESEND_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: resendBody({
+        headers: unsubscribeHeaders(APP_ORIGIN, opts.userId),
+        to: [opts.toEmail],
+        subject: `🔍 Security configuration changed on ${targetUrl}`,
+        html,
+      }),
+    });
+    if (!res.ok) throw new Error(`Resend API ${res.status}`);
+    console.log("[mailer] Drift email sent", { to: opts.toEmail, changes: changes.length });
+  } catch (err) {
+    console.error("[mailer] Failed to send drift email:", err);
   }
 }
 
