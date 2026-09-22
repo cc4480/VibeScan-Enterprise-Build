@@ -291,8 +291,16 @@ async function runSweep(): Promise<void> {
  */
 const PULSE_CONCURRENCY = 5;
 
-async function pulseOne(sub: ActiveSub, appOrigin: string): Promise<void> {
+/** What one pulse did, so the run can summarise instead of logging nothing. */
+interface PulseOutcome {
+  reachable: boolean;
+  availabilityAlert: boolean;
+  driftFindings: number;
+}
+
+async function pulseOne(sub: ActiveSub, appOrigin: string): Promise<PulseOutcome> {
   const log = logger.child({ job: PULSE_QUEUE, subscriptionId: sub.id });
+  const outcome: PulseOutcome = { reachable: false, availabilityAlert: false, driftFindings: 0 };
 
   const result = await runPulse(sub.targetUrl);
 
@@ -351,9 +359,12 @@ async function pulseOne(sub: ActiveSub, appOrigin: string): Promise<void> {
     failureReason: result.failureReason,
   });
 
+  outcome.reachable = result.reachable;
+
   // ── Availability ──
   const availability = evaluateAvailability(earlier, result);
   if (availability) {
+    outcome.availabilityAlert = true;
     const consecutiveFailures = availability === "down" ? DOWN_THRESHOLD : 0;
     log.warn({ event: availability, status: result.httpStatus }, "Availability change detected");
 
@@ -397,6 +408,7 @@ async function pulseOne(sub: ActiveSub, appOrigin: string): Promise<void> {
     );
 
     if (changes.length > 0) {
+      outcome.driftFindings = changes.length;
       const severity = highestSeverity(changes);
       log.warn({ changes: changes.map((c) => c.kind), severity }, "Security drift detected");
 
@@ -432,6 +444,8 @@ async function pulseOne(sub: ActiveSub, appOrigin: string): Promise<void> {
   if (result.certExpiresAt) {
     await maybeAlertCertExpiry(sub, result.certExpiresAt, checkedAt, appOrigin, log);
   }
+
+  return outcome;
 }
 
 async function runPulseCheck(): Promise<void> {
@@ -443,18 +457,45 @@ async function runPulseCheck(): Promise<void> {
 
   const appOrigin = APP_ORIGIN;
 
+  let up = 0;
+  let down = 0;
+  let errored = 0;
+  let availabilityAlerts = 0;
+  let driftFindings = 0;
+
   for (let i = 0; i < subs.length; i += PULSE_CONCURRENCY) {
     const batch = subs.slice(i, i + PULSE_CONCURRENCY);
-    await Promise.all(
+    const outcomes = await Promise.all(
       batch.map((sub) =>
         // One site failing must not abandon the rest of the batch, so each is
         // caught here rather than letting Promise.all reject.
         pulseOne(sub, appOrigin).catch((err) => {
           log.error({ err, subscriptionId: sub.id }, "Pulse check failed for subscription");
+          return null;
         }),
       ),
     );
+
+    for (const outcome of outcomes) {
+      if (!outcome) { errored++; continue; }
+      if (outcome.reachable) up++;
+      else down++;
+      if (outcome.availabilityAlert) availabilityAlerts++;
+      driftFindings += outcome.driftFindings;
+    }
   }
+
+  // Logged on every run, including the quiet ones.
+  //
+  // Before this, a pulse run that worked logged its start line and nothing
+  // else: the purge is silent when it finds nothing, and no site being down is
+  // the normal case. So a successful run and a run whose every insert failed
+  // looked identical in the logs — the same defect as the monitor update in
+  // worker.ts that claimed success whether or not it matched a row.
+  log.info(
+    { checked: subs.length, up, down, errored, availabilityAlerts, driftFindings },
+    "Hourly pulse check complete",
+  );
 
   // Rolling window: pulse rows exist for uptime and response-time trends, not
   // as a permanent record. Without this, one subscription accumulates 8,760
