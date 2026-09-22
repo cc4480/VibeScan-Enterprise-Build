@@ -26,6 +26,25 @@ import { trialScansUsedBy, FREE_TRIAL_SCAN_LIMIT } from "../lib/freeTrial";
 
 const router: IRouter = Router();
 
+/**
+ * Refuse checkout to an identity that has no email — the browser-only accounts
+ * the site still creates for first-time visitors.
+ *
+ * Anything bought on one lives only as long as that browser's storage: clear
+ * it, switch device, and the paid credits or subscription are unreachable, with
+ * no address to recover them or to cancel a subscription that keeps charging.
+ * Registering converts the same row in place (routes/account.ts), so asking
+ * first loses the visitor nothing — their free scans come with them.
+ */
+function refuseUnregistered(req: { user: { email?: string | null } }, res: { status: (n: number) => { json: (b: unknown) => void } }): boolean {
+  if (req.user.email) return false;
+  res.status(403).json({
+    error: "Create an account before buying, so your purchase isn't tied to this browser.",
+    code: "account_required",
+  });
+  return true;
+}
+
 /** The packs that may be bought. Anything outside CREDITS_MAP grants nothing. */
 const BUYABLE = Object.keys(CREDITS_MAP);
 
@@ -59,6 +78,8 @@ router.post("/checkout/credits", async (req, res): Promise<void> => {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
+
+  if (refuseUnregistered(req, res)) return;
 
   // A deployment with no key is not broken, it just does not sell anything.
   // Say so plainly rather than failing somewhere further in.
@@ -155,6 +176,8 @@ router.post("/checkout/subscription", async (req, res): Promise<void> => {
     res.status(503).json({ error: "Payments are not configured on this deployment." });
     return;
   }
+
+  if (refuseUnregistered(req, res)) return;
 
   // One plan per user (billing_subscriptions.user_id is unique). Someone who
   // already has a live one is sent to manage it, not charged a second time.

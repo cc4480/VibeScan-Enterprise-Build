@@ -188,3 +188,26 @@ describe("GET /billing/status", () => {
     });
   });
 });
+
+describe("anonymous (browser-only) identities", () => {
+  // First-time visitors get an account with no email. A purchase on one would
+  // live only in that browser's storage — unrecoverable, and a subscription
+  // nobody could sign in to cancel.
+  const anon = () => makeReq({ user: { id: "anon-1", email: null } });
+
+  it("cannot start a subscription", async () => {
+    const res = makeRes();
+    await (await handlerFor("post", "/checkout/subscription"))(anon(), res);
+    expect(res.statusCode).toBe(403);
+    expect(res.body.code).toBe("account_required");
+    expect(state.sessionArgs).toBeNull();
+  });
+
+  it("cannot buy a credit pack", async () => {
+    const res = makeRes();
+    await (await handlerFor("post", "/checkout/credits"))({ ...anon(), body: { tier: "single" } }, res);
+    expect(res.statusCode).toBe(403);
+    expect(res.body.code).toBe("account_required");
+    expect(state.sessionArgs).toBeNull();
+  });
+});

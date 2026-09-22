@@ -26,7 +26,11 @@ import {
   domainVerificationsTable,
   authTokensTable,
   pendingLoginsTable,
+  billingSubscriptionsTable,
+  purchaseIntentsTable,
+  feedbackTable,
 } from "@workspace/db";
+import { stripe } from "../lib/stripe";
 import { eq } from "drizzle-orm";
 import { hashPassword, verifyPassword, needsRehash } from "../lib/password";
 import {
@@ -363,6 +367,47 @@ router.delete("/account", async (req, res): Promise<void> => {
 
   const userId = req.user.id;
 
+  // Stop the money BEFORE erasing anything. Deleting the rows but leaving a
+  // live Stripe subscription would keep charging $50 a month to an account
+  // that no longer exists, with no way left to sign in and cancel it. So a
+  // subscription that cannot be cancelled blocks the deletion: the account
+  // stays intact and the person can retry, or cancel from Settings first.
+  try {
+    const [plan] = await db
+      .select({
+        status: billingSubscriptionsTable.status,
+        stripeSubscriptionId: billingSubscriptionsTable.stripeSubscriptionId,
+      })
+      .from(billingSubscriptionsTable)
+      .where(eq(billingSubscriptionsTable.userId, userId))
+      .limit(1);
+
+    if (plan?.stripeSubscriptionId && plan.status !== "cancelled") {
+      if (!stripe) {
+        res.status(503).json({
+          error: "Your subscription could not be cancelled right now, so nothing was deleted. Please try again shortly.",
+        });
+        return;
+      }
+      // Immediate, not at period end: there will be no account left to use
+      // the rest of the month. Stripe answers "already canceled" for a
+      // subscription cancelled elsewhere, which is the outcome we want.
+      try {
+        await stripe.subscriptions.cancel(plan.stripeSubscriptionId);
+      } catch (err) {
+        const code = (err as { code?: string } | null)?.code;
+        if (code !== "resource_missing") throw err;
+      }
+      req.log.info({ userId }, "Cancelled Stripe subscription before account deletion");
+    }
+  } catch (err) {
+    req.log.error({ err, userId }, "Could not cancel subscription; account NOT deleted");
+    res.status(502).json({
+      error: "Your subscription could not be cancelled, so nothing was deleted. Please try again, or cancel it from Settings first.",
+    });
+    return;
+  }
+
   try {
     await db.delete(scansTable).where(eq(scansTable.userId, userId));
     await db.delete(monitorSubscriptionsTable).where(eq(monitorSubscriptionsTable.userId, userId));
@@ -370,6 +415,14 @@ router.delete("/account", async (req, res): Promise<void> => {
     await db.delete(dismissedFindingsTable).where(eq(dismissedFindingsTable.userId, userId));
     await db.delete(domainVerificationsTable).where(eq(domainVerificationsTable.userId, userId));
     await db.delete(creditsTable).where(eq(creditsTable.userId, userId));
+    await db.delete(billingSubscriptionsTable).where(eq(billingSubscriptionsTable.userId, userId));
+    await db.delete(purchaseIntentsTable).where(eq(purchaseIntentsTable.userId, userId));
+    // Feedback is kept — it is about the product, not the person — but no
+    // longer says who sent it.
+    await db
+      .update(feedbackTable)
+      .set({ userId: null, email: null })
+      .where(eq(feedbackTable.userId, userId));
     await db.delete(authTokensTable).where(eq(authTokensTable.userId, userId));
     await db.delete(pendingLoginsTable).where(eq(pendingLoginsTable.userId, userId));
     await db.delete(usersTable).where(eq(usersTable.id, userId));

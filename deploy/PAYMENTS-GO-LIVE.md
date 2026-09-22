@@ -73,8 +73,26 @@ Card `4242 4242 4242 4242`, any future date, any CVC.
    Without this, "Manage or cancel" in Settings cannot open.
 4. Railway → **web** service → **Variables**: add `STRIPE_SECRET_KEY` and
    `STRIPE_WEBHOOK_SECRET` (the live values), both at once.
-5. Buy one real $12 credit with your own card, confirm it lands, refund it from
+5. **Settings → Customer emails** → turn on **Successful payments** and
+   **Failed payments** (and the card-update reminders). SecScan emails its own
+   receipt for credit packs, but a monthly renewal's receipt — and the "your
+   card was declined" email — come only from Stripe.
+6. Buy one real $12 credit with your own card, confirm it lands, refund it from
    the Stripe dashboard.
+7. **Tell the people who asked.** Everyone who clicked "Email me when I can buy
+   scans" was promised an email. Dry run first, then send (once):
+   ```
+   DATABASE_URL=… RESEND_API_KEY=… STRIPE_SECRET_KEY=… APP_ORIGIN=https://secscan.us      npx tsx artifacts/api-server/scripts/notify-purchase-intents.ts          # lists them
+   …notify-purchase-intents.ts --send                                         # emails them
+   ```
+   Safe to re-run: each person is marked as told only once the email is accepted.
+
+## Sales tax
+
+Checkout does not collect sales tax or VAT. If you need to, turn on **Stripe
+Tax** in the dashboard and add `automatic_tax: { enabled: true }` to both
+checkout sessions in `routes/checkout.ts` — a decision for you and your
+accountant, not a default.
 
 ## 4. Decide before switching monitoring to paid
 

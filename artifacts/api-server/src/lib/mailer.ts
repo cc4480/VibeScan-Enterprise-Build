@@ -1082,3 +1082,48 @@ export async function sendWelcomeEmail(toEmail: string, firstName?: string | nul
     "welcome email",
   );
 }
+
+/**
+ * "You can buy now" — the email promised to everyone who clicked "Email me when
+ * I can buy scans" before checkout existed (routes/purchaseIntent.ts).
+ *
+ * Returns what happened instead of swallowing it, unlike the other senders
+ * here: scripts/notify-purchase-intents.ts marks a person as notified only on
+ * "sent", so a missing API key or a Resend outage leaves them on the list for
+ * the next run rather than silently breaking the promise.
+ *
+ * Suppression uses the BULK rule: they asked for this, but it is an
+ * announcement, so someone who marked our mail as spam is not sent it.
+ */
+export async function sendPaymentsLiveEmail(toEmail: string): Promise<"sent" | "suppressed" | "failed"> {
+  if (await isSuppressed(toEmail, "bulk")) return "suppressed";
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return "failed";
+
+  const heading = "You can keep scanning now";
+  const body =
+    "You asked us to tell you when you could buy more scans on SecScan. You can now.<br><br>" +
+    "<strong>SecScan Pro</strong> — $50 a month: continuous monitoring for up to 3 sites, " +
+    "plus 5 full scans every month. Cancel any time.<br>" +
+    "<strong>Scan credits</strong> — $12 each, 5 for $50, or 20 for $160. They never expire.";
+  const ctaLabel = "See plans and credits";
+  const ctaUrl = `${APP_ORIGIN}/settings#billing`;
+  const footnote = "You're receiving this once, because you asked to be told. You won't get it again.";
+
+  try {
+    const res = await fetch(RESEND_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: resendBody({
+        from: AUTH_FROM_EMAIL,
+        to: [toEmail],
+        subject: "You can keep scanning on SecScan now",
+        html: buildAccountHtml(heading, body, ctaLabel, ctaUrl, footnote),
+        text: buildAccountText(heading, body, ctaLabel, ctaUrl, footnote),
+      }),
+    });
+    return res.ok ? "sent" : "failed";
+  } catch {
+    return "failed";
+  }
+}

@@ -135,6 +135,10 @@ export const purchaseIntentsTable = pgTable("purchase_intents", {
   // recorded against the old one.
   email: text("email").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  // When the "you can buy now" email went out. Set per row as each send
+  // succeeds, so the launch mailer can be re-run after a partial failure
+  // without emailing anyone twice. Null = promised, not yet told.
+  notifiedAt: timestamp("notified_at", { withTimezone: true }),
 });
 
 export type PurchaseIntent = typeof purchaseIntentsTable.$inferSelect;

@@ -90,8 +90,11 @@ function ActionButton({
 export function BuyOptions({ fallback, compact }: { fallback?: ReactNode; compact?: boolean }) {
   const catalog = useBillingCatalog();
   const auth = useGetCurrentAuthUser();
-  const signedIn = !!auth.data?.user;
-  const status = useBillingStatus(signedIn);
+  // A registered account, not merely "has an identity": first-time visitors get
+  // a browser-only account with no email, and the server refuses checkout for
+  // those (account_required) — a purchase on one would die with the browser.
+  const signedIn = !!auth.data?.user?.email;
+  const status = useBillingStatus(!!auth.data?.user);
 
   if (catalog.isLoading) {
     return (
