@@ -95,8 +95,11 @@ SSRF_PROBE_ALLOWLIST=collector.secscan.me
 ```
 
 See the comment on `/api/webhook-preview` in `artifacts/vuln-fixture/src/server.ts`
-for exactly what this does and does not restrict: unset (the default, used by
-every local/CI run) is fully open; set, it refuses every host except the exact
+for exactly what this does and does not restrict: unset is fully open for
+local/CI runs — but with `NODE_ENV=production` (which the Dockerfile sets) the
+server **refuses to start** without it, so a forgotten variable is a failed
+deploy, not an open proxy. `SSRF_PROBE_UNRESTRICTED=true` overrides that, and
+must never be set on anything reachable from outside. Set, it refuses every host except the exact
 match, and refuses with the SAME response shape as a genuine network failure —
 an attacker probing this endpoint from outside cannot distinguish "blocked by
 the allowlist" from "that host is actually unreachable", which is what keeps
@@ -108,6 +111,13 @@ the allowlist from becoming a network-mapping oracle in its own right.
 # Must be blocked (502, generic error):
 curl "https://secscan.me/api/webhook-preview?url=http://169.254.169.254/"
 curl "https://secscan.me/api/webhook-preview?url=http://10.0.0.1/"
+# Must ALSO be blocked — the redirect bypass. The fixture's own "/" is a
+# planted open redirect. Expect 502: secscan.me itself must NOT be on the
+# allowlist. If it were, this would bounce the fetch into cloud metadata.
+curl "https://secscan.me/api/webhook-preview?url=https%3A%2F%2Fsecscan.me%2F%3Fnext%3Dhttp%3A%2F%2F169.254.169.254%2F"
+# Redirects are never followed (fetch uses redirect: "manual"), so even an
+# allowlisted host that redirects returns {"status":30x,...} — the redirect
+# itself, not the page it points to.
 # Must succeed (the whole point of the fault):
 curl "https://secscan.me/api/webhook-preview?url=https://collector.secscan.me/probe-test"
 ```

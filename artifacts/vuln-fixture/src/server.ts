@@ -360,6 +360,30 @@ const SSRF_ALLOWLIST = (process.env.SSRF_PROBE_ALLOWLIST ?? "")
   .map((s) => s.trim().toLowerCase())
   .filter(Boolean);
 
+// Fail CLOSED in production. The allowlist above is opt-in so local and CI runs
+// keep working unchanged, which means a public deployment that simply forgot
+// to set it would boot as an open SSRF proxy — into cloud metadata and
+// whatever else the host can reach. The runbook calls the variable "not
+// optional"; this makes that true in code rather than in prose. The
+// production Dockerfile sets NODE_ENV=production, so the public image cannot
+// start unrestricted by accident.
+//
+// SSRF_PROBE_UNRESTRICTED=true is the deliberate escape hatch for running the
+// production image locally, on a machine that is not reachable from outside.
+if (
+  process.env.NODE_ENV === "production" &&
+  SSRF_ALLOWLIST.length === 0 &&
+  process.env.SSRF_PROBE_UNRESTRICTED !== "true"
+) {
+  console.error(
+    "[vuln-fixture] Refusing to start: NODE_ENV=production with no SSRF_PROBE_ALLOWLIST.\n" +
+      "  /api/webhook-preview would be an unrestricted SSRF proxy on a public host.\n" +
+      "  Set SSRF_PROBE_ALLOWLIST=<collector-host:port>, or SSRF_PROBE_UNRESTRICTED=true\n" +
+      "  ONLY on a machine nothing outside can reach.",
+  );
+  process.exit(1);
+}
+
 function ssrfTargetAllowed(rawUrl: string): boolean {
   if (SSRF_ALLOWLIST.length === 0) return true; // unrestricted: local/CI default
   try {
@@ -382,7 +406,16 @@ app.get("/api/webhook-preview", async (req, res) => {
     return;
   }
   try {
-    const upstream = await fetch(url, { signal: AbortSignal.timeout(5_000) });
+    // redirect: "manual" — the allowlist checks only the URL it was given,
+    // and fetch() follows redirects by default. This fixture has a planted open
+    // redirect on "/" (OPEN_REDIRECT_PARAM_NAMES), so with redirects followed,
+    // ?url=https://<allowlisted-host>/?next=http://169.254.169.254/ walks
+    // straight past the allowlist into cloud metadata. Any allowlisted host
+    // that redirects at all would do the same.
+    //
+    // Costs the SSRF finding nothing: it is proved by the collector recording a
+    // callback for the planted URL itself, never by following a redirect.
+    const upstream = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(5_000) });
     res.json({ status: upstream.status, contentType: upstream.headers.get("content-type") });
   } catch {
     res.status(502).json({ error: "could not reach that URL" });
