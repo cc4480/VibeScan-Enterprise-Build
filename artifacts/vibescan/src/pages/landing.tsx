@@ -411,7 +411,7 @@ export default function LandingPage() {
 function StaticPricing() {
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {[
           { label: "SecScan Pro", price: "$50", per: "per month · 3 sites · 5 scans", note: null, popular: true },
           { label: "1 Scan Credit", price: "$12", per: "$12.00 / scan", note: null },

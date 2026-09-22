@@ -87,7 +87,16 @@ function ActionButton({
  * Signed-out visitors (the landing page) get links to create an account
  * instead: checkout needs an account to attach the purchase to.
  */
-export function BuyOptions({ fallback, compact }: { fallback?: ReactNode; compact?: boolean }) {
+export function BuyOptions({
+  fallback,
+  compact,
+  packsOnly,
+}: {
+  fallback?: ReactNode;
+  compact?: boolean;
+  /** Credits only — for a subscriber topping up, who must not be re-sold the plan they have. */
+  packsOnly?: boolean;
+}) {
   const catalog = useBillingCatalog();
   const auth = useGetCurrentAuthUser();
   // A registered account, not merely "has an identity": first-time visitors get
@@ -127,8 +136,9 @@ export function BuyOptions({ fallback, compact }: { fallback?: ReactNode; compac
     );
 
   return (
-    <div className={cn("grid gap-5", compact ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-[1.15fr_1fr]")}>
+    <div className={cn("grid gap-5", compact || packsOnly ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-[1.15fr_1fr]")}>
       {/* The subscription — the way to save, so it leads. */}
+      {!packsOnly && (
       <div className="glass-panel rounded-2xl p-6 border border-primary/50 shadow-[0_0_30px_rgba(20,184,120,0.08)] flex flex-col relative">
         <div className="absolute top-0 left-6 -translate-y-1/2 bg-primary text-primary-foreground px-3 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider">
           Best value
@@ -167,6 +177,7 @@ export function BuyOptions({ fallback, compact }: { fallback?: ReactNode; compac
           cta(subscribe, `Subscribe — ${formatUsd(plan.amountCents)}/month`, true)
         )}
       </div>
+      )}
 
       {/* Credit packs — for one-off needs, never expire. */}
       <div className="space-y-3">
@@ -179,9 +190,19 @@ export function BuyOptions({ fallback, compact }: { fallback?: ReactNode; compac
               ? Math.round((1 - perScanCents(pack) / single.amountCents) * 100)
               : 0;
           return (
-            <div key={pack.tier} className="glass-panel rounded-xl p-4 border border-white/10 flex items-center gap-4">
+            <div
+              key={pack.tier}
+              className={cn(
+                "glass-panel rounded-xl p-4 border border-white/10 flex gap-3",
+                // Stacked on phones — text above, full-width button below —
+                // and side by side once there is room. In the compact column
+                // (paywall, Settings) "room" arrives later, so it stays stacked
+                // until md.
+                compact || packsOnly ? "flex-col md:flex-row md:items-center md:gap-4" : "flex-col sm:flex-row sm:items-center sm:gap-4",
+              )}
+            >
               <div className="flex-1 min-w-0">
-                <div className="font-semibold">
+                <div className="font-semibold whitespace-nowrap">
                   {pack.credits} scan{pack.credits === 1 ? "" : "s"}
                   {saving > 0 && <span className="text-primary text-xs font-semibold ml-2">{saving}% off</span>}
                 </div>
@@ -191,7 +212,9 @@ export function BuyOptions({ fallback, compact }: { fallback?: ReactNode; compac
                     : `${formatUsd(pack.amountCents)} · ${formatUsd(perScanCents(pack))} per scan`}
                 </div>
               </div>
-              <div className="w-32 shrink-0">{cta(() => buyPack(pack.tier), `Buy ${formatUsd(pack.amountCents)}`)}</div>
+              <div className={cn("shrink-0 w-full", compact || packsOnly ? "md:w-32" : "sm:w-32")}>
+                {cta(() => buyPack(pack.tier), `Buy ${formatUsd(pack.amountCents)}`)}
+              </div>
             </div>
           );
         })}
@@ -277,7 +300,7 @@ export function BillingSummary() {
         <details className="text-sm">
           <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Need more scans this month? Buy credits</summary>
           <div className="mt-4">
-            <BuyOptions compact />
+            <BuyOptions compact packsOnly />
           </div>
         </details>
       )}

@@ -994,7 +994,10 @@ function AddSubscriptionForm({ onSuccess }: { onSuccess: () => void }) {
           id="monitor-url"
           type="url"
           value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          // The field starts as "https://", so pasting a full address — the
+          // normal way to enter one on a phone — produced "https://https://…".
+          // Collapse a doubled scheme to the one that was pasted.
+          onChange={(e) => setUrl(e.target.value.replace(/^(?:https?:\/\/)+(https?:\/\/)/i, "$1"))}
           placeholder="https://yourapp.com"
           required
           className="flex-1 bg-background/60 border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary/50 transition-colors"
