@@ -83,6 +83,8 @@ async function isHstsPreloaded(hostname: string): Promise<boolean> {
 
 import { runWithScanHttp, scanFetch, scanFetchOrThrow, sessionWasLost, type ScanCredentials as ScanHttpCredentials } from "./http";
 import { runAllProbes } from "./probes";
+import { TestLedger, NOT_VERIFIED, type TestRecord } from "./testLedger";
+import { isOobConfigured } from "./oobServer";
 import { checkDnsSecurity } from "./dnsChecks";
 import { scanJavaScriptForSecrets } from "./jsScanner";
 import { crawlAndCheck } from "./crawler";
@@ -146,6 +148,12 @@ export interface ScanResult {
    * of not being let in, not evidence the site is clean. See interceptedFinding.
    */
   intercepted: boolean;
+  /**
+   * Every test the scan was meant to run and its outcome — ran, skipped (with
+   * the reason) or failed — with its time and finding count. See testLedger.ts.
+   * Optional because early-exit paths (unreachable target) run no tests.
+   */
+  tests?: TestRecord[];
 }
 
 const FETCH_TIMEOUT_MS = 20_000;
@@ -1001,12 +1009,27 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
   // All checks run concurrently — active HTTP probes, DNS checks, site crawl,
   // CVE lookup, JWT analysis, subdomain takeover, JS secret scanning and path
   // traversal.
+  // Every test's outcome — ran, skipped (and why) or failed — for the per-test
+  // log the worker writes and the coverage line in the report. See testLedger.ts.
+  const ledger = new TestLedger();
+  const crawlStarted = Date.now();
+
   // Run crawl separately to capture pagesVisited alongside findings
   const crawlPromise = crawlAndCheck(
     finalUrl, html, rawHeaders, initial.setCookies ?? [], CRAWL_PAGE_BUDGET,
   )
-    .then((r) => ({ ...r, failed: false }))
+    .then((r) => {
+      ledger.records.push({
+        group: "crawl", name: `site crawl (${r.pagesVisited.length} inner pages)`, status: "ran",
+        findings: r.vulnerabilities.length, durationMs: Date.now() - crawlStarted,
+      });
+      return { ...r, failed: false };
+    })
     .catch((err: unknown) => {
+      ledger.records.push({
+        group: "crawl", name: "site crawl", status: "failed", findings: 0, durationMs: Date.now() - crawlStarted,
+        reason: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200),
+      });
       // Same reasoning as the probe families below: a crawl that died is not a
       // site without inner pages, and the report has to be able to tell them
       // apart.
@@ -1038,7 +1061,7 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
       run: runAllProbes(finalUrl, html, allowActiveProbes, (checkName, reason) => {
         innerProbeFailures.push(checkName);
         console.error(`[scan] check failed: ${checkName}`, reason);
-      }),
+      }, ledger),
     },
     { family: "DNS and email authentication", run: checkDnsSecurity(finalUrl) },
     // Mail transport security: does the domain's MX actually offer STARTTLS,
@@ -1079,6 +1102,18 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
 
   // Everything below reads data out of a backend the target owns, or fuzzes an
   // endpoint to see what it admits to. That is testing, not visiting.
+  const activeFamilies = [
+    "Supabase RLS and Firebase rules",
+    "BaaS open data (PocketBase, Appwrite)",
+    "GraphQL introspection",
+    "public cloud storage buckets",
+    "dependency CVEs from an exposed manifest",
+    "path traversal",
+    "injection (XSS, SQLi)",
+  ];
+  if (!allowActiveProbes) {
+    for (const family of activeFamilies) ledger.skip("active", family, NOT_VERIFIED);
+  }
   if (allowActiveProbes) {
     namedProbes.push(
       // Vibe-stack database security — Supabase RLS + Firebase rules (both tiers)
@@ -1116,7 +1151,15 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
 
   const [crawlResult, ...probeResults] = await Promise.all([
     crawlPromise,
-    Promise.allSettled(namedProbes.map((p) => p.run)),
+    Promise.allSettled(
+      namedProbes.map((p) =>
+        // The HTTP probes bundle records its thirteen checks one by one inside
+        // runAllProbes; recording the bundle too would count them twice.
+        p.family.startsWith("HTTP probes")
+          ? p.run
+          : ledger.track(activeFamilies.includes(p.family) ? "active" : "passive", p.family, p.run),
+      ),
+    ),
   ]);
 
   vulnerabilities.push(...crawlResult.vulnerabilities);
@@ -1150,21 +1193,43 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
   // output. SSRF is the one that matters most here: its whole method is a
   // negative result ("no callback arrived"), so a failed OOB registration or a
   // network fault looked exactly like a target that is not vulnerable.
+  if (!allowActiveProbes) {
+    ledger.skip("active", "API surface discovery", NOT_VERIFIED);
+    ledger.skip("active", "API endpoint testing (auth, injection, IDOR, mass assignment)", NOT_VERIFIED);
+    ledger.skip("active", "SSRF (out-of-band callback)", NOT_VERIFIED);
+  }
   if (allowActiveProbes) {
     const origin = new URL(finalUrl).origin;
-    const endpoints = await collectApiSurface(origin, html).catch((err: unknown) => {
-      unrunFamilies.push("API surface discovery");
-      console.error("[scan] API surface discovery failed", err);
-      return [] as ApiEndpoint[];
-    });
+    const discoveryStarted = Date.now();
+    const endpoints = await collectApiSurface(origin, html)
+      .then((found) => {
+        ledger.records.push({
+          group: "active", name: `API surface discovery (${found.length} endpoints)`, status: "ran",
+          findings: 0, durationMs: Date.now() - discoveryStarted,
+        });
+        return found;
+      })
+      .catch((err: unknown) => {
+        ledger.records.push({
+          group: "active", name: "API surface discovery", status: "failed", findings: 0,
+          durationMs: Date.now() - discoveryStarted,
+          reason: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200),
+        });
+        unrunFamilies.push("API surface discovery");
+        console.error("[scan] API surface discovery failed", err);
+        return [] as ApiEndpoint[];
+      });
+    if (endpoints.length === 0) {
+      ledger.skip("active", "API endpoint testing (auth, injection, IDOR, mass assignment)", "no API endpoints were found to test");
+    }
 
     const apiFindings = await (async () => {
       if (endpoints.length === 0) return [] as ScanVulnerability[];
-      return runApiProbes({
+      return ledger.track("active", "API endpoint testing (auth, injection, IDOR, mass assignment)", runApiProbes({
         endpoints,
         ...(auth?.credentials ? { credentials: auth.credentials } : {}),
         ...(auth?.secondary ? { secondary: auth.secondary } : {}),
-      });
+      }));
     })().catch((err: unknown) => {
       unrunFamilies.push("API endpoint testing (auth, injection, IDOR, mass assignment)");
       console.error("[scan] API probes failed", err);
@@ -1175,12 +1240,21 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
     // ── A10: SSRF via the out-of-band collector ─────────────────────────────
     // Runs only when a public callback host is configured, since the target's
     // server is what has to reach it. Reuses the discovered endpoints.
-    const ssrfFindings = await runSsrfProbes({
-      scanId,
-      targetUrl: finalUrl,
-      endpoints,
-      ...(auth?.credentials ? { credentials: auth.credentials } : {}),
-    }).catch((err: unknown) => {
+    // runSsrfProbes returns nothing when no callback host is configured —
+    // recorded as a skip, so it cannot read as "not vulnerable".
+    let ssrfRun: Promise<ScanVulnerability[]>;
+    if (isOobConfigured()) {
+      ssrfRun = ledger.track("active", "SSRF (out-of-band callback)", runSsrfProbes({
+        scanId,
+        targetUrl: finalUrl,
+        endpoints,
+        ...(auth?.credentials ? { credentials: auth.credentials } : {}),
+      }));
+    } else {
+      ledger.skip("active", "SSRF (out-of-band callback)", "no public callback host is configured (OOB_BASE_URL / APP_ORIGIN)");
+      ssrfRun = Promise.resolve([]);
+    }
+    const ssrfFindings = await ssrfRun.catch((err: unknown) => {
       unrunFamilies.push("SSRF (out-of-band callback)");
       console.error("[scan] SSRF probe failed", err);
       return [] as ScanVulnerability[];
@@ -1193,13 +1267,18 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
   // account actually reached are the ones worth asking a second account for.
   // Requires both accounts — one identity cannot demonstrate an authorisation
   // boundary between users.
+  if (!allowActiveProbes) {
+    ledger.skip("active", "cross-account access control (IDOR)", NOT_VERIFIED);
+  } else if (!auth?.secondary) {
+    ledger.skip("active", "cross-account access control (IDOR)", "needs sign-ins for two test accounts on the scan");
+  }
   if (allowActiveProbes && auth?.secondary) {
     const candidateUrls = [finalUrl, ...crawlResult.pagesVisited];
-    const accessFindings = await runAccessControlProbes({
+    const accessFindings = await ledger.track("active", "cross-account access control (IDOR)", runAccessControlProbes({
       urls: candidateUrls,
       primary: auth.credentials,
       secondary: auth.secondary,
-    }).catch((err: unknown) => {
+    })).catch((err: unknown) => {
       unrunFamilies.push("cross-account access control (IDOR)");
       console.error("[scan] access control probes failed", err);
       return [] as ScanVulnerability[];
@@ -1276,6 +1355,7 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
     probedNotFound: crawlResult.probedNotFound,
     renderedWithBrowser,
     intercepted: challengeVerdict.isChallenge,
+    tests: ledger.records,
   };
 }
 

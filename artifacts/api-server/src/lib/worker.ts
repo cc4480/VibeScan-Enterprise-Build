@@ -26,6 +26,7 @@ import { corroborateMerge } from "./scoring";
 import { findingFingerprint, canonicalizeTargetUrl } from "./fingerprint";
 import { runRecon } from "./recon";
 import { activeProbesUnlocked } from "./activeProbeGate";
+import { formatTestLine, formatTestSummary, NOT_VERIFIED, type TestRecord } from "./testLedger";
 import { warnIfLocalDataStale, OSV_CACHE_MAX_SIZE } from "./cveCheck";
 import { refreshEolData, loadEolCacheFromDb, EOL_REFRESH_QUEUE } from "./eolFetcher";
 import { callDeepSeek } from "./deepseek";
@@ -162,6 +163,7 @@ export async function processScanJob(job: ScanJob): Promise<void> {
   log.info("Starting HTTP scan, SSL Labs check, and reconnaissance in parallel");
 
   // SSL Labs is best-effort and can take up to 120 seconds — start it early
+  const parallelStartedAt = Date.now();
   const sslLabsPromise = checkSslLabs(targetUrl).catch((err) => {
     log.warn({ err }, "SSL Labs check failed (non-fatal)");
     return null;
@@ -266,8 +268,15 @@ export async function processScanJob(job: ScanJob): Promise<void> {
       ),
       scanTimeout,
     ]);
+    // pageLoadMs is the first fetch of the target only; scanMs is the whole
+    // HTTP scan (crawl, probes, active tests). Logging the former as
+    // "durationMs" made a full scan look like it took 1.6 seconds.
     log.info(
-      { vulnCount: scanResult.vulnerabilities.length, durationMs: scanResult.requestDurationMs },
+      {
+        vulnCount: scanResult.vulnerabilities.length,
+        pageLoadMs: scanResult.requestDurationMs,
+        scanMs: Date.now() - parallelStartedAt,
+      },
       "HTTP scan complete",
     );
   } catch (scanErr) {
@@ -327,6 +336,36 @@ export async function processScanJob(job: ScanJob): Promise<void> {
   } else {
     log.warn("Recon results unavailable — continuing without reconnaissance data");
   }
+
+  // ── 2b′. One log line per test ───────────────────────────────────────
+  // Everything the scan was meant to run — the scanner's own ledger plus
+  // SSL Labs and reconnaissance, which run beside it here — each with its
+  // outcome, so "did every test fire?" is answered by the log, not inferred.
+  const tests: TestRecord[] = [...(scanResult.tests ?? [])];
+  const sideMs = Date.now() - parallelStartedAt;
+  tests.push(
+    sslLabsResult
+      ? { group: "transport", name: `SSL Labs TLS grade (${sslLabsResult.grade ?? "no grade"})`, status: "ran", findings: sslLabsResult.grade && /^[C-F]$/.test(sslLabsResult.grade) ? 1 : 0, durationMs: sideMs }
+      : { group: "transport", name: "SSL Labs TLS grade", status: "failed", findings: 0, durationMs: sideMs, reason: "assessment unavailable (basic TLS detection used)" },
+  );
+  if (reconRunResult) {
+    const r = reconRunResult.recon;
+    tests.push(
+      { group: "recon", name: `DNS records (${r.dnsRecords.length})`, status: "ran", findings: 0, durationMs: r.reconDurationMs },
+      { group: "recon", name: `subdomain enumeration (${r.subdomains.length} found)`, status: "ran", findings: 0, durationMs: r.reconDurationMs },
+      allowActiveProbes
+        ? { group: "recon", name: `port scan (${r.openPorts.length} open)`, status: "ran", findings: reconRunResult.vulns.length, durationMs: r.reconDurationMs }
+        : { group: "recon", name: "port scan", status: "skipped", findings: 0, durationMs: 0, reason: NOT_VERIFIED },
+    );
+  } else {
+    tests.push({ group: "recon", name: "reconnaissance (DNS, subdomains, ports)", status: "failed", findings: 0, durationMs: sideMs, reason: "recon did not return results" });
+  }
+  for (const t of tests) {
+    const line = formatTestLine(t);
+    if (t.status === "failed") log.warn({ test: t }, line);
+    else log.info({ test: t }, line);
+  }
+  log.info({ tests: tests.length }, formatTestSummary(tests));
 
   // ── 2c. Corroboration merge — deduplicate duplicate-root-cause findings ──
   const preCorrobCount = scanResult.vulnerabilities.length;
@@ -498,6 +537,9 @@ export async function processScanJob(job: ScanJob): Promise<void> {
     certExpiry: certExpiry ? certExpiry.toISOString() : null,
     pagesScanned: scanResult.pagesScanned,
     probedNotFound: scanResult.probedNotFound,
+    // What ran, what was skipped and why — so the report can show coverage,
+    // not just findings. See testLedger.ts.
+    tests,
     summary: {
       totalVulnerabilities: scanResult.vulnerabilities.length,
       critical: severityCounts["critical"] ?? 0,

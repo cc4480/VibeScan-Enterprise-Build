@@ -7,6 +7,7 @@
  * rate limiting, directory listing, and clickjacking verification.
  */
 
+import { type TestLedger, NOT_VERIFIED } from "./testLedger";
 import { randomUUID } from "node:crypto";
 import { scanFetch, type HttpResult } from "./http";
 import type { ScanVulnerability } from "./scanner";
@@ -925,6 +926,8 @@ export async function runAllProbes(
    * implying they passed. Optional so existing callers and tests are unaffected.
    */
   onFailure?: (checkName: string, reason: unknown) => void,
+  /** Records each check's outcome for the per-test log (see testLedger.ts). */
+  ledger?: TestLedger,
 ): Promise<ScanVulnerability[]> {
   const passive: Array<[string, Promise<ScanVulnerability[]>]> = [
     ["sensitive file exposure", checkSensitiveFiles(targetUrl)],
@@ -951,7 +954,14 @@ export async function runAllProbes(
     : [];
 
   const all = [...passive, ...active];
-  const settled = await Promise.allSettled(all.map(([, p]) => p));
+  if (ledger && !allowActive) {
+    for (const name of ["HTTP methods", "active CORS", "open redirect", "Supabase RLS"]) {
+      ledger.skip("HTTP probes", name, NOT_VERIFIED);
+    }
+  }
+  const settled = await Promise.allSettled(
+    all.map(([name, p]) => (ledger ? ledger.track("HTTP probes", name, p) : p)),
+  );
 
   const findings: ScanVulnerability[] = [];
   settled.forEach((r, i) => {
