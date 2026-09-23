@@ -92,7 +92,11 @@ export function AiEditorsSection() {
     }
   }
 
-  async function revoke(id: string) {
+  async function revoke(id: string, name: string) {
+    // One click used to revoke with no warning, and a revoked token cannot be
+    // restored: every editor using it stops working at once. Same prompt as
+    // stopping a monitor (pages/monitor.tsx).
+    if (!confirm(`Revoke "${name}"? Any editor using this token stops working immediately. This cannot be undone.`)) return;
     await customFetch(`/api/account/tokens/${id}`, { method: "DELETE" }).catch(() => {});
     await queryClient.invalidateQueries({ queryKey: ["api-tokens"] });
   }
@@ -165,7 +169,7 @@ export function AiEditorsSection() {
               </div>
               <button
                 type="button"
-                onClick={() => revoke(t.id)}
+                onClick={() => revoke(t.id, t.name)}
                 className={cn("inline-flex items-center gap-1.5 text-sm text-red-400 hover:text-red-300")}
               >
                 <Trash2 className="w-4 h-4" /> Revoke

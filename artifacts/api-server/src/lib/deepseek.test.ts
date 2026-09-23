@@ -101,6 +101,11 @@ describe("the AI analysis is grounded in the scan's own findings", () => {
     expect(user).not.toMatch(/Third priority/);
   });
 
+  it("does not ask the editor for code changes when no finding needs one", async () => {
+    const { user } = await capturePrompt();
+    expect(user).toMatch(/If none of the findings needs a code change/);
+  });
+
   it("carries no unsourced statistics into the report", async () => {
     const { user } = await capturePrompt();
     expect(user).not.toMatch(/91\.5%/);

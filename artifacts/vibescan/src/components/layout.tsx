@@ -64,7 +64,7 @@ function AccountNav({
       <span
         className={cn(
           "text-sm text-muted-foreground truncate",
-          mobile ? "px-4 py-1" : "max-w-[14rem]",
+          mobile ? "px-4 py-1" : "max-w-[12rem] 2xl:max-w-[16rem]",
         )}
         title={email}
       >
@@ -115,7 +115,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         )}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 group">
+          <Link href="/" className="flex items-center gap-2 group shrink-0">
             {/* The real mark, not the generic glyph. The artwork already carries
                 its own dark ground and glow, so it needs no gradient tile behind
                 it — just the rounded crop. */}
@@ -132,16 +132,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </Link>
 
           {/* Desktop Nav */}
-          <nav className="hidden md:flex items-center gap-8">
-            <Link
-              href="/"
-              className={cn(
-                "text-sm font-medium transition-colors hover:text-foreground",
-                location === "/" ? "text-foreground" : "text-muted-foreground",
-              )}
-            >
-              Home
-            </Link>
+          {/* Signed in, the bar holds seven links, the account, Sign out and New
+              Scan. Below 1280px they do not fit, and they used to slide under the
+              logo ("SecScanHome"), so the phone menu takes over until xl. The
+              logo is the Home link here, so the bar does not repeat it. */}
+          <nav className="hidden xl:flex items-center gap-5 2xl:gap-7 whitespace-nowrap">
             <Link
               href="/dashboard"
               className={cn(
@@ -214,7 +209,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               just "button". */}
           <button
             type="button"
-            className="md:hidden p-2 text-foreground"
+            className="xl:hidden p-2 text-foreground"
             aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
             aria-expanded={mobileMenuOpen}
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -225,7 +220,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Mobile menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden absolute top-full left-0 right-0 bg-background/95 backdrop-blur-xl border-b border-white/5 py-4 px-4 flex flex-col gap-3 shadow-2xl">
+          <div className="xl:hidden absolute top-full left-0 right-0 bg-background/95 backdrop-blur-xl border-b border-white/5 py-4 px-4 flex flex-col gap-3 shadow-2xl">
             <Link
               href="/"
               onClick={() => setMobileMenuOpen(false)}

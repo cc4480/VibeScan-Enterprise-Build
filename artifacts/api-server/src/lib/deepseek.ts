@@ -153,6 +153,7 @@ Return a JSON object with EXACTLY these five fields:
 Rules:
 - Every statement must come from the findings listed above. Never say something is missing, misconfigured, exposed or vulnerable unless a finding above reports it — the scanner ran many more checks than it reported, and everything not listed passed. Do not add general best-practice advice as if it were a problem with this site.
 - The agentFixPrompt covers the findings above and nothing else. If there are no findings, say the scan found nothing to fix.
+- If none of the findings needs a code change (for example the only one is to verify domain ownership), end the agentFixPrompt with "None of these needs a code change." instead of the closing line above, which asks for code changes.
 - Write for a developer who used AI to build their app and may not understand security concepts
 - topPriorities must be specific: what to change, not just what is wrong
 - quickWins are changes under 5 minutes
