@@ -489,7 +489,7 @@ function SubscriptionCard({ sub, onCancel }: { sub: MonitorSubscription; onCance
     setScanning(true);
     try {
       await triggerManualScan(sub.id);
-      toast({ title: "Scan queued", description: "A fresh deep scan has started — this usually takes 1–2 minutes." });
+      toast({ title: "Scan queued", description: "A fresh full scan has started — most finish in under a minute." });
       queryClient.invalidateQueries({ queryKey: ["monitor-subscriptions"] });
     } catch {
       toast({ title: "Failed to start scan", description: "Please try again in a moment.", variant: "destructive" });

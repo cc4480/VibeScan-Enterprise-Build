@@ -37,7 +37,7 @@ export const MONITOR_PLANS: Record<MonitorPlan["key"], MonitorPlan> = {
     amountCents: 5000,
     urlLimit: 3,
     includedScans: 5,
-    description: "Continuous monitoring for up to 3 sites, plus 5 full scans every month",
+    description: "Up to 3 sites watched around the clock, plus 5 on-demand full scans every month",
   },
 };
 

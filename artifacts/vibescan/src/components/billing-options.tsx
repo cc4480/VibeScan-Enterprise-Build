@@ -153,8 +153,8 @@ export function BuyOptions({
         </div>
         <ul className="space-y-2 mb-6 flex-1 text-sm">
           {[
-            `Continuous monitoring for up to ${plan.urlLimit} sites`,
-            `${plan.includedScans} full scans every month`,
+            `Up to ${plan.urlLimit} sites watched around the clock`,
+            `${plan.includedScans} on-demand full scans every month`,
             "Hourly uptime, header and certificate checks",
             "Hourly CVE matching, ranked by exploit likelihood",
             "Rescans that tighten as your grade drops",

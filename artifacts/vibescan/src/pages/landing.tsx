@@ -59,7 +59,7 @@ export default function LandingPage() {
             </motion.h1>
 
             <motion.p variants={itemVariants} className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl">
-              Paste any public URL — your app, a client's site, or a competitor's — and get a plain-English security report in under 10 minutes. No installs, no agents.
+              Paste the URL of an app you own or are authorised to test — yours or a client's — and get a plain-English security report, usually in under a minute. No installs, no agents.
             </motion.p>
 
             <motion.div variants={itemVariants} className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
@@ -329,10 +329,10 @@ export default function LandingPage() {
             {
               icon: Bell,
               title: "SecScan Pro — $50/month",
-              desc: "Continuous monitoring, plus 5 full scans every month.",
+              desc: "3 sites watched around the clock, plus 5 on-demand scans a month.",
               features: [
-                "Monitoring for up to 3 sites",
-                "5 full scans every month",
+                "Up to 3 sites watched around the clock",
+                "5 on-demand full scans every month",
                 "Hourly uptime, header and certificate checks",
                 "Hourly CVE matching, ranked by EPSS",
                 "Rescans that follow your grade (A: 14d → F: 3d)",
@@ -413,7 +413,7 @@ function StaticPricing() {
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {[
-          { label: "SecScan Pro", price: "$50", per: "per month · 3 sites · 5 scans", note: null, popular: true },
+          { label: "SecScan Pro", price: "$50", per: "per month · 3 sites watched · 5 scans", note: null, popular: true },
           { label: "1 Scan Credit", price: "$12", per: "$12.00 / scan", note: null },
           { label: "5 Scan Pack", price: "$50", per: "$10.00 / scan", note: "17% off" },
           { label: "20 Scan Pack", price: "$160", per: "$8.00 / scan", note: "33% off" },

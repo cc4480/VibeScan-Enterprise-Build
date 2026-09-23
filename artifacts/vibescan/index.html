@@ -13,7 +13,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <title>SecScan — Black-Box Security Scanning for Vibe Coders</title>
-    <meta name="description" content="Paste a URL and get a plain-English security report in under 10 minutes. OWASP Top 10-aligned checks, AI-powered analysis, per-agent fix prompts. Free during early access." />
+    <meta name="description" content="Paste a URL and get a plain-English security report, usually in under a minute. OWASP Top 10-aligned checks, AI-powered analysis, per-agent fix prompts. 2 free scans." />
     <meta name="keywords" content="penetration testing, security scan, web security, OWASP, vibe coding, AI security, black-box testing, Supabase RLS, security headers" />
     <!-- max-image-preview:large opts into full-size thumbnails in Google
          Discover and rich results; the snippet limits remove the default
@@ -29,7 +29,7 @@
     <meta property="og:url" content="https://secscan.us/" />
     <meta property="og:site_name" content="SecScan" />
     <meta property="og:title" content="SecScan — Black-Box Security Scanning for Vibe Coders" />
-    <meta property="og:description" content="Paste a URL and get a plain-English security report in under 10 minutes. OWASP Top 10-aligned checks, AI-powered analysis, per-agent fix prompts." />
+    <meta property="og:description" content="Paste a URL and get a plain-English security report, usually in under a minute. OWASP Top 10-aligned checks, AI-powered analysis, per-agent fix prompts." />
     <meta property="og:image" content="https://secscan.us/opengraph.jpg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -40,7 +40,7 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:url" content="https://secscan.us/" />
     <meta name="twitter:title" content="SecScan — Security Scans for Vibe Coders" />
-    <meta name="twitter:description" content="Paste a URL and get a plain-English security report in under 10 minutes. No installs." />
+    <meta name="twitter:description" content="Paste a URL and get a plain-English security report, usually in under a minute. No installs." />
     <meta name="twitter:image" content="https://secscan.us/opengraph.jpg" />
     <meta name="twitter:image:alt" content="SecScan security scan report" />
 
@@ -92,7 +92,7 @@
           "@id": "https://secscan.us/#webpage",
           "url": "https://secscan.us/",
           "name": "SecScan — Black-Box Security Scanning for Vibe Coders",
-          "description": "Paste a URL and get a plain-English security report in under 10 minutes. OWASP Top 10-aligned checks, AI-powered analysis, per-agent fix prompts.",
+          "description": "Paste a URL and get a plain-English security report, usually in under a minute. OWASP Top 10-aligned checks, AI-powered analysis, per-agent fix prompts.",
           "isPartOf": { "@id": "https://secscan.us/#website" },
           "about": { "@id": "https://secscan.us/#organization" },
           "breadcrumb": {
@@ -149,7 +149,7 @@
                 "priceCurrency": "USD",
                 "billingDuration": "P1M"
               },
-              "description": "Continuous monitoring for up to 3 sites plus 5 full scans every month"
+              "description": "Up to 3 sites watched around the clock, plus 5 on-demand full scans every month"
             },
             {
               "@type": "Offer",
@@ -164,7 +164,7 @@
         {
           "@type": "HowTo",
           "name": "How to scan your web app with SecScan",
-          "description": "Run an automated black-box security scan on any public web application in under 10 minutes.",
+          "description": "Run an automated black-box security scan on a web application you own, usually in under a minute.",
           "totalTime": "PT10M",
           "step": [
             {
@@ -183,7 +183,7 @@
               "@type": "HowToStep",
               "position": 3,
               "name": "Get your report",
-              "text": "Within 10 minutes, receive a plain-English security report with a letter grade (A–F), risk score, vulnerability list, and actionable fix steps tailored to your AI coding tool."
+              "text": "Usually within a minute, receive a plain-English security report with a letter grade (A–F), risk score, vulnerability list, and actionable fix steps tailored to your AI coding tool."
             }
           ]
         },
@@ -195,7 +195,7 @@
               "name": "What is SecScan?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "SecScan is an automated black-box security scanner for web applications. You paste a URL for an app you own or are authorised to test and receive a plain-English security report, usually within ten minutes. No installs, agents or code changes required. It is an automated scanner rather than a manual penetration test, and it is free during early access."
+                "text": "SecScan is an automated black-box security scanner for web applications. You paste a URL for an app you own or are authorised to test and receive a plain-English security report, usually in under a minute. No installs, agents or code changes required. It is an automated scanner rather than a manual penetration test. Every account gets 2 free scans."
               }
             },
             {
@@ -203,7 +203,7 @@
               "name": "What security checks does SecScan perform?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "SecScan checks security headers (CSP, HSTS, X-Frame-Options, Referrer-Policy, Permissions-Policy), SSL/TLS configuration and grade, cookie flags (HttpOnly, Secure, SameSite), CORS misconfigurations, server version disclosure, technology fingerprinting, exposed secrets and sensitive files, known-CVE component versions, and Supabase/Firebase data exposure — aligned with the OWASP Top 10 categories that are testable from outside the app (it does not perform authenticated or server-side testing, so categories like A04, A09 and A10 are out of scope)."
+                "text": "SecScan checks security headers (CSP, HSTS, X-Frame-Options, Referrer-Policy, Permissions-Policy), SSL/TLS configuration and grade, cookie flags (HttpOnly, Secure, SameSite), CORS misconfigurations, server version disclosure, technology fingerprinting, exposed secrets and sensitive files, known-CVE component versions, and Supabase/Firebase data exposure. On a domain whose ownership you have verified (a DNS record or a file), it also runs active tests: injection, cross-site scripting, path traversal, server-side request forgery (proved by an out-of-band callback) and API probing. Given a login — a session cookie, a bearer token or a sign-in form — it scans the pages behind it, and with a second account it checks whether one user can reach another's data. Findings are mapped to the OWASP Top 10 and to SOC 2, PCI DSS, ISO 27001 and OWASP ASVS controls. What no outside scan can see — insecure design (A04) and logging and monitoring (A09) — is out of scope."
               }
             },
             {
@@ -211,7 +211,7 @@
               "name": "How long does a SecScan scan take?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Most scans complete in under 10 minutes. Basic scans typically finish in 1–2 minutes. Deep scans with AI analysis usually complete in 3–10 minutes depending on the target site."
+                "text": "Most scans finish in under a minute, AI analysis included. Across production scans in September 2026, the median was 23 seconds and 9 in 10 finished within 36 seconds. Very large or slow sites can take longer."
               }
             },
             {
@@ -235,7 +235,7 @@
               "name": "What does the per-agent fix prompt do?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "After a Deep Scan, SecScan generates a ready-to-paste prompt for your specific AI coding tool. Each prompt is pre-formatted with the vulnerability context and the exact fix instructions so you can paste it directly into Cursor, Claude Code, Lovable, Bolt, or Replit AI and get working code."
+                "text": "After every scan, SecScan generates a ready-to-paste prompt for your specific AI coding tool. Each prompt is pre-formatted with the vulnerability context and the exact fix instructions so you can paste it directly into Cursor, Claude Code, Lovable, Bolt, or Replit AI and get working code."
               }
             },
             {
@@ -251,7 +251,7 @@
               "name": "What is SecScan Pro?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "SecScan Pro is $50 a month for continuous monitoring of up to 3 sites plus 5 full scans every month. Monitoring checks each site hourly for downtime and weakened security headers, runs automated deep rescans on a schedule that follows your grade — every 14 days for an A down to every 3 days for a D or F — and matches newly published CVEs (Common Vulnerabilities and Exposures) against your detected tech stack every hour. Cancel any time."
+                "text": "SecScan Pro is $50 a month: up to 3 sites watched around the clock, plus 5 on-demand full scans every month. Monitoring checks each site hourly for downtime and weakened security headers, runs automated deep rescans on a schedule that follows your grade — every 14 days for an A down to every 3 days for a D or F — and matches newly published CVEs (Common Vulnerabilities and Exposures) against your detected tech stack every hour. Cancel any time."
               }
             }
           ]
@@ -272,9 +272,9 @@
     -->
     <noscript>
       <h1>SecScan — black-box security scanning for vibe coders</h1>
-      <p>Paste a URL for a web application you own or are authorised to test and get a plain-English security report, usually within ten minutes — no installs, agents or code changes required. Every scan is a full scan; there are no tiers.</p>
+      <p>Paste a URL for a web application you own or are authorised to test and get a plain-English security report, usually in under a minute — no installs, agents or code changes required. Every scan is a full scan; there are no tiers.</p>
       <p>Checks are aligned with the OWASP Top 10: security headers, TLS/HSTS, cookie flags, CORS misconfiguration, exposed secrets and config files, known-CVE component versions, Supabase/Firebase rules exposure, injection (reflected XSS, SQL injection, path traversal), and API surface discovery with missing-authentication, IDOR, BFLA and mass-assignment testing.</p>
-      <p>Reports are generated by AI with a letter grade (A–F), a numeric risk score, and per-agent fix prompts tailored to Cursor, Claude Code, Lovable, Bolt and Replit AI. Every account gets 2 free scans. SecScan Pro ($50/month) adds continuous monitoring for up to 3 sites — hourly checks, grade-based rescans and hourly CVE matching — plus 5 full scans a month; scan credits are $12 each, 5 for $50 or 20 for $160.</p>
+      <p>Reports are generated by AI with a letter grade (A–F), a numeric risk score, and per-agent fix prompts tailored to Cursor, Claude Code, Lovable, Bolt and Replit AI. Every account gets 2 free scans. SecScan Pro ($50/month) has up to 3 sites watched around the clock — hourly checks, grade-based rescans and hourly CVE matching — plus 5 on-demand full scans a month; scan credits are $12 each, 5 for $50 or 20 for $160.</p>
       <p>SecScan needs JavaScript to run a scan interactively. These pages read fine without it:</p>
       <nav>
         <ul>

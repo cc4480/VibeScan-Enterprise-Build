@@ -11,7 +11,7 @@ secscan.io, and not any of the similarly named GitHub projects.
 
 SecScan performs automated black-box security scans on web applications you own or are
 authorised to test. Paste a URL and receive a plain-English security report powered by AI,
-usually within ten minutes, with no installs or agents required.
+usually in under a minute, with no installs or agents required.
 
 Every scan is a full scan. There are no tiers to choose between.
 
@@ -47,8 +47,8 @@ every coding session.
 
 Every account gets 2 free scans to try the platform, every check included.
 
-- SecScan Pro — $50/month: continuous monitoring for up to 3 sites, plus 5 full scans every
-  month (unused scans do not roll over). Cancel any time.
+- SecScan Pro — $50/month: up to 3 sites watched around the clock, plus 5 on-demand full
+  scans every month (unused scans do not roll over). Cancel any time.
 - Scan credits — $12 for 1, $50 for 5, $160 for 20. Credits never expire.
 
 Payments are handled by Stripe.

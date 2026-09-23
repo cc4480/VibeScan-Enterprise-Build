@@ -156,7 +156,7 @@ function buildHtml(opts: SendReportEmailOptions): string {
 
         <!-- Footer -->
         <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
-          <p style="margin:0;">You received this because you ran a SecScan deep scan.</p>
+          <p style="margin:0;">You received this because you ran a SecScan scan.</p>
           <p style="margin:4px 0 0;">© 2026 SecScan</p>
         </td></tr>
       </table>
@@ -1103,8 +1103,8 @@ export async function sendPaymentsLiveEmail(toEmail: string): Promise<"sent" | "
   const heading = "You can keep scanning now";
   const body =
     "You asked us to tell you when you could buy more scans on SecScan. You can now.<br><br>" +
-    "<strong>SecScan Pro</strong> — $50 a month: continuous monitoring for up to 3 sites, " +
-    "plus 5 full scans every month. Cancel any time.<br>" +
+    "<strong>SecScan Pro</strong> — $50 a month: up to 3 sites watched around the clock, " +
+    "plus 5 on-demand full scans every month. Cancel any time.<br>" +
     "<strong>Scan credits</strong> — $12 each, 5 for $50, or 20 for $160. They never expire.";
   const ctaLabel = "See plans and credits";
   const ctaUrl = `${APP_ORIGIN}/settings#billing`;

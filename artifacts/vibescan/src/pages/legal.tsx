@@ -12,7 +12,7 @@ import { useSeo } from "@/lib/seo";
 
 // Per document: a change to one must not re-date the other.
 const LAST_UPDATED: Record<"privacy" | "terms", string> = {
-  privacy: "September 5, 2026",
+  privacy: "September 22, 2026", // AI analysis now runs on every scan, not only "deep" ones
   terms: "September 22, 2026", // SecScan Pro subscription terms added
 };
 const CONTACT = "hello@secscan.us";
@@ -92,10 +92,11 @@ function Privacy() {
         </p>
         <p>
           <strong className="text-foreground">Our AI analysis provider</strong> — generates
-          the written analysis on deep scans. Your scan findings, including the target URL
-          and evidence fragments, are sent to this provider for that purpose. The provider is
-          based in China, so this is a transfer outside the UK and EEA. If you would rather
-          not have findings leave our infrastructure, do not run deep scans.
+          the written analysis in every report. Every scan sends its findings, including the
+          target URL and evidence fragments, to this provider for that purpose. The provider
+          is based in China, so this is a transfer outside the UK and EEA. There is currently
+          no way to run a scan without it, so if you would rather not have findings leave our
+          infrastructure, do not run scans.
         </p>
       </Section>
 
@@ -252,7 +253,7 @@ function Terms() {
         <p>
           Your scan targets, reports and credentials remain yours. You grant us only the
           permission needed to run the service: to store them, to process them to produce
-          your report, and to send findings to the AI provider when you request a deep scan.
+          your report, and to send findings to the AI provider to write the analysis in each report.
         </p>
       </Section>
 

@@ -919,7 +919,7 @@ export default function LearnPage() {
         <Shield className="w-10 h-10 text-primary mx-auto mb-4" />
         <h2 className="text-2xl font-bold mb-2">See how your app scores</h2>
         <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-          SecScan tests all of the above — plus dozens more checks — in a single automated scan. Get your grade in under 10 minutes.
+          SecScan tests all of the above — plus dozens more checks — in a single automated scan. Get your grade, usually in under a minute.
         </p>
         <Link href="/scan"
           className="inline-flex items-center gap-2 px-8 py-3 bg-primary text-primary-foreground font-bold rounded-xl hover:shadow-[0_0_20px_rgba(20,184,120,0.4)] hover:-translate-y-0.5 transition-all duration-200">

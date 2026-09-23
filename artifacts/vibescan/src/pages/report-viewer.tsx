@@ -2980,7 +2980,7 @@ export default function ReportViewer() {
         <Shield className="w-12 h-12 text-primary mx-auto mb-4" />
         <h2 className="text-2xl md:text-3xl font-bold mb-3">Scan another website</h2>
         <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-          Check a different URL, a staging environment, or a client's site — each scan takes under 10 minutes.
+          Check a different URL, a staging environment, or a client's site — most scans finish in under a minute.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link
