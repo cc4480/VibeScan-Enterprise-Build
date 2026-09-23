@@ -149,7 +149,7 @@ export default function LandingPage() {
                 <span className="text-gradient-primary">Security gaps come free.</span>
               </h2>
               <p className="text-muted-foreground mb-8 text-lg leading-relaxed">
-                VibeScan knows the specific risks that Lovable, Bolt, and Cursor-generated apps leave behind — including Supabase Row Level Security bypasses that expose your entire database to anonymous reads.
+                SecScan knows the specific risks that Lovable, Bolt, and Cursor-generated apps leave behind — including Supabase Row Level Security bypasses that expose your entire database to anonymous reads.
               </p>
               <Link
                 href="/scan"
