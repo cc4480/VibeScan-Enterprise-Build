@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "us.secscan/secscan",
   "title": "SecScan",
-  "description": "Security-scan a live web app from your editor: A–F graded report with evidence and fix prompts.",
-  "version": "1.0.0",
+  "description": "Scan, monitor and fix a live web app from your editor: graded security reports with fix prompts.",
+  "version": "1.1.0",
   "websiteUrl": "https://secscan.info/ai-editors",
   "icons": [
     { "src": "https://secscan.us/icon-192.png", "mimeType": "image/png", "sizes": ["192x192"] }

@@ -105,8 +105,11 @@ editors can scan a site and read the report without leaving the editor.
 3. Ask the editor to scan your site.
 
 Tools: scan_url, get_scan_status (can wait for the result), get_report (findings, fixes and a
-fix prompt for the editor), list_recent_scans, list_verified_domains. Scans from an editor follow
-exactly the same rules as the website: they use the account's free scans, plan scans or credits,
+fix prompt for the editor), list_recent_scans, list_verified_domains, start_domain_verification
+and check_domain_verification (unlock active tests), get_account (scans left and plan),
+list_monitors, add_monitor, monitor_scan_now (continuous monitoring), and dismiss_finding (mark
+a confirmed false positive). Everything from an editor follows exactly the same rules as the
+website: scans, new monitors and rescans use the account's free scans, plan scans or credits,
 and active tests run only on verified domains. Tokens work only for the MCP endpoint and can be
 revoked any time.
 

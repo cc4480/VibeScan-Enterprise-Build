@@ -806,7 +806,6 @@ router.post("/monitor/subscriptions/:id/scan", monitorRateLimit, async (req, res
   }
 
   let scanId: string | null = null;
-  let baselineScanId: string | null = null;
   try {
     const [scan] = await db
       .insert(scansTable)

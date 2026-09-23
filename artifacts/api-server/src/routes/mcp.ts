@@ -24,6 +24,10 @@ import { db, scansTable, reportsTable, domainVerificationsTable } from "@workspa
 import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { authenticateApiToken, type TokenUser } from "../lib/apiTokens";
 import { createScanHandler, scanRateLimit, scanNetworkRateLimit } from "./scans";
+import monitorRouter from "./monitor";
+import domainVerificationRouter from "./domainVerification";
+import dismissalsRouter from "./dismissals";
+import checkoutRouter from "./checkout";
 import { APP_ORIGIN } from "../lib/appOrigin";
 import { stripe } from "../lib/stripe";
 import { rateLimitMiddleware } from "../lib/rateLimit";
@@ -94,6 +98,68 @@ async function launchScan(httpReq: Request, user: TokenUser, url: string): Promi
   return { status, body };
 }
 
+interface RouteLayer {
+  route?: {
+    path: string;
+    methods: Record<string, boolean>;
+    stack: { handle: (req: Request, res: Response, next: (err?: unknown) => void) => unknown }[];
+  };
+}
+
+/**
+ * Run one of the website's own routes for this user — its whole handler chain,
+ * middleware (auth checks, rate limiters) included — and capture the answer.
+ *
+ * This is how every tool beyond scan_url keeps the NO SIDE DOOR rule: adding a
+ * monitor, "scan now", verifying a domain and dismissing a finding charge,
+ * limit, validate and refuse exactly as the browser does, because they ARE the
+ * browser's code path. A route that is renamed or removed fails loudly here
+ * (the tool reports an error) rather than silently doing something else.
+ */
+export async function runAppRoute(
+  router: unknown,
+  method: "get" | "post" | "delete",
+  path: string,
+  httpReq: Request,
+  user: TokenUser,
+  input: { body?: unknown; params?: Record<string, string>; query?: Record<string, string> } = {},
+): Promise<{ status: number; body: any }> {
+  const layer = (router as { stack: RouteLayer[] }).stack.find((l) => l.route?.path === path && l.route.methods[method]);
+  if (!layer?.route) throw new Error(`MCP: no ${method.toUpperCase()} ${path} route to run`);
+
+  // defineProperties, not Object.assign: Express 5 defines req.query as a
+  // getter-only accessor on the request prototype, so assigning it throws
+  // ("Cannot set property query … which has only a getter"). Own data
+  // properties shadow the accessor instead.
+  const own = (value: unknown) => ({ value, writable: true, enumerable: true, configurable: true });
+  const asUser = Object.create(httpReq, {
+    user: own(user),
+    body: own(input.body ?? {}),
+    params: own(input.params ?? {}),
+    query: own(input.query ?? {}),
+    isAuthenticated: own(() => true),
+  }) as Request;
+
+  let status = 200;
+  let body: any = null;
+  let answered = false;
+  const res = {
+    status(code: number) { status = code; return res; },
+    json(payload: unknown) { body = payload; answered = true; return res; },
+    setHeader() { return res; },
+    end() { answered = true; return res; },
+  } as unknown as Response;
+
+  for (const { handle } of layer.route.stack) {
+    let proceed = false;
+    let failure: unknown;
+    await handle(asUser, res, (err?: unknown) => { proceed = true; failure = err; });
+    if (failure) throw failure;
+    if (answered || !proceed) break;
+  }
+  return { status, body };
+}
+
 async function ownScan(userId: string, scanId: string) {
   const [scan] = await db
     .select({
@@ -151,7 +217,10 @@ const SERVER_INSTRUCTIONS = [
   'min_severity "high" to focus. Work through critical and high findings first, and use the fix prompt in the',
   "report — it is written for the user's editor. Active tests (injection, XSS, SSRF, access control) run only on",
   "domains listed by list_verified_domains; say so if a scan was passive-only. Each scan spends one of the user's",
-  "free scans, plan scans or credits, so do not start a scan the user did not ask for.",
+  "free scans, plan scans or credits, so do not start a scan the user did not ask for. The same applies to",
+  "add_monitor and monitor_scan_now; get_account says how many scans are left. To unlock active tests, use",
+  "start_domain_verification, publish the file or DNS record it returns, then check_domain_verification.",
+  "Only call dismiss_finding when the user has confirmed a finding is a false positive — never to improve a grade.",
 ].join(" ");
 
 /**
@@ -225,7 +294,7 @@ export function formatReport(
 }
 
 function buildServer(httpReq: Request, user: TokenUser): McpServer {
-  const server = new McpServer({ name: "secscan", version: "1.0.0" }, { instructions: SERVER_INSTRUCTIONS });
+  const server = new McpServer({ name: "secscan", version: "1.1.0" }, { instructions: SERVER_INSTRUCTIONS });
 
   server.registerTool(
     "scan_url",
@@ -377,7 +446,258 @@ function buildServer(httpReq: Request, user: TokenUser): McpServer {
     },
   );
 
+  // ── Account ──────────────────────────────────────────────────────────────
+
+  server.registerTool(
+    "get_account",
+    {
+      title: "Scans left and plan",
+      description:
+        "How many scans the user can still run — free scans, plan scans and credits — and their plan. " +
+        "Check this before starting several scans.",
+      inputSchema: {},
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const { status, body } = await runAppRoute(checkoutRouter, "get", "/billing/status", httpReq, user);
+      if (status >= 400) return text(String(body?.error ?? "Could not read the account."), true);
+      return text(formatAccount(body));
+    },
+  );
+
+  // ── Domain verification ──────────────────────────────────────────────────
+
+  server.registerTool(
+    "start_domain_verification",
+    {
+      title: "Start verifying a domain",
+      description:
+        "Begin proving the user owns a domain, which unlocks active tests (injection, XSS, SSRF, access control) on its scans. " +
+        "Returns a file to publish on the site, or a DNS TXT record — an editor can usually add the file to the codebase " +
+        "and deploy it. Then call check_domain_verification. Calling it again issues a new token unless already verified.",
+      inputSchema: { domain: z.string().min(1).max(253).describe("The domain, e.g. example.com or https://example.com") },
+      annotations: { idempotentHint: false },
+    },
+    async ({ domain }) => {
+      const { status, body } = await runAppRoute(domainVerificationRouter, "post", "/domain-verifications", httpReq, user, {
+        body: { domain },
+      });
+      if (status >= 400) return text(String(body?.error ?? "Could not start verification."), true);
+      return text(formatVerification(body.verification));
+    },
+  );
+
+  server.registerTool(
+    "check_domain_verification",
+    {
+      title: "Check a domain verification",
+      description:
+        "Check whether the file or DNS record from start_domain_verification is live. On success the domain is verified " +
+        "and its next scan includes active tests. DNS changes can take a few minutes.",
+      inputSchema: { domain: z.string().min(1).max(253).describe("The domain passed to start_domain_verification") },
+      annotations: { idempotentHint: true, openWorldHint: true },
+    },
+    async ({ domain }) => {
+      const { status, body } = await runAppRoute(
+        domainVerificationRouter,
+        "post",
+        "/domain-verifications/:domain/check",
+        httpReq,
+        user,
+        { params: { domain: hostOf(domain) } },
+      );
+      if (status === 409 && body?.verification) {
+        return text(`Not found yet. ${body.detail ?? ""}\n\n${formatVerification(body.verification)}`, true);
+      }
+      if (status >= 400) return text(String(body?.error ?? "Could not check verification."), true);
+      return text(formatVerification(body.verification));
+    },
+  );
+
+  // ── Monitoring ───────────────────────────────────────────────────────────
+
+  server.registerTool(
+    "list_monitors",
+    {
+      title: "List monitored sites",
+      description:
+        "Sites under continuous monitoring: latest grade, last and next scan, uptime check, CVE alerts, new problems " +
+        "in the last scan and certificate expiry. Use the monitor id with monitor_scan_now.",
+      inputSchema: {},
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const { status, body } = await runAppRoute(monitorRouter, "get", "/monitor/subscriptions", httpReq, user);
+      if (status >= 400) return text(String(body?.error ?? "Could not list monitors."), true);
+      return text(formatMonitors(Array.isArray(body) ? body : []));
+    },
+  );
+
+  server.registerTool(
+    "add_monitor",
+    {
+      title: "Monitor a site",
+      description:
+        "Put a site the user owns under continuous monitoring: hourly uptime checks, CVE matching, certificate alerts and " +
+        "regular rescans. Runs a full baseline scan straight away, which uses one of the user's scans exactly as in the app " +
+        "(free for plan holders). Returns the baseline scan_id for get_scan_status.",
+      inputSchema: { url: z.string().min(1).max(2048).describe("The site to monitor, e.g. https://example.com") },
+      annotations: { openWorldHint: true },
+    },
+    async ({ url }) => {
+      const { status, body } = await runAppRoute(monitorRouter, "post", "/monitor/subscriptions", httpReq, user, {
+        body: { targetUrl: url },
+      });
+      if (status >= 400) {
+        const extra = body?.code === "trial_exhausted" && stripe ? ` Plans and credits: ${APP_ORIGIN}/settings#billing` : "";
+        return text(`${String(body?.error ?? `Could not add the monitor (HTTP ${status}).`)}${extra}`, true);
+      }
+      return text(
+        `Now monitoring ${body.subscription.targetUrl} (monitor id ${body.subscription.id}).\n` +
+          (body.initialScanId
+            ? `Baseline scan started: scan_id ${body.initialScanId}. Call get_scan_status with wait_seconds 60 for the result.`
+            : "The baseline scan could not be queued (you were not charged); the scheduler will scan it shortly."),
+      );
+    },
+  );
+
+  server.registerTool(
+    "monitor_scan_now",
+    {
+      title: "Rescan a monitored site now",
+      description:
+        "Run a full scan of a monitored site now instead of waiting for its schedule — e.g. to confirm a fix. Free for plan " +
+        "holders; otherwise uses one of the user's scans, as in the app. Takes the monitor id from list_monitors.",
+      inputSchema: { monitor_id: z.string().describe("The monitor id from list_monitors or add_monitor") },
+      annotations: { openWorldHint: true },
+    },
+    async ({ monitor_id }) => {
+      if (!UUID.test(monitor_id)) return text("No monitor with that id.", true);
+      const { status, body } = await runAppRoute(monitorRouter, "post", "/monitor/subscriptions/:id/scan", httpReq, user, {
+        params: { id: monitor_id },
+      });
+      if (status === 404) return text("No monitor with that id.", true);
+      if (status >= 400) return text(String(body?.error ?? `Could not start the scan (HTTP ${status}).`), true);
+      return text(`Scan started: scan_id ${body.scanId}. Call get_scan_status with wait_seconds 60 for the result.`);
+    },
+  );
+
+  // ── Findings ─────────────────────────────────────────────────────────────
+
+  server.registerTool(
+    "dismiss_finding",
+    {
+      title: "Dismiss a false positive",
+      description:
+        "Mark a finding as a false positive for this site, so future scans of it stop reporting it — the same as " +
+        "Dismiss in the app, and undoable there. ONLY use this after the user has confirmed the finding is wrong; never " +
+        "dismiss a real problem to improve a grade.",
+      inputSchema: {
+        scan_id: z.string().describe("The scan whose report contains the finding"),
+        finding_name: z.string().min(1).max(300).describe("The finding's name exactly as get_report shows it"),
+      },
+      annotations: { destructiveHint: true },
+    },
+    async ({ scan_id, finding_name }) => {
+      if (!UUID.test(scan_id)) return text("No scan with that id.", true);
+      const scan = await ownScan(user.id, scan_id);
+      const report = scan ? await reportForScan(user.id, scan_id) : null;
+      if (!scan || !report) return text("No finished scan with that id.", true);
+      // Taken from the report, not from the caller: an editor can only dismiss
+      // a finding the scan actually produced, with its real category and evidence.
+      const data = report.data as { vulnerabilities?: any[] } | null;
+      const vulns = Array.isArray(data?.vulnerabilities) ? data.vulnerabilities : [];
+      const wanted = finding_name.trim().toLowerCase();
+      const matches = vulns.filter((v) => String(v.name).trim().toLowerCase() === wanted);
+      if (matches.length === 0) {
+        return text(`That report has no finding named "${finding_name}". Use the name exactly as get_report shows it.`, true);
+      }
+      for (const v of matches) {
+        const { status, body } = await runAppRoute(dismissalsRouter, "post", "/dismissals", httpReq, user, {
+          body: {
+            targetUrl: scan.targetUrl,
+            findingName: v.name,
+            findingCategory: v.category,
+            findingEvidence: v.evidence ?? undefined,
+            reason: "false_positive",
+          },
+        });
+        if (status >= 400) return text(String(body?.error ?? "Could not dismiss the finding."), true);
+      }
+      return text(
+        `Dismissed "${matches[0].name}" for ${scan.targetUrl}` +
+          `${matches.length > 1 ? ` (${matches.length} occurrences)` : ""}. Future scans of this site will not report it. ` +
+          `Undo it from the report in the app: ${APP_ORIGIN}/report/${report.id}`,
+      );
+    },
+  );
+
   return server;
+}
+
+/** The hostname from "example.com", "https://example.com/path" or similar; the input unchanged if unparseable. */
+function hostOf(domain: string): string {
+  try {
+    return new URL(/^https?:\/\//i.test(domain) ? domain : `https://${domain}`).hostname;
+  } catch {
+    return domain;
+  }
+}
+
+/** GET /billing/status, as text. Exported for tests. */
+export function formatAccount(b: any): string {
+  const sub = b.subscription;
+  return [
+    `Free scans left: ${b.freeScansRemaining} of ${b.freeScanLimit}`,
+    `Credits: ${b.credits}`,
+    sub
+      ? `Plan: ${sub.plan} (${sub.status}) · ${sub.includedScansRemaining} included scans left this period · ` +
+        `up to ${sub.urlLimit} monitored sites` +
+        (sub.currentPeriodEnd ? ` · renews ${String(sub.currentPeriodEnd).slice(0, 10)}` : "")
+      : "Plan: none",
+    b.paymentsEnabled ? `Plans and credits: ${APP_ORIGIN}/settings#billing` : "Buying scans is not open yet.",
+  ].join("\n");
+}
+
+/** One domain verification, as text: its state, or exactly what to publish. Exported for tests. */
+export function formatVerification(v: any): string {
+  if (v.verified) {
+    return `Domain: ${v.domain} — VERIFIED (${v.method === "dns" ? "DNS record" : "file"}). Its scans now include active tests.`;
+  }
+  return [
+    `Domain: ${v.domain} — not verified yet.`,
+    "Prove ownership with EITHER of these, then call check_domain_verification:",
+    `  File: serve exactly this text at ${v.wellKnown.url}`,
+    `        ${v.wellKnown.content}`,
+    `  DNS:  a TXT record named ${v.dns.name} with the value ${v.dns.value}`,
+  ].join("\n");
+}
+
+/** GET /monitor/subscriptions, as text — active monitors only. Exported for tests. */
+export function formatMonitors(subs: any[]): string {
+  const active = subs.filter((m) => m.status === "active");
+  if (active.length === 0) return `No sites are being monitored. Add one with add_monitor, or at ${APP_ORIGIN}/monitor.`;
+  const when = (d: unknown) => (d ? new Date(String(d)).toISOString().slice(0, 16).replace("T", " ") + " UTC" : "—");
+  return active
+    .map((m) => {
+      const uptime =
+        m.pulseReachable == null
+          ? "not run yet"
+          : m.pulseReachable
+            ? `up (HTTP ${m.pulseStatus}, ${m.responseTimeMs} ms)`
+            : `DOWN — ${m.pulseFailureReason ?? `HTTP ${m.pulseStatus}`}`;
+      return [
+        `${m.targetUrl}  (monitor id ${m.id})`,
+        `  Grade ${m.lastReport?.grade ?? "—"}` +
+          (m.lastReport?.riskScore != null ? ` · risk ${m.lastReport.riskScore}/100` : "") +
+          ` · last scan ${when(m.lastScanAt)} · next ${when(m.nextScanAt)}` +
+          (m.scanInProgress ? ` · a scan is ${m.scanStatus} now` : ""),
+        `  Uptime: ${uptime} · CVE alerts: ${m.alertCount ?? 0} · new problems in last scan: ${m.regressionCount ?? 0}` +
+          (m.certExpiryDays != null ? ` · certificate expires in ${m.certExpiryDays} days` : ""),
+        ...(m.lastReport?.id ? [`  Latest report: ${APP_ORIGIN}/report/${m.lastReport.id}`] : []),
+      ].join("\n");
+    })
+    .join("\n\n");
 }
 
 router.post("/mcp", async (req, res): Promise<void> => {

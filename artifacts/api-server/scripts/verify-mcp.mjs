@@ -67,9 +67,15 @@ out("get_scan_status on finished scan -> report", String((await call(c, "get_sca
 const cb = await mcp(tokB);
 out("user B reading A's scan", (await call(cb, "get_report", { scan_id: scanId })).t);
 out("malformed scan id", (await call(c, "get_report", { scan_id: "1; drop table scans" })).t);
-const s2 = await call(c, "scan_url", { url: "https://example.org" });
-out("scan_url #2 (last free scan)", s2.err ? "ERROR " + s2.t.slice(0, 60) : "started");
-out("scan_url #3 — free trial used up", (await call(c, "scan_url", { url: "https://example.net" })).t.slice(0, 115));
+// Spend whatever is left of the free allowance (3 by default), then expect a
+// refusal — counted from get_account rather than assumed, so a change to
+// FREE_TRIAL_SCAN_LIMIT does not silently turn the last line into a pass.
+const left = Number(/Free scans left: (\d+)/.exec((await call(c, "get_account")).t)?.[1] ?? 0);
+for (let i = 1; i <= left; i++) {
+  const s = await call(c, "scan_url", { url: `https://example.org/?n=${i}` });
+  out(`scan_url — free scan ${i} of ${left} left`, s.err ? "ERROR " + s.t.slice(0, 60) : "started");
+}
+out("scan_url once free scans are used up", (await call(c, "scan_url", { url: "https://example.net" })).t.slice(0, 115));
 
 const noTok = await fetch(B + "/api/mcp", { method: "POST", headers: H(), body: "{}" });
 out("POST /api/mcp without a token", `${noTok.status} ${noTok.headers.get("www-authenticate")}`);
