@@ -31,9 +31,27 @@ const router: IRouter = Router();
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"] as const;
-/** Findings returned by get_report. A long tail of info notes would crowd an editor's context. */
-const MAX_FINDINGS = 60;
-const MAX_EVIDENCE_CHARS = 400;
+/**
+ * Findings per page. Measured on a real scan of the vuln-fixture (180
+ * findings): 60 per page came to ~37k characters (~9.5k tokens), past
+ * Claude Code's MCP-output warning and a heavy share of an editor's context.
+ * 25 per page is roughly 15k characters; the rest is reachable with offset.
+ */
+const DEFAULT_PAGE = 25;
+const MAX_PAGE = 50;
+const MAX_EVIDENCE_CHARS = 300;
+const MAX_TEXT_CHARS = 600;
+const clip = (v: unknown, n: number): string => {
+  const t = String(v ?? "");
+  return t.length > n ? t.slice(0, n) + "…" : t;
+};
+type Severity = (typeof SEVERITY_ORDER)[number];
+
+export interface ReportPage {
+  offset?: number;
+  limit?: number;
+  minSeverity?: Severity;
+}
 
 type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };
 const text = (t: string, isError = false): ToolResult => ({ content: [{ type: "text", text: t }], ...(isError ? { isError } : {}) });
@@ -102,15 +120,28 @@ async function reportForScan(userId: string, scanId: string) {
 
 const FINISHED = new Set(["complete", "failed"]);
 
-/** A plain-text report sized for an editor's context window. */
-function formatReport(report: { id: string; targetUrl: string; scannedAt: Date; data: any }): string {
+/**
+ * A plain-text report sized for an editor's context window: one page of
+ * findings at a time, most severe first. Exported for tests.
+ */
+export function formatReport(
+  report: { id: string; targetUrl: string; scannedAt: Date; data: any },
+  page: ReportPage = {},
+): string {
   const d = report.data ?? {};
   const s = d.summary ?? {};
   const vulns: any[] = Array.isArray(d.vulnerabilities) ? d.vulnerabilities : [];
-  const sorted = [...vulns].sort(
-    (a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity),
-  );
-  const shown = sorted.slice(0, MAX_FINDINGS);
+  const floor = SEVERITY_ORDER.indexOf(page.minSeverity ?? "info");
+  const sorted = vulns
+    .filter((v) => {
+      const rank = SEVERITY_ORDER.indexOf(v.severity);
+      return rank !== -1 && rank <= floor;
+    })
+    .sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity));
+  const offset = Math.max(0, page.offset ?? 0);
+  const limit = Math.min(MAX_PAGE, Math.max(1, page.limit ?? DEFAULT_PAGE));
+  const shown = sorted.slice(offset, offset + limit);
+  const firstPage = offset === 0;
 
   const lines: string[] = [
     `SecScan report for ${report.targetUrl} (scanned ${report.scannedAt.toISOString()})`,
@@ -118,30 +149,44 @@ function formatReport(report: { id: string; targetUrl: string; scannedAt: Date; 
     `Full report: ${APP_ORIGIN}/report/${report.id}`,
     "",
   ];
-  if (s.executiveSummary) lines.push("Summary:", String(s.executiveSummary), "");
-
+  // The narrative belongs to the report, not to a page — sent once, on page 1.
   const ai = d.aiAnalysis;
-  if (ai?.topPriorities?.length) {
-    lines.push("Top priorities:", ...ai.topPriorities.map((p: string, i: number) => `${i + 1}. ${p}`), "");
-  }
-  if (ai?.agentFixPrompt) {
-    lines.push("Fix prompt (written for this codebase's AI editor — act on it directly):", String(ai.agentFixPrompt), "");
+  if (firstPage) {
+    if (s.executiveSummary) lines.push("Summary:", String(s.executiveSummary), "");
+    if (ai?.topPriorities?.length) {
+      lines.push("Top priorities:", ...ai.topPriorities.map((p: string, i: number) => `${i + 1}. ${p}`), "");
+    }
+    if (ai?.agentFixPrompt) {
+      lines.push("Fix prompt (written for this codebase's AI editor — act on it directly):", String(ai.agentFixPrompt), "");
+    }
   }
 
-  lines.push(`Findings (${vulns.length}${vulns.length > shown.length ? `, showing the ${shown.length} most severe` : ""}):`);
+  const filterNote = page.minSeverity && page.minSeverity !== "info" ? ` at ${page.minSeverity} or above` : "";
+  if (sorted.length === 0) {
+    lines.push(`No findings${filterNote}.`);
+  } else if (shown.length === 0) {
+    lines.push(`No findings at offset ${offset} — there are ${sorted.length}${filterNote}.`);
+  } else {
+    lines.push(`Findings ${offset + 1}–${offset + shown.length} of ${sorted.length}${filterNote}, most severe first:`);
+  }
   for (const v of shown) {
     lines.push(
       "",
       `[${String(v.severity).toUpperCase()}] ${v.name}${v.cweId ? ` (${v.cweId})` : ""}`,
-      `What: ${v.description}`,
-      `Fix: ${v.solution}`,
+      `What: ${clip(v.description, MAX_TEXT_CHARS)}`,
+      `Fix: ${clip(v.solution, MAX_TEXT_CHARS)}`,
     );
-    if (v.evidence) {
-      const ev = String(v.evidence);
-      lines.push(`Evidence: ${ev.length > MAX_EVIDENCE_CHARS ? ev.slice(0, MAX_EVIDENCE_CHARS) + "…" : ev}`);
-    }
+    if (v.evidence) lines.push(`Evidence: ${clip(v.evidence, MAX_EVIDENCE_CHARS)}`);
   }
-  if (d.compliance?.disclaimer) lines.push("", `Compliance mapping note: ${d.compliance.disclaimer}`);
+  const next = offset + shown.length;
+  if (shown.length > 0 && next < sorted.length) {
+    lines.push(
+      "",
+      `${sorted.length - next} more. Call get_report with offset ${next}` +
+        `${page.minSeverity ? ` and min_severity "${page.minSeverity}"` : ""} to continue.`,
+    );
+  }
+  if (firstPage && d.compliance?.disclaimer) lines.push("", `Compliance mapping note: ${d.compliance.disclaimer}`);
   return lines.join("\n");
 }
 
@@ -218,17 +263,25 @@ function buildServer(httpReq: Request, user: TokenUser): McpServer {
       title: "Read a scan report",
       description:
         "The finished report for a scan: grade, prioritised findings with fixes and evidence, and a fix prompt " +
-        "written for the user's AI editor.",
-      inputSchema: { scan_id: z.string().describe("The scan_id returned by scan_url or list_recent_scans") },
+        `written for the user's AI editor. Findings come ${DEFAULT_PAGE} per page, most severe first — pass offset ` +
+        'for the next page, or min_severity (e.g. "high") to focus on what matters most.',
+      inputSchema: {
+        scan_id: z.string().describe("The scan_id returned by scan_url or list_recent_scans"),
+        min_severity: z.enum(SEVERITY_ORDER).optional().describe('Only findings at this severity or worse, e.g. "high"'),
+        offset: z.number().int().min(0).optional().describe("Skip this many findings, for the next page"),
+        limit: z.number().int().min(1).max(MAX_PAGE).optional().describe(`Findings per page (default ${DEFAULT_PAGE}, max ${MAX_PAGE})`),
+      },
       annotations: { readOnlyHint: true },
     },
-    async ({ scan_id }) => {
+    async ({ scan_id, min_severity, offset, limit }) => {
       if (!UUID.test(scan_id)) return text("No scan with that id.", true);
       const scan = await ownScan(user.id, scan_id);
       if (!scan) return text("No scan with that id.", true);
       if (scan.status !== "complete") return text(`That scan is ${scan.status}, not finished yet.`, true);
       const report = await reportForScan(user.id, scan_id);
-      return report ? text(formatReport(report)) : text("The report is not available yet — try again in a moment.", true);
+      return report
+        ? text(formatReport(report, { minSeverity: min_severity, offset, limit }))
+        : text("The report is not available yet — try again in a moment.", true);
     },
   );
 
