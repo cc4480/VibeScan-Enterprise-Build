@@ -209,7 +209,7 @@ function Terms() {
 
       <Section title="Credits and payment">
         <p>
-          Every account gets 2 free scans. After that, scans are paid for with a SecScan Pro
+          Every account gets 3 free scans. After that, scans are paid for with a SecScan Pro
           subscription or with scan credits. Prices are shown before you pay, and payment is
           taken by Stripe.
         </p>

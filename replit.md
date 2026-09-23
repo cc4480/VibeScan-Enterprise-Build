@@ -79,7 +79,7 @@ lib/
 
 ## Product
 
-2 free scans per account; then SecScan Pro's included scans, then credits.
+3 free scans per account; then SecScan Pro's included scans, then credits.
 `POST /scans` spends in that order and records the source on `scans.paid_with`;
 a scan that fails later is refunded to it. The `tier` column is legacy.
 

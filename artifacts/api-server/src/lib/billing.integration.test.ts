@@ -342,14 +342,14 @@ suite("billing (real Postgres)", () => {
     await m.billing.addCredits(m.db.db, "u20", 1);
 
     const seen: string[] = [];
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 10; i++) {
       const paid = await m.billing.chargeScan("u20");
       seen.push(String(paid));
       // A free charge takes nothing now; the scan row it creates is what counts.
       if (paid === "free") await insertScan("u20", "free");
     }
-    expect(seen).toEqual(["free", "free", "included", "included", "included", "included", "included", "credit", "null"]);
-    expect(await trial.trialScansUsedBy("u20")).toBe(2);
+    expect(seen).toEqual(["free", "free", "free", "included", "included", "included", "included", "included", "credit", "null"]);
+    expect(await trial.trialScansUsedBy("u20")).toBe(3);
   });
 
   it("counts a monitor scan paid with a free scan toward the trial, but never the scheduler's own", async () => {

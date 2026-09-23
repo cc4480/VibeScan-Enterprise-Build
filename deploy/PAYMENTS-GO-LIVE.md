@@ -9,7 +9,7 @@ What is sold (decided 2026-09-22):
 | 5-scan pack | $50 | Five scans, never expire |
 | 20-scan pack | $160 | Twenty scans, never expire |
 
-Every account also gets 2 free scans. Scans are paid for in this order: free →
+Every account also gets 3 free scans. Scans are paid for in this order: free →
 this month's plan scans → credits.
 
 All prices live in code (`lib/stripe.ts` `PRICE_MAP`, `lib/plans.ts`). You do

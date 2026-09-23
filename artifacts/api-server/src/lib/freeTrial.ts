@@ -16,7 +16,7 @@ import { and, count, eq, or } from "drizzle-orm";
  * on-demand rescan is a scan somebody asked for, so leaving those ungated made
  * monitoring an unlimited-scan bypass around the cap.
  */
-export const FREE_TRIAL_SCAN_LIMIT = Number(process.env["FREE_TRIAL_SCAN_LIMIT"] ?? 2);
+export const FREE_TRIAL_SCAN_LIMIT = Number(process.env["FREE_TRIAL_SCAN_LIMIT"] ?? 3);
 
 // Two wordings, chosen by whether this deployment can take payment. Telling
 // someone to buy what cannot be bought is the dead end this message used to be

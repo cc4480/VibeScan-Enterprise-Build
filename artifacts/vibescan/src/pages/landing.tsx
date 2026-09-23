@@ -365,8 +365,8 @@ export default function LandingPage() {
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold mb-4 uppercase tracking-wider">
             <Zap className="w-3.5 h-3.5" /> Free Trial
           </div>
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">2 free scans, everything included</h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto">Every account gets 2 free scans to try the platform — every check, no tier to pick. After that, subscribe to SecScan Pro for monitoring plus monthly scans, or buy credits that never expire.</p>
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">3 free scans, everything included</h2>
+          <p className="text-muted-foreground max-w-2xl mx-auto">Every account gets 3 free scans to try the platform — every check, no tier to pick. After that, subscribe to SecScan Pro for monitoring plus monthly scans, or buy credits that never expire.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
@@ -503,7 +503,7 @@ function StaticPricing() {
         ))}
       </div>
       <p className="text-center text-xs text-muted-foreground mt-6">
-        Purchasing isn't live yet — <Link href="/scan" className="underline hover:text-foreground">start with your 2 free scans</Link> and we'll email you when plans and credits are ready to buy.
+        Purchasing isn't live yet — <Link href="/scan" className="underline hover:text-foreground">start with your 3 free scans</Link> and we'll email you when plans and credits are ready to buy.
       </p>
     </>
   );

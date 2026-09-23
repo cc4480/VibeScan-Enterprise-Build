@@ -45,7 +45,7 @@ every coding session.
 
 ## Pricing
 
-Every account gets 2 free scans to try the platform, every check included.
+Every account gets 3 free scans to try the platform, every check included.
 
 - SecScan Pro — $50/month: up to 3 sites watched around the clock, plus 5 on-demand full
   scans every month (unused scans do not roll over). Cancel any time.

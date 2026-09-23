@@ -79,7 +79,7 @@ router.post("/monitor/subscriptions", requireMonitorAuth, monitorRateLimit, asyn
 
   // A Pro subscriber is PAYING for monitoring: they may add sites whatever
   // happened to their free scans. This used to check only the free-scan cap,
-  // so someone who used their 2 free scans and then subscribed was refused the
+  // so someone who used their free scans and then subscribed was refused the
   // very thing they had just paid for. Without a plan, subscribing fires a
   // baseline scan that is paid with a free scan (below), so one must be left.
   const planHolder = await hasLivePlan(req.user.id);
@@ -198,7 +198,7 @@ router.post("/monitor/subscriptions", requireMonitorAuth, monitorRateLimit, asyn
         status: "paid",
         origin: "monitor",
         // Covered by the plan for a subscriber. Otherwise it spends one of the
-        // two free scans — it used to spend nothing, so a free user could add
+        // free scans — it used to spend nothing, so a free user could add
         // monitors one after another and collect a full scan from each.
         paidWith: planHolder ? null : "free",
       })
@@ -756,7 +756,7 @@ router.post("/monitor/subscriptions/:id/scan", monitorRateLimit, async (req, res
   // Everyone else pays for it like any other scan (free scans, then credits).
   // It used to be allowed while free scans remained but charged NOTHING, so a
   // free user could press it up to 20 times a day without ever using one of
-  // their two free scans.
+  // their free scans.
   //
   // hasLivePlan, not monitorEntitlement: the latter reports "no plan" while
   // MONITORING_REQUIRES_PLAN is off, which would charge a paying subscriber.

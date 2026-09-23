@@ -115,8 +115,14 @@ describe("trialScansExhausted", () => {
     expect(await trialScansExhausted("user-1")).toBe(false);
   });
 
-  it("refuses the scan that would be the third", async () => {
+  it("allows the third free scan (the default is 3)", async () => {
     dbState.rows = [{ n: 2 }];
+    const { trialScansExhausted } = await load();
+    expect(await trialScansExhausted("user-1")).toBe(false);
+  });
+
+  it("refuses the scan that would be the fourth", async () => {
+    dbState.rows = [{ n: 3 }];
     const { trialScansExhausted } = await load();
     expect(await trialScansExhausted("user-1")).toBe(true);
   });
