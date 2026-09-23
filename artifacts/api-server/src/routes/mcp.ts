@@ -26,6 +26,7 @@ import { authenticateApiToken, type TokenUser } from "../lib/apiTokens";
 import { createScanHandler, scanRateLimit, scanNetworkRateLimit } from "./scans";
 import { APP_ORIGIN } from "../lib/appOrigin";
 import { stripe } from "../lib/stripe";
+import { rateLimitMiddleware } from "../lib/rateLimit";
 
 const router: IRouter = Router();
 
@@ -121,6 +122,39 @@ async function reportForScan(userId: string, scanId: string) {
 const FINISHED = new Set(["complete", "failed"]);
 
 /**
+ * Requests per user per minute, across all tools. Scans already have their own
+ * (stricter) limits; this bounds the reads — an editor stuck in a loop calling
+ * get_report should not be able to hammer the database. A normal session makes
+ * a handful of calls a minute.
+ */
+const mcpRateLimit = rateLimitMiddleware({
+  rules: [{ windowMs: 60_000, max: 120, label: "minute" }],
+  name: "mcp",
+  keyFrom: (req) => (req.isAuthenticated() ? `mcp:${req.user.id}` : undefined),
+});
+
+/**
+ * Concurrent get_scan_status waits per user, per replica. A wait holds an HTTP
+ * connection open and polls the database every 2s for up to 60s, so a client
+ * that fires many at once would pin connections for nothing. Past the cap the
+ * call still answers — with the current status, immediately.
+ */
+const MAX_CONCURRENT_WAITS = 3;
+const activeWaits = new Map<string, number>();
+
+/** How a well-behaved client should use these tools — sent to the client at connect. */
+const SERVER_INSTRUCTIONS = [
+  "SecScan scans a live web application from the outside and reports its security problems.",
+  "Only scan applications the user owns or is authorised to test.",
+  "Typical flow: scan_url -> get_scan_status with wait_seconds 60 (most scans finish in under a minute, and the",
+  "call returns the report as soon as it does) -> for a large report, get_report with offset for more pages, or",
+  'min_severity "high" to focus. Work through critical and high findings first, and use the fix prompt in the',
+  "report — it is written for the user's editor. Active tests (injection, XSS, SSRF, access control) run only on",
+  "domains listed by list_verified_domains; say so if a scan was passive-only. Each scan spends one of the user's",
+  "free scans, plan scans or credits, so do not start a scan the user did not ask for.",
+].join(" ");
+
+/**
  * A plain-text report sized for an editor's context window: one page of
  * findings at a time, most severe first. Exported for tests.
  */
@@ -191,7 +225,7 @@ export function formatReport(
 }
 
 function buildServer(httpReq: Request, user: TokenUser): McpServer {
-  const server = new McpServer({ name: "secscan", version: "1.0.0" });
+  const server = new McpServer({ name: "secscan", version: "1.0.0" }, { instructions: SERVER_INSTRUCTIONS });
 
   server.registerTool(
     "scan_url",
@@ -241,11 +275,23 @@ function buildServer(httpReq: Request, user: TokenUser): McpServer {
     },
     async ({ scan_id, wait_seconds }) => {
       if (!UUID.test(scan_id)) return text("No scan with that id.", true);
-      const deadline = Date.now() + (wait_seconds ?? 0) * 1000;
-      let scan = await ownScan(user.id, scan_id);
-      while (scan && !FINISHED.has(scan.status) && Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, 2000));
+      const inFlight = activeWaits.get(user.id) ?? 0;
+      const mayWait = (wait_seconds ?? 0) > 0 && inFlight < MAX_CONCURRENT_WAITS;
+      const deadline = Date.now() + (mayWait ? (wait_seconds ?? 0) * 1000 : 0);
+      if (mayWait) activeWaits.set(user.id, inFlight + 1);
+      let scan: Awaited<ReturnType<typeof ownScan>>;
+      try {
         scan = await ownScan(user.id, scan_id);
+        while (scan && !FINISHED.has(scan.status) && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 2000));
+          scan = await ownScan(user.id, scan_id);
+        }
+      } finally {
+        if (mayWait) {
+          const left = (activeWaits.get(user.id) ?? 1) - 1;
+          if (left <= 0) activeWaits.delete(user.id);
+          else activeWaits.set(user.id, left);
+        }
       }
       if (!scan) return text("No scan with that id.", true);
       if (scan.status === "failed") return text(`The scan of ${scan.targetUrl} failed: ${scan.error ?? "unknown error"}`, true);
@@ -341,6 +387,17 @@ router.post("/mcp", async (req, res): Promise<void> => {
       .status(401)
       .setHeader("WWW-Authenticate", 'Bearer realm="secscan"')
       .json({ error: `Missing or invalid API token. Create one at ${APP_ORIGIN}/settings#ai-editors.` });
+    return;
+  }
+
+  // Per-user request budget, checked after authentication so it counts
+  // against the account rather than the address.
+  const decision = mcpRateLimit.decide(Object.assign(Object.create(req), { user, isAuthenticated: () => true }) as Request);
+  if (!decision.allowed) {
+    res
+      .status(429)
+      .setHeader("Retry-After", String(decision.retryAfterSeconds ?? 60))
+      .json({ error: `Too many requests — at most ${decision.rule?.max} per ${decision.rule?.label}. Try again in ${decision.retryAfterSeconds} seconds.` });
     return;
   }
 
