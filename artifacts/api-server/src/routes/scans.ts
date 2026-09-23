@@ -10,9 +10,8 @@ import { enqueueScan } from "../lib/queue";
 import { validateCredentials, encryptCredentials } from "../lib/scanCredentials";
 import { checkScanTarget } from "../lib/ssrfGuard";
 import { rateLimitMiddleware, scanRateLimitRules, scanNetworkRateLimitRules } from "../lib/rateLimit";
-import { trialScansExhausted, TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE } from "../lib/freeTrial";
-import { spendOneCredit, refundOneCredit } from "../lib/credits";
-import { spendIncludedScan, refundIncludedScan, refundFailedScan } from "../lib/billing";
+import { TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE } from "../lib/freeTrial";
+import { refundFailedScan, chargeScan, refundCharge } from "../lib/billing";
 
 // ── Abuse and cost control ───────────────────────────────────────────────────
 // A scan is expensive in a way an API request normally is not: it launches a
@@ -164,35 +163,22 @@ export async function createScanHandler(req: Request, res: Response): Promise<vo
   // alternative — validate, create, then charge — leaves a window in which a
   // scan exists that nobody paid for. The cost of taking it first is that every
   // rejection below has to give it back, which is what refundIfCharged is for.
-  // Spend order: free trial, then the subscription's included scans, then
-  // bought credits. Included scans go before credits because they expire at
-  // the end of the billing period and credits never do — spending a credit
-  // while included scans sit unused would quietly waste what the customer
-  // already paid for this month.
-  let paidWith: "free" | "included" | "credit" = "free";
-  if (await trialScansExhausted(req.user.id)) {
-    const includedLeft = await spendIncludedScan(req.user.id);
-    if (includedLeft !== null) {
-      paidWith = "included";
-      req.log.info({ includedLeft }, "Scan paid for with an included subscription scan");
-    } else {
-      const remaining = await spendOneCredit(req.user.id);
-      if (remaining === null) {
-        res.status(403).json({ error: TRIAL_LIMIT_MESSAGE, code: TRIAL_LIMIT_CODE });
-        return;
-      }
-      paidWith = "credit";
-      req.log.info({ remaining }, "Scan paid for with a credit");
-    }
+  // Spend order (free trial, then the plan's included scans, then credits)
+  // lives in one place — chargeScan — shared with the MCP endpoint and the
+  // Monitor page, so no way in can price a scan differently.
+  const paidWith = await chargeScan(req.user.id);
+  if (paidWith === null) {
+    res.status(403).json({ error: TRIAL_LIMIT_MESSAGE, code: TRIAL_LIMIT_CODE });
+    return;
   }
+  if (paidWith !== "free") req.log.info({ paidWith }, "Scan paid for");
   const creditUsed = paidWith === "credit";
 
   /** Give back what this request took, to the place it came from. */
   const refundIfCharged = async (): Promise<void> => {
     if (paidWith === "free") return;
     try {
-      if (paidWith === "credit") await refundOneCredit(req.user.id);
-      else await refundIncludedScan(db, req.user.id);
+      await refundCharge(req.user.id, paidWith);
       req.log.info({ paidWith }, "Scan payment refunded — scan was not created");
     } catch (err) {
       // Worth a loud log rather than a 500: the caller's request already

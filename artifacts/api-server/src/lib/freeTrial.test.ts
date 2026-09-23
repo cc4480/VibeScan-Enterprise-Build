@@ -26,13 +26,14 @@ vi.mock("@workspace/db", () => {
   };
   return {
     db: { select: () => chain },
-    scansTable: { userId: "user_id", origin: "origin" },
+    scansTable: { userId: "user_id", origin: "origin", paidWith: "paid_with" },
   };
 });
 
 vi.mock("drizzle-orm", () => ({
   and: (...a: unknown[]) => ({ op: "and", args: a }),
   eq: (col: unknown, val: unknown) => ({ op: "eq", col, val }),
+  or: (...a: unknown[]) => ({ op: "or", args: a }),
   count: () => ({ op: "count" }),
 }));
 
@@ -54,28 +55,40 @@ async function load() {
   return import("./freeTrial.js");
 }
 
-/** Every eq() the last query was built from, flattened out of the and(). */
+/** Every eq() the last query was built from, flattened out of and()/or(). */
 function eqsInLastWhere(): Array<{ col: unknown; val: unknown }> {
-  const w = dbState.lastWhere as { op: string; args?: unknown[] } | null;
-  const args = w?.op === "and" ? (w.args ?? []) : [w];
-  return args.filter(
-    (a): a is { op: string; col: unknown; val: unknown } =>
-      !!a && (a as { op?: string }).op === "eq",
-  );
+  const out: Array<{ op: string; col: unknown; val: unknown }> = [];
+  const walk = (n: any) => {
+    if (!n) return;
+    if (n.op === "eq") out.push(n);
+    else if (n.op === "and" || n.op === "or") (n.args ?? []).forEach(walk);
+  };
+  walk(dbState.lastWhere);
+  return out;
+}
+
+/** The or() inside the where — what makes a scan count. */
+function orInLastWhere(): Array<{ col: unknown; val: unknown }> {
+  const w = dbState.lastWhere as { op: string; args?: any[] } | null;
+  const or = (w?.args ?? []).find((a) => a?.op === "or");
+  return or?.args ?? [];
 }
 
 describe("trialScansUsedBy", () => {
-  it("counts only scans the user asked for, never the monitor's own", async () => {
+  it("counts scans the user asked for, and any scan paid with a free scan — never the monitor's automatic ones", async () => {
     dbState.rows = [{ n: 2 }];
     const { trialScansUsedBy } = await load();
 
     expect(await trialScansUsedBy("user-1")).toBe(2);
 
-    // The origin filter is the whole fix. Without it a subscriber's automated
-    // rescans are counted against the allowance they never spent.
-    expect(eqsInLastWhere()).toEqual(
-      expect.arrayContaining([{ op: "eq", col: "origin", val: "user" }]),
-    );
+    // A scan counts if the user started it, or if a free scan paid for it (a
+    // non-subscriber's monitor baseline or "Scan now"). The scheduler's own
+    // rescans are neither, so a subscriber's automation never spends the
+    // allowance — the bug these tests were written for.
+    expect(orInLastWhere()).toEqual([
+      { op: "eq", col: "origin", val: "user" },
+      { op: "eq", col: "paid_with", val: "free" },
+    ]);
   });
 
   it("scopes the count to the one user", async () => {

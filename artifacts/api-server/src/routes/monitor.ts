@@ -13,6 +13,7 @@ import { checkScanTarget } from "../lib/ssrfGuard";
 import { rateLimitMiddleware, scanRateLimitRules } from "../lib/rateLimit";
 import { trialScansExhausted, TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE } from "../lib/freeTrial";
 import { monitorEntitlement } from "../lib/entitlements";
+import { hasLivePlan, chargeScan, refundCharge, refundFailedScan, type PaidWith } from "../lib/billing";
 import { summariseUptime } from "../lib/monitorPulse";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -76,10 +77,13 @@ router.post("/monitor/subscriptions", requireMonitorAuth, monitorRateLimit, asyn
 
   const { targetUrl, webhookUrl } = parsed.data;
 
-  // Subscribing fires a baseline scan and schedules more, so it has to respect
-  // the free-scan cap. Without this, "subscribe to monitoring" was a way to run
-  // unlimited scans after the trial was spent.
-  if (await trialScansExhausted(req.user.id)) {
+  // A Pro subscriber is PAYING for monitoring: they may add sites whatever
+  // happened to their free scans. This used to check only the free-scan cap,
+  // so someone who used their 2 free scans and then subscribed was refused the
+  // very thing they had just paid for. Without a plan, subscribing fires a
+  // baseline scan that is paid with a free scan (below), so one must be left.
+  const planHolder = await hasLivePlan(req.user.id);
+  if (!planHolder && (await trialScansExhausted(req.user.id))) {
     res.status(403).json({ error: TRIAL_LIMIT_MESSAGE, code: TRIAL_LIMIT_CODE });
     return;
   }
@@ -193,6 +197,10 @@ router.post("/monitor/subscriptions", requireMonitorAuth, monitorRateLimit, asyn
         tier: "deep",
         status: "paid",
         origin: "monitor",
+        // Covered by the plan for a subscriber. Otherwise it spends one of the
+        // two free scans — it used to spend nothing, so a free user could add
+        // monitors one after another and collect a full scan from each.
+        paidWith: planHolder ? null : "free",
       })
       .returning();
 
@@ -742,19 +750,27 @@ router.post("/monitor/subscriptions/:id/scan", monitorRateLimit, async (req, res
     return;
   }
 
-  // An on-demand rescan is a scan the user asked for, so the free-scan cap
-  // applies — UNLESS they are paying to monitor this exact URL, in which case
-  // refusing is nonsense: the scheduler will rescan it on its own cadence
-  // anyway, and the only thing the cap achieves is blocking the button that
-  // does it sooner. Checked before the cap so a plan holder never sees it.
-  const rescanEntitlement = await monitorEntitlement(req.user.id);
-  const coveredByPlan = rescanEntitlement.monitoringActive && rescanEntitlement.plan !== null;
-
-  if (!coveredByPlan && (await trialScansExhausted(req.user.id))) {
-    res.status(403).json({ error: TRIAL_LIMIT_MESSAGE, code: TRIAL_LIMIT_CODE });
-    return;
+  // A plan holder's monitored sites rescan free, any time — the scheduler
+  // would rescan them anyway, and this only does it sooner.
+  //
+  // Everyone else pays for it like any other scan (free scans, then credits).
+  // It used to be allowed while free scans remained but charged NOTHING, so a
+  // free user could press it up to 20 times a day without ever using one of
+  // their two free scans.
+  //
+  // hasLivePlan, not monitorEntitlement: the latter reports "no plan" while
+  // MONITORING_REQUIRES_PLAN is off, which would charge a paying subscriber.
+  const coveredByPlan = await hasLivePlan(req.user.id);
+  let paidWith: PaidWith | null = null;
+  if (!coveredByPlan) {
+    paidWith = await chargeScan(req.user.id);
+    if (paidWith === null) {
+      res.status(403).json({ error: TRIAL_LIMIT_MESSAGE, code: TRIAL_LIMIT_CODE });
+      return;
+    }
   }
 
+  let scanId: string | null = null;
   try {
     const [scan] = await db
       .insert(scansTable)
@@ -765,8 +781,10 @@ router.post("/monitor/subscriptions/:id/scan", monitorRateLimit, async (req, res
         tier: "deep",
         status: "paid",
         origin: "monitor",
+        paidWith,
       })
       .returning();
+    scanId = scan.id;
 
     await enqueueScan({
       scanId: scan.id,
@@ -786,7 +804,20 @@ router.post("/monitor/subscriptions/:id/scan", monitorRateLimit, async (req, res
     res.json({ scanId: scan.id });
   } catch (err) {
     logger.error({ err }, "Failed to enqueue manual monitor scan");
-    res.status(500).json({ error: "Failed to enqueue scan" });
+    // Paid for, never ran: give it back. Once the row exists the worker's
+    // exactly-once refund path applies; before that, the charge is returned
+    // directly.
+    try {
+      if (scanId) {
+        await db.update(scansTable).set({ status: "failed", error: "Could not be queued" }).where(eq(scansTable.id, scanId));
+        await refundFailedScan(scanId);
+      } else {
+        await refundCharge(req.user.id, paidWith);
+      }
+    } catch (refundErr) {
+      logger.error({ err: refundErr }, "Could not refund a manual monitor scan that failed to queue");
+    }
+    res.status(500).json({ error: "Failed to enqueue scan. You were not charged." });
   }
 });
 

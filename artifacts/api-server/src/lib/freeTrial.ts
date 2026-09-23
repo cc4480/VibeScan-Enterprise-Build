@@ -1,5 +1,5 @@
 import { db, scansTable } from "@workspace/db";
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, or } from "drizzle-orm";
 
 /**
  * The free-scan allowance, and the one place that decides whether it is spent.
@@ -46,7 +46,10 @@ export async function trialScansUsedBy(userId: string): Promise<number> {
   const [row] = await db
     .select({ n: count() })
     .from(scansTable)
-    .where(and(eq(scansTable.userId, userId), eq(scansTable.origin, "user")));
+    // A scan the user started, OR any scan paid for with a free scan — so a
+    // non-subscriber's monitor baseline and "Scan now" draw on the same two
+    // free scans as the scan form, instead of being a way around them.
+    .where(and(eq(scansTable.userId, userId), or(eq(scansTable.origin, "user"), eq(scansTable.paidWith, "free"))));
   return row?.n ?? 0;
 }
 

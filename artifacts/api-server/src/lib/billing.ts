@@ -310,4 +310,51 @@ export async function reapStuckScans(now = new Date()): Promise<{ failed: number
   return { failed: stuck.length, refunded };
 }
 
+/**
+ * Does this account have a plan that is currently paying for monitoring?
+ *
+ * Read from the billing row directly, NOT through monitorEntitlement: that
+ * short-circuits to "no plan" while MONITORING_REQUIRES_PLAN is off, which
+ * would treat a paying Pro subscriber exactly like a free user. active and
+ * past_due count (a card being retried keeps its service); paused and
+ * cancelled do not. A grandfathered row counts unless cancelled.
+ */
+export async function hasLivePlan(userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ status: billingSubscriptionsTable.status, grandfathered: billingSubscriptionsTable.grandfathered })
+    .from(billingSubscriptionsTable)
+    .where(eq(billingSubscriptionsTable.userId, userId))
+    .limit(1);
+  if (!row || row.status === "cancelled") return false;
+  return row.grandfathered || row.status === "active" || row.status === "past_due";
+}
+
+export type PaidWith = "free" | "included" | "credit";
+
+/**
+ * Pay for one scan, in the product's one spend order: free trial, then the
+ * plan's included scans (they expire), then credits (they never do). Returns
+ * what paid, or null when nothing is left.
+ *
+ * The ONE place this order lives — the scan form, the MCP endpoint and the
+ * Monitor page all charge through it, so a way in cannot price differently.
+ * A "free" charge takes nothing now: the scan row, marked paid_with 'free',
+ * is itself what counts against the trial (see freeTrial.ts).
+ */
+export async function chargeScan(userId: string): Promise<PaidWith | null> {
+  const { trialScansExhausted } = await import("./freeTrial");
+  if (!(await trialScansExhausted(userId))) return "free";
+  if ((await spendIncludedScan(userId)) !== null) return "included";
+  const { spendOneCredit } = await import("./credits");
+  if ((await spendOneCredit(userId)) !== null) return "credit";
+  return null;
+}
+
+/** Give back a charge whose scan was never created. */
+export async function refundCharge(userId: string, paidWith: PaidWith | null): Promise<void> {
+  if (paidWith === "credit") await addCredits(db, userId, 1);
+  else if (paidWith === "included") await refundIncludedScan(db, userId);
+  // "free" and null took nothing, so there is nothing to return.
+}
+
 export { includedScansForPlan };

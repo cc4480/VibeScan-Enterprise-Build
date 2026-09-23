@@ -127,6 +127,16 @@ vi.mock("../lib/rateLimit", () => ({
   rateLimitMiddleware: () => (_req: unknown, _res: unknown, next: () => void) => next(),
   scanRateLimitRules: () => [],
 }));
+// Plan and charging decisions are billing.ts's (tested against a real database
+// in billing.integration.test.ts). Here they are set per test, so the queued
+// database answers below line up with the route's own queries.
+const billingState = { livePlan: false, charge: "free" as string | null };
+vi.mock("../lib/billing", () => ({
+  hasLivePlan: async () => billingState.livePlan,
+  chargeScan: async () => billingState.charge,
+  refundCharge: async () => undefined,
+  refundFailedScan: async () => null,
+}));
 vi.mock("../lib/freeTrial", () => ({
   trialScansExhausted: async () => false,
   TRIAL_LIMIT_MESSAGE: "out of scans",
