@@ -62,3 +62,47 @@ describe("detectAgentEnvironment", () => {
     expect(detectAgentEnvironment(["LOVABLE"], "https://myapp.com")).toBe("lovable");
   });
 });
+
+describe("the AI analysis is grounded in the scan's own findings", () => {
+  // A clean site once got "Missing Content-Security-Policy Header" in its fix
+  // prompt: the prompt primed the model with common vibe-coding problems and
+  // demanded exactly three priorities, so with one finding it invented two.
+  async function capturePrompt(): Promise<{ system: string; user: string }> {
+    const { callDeepSeek } = await import("./deepseek.js");
+    const realFetch = globalThis.fetch;
+    const realKey = process.env.DEEPSEEK_API_KEY;
+    let body: { messages: Array<{ content: string }> } | null = null;
+    process.env.DEEPSEEK_API_KEY = "test-key";
+    globalThis.fetch = (async (_u: unknown, init: { body: string }) => {
+      body = JSON.parse(init.body);
+      return new Response("{}", { status: 500 });
+    }) as unknown as typeof fetch;
+    try {
+      await callDeepSeek("https://example.com", [], ["Astro", "React"], "deep");
+    } finally {
+      globalThis.fetch = realFetch;
+      if (realKey === undefined) delete process.env.DEEPSEEK_API_KEY;
+      else process.env.DEEPSEEK_API_KEY = realKey;
+    }
+    return { system: body!.messages[0]!.content, user: body!.messages[1]!.content };
+  }
+
+  it("forbids reporting problems the scanner did not find", async () => {
+    const { system, user } = await capturePrompt();
+    expect(user).toMatch(/Never say something is missing, misconfigured, exposed or vulnerable unless a finding above reports it/);
+    expect(user).toMatch(/Never assume one of them is present/);
+    expect(system).toMatch(/report only what this scan found/);
+  });
+
+  it("does not demand a fixed number of priorities", async () => {
+    const { user } = await capturePrompt();
+    expect(user).toMatch(/never more items than findings/);
+    expect(user).toMatch(/Empty array if none qualify/);
+    expect(user).not.toMatch(/Third priority/);
+  });
+
+  it("carries no unsourced statistics into the report", async () => {
+    const { user } = await capturePrompt();
+    expect(user).not.toMatch(/91\.5%/);
+  });
+});

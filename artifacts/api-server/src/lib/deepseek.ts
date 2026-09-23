@@ -99,11 +99,11 @@ function buildPrompt(
   const isVibeCoded = VIBE_FRAMEWORKS.some((f) => techLower.includes(f));
   const vibeCodingContext = isVibeCoded
     ? `\nContext: This is a ${techStack} app — a typical vibe-coded / AI-generated stack. ` +
-      `Studies show 91.5% of AI-generated apps have at least one critical vulnerability. ` +
-      `The most common issues are: (1) secrets accidentally exposed in the frontend bundle via VITE_/REACT_APP_ env vars, ` +
+      `Common issues in these stacks are: (1) secrets exposed in the frontend bundle via VITE_/REACT_APP_ env vars, ` +
       `(2) client-side-only authentication that can be bypassed by calling APIs directly, ` +
       `(3) missing Content-Security-Policy leaving XSS fully exploitable, and ` +
-      `(4) unauthenticated API endpoints (BOLA/IDOR). Weight your analysis with these patterns in mind.`
+      `(4) unauthenticated API endpoints (BOLA/IDOR). When a finding below is one of these, say so. ` +
+      `Never assume one of them is present: if no finding below reports it, the scanner checked and it was fine.`
     : "";
 
   const structuredVulns = vulnerabilities
@@ -141,19 +141,18 @@ Return a JSON object with EXACTLY these five fields:
 {
   "overallRisk": "<2-3 sentence plain-English assessment: biggest risk and its real-world impact. Reference the most dangerous finding by name. Mention if this is a common pattern in AI-generated code. No jargon without explanation.>",
   "topPriorities": [
-    "<Specific, actionable fix — what to do and in which file/config. Max 150 chars.>",
-    "<Second priority>",
-    "<Third priority>"
+    "<1 to 3 items, one per finding above, most important first — never more items than findings. Specific, actionable fix: what to do and in which file/config. Max 150 chars.>"
   ],
   "quickWins": [
-    "<A change that takes under 5 minutes — e.g. adding a response header, moving an env var server-side. Max 150 chars.>",
-    "<Second quick win>"
+    "<0 to 2 items: findings above whose fix takes under 5 minutes — e.g. adding a response header. Empty array if none qualify. Max 150 chars.>"
   ],
   "complianceNotes": "<1-2 sentences on OWASP Top 10 or regulatory (GDPR/PCI-DSS) implications, or null if none apply>",
   "agentFixPrompt": "<Follow the Fix Prompt Instructions above EXACTLY. Generate the fix prompt formatted specifically for the detected agent target. Self-contained and paste-ready.>"
 }
 
 Rules:
+- Every statement must come from the findings listed above. Never say something is missing, misconfigured, exposed or vulnerable unless a finding above reports it — the scanner ran many more checks than it reported, and everything not listed passed. Do not add general best-practice advice as if it were a problem with this site.
+- The agentFixPrompt covers the findings above and nothing else. If there are no findings, say the scan found nothing to fix.
 - Write for a developer who used AI to build their app and may not understand security concepts
 - topPriorities must be specific: what to change, not just what is wrong
 - quickWins are changes under 5 minutes
@@ -186,7 +185,7 @@ export async function callDeepSeek(
       {
         role: "system",
         content:
-          "You are a senior application security engineer specializing in securing AI-generated (vibe-coded) web applications. Your audience is developers who built their app with Cursor, Claude, or Lovable and have limited security knowledge. Your writing is direct, jargon-free, and highly actionable — every finding includes the exact file/config to change and why it matters in plain English. You are deeply familiar with the most common security mistakes in vibe-coded apps: exposed API keys in frontend bundles, client-side-only authentication, missing CSP, and unauthenticated API endpoints. Respond only with valid JSON as instructed. Do not add markdown fences, preamble, or explanation.",
+          "You are a senior application security engineer specializing in securing AI-generated (vibe-coded) web applications. Your audience is developers who built their app with Cursor, Claude, or Lovable and have limited security knowledge. Your writing is direct, jargon-free, and highly actionable — every finding includes the exact file/config to change and why it matters in plain English. You are deeply familiar with the most common security mistakes in vibe-coded apps: exposed API keys in frontend bundles, client-side-only authentication, missing CSP, and unauthenticated API endpoints — but you report only what this scan found, never a problem it did not report. Respond only with valid JSON as instructed. Do not add markdown fences, preamble, or explanation.",
       },
       {
         role: "user",

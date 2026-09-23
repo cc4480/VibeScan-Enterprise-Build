@@ -845,9 +845,10 @@ function buildExecutiveSummary(
       ? `${critical} critical issue${critical > 1 ? "s" : ""} requiring immediate attention`
       : high > 0
         ? `${high} high-severity issue${high > 1 ? "s" : ""} that should be addressed promptly`
-        : `${totalVulns} security findings, none of which are immediately critical`;
+        : `${totalVulns} security finding${totalVulns > 1 ? "s" : ""}, none of them critical or high`;
+  const advice = critical + high > 0 ? " Review the findings below and fix the critical and high items first." : "";
 
-  return `Security scan of ${domain} identified ${urgencyPhrase}, yielding an overall grade of ${grade} with a risk score of ${riskScore}/100. Review the findings below and prioritise the high and critical items first.`;
+  return `Security scan of ${domain} identified ${urgencyPhrase}, yielding an overall grade of ${grade} with a risk score of ${riskScore}/100.${advice}`;
 }
 
 export async function startWorker(): Promise<void> {
