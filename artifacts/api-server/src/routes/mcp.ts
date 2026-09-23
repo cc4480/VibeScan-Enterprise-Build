@@ -293,7 +293,12 @@ export function formatReport(
   return lines.join("\n");
 }
 
-function buildServer(httpReq: Request, user: TokenUser): McpServer {
+/**
+ * Exported so the public server card (scripts/build-server-card.ts) is built
+ * from these exact tool definitions, and a test can catch the two drifting.
+ * Listing tools never touches the user or the request; only calling one does.
+ */
+export function buildServer(httpReq: Request, user: TokenUser): McpServer {
   const server = new McpServer({ name: "secscan", version: "1.1.0" }, { instructions: SERVER_INSTRUCTIONS });
 
   server.registerTool(
