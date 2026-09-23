@@ -109,7 +109,7 @@ function computeStepStatuses(
 
 const STEP_LOGS: Record<string, string[]> = {
   fetch: [
-    "$ curl -sIL https://{domain}/ -A 'VibeScan-Security-Bot/2.0'",
+    "$ curl -sIL https://{domain}/ -A 'SecScan-Security-Bot/1.0'",
     "  [>] Resolving {domain}...",
     "  [>] TCP connect → {domain}:443",
     "  [>] TLS 1.3 handshake complete",
@@ -353,7 +353,7 @@ function lineColor(text: string): string {
   if (t.startsWith("[>]") || t.startsWith("[<]") || t.startsWith("[GET]")) return "text-sky-400";
   if (t.startsWith("[+]")) return "text-green-400";
   if (t.startsWith("[.]") || t.startsWith("[~]")) return "text-zinc-500";
-  if (t.startsWith("─") || t.startsWith("═") || t.startsWith("VibeScan")) return "text-primary/70";
+  if (t.startsWith("─") || t.startsWith("═") || t.startsWith("SecScan")) return "text-primary/70";
   if (t.startsWith("Target") || t.startsWith("Tier") || t.startsWith("Session")) return "text-zinc-400";
   if (t.includes("✓")) return "text-green-400/80";
   return "text-zinc-300";
@@ -478,7 +478,7 @@ export default function ScanProgressPage() {
 
     const scanCount = steps.length;
     const lines = [
-      `VibeScan Enterprise Security Scanner v2.0`,
+      `SecScan Security Scanner`,
       `────────────────────────────────────────────────────`,
       `Target  : https://${domain}`,
       `Checks  : ${scanCount}`,
@@ -643,7 +643,7 @@ export default function ScanProgressPage() {
           {/* Queued placeholder */}
           {isQueued && terminalLines.length === 0 && (
             <div className="text-zinc-600 flex flex-col gap-1">
-              <span className="text-primary/50">VibeScan Enterprise Security Scanner v2.0</span>
+              <span className="text-primary/50">SecScan Security Scanner</span>
               <span>────────────────────────────────────────────────────</span>
               <span>Connecting to job queue...</span>
               <span>Waiting for an available worker slot
