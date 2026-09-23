@@ -130,15 +130,27 @@ vi.mock("../lib/rateLimit", () => ({
 // Plan and charging decisions are billing.ts's (tested against a real database
 // in billing.integration.test.ts). Here they are set per test, so the queued
 // database answers below line up with the route's own queries.
-const billingState = { livePlan: false, charge: "free" as string | null };
+const billingState = {
+  livePlan: false,
+  charge: "free" as string | null,
+  trialExhausted: false,
+  credits: 0,
+  refunds: [] as Array<{ kind: "charge"; paidWith: string | null } | { kind: "scan"; scanId: string }>,
+};
 vi.mock("../lib/billing", () => ({
   hasLivePlan: async () => billingState.livePlan,
   chargeScan: async () => billingState.charge,
-  refundCharge: async () => undefined,
-  refundFailedScan: async () => null,
+  refundCharge: async (_u: string, paidWith: string | null) => {
+    billingState.refunds.push({ kind: "charge", paidWith });
+  },
+  refundFailedScan: async (scanId: string) => {
+    billingState.refunds.push({ kind: "scan", scanId });
+    return null;
+  },
 }));
+vi.mock("../lib/credits", () => ({ creditBalance: async () => billingState.credits }));
 vi.mock("../lib/freeTrial", () => ({
-  trialScansExhausted: async () => false,
+  trialScansExhausted: async () => billingState.trialExhausted,
   TRIAL_LIMIT_MESSAGE: "out of scans",
   TRIAL_LIMIT_CODE: "trial_exhausted",
 }));
@@ -200,6 +212,7 @@ beforeEach(() => {
   // otherwise silently change the behaviour of every test after it, and the
   // default-off case is the one that matters most right now.
   delete process.env["MONITORING_REQUIRES_PLAN"];
+  Object.assign(billingState, { livePlan: false, charge: "free", trialExhausted: false, credits: 0, refunds: [] });
   vi.resetModules();
 });
 
@@ -384,5 +397,61 @@ describe("GET /monitor/subscriptions/:id/history — trend data", () => {
     const body = res.body as Array<{ vulnCount: number | null; grade: string | null }>;
     expect(body[0]?.grade).toBe("B");
     expect(body[0]?.vulnCount).toBe(7);
+  });
+});
+
+describe("POST /monitor/subscriptions — paying for the baseline scan", () => {
+  // Adding a monitor runs a full deep scan straight away. Without a plan it is
+  // charged like any other scan. It used to demand a free scan specifically,
+  // so a customer who had bought credits could not add a single monitor.
+  const add = async () => {
+    const handle = await handlerFor("post", "/monitor/subscriptions");
+    const res = makeRes();
+    await handle(makeReq({ body: { targetUrl: "https://example.com" }, params: {} }), res);
+    return res;
+  };
+  const baselineScan = () => inserted.find((v) => v.origin === "monitor" && "tier" in v);
+
+  it("lets a credit holder add a monitor once the free scans are gone, paying with a credit", async () => {
+    Object.assign(billingState, { trialExhausted: true, credits: 20, charge: "credit" });
+    queuedResults.push([{ value: 0 }]);
+    const res = await add();
+    expect(res.statusCode).toBe(201);
+    expect(baselineScan()?.paidWith).toBe("credit");
+  });
+
+  it("refuses, and inserts nothing, when there are no free scans and no credits", async () => {
+    Object.assign(billingState, { trialExhausted: true, credits: 0, charge: null });
+    const res = await add();
+    expect(res.statusCode).toBe(403);
+    expect((res.body as { code: string }).code).toBe("trial_exhausted");
+    expect(inserted).toHaveLength(0);
+  });
+
+  it("refuses without creating the monitor if the last scan was spent by a concurrent request", async () => {
+    Object.assign(billingState, { trialExhausted: true, credits: 1, charge: null });
+    queuedResults.push([{ value: 0 }]);
+    const res = await add();
+    expect(res.statusCode).toBe(403);
+    expect(inserted.find((v) => "expiresAt" in v)).toBeUndefined();
+  });
+
+  it("does not charge a plan holder for the baseline", async () => {
+    Object.assign(billingState, { livePlan: true, trialExhausted: true, charge: "credit" });
+    queuedResults.push([{ value: 0 }]);
+    const res = await add();
+    expect(res.statusCode).toBe(201);
+    expect(baselineScan()?.paidWith).toBeNull();
+  });
+
+  it("gives the charge back when the baseline scan cannot be queued", async () => {
+    Object.assign(billingState, { trialExhausted: true, credits: 5, charge: "credit" });
+    queuedResults.push([{ value: 0 }]);
+    const queue = await import("../lib/queue");
+    vi.mocked(queue.enqueueScan).mockRejectedValueOnce(new Error("queue down"));
+    const res = await add();
+    expect(res.statusCode).toBe(201);
+    expect(billingState.refunds).toHaveLength(1);
+    expect(billingState.refunds[0]!.kind).toBe("scan");
   });
 });
