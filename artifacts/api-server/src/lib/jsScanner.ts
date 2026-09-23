@@ -79,6 +79,29 @@ function redactSecret(match: string): string {
   return match.slice(0, 6) + "..." + match.slice(-4);
 }
 
+/**
+ * The surrounding code shown as evidence, with every secret in it masked.
+ *
+ * Masking only the matched value is not enough: the context window is taken
+ * around that value, so it contains it in full, and bundles tend to keep their
+ * keys side by side, so it usually contains the neighbours too. A report is
+ * stored, emailed and sent to the AI analysis step — the one place a live key
+ * must never be written out whole.
+ *
+ * Three passes, each catching what the last cannot: the match itself, anything
+ * any secret pattern recognises, and — as a backstop for a key cut in half at
+ * the window's edge, where no pattern can match it — any long unbroken
+ * token-shaped run. Over-masking a harmless identifier costs nothing here.
+ */
+export function redactContext(context: string, match: string): string {
+  let out = context.split(match).join(redactSecret(match));
+  for (const p of SECRET_PATTERNS) {
+    const all = new RegExp(p.pattern.source, "g" + (p.pattern.flags.includes("i") ? "i" : ""));
+    out = out.replace(all, (m) => redactSecret(m));
+  }
+  return out.replace(/[A-Za-z0-9+/=_-]{24,}/g, (m) => redactSecret(m));
+}
+
 function scanContent(content: string): Array<{ pattern: SecretPattern; match: string; context: string }> {
   const findings: Array<{ pattern: SecretPattern; match: string; context: string }> = [];
 
@@ -157,7 +180,7 @@ export async function scanJavaScriptForSecrets(
       severity: f.pattern.severity,
       category: "Exposed Secrets / Credentials",
       description: f.pattern.description,
-      evidence: `Source: inline <script> block\nMatch (redacted): ${redactSecret(f.match)}\nContext: ...${f.context.slice(0, 200)}...`,
+      evidence: `Source: inline <script> block\nMatch (redacted): ${redactSecret(f.match)}\nContext: ...${redactContext(f.context, f.match).slice(0, 200)}...`,
       solution: f.pattern.solution,
       cweId: f.pattern.cweId,
       cvssScore: f.pattern.cvssScore,
@@ -174,7 +197,7 @@ export async function scanJavaScriptForSecrets(
       severity: f.pattern.severity,
       category: "Exposed Secrets / Credentials",
       description: f.pattern.description,
-      evidence: `Source: external script ${scriptPath}\nMatch (redacted): ${redactSecret(f.match)}\nContext: ...${f.context.slice(0, 200)}...`,
+      evidence: `Source: external script ${scriptPath}\nMatch (redacted): ${redactSecret(f.match)}\nContext: ...${redactContext(f.context, f.match).slice(0, 200)}...`,
       solution: f.pattern.solution,
       cweId: f.pattern.cweId,
       cvssScore: f.pattern.cvssScore,
