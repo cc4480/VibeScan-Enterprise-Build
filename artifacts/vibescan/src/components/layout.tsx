@@ -132,11 +132,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </Link>
 
           {/* Desktop Nav */}
-          {/* Signed in, the bar holds seven links, the account, Sign out and New
-              Scan. Below 1280px they do not fit, and they used to slide under the
-              logo ("SecScanHome"), so the phone menu takes over until xl. The
+          {/* Signed in, the bar holds five links, the account, Sign out and New
+              Scan. Below 1100px they do not fit, and they used to slide under the
+              logo ("SecScanHome"), so the phone menu takes over until 1100px. The
               logo is the Home link here, so the bar does not repeat it. */}
-          <nav className="hidden xl:flex items-center gap-5 2xl:gap-7 whitespace-nowrap">
+          <nav className="hidden min-[1100px]:flex items-center gap-5 2xl:gap-7 whitespace-nowrap">
             <Link
               href="/dashboard"
               className={cn(
@@ -182,16 +182,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
             >
               <Settings className="w-3.5 h-3.5" /> Settings
             </Link>
-            <Link
-              href="/feedback"
-              className={cn(
-                "text-sm font-medium transition-colors hover:text-foreground flex items-center gap-1.5",
-                location === "/feedback" ? "text-foreground" : "text-muted-foreground",
-              )}
-            >
-              <MessageSquare className="w-3.5 h-3.5" /> Feedback
-            </Link>
-
             <div className="w-px h-6 bg-border" />
 
             <AccountNav />
@@ -209,7 +199,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               just "button". */}
           <button
             type="button"
-            className="xl:hidden p-2 text-foreground"
+            className="min-[1100px]:hidden p-2 text-foreground"
             aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
             aria-expanded={mobileMenuOpen}
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -220,7 +210,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Mobile menu */}
         {mobileMenuOpen && (
-          <div className="xl:hidden absolute top-full left-0 right-0 bg-background/95 backdrop-blur-xl border-b border-white/5 py-4 px-4 flex flex-col gap-3 shadow-2xl">
+          <div className="min-[1100px]:hidden absolute top-full left-0 right-0 bg-background/95 backdrop-blur-xl border-b border-white/5 py-4 px-4 flex flex-col gap-3 shadow-2xl">
             <Link
               href="/"
               onClick={() => setMobileMenuOpen(false)}
@@ -263,13 +253,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
             >
               <Settings className="w-4 h-4" /> Settings
             </Link>
-            <Link
-              href="/feedback"
-              onClick={() => setMobileMenuOpen(false)}
-              className="px-4 py-2 text-foreground font-medium rounded-lg hover:bg-secondary flex items-center gap-2"
-            >
-              <MessageSquare className="w-4 h-4" /> Feedback
-            </Link>
             <div className="h-px bg-border mx-4" />
             <AccountNav mobile onNavigate={() => setMobileMenuOpen(false)} />
             <div className="h-px bg-border mx-4" />
@@ -287,6 +270,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <main className="flex-1 pt-24 pb-12">
         {children}
       </main>
+
+      {/* Feedback lives here rather than in the top bar, which it crowded into
+          the logo. Every page, every screen size; hidden on the feedback page
+          itself. */}
+      {location !== "/feedback" && (
+        <Link
+          href="/feedback"
+          aria-label="Send feedback"
+          title="Send feedback"
+          className="fixed bottom-5 right-5 z-40 flex items-center justify-center w-12 h-12 rounded-full bg-card border border-white/10 text-muted-foreground shadow-lg shadow-black/40 hover:text-foreground hover:border-primary/40 hover:shadow-primary/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary transition-all"
+        >
+          <MessageSquare className="w-5 h-5" />
+        </Link>
+      )}
 
       <footer className="border-t border-white/5 py-12 mt-auto bg-card/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-6">
