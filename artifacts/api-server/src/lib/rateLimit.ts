@@ -182,7 +182,11 @@ export function rateLimitMiddleware(options: RateLimiterOptions) {
   // Do not hold the event loop open on shutdown.
   sweep.unref?.();
 
-  return function rateLimit(req: Request, res: Response, next: NextFunction): void {
+  function decide(req: Request): RateLimitDecision {
+    return limiter.check(options.keyFrom?.(req) ?? clientIp(req));
+  }
+
+  const middleware = function rateLimit(req: Request, res: Response, next: NextFunction): void {
     const key = options.keyFrom?.(req) ?? clientIp(req);
     const decision = limiter.check(key);
 
@@ -206,4 +210,12 @@ export function rateLimitMiddleware(options: RateLimiterOptions) {
         `Try again in ${decision.retryAfterSeconds} seconds.`,
     });
   };
+
+  /**
+   * The same decision without an HTTP response — for callers that are not
+   * Express middleware chains, such as an MCP tool that launches a scan. It
+   * counts against the SAME buckets, so the limit cannot be sidestepped by
+   * choosing a different way in.
+   */
+  return Object.assign(middleware, { decide });
 }

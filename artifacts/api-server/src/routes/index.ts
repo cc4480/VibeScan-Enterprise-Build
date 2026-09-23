@@ -17,6 +17,8 @@ import emailPreferencesRouter from "./emailPreferences";
 import purchaseIntentRouter from "./purchaseIntent";
 import feedbackRouter from "./feedback";
 import checkoutRouter from "./checkout";
+import apiTokensRouter from "./apiTokens";
+import mcpRouter from "./mcp";
 
 const router: IRouter = Router();
 
@@ -38,5 +40,7 @@ router.use(emailPreferencesRouter);
 router.use(purchaseIntentRouter);
 router.use(feedbackRouter);
 router.use(checkoutRouter);
+router.use(apiTokensRouter);
+router.use(mcpRouter);
 
 export default router;

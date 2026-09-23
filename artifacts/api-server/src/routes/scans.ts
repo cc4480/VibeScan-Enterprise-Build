@@ -111,7 +111,7 @@ router.get("/scans", async (req, res): Promise<void> => {
 // meant every customer behind one office NAT, VPN or campus egress shared a
 // single 5-scans-per-hour allowance: the second colleague to launch a scan was
 // refused because of what the first one did, with an error blaming them for it.
-const scanRateLimit = rateLimitMiddleware({
+export const scanRateLimit = rateLimitMiddleware({
   rules: scanRateLimitRules(),
   name: "scans",
   // Only reached after requireScanAuth below, so the user is always present.
@@ -120,7 +120,7 @@ const scanRateLimit = rateLimitMiddleware({
 
 // Per NETWORK, above the per-user cap. The per-user gate cannot see one host
 // creating accounts to multiply its allowance; this can.
-const scanNetworkRateLimit = rateLimitMiddleware({
+export const scanNetworkRateLimit = rateLimitMiddleware({
   rules: scanNetworkRateLimitRules(),
   name: "scans-network",
 });
@@ -137,7 +137,13 @@ function requireScanAuth(req: Request, res: Response, next: NextFunction): void 
   next();
 }
 
-router.post("/scans", requireScanAuth, scanRateLimit, scanNetworkRateLimit, async (req, res): Promise<void> => {
+/**
+ * Launch a scan. Exported so the MCP endpoint (routes/mcp.ts) runs EXACTLY this
+ * — the same trial, payment, SSRF, ownership and validation rules — rather than
+ * a copy that could drift from what the website enforces. It reads only
+ * req.user, req.body, req.isAuthenticated and req.log.
+ */
+export async function createScanHandler(req: Request, res: Response): Promise<void> {
   if (!req.isAuthenticated()) {
     res.status(401).json({ error: "Unauthorized" });
     return;
@@ -366,7 +372,9 @@ router.post("/scans", requireScanAuth, scanRateLimit, scanNetworkRateLimit, asyn
     .where(eq(scansTable.id, scan.id));
 
   res.status(201).json({ scanId: scan.id, checkoutUrl: null, creditUsed, paidWith });
-});
+}
+
+router.post("/scans", requireScanAuth, scanRateLimit, scanNetworkRateLimit, createScanHandler);
 
 router.get("/scans/:id/status", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) {

@@ -276,6 +276,32 @@ export const stripeEventsTable = pgTable("stripe_events", {
   processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Personal API tokens — how an AI editor (Claude Code, Cursor, …) reaches the
+ * MCP endpoint on a user's behalf, since it cannot hold a browser session.
+ *
+ * Only a SHA-256 of the token is stored; the token itself is shown once, at
+ * creation. `prefix` is the first characters, kept so the UI can tell tokens
+ * apart ("ssk_4fQ…") without being able to reconstruct one.
+ *
+ * Deliberately narrow: these authenticate the MCP endpoint and nothing else
+ * (routes/mcp.ts). The site's own auth middleware never accepts them, so a
+ * leaked token can start scans and read reports, but cannot delete the
+ * account, buy anything, change the password or mint more tokens.
+ */
+export const apiTokensTable = pgTable("api_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: text("user_id").notNull(),
+  name: text("name").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  prefix: text("prefix").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+}, (table) => [
+  index("idx_api_tokens_user").on(table.userId),
+]);
+
 export const cveAlertsTable = pgTable("cve_alerts", {
   id: uuid("id").primaryKey().defaultRandom(),
   subscriptionId: uuid("subscription_id").notNull().references(() => monitorSubscriptionsTable.id, { onDelete: "cascade" }),

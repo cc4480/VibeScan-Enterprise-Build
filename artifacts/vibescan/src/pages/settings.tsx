@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSeo } from "@/lib/seo";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Loader2, AlertTriangle, Mail, CreditCard } from "lucide-react";
+import { Trash2, Loader2, AlertTriangle, Mail, CreditCard, Bot } from "lucide-react";
+import { AiEditorsSection } from "@/components/ai-editors";
 import { BillingSummary } from "@/components/billing-options";
 import { cn } from "@/lib/utils";
 
@@ -156,6 +157,22 @@ export default function SettingsPage() {
           </div>
         </div>
         <BillingSummary />
+      </div>
+
+      <div id="ai-editors" className="glass-panel p-6 sm:p-10 rounded-3xl mb-8 scroll-mt-24">
+        <div className="flex items-start gap-4 mb-6">
+          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20 shrink-0">
+            <Bot className="w-6 h-6 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold mb-1">AI editors</h2>
+            <p className="text-sm text-muted-foreground">
+              Scan and read reports from Claude Code, Cursor or any MCP-capable editor. Create a token, paste the
+              setup line, then ask your editor to scan your site.
+            </p>
+          </div>
+        </div>
+        <AiEditorsSection />
       </div>
 
       <div className="glass-panel p-6 sm:p-10 rounded-3xl mb-8">

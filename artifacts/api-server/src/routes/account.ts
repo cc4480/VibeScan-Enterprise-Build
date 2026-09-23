@@ -28,6 +28,7 @@ import {
   pendingLoginsTable,
   billingSubscriptionsTable,
   purchaseIntentsTable,
+  apiTokensTable,
   feedbackTable,
 } from "@workspace/db";
 import { stripe } from "../lib/stripe";
@@ -416,6 +417,10 @@ router.delete("/account", async (req, res): Promise<void> => {
     await db.delete(domainVerificationsTable).where(eq(domainVerificationsTable.userId, userId));
     await db.delete(creditsTable).where(eq(creditsTable.userId, userId));
     await db.delete(billingSubscriptionsTable).where(eq(billingSubscriptionsTable.userId, userId));
+    // Tokens die with the account: a token outliving it would authenticate as
+    // an id that no longer exists (the join in authenticateApiToken would
+    // refuse it, but a credential should not survive its owner either way).
+    await db.delete(apiTokensTable).where(eq(apiTokensTable.userId, userId));
     await db.delete(purchaseIntentsTable).where(eq(purchaseIntentsTable.userId, userId));
     // Feedback is kept — it is about the product, not the person — but no
     // longer says who sent it.

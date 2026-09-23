@@ -83,6 +83,22 @@ Firebase `AIza…`) never flagged on their own. The rules every new probe is
 expected to follow are written up in
 [`replit.md`](replit.md#scanner-false-positive-prevention).
 
+## Use from AI editors (MCP)
+
+`POST /api/mcp` is a remote, stateless MCP server (Streamable HTTP) authenticated
+by personal API tokens that users create in Settings → AI editors. Tools:
+`scan_url`, `get_scan_status` (optionally waits up to 60 s), `get_report`,
+`list_recent_scans`, `list_verified_domains`.
+
+- **No side door.** `scan_url` runs the website's own `createScanHandler` after
+  its own rate limiters (`routes/scans.ts`), so trial, credits, plan scans, the
+  SSRF guard and domain-ownership gating apply unchanged.
+- **Tokens are MCP-only.** `ssk_…`, 256-bit, stored as SHA-256, revocable. The
+  site's auth middleware never accepts them, so a leaked token cannot touch
+  account, billing or token routes.
+- End-to-end check: `artifacts/api-server/scripts/verify-mcp.mjs` (writes test
+  data — throwaway database only).
+
 ## ⚠️ Scan only what you are allowed to scan
 
 Scans send active probes — path enumeration, traversal attempts, injection

@@ -94,6 +94,22 @@ Components: known-CVE matching and end-of-life version detection
    surface, runs its probes, and calls its AI provider for analysis
 4. Receive a report with grade, risk score, findings and fix prompts
 
+## Use from AI editors (MCP)
+
+SecScan runs as a remote MCP server, so Claude Code, Cursor and other MCP-capable
+editors can scan a site and read the report without leaving the editor.
+
+1. In SecScan, open Settings -> AI editors and create a token (shown once).
+2. Claude Code: claude mcp add --transport http secscan https://secscan.us/api/mcp --header "Authorization: Bearer <token>"
+   Cursor: add {"mcpServers":{"secscan":{"url":"https://secscan.us/api/mcp","headers":{"Authorization":"Bearer <token>"}}}} to ~/.cursor/mcp.json
+3. Ask the editor to scan your site.
+
+Tools: scan_url, get_scan_status (can wait for the result), get_report (findings, fixes and a
+fix prompt for the editor), list_recent_scans, list_verified_domains. Scans from an editor follow
+exactly the same rules as the website: they use the account's free scans, plan scans or credits,
+and active tests run only on verified domains. Tokens work only for the MCP endpoint and can be
+revoked any time.
+
 ## Scope and safety
 
 - Scans send active traffic. Injection payloads, path traversal attempts and a port scan are
