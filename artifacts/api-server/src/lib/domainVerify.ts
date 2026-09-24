@@ -19,7 +19,7 @@
  */
 import crypto from "node:crypto";
 import * as dns from "node:dns/promises";
-import { checkHostname } from "./ssrfGuard";
+import { checkHostname, isPrivateAddress } from "./ssrfGuard";
 
 export function extractDomain(rawUrl: string): string {
   let u = (rawUrl || "").trim();
@@ -37,13 +37,71 @@ export function txtRecordName(domain: string): string {
 
 export const WELL_KNOWN_PATH = "/.well-known/secscan-verification.txt";
 
-/** Checks the DNS TXT record at _secscan-challenge.<domain> for the token. */
-export async function checkTxtRecord(domain: string, token: string): Promise<boolean> {
+// A TXT value longer than 255 bytes arrives split into chunks; join before
+// comparing or a token that straddles the boundary never matches.
+const hasToken = (records: string[][], token: string) =>
+  records.some((chunks) => chunks.join("").trim() === token);
+
+/**
+ * The zone's own nameservers, as public IPv4 addresses. Walks up from the
+ * name until a zone apex answers NS (a subdomain like app.example.com usually
+ * has none of its own).
+ */
+async function authoritativeServers(domain: string): Promise<string[]> {
+  const labels = domain.split(".");
+  for (let i = 0; i < labels.length - 1; i++) {
+    const zone = labels.slice(i).join(".");
+    let ns: string[];
+    try {
+      ns = await dns.resolveNs(zone);
+    } catch {
+      continue;
+    }
+    const ips = (await Promise.all(ns.slice(0, 4).map((h) => dns.resolve4(h).catch(() => [] as string[])))).flat();
+    // The NS names come from the user's zone; never aim a query at a private
+    // address because a zone says to.
+    return ips.filter((ip) => !isPrivateAddress(ip));
+  }
+  return [];
+}
+
+/** Asks the zone's nameservers directly. They hold the zone, so no cache sits in between. */
+async function txtFromAuthority(name: string, domain: string): Promise<string[][] | null> {
+  const servers = await authoritativeServers(domain);
+  if (servers.length === 0) return null;
+  const resolver = new dns.Resolver({ timeout: 3000, tries: 2 });
+  resolver.setServers(servers);
   try {
-    const records = await dns.resolveTxt(txtRecordName(domain));
-    // A TXT value longer than 255 bytes arrives split into chunks; join before
-    // comparing or a token that straddles the boundary never matches.
-    return records.some((chunks) => chunks.join("").trim() === token);
+    return await resolver.resolveTxt(name);
+  } catch (err) {
+    // "No such record" from the authority is a real answer; anything else
+    // (timeout, refused) means we could not ask and should fall back.
+    const code = (err as NodeJS.ErrnoException).code;
+    return code === "ENOTFOUND" || code === "ENODATA" ? [] : null;
+  }
+}
+
+/**
+ * Checks the DNS TXT record at _secscan-challenge.<domain> for the token.
+ *
+ * The zone's authoritative nameservers are asked first. Going through the
+ * host's recursive resolver alone made verification fail for minutes after a
+ * record was added: a check that ran before the record existed cached "no
+ * such name" for the zone's negative TTL (1800 s on Cloudflare), and the user
+ * had to press Check over and over until a query happened to land on a
+ * resolver without the stale answer. The recursive resolver stays as a
+ * fallback for networks that cannot reach the authority directly.
+ */
+export async function checkTxtRecord(domain: string, token: string): Promise<boolean> {
+  const name = txtRecordName(domain);
+  try {
+    const fresh = await txtFromAuthority(name, domain);
+    if (fresh && hasToken(fresh, token)) return true;
+  } catch {
+    // fall through to the recursive resolver
+  }
+  try {
+    return hasToken(await dns.resolveTxt(name), token);
   } catch {
     return false;
   }
@@ -70,9 +128,12 @@ export async function checkWellKnownFile(domain: string, token: string): Promise
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 5000);
   try {
-    const res = await fetch(`https://${domain}${WELL_KNOWN_PATH}`, {
+    // Cache-busted: a CDN in front of the site (Cloudflare caches .txt) may
+    // still hold the 404 from a check made before the file was deployed.
+    const res = await fetch(`https://${domain}${WELL_KNOWN_PATH}?check=${Date.now()}`, {
       redirect: "manual",
       signal: ctl.signal,
+      headers: { "Cache-Control": "no-cache" },
     });
     if (!res.ok) return false;
     // Cap the read: a verification file is 40-odd bytes, and this is an
