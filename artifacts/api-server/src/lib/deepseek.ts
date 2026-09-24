@@ -1,6 +1,6 @@
 /**
  * DeepSeek AI client for security report analysis.
- * Model: deepseek-chat
+ * Model: DEEPSEEK_MODEL (default deepseek-flash, i.e. DeepSeek-V4.1-Flash)
  * Endpoint: https://api.deepseek.com/v1/chat/completions
  *
  * Per-agent fix routing: detects the user's build tool from the scanned
@@ -8,6 +8,7 @@
  */
 
 import type { ScanVulnerability } from "./scanner";
+import type { TestRecord } from "./testLedger";
 import { agentPromptInstructions, type AgentEnvironment } from "./deepseek-prompts";
 export type { AgentEnvironment } from "./deepseek-prompts";
 
@@ -81,14 +82,32 @@ const VIBE_FRAMEWORKS = [
   "remix", "angular", "astro", "gatsby", "vercel", "netlify",
 ];
 
+/**
+ * The coverage section of the prompt: how many tests ran, and each one that
+ * was skipped or failed with its reason. Exported for tests.
+ */
+export function describeCoverage(tests: TestRecord[]): string {
+  if (tests.length === 0) return "Not recorded for this scan. Do not claim any area was or was not tested.";
+  const ran = tests.filter((t) => t.status === "ran").length;
+  const notRun = tests.filter((t) => t.status !== "ran");
+  return [
+    `${ran} of ${tests.length} tests ran.`,
+    ...(notRun.length
+      ? ["NOT tested on this scan — never describe these areas as safe:", ...notRun.map((t) => `- ${t.name}: ${t.status === "failed" ? "failed to run" : t.reason ?? "skipped"}`)]
+      : ["Every test ran."]),
+  ].join("\n");
+}
+
 function buildPrompt(
   targetUrl: string,
   vulnerabilities: ScanVulnerability[],
   technologies: string[],
   tier: string,
   agent: AgentEnvironment,
+  tests: TestRecord[] = [],
 ): string {
   const techStack = technologies.length > 0 ? technologies.join(", ") : "unknown";
+  const coverage = describeCoverage(tests);
 
   const domain = (() => {
     try { return new URL(targetUrl).hostname; } catch { return targetUrl; }
@@ -131,7 +150,10 @@ Scan tier: ${tier}
 Detected technologies: ${techStack}
 
 ─── Security Findings ───
-${structuredVulns || "No significant vulnerabilities detected."}
+${structuredVulns || "No findings. The scan found nothing to fix."}
+
+─── What this scan tested ───
+${coverage}
 
 ─── Fix Prompt Instructions ───
 ${agentInstructions}
@@ -151,7 +173,8 @@ Return a JSON object with EXACTLY these five fields:
 }
 
 Rules:
-- Every statement must come from the findings listed above. Never say something is missing, misconfigured, exposed or vulnerable unless a finding above reports it — the scanner ran many more checks than it reported, and everything not listed passed. Do not add general best-practice advice as if it were a problem with this site.
+- Every statement must come from the findings listed above. Never say something is missing, misconfigured, exposed or vulnerable unless a finding above reports it — the scanner ran many more checks than it reported, and anything not listed either passed or was not tested (see "What this scan tested"). Do not add general best-practice advice as if it were a problem with this site.
+- Never describe an area listed under "NOT tested on this scan" as safe or clean.
 - The agentFixPrompt covers the findings above and nothing else. If there are no findings, say the scan found nothing to fix.
 - If none of the findings needs a code change (for example the only one is to verify domain ownership), end the agentFixPrompt with "None of these needs a code change." instead of the closing line above, which asks for code changes.
 - Write for a developer who used AI to build their app and may not understand security concepts
@@ -165,11 +188,53 @@ Rules:
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
+/**
+ * The model. DeepSeek's current name is `deepseek-flash` (served by
+ * DeepSeek-V4.1-Flash); the old `deepseek-chat` is no longer in their docs.
+ * DEEPSEEK_MODEL switches it on Railway without a deploy — e.g. to
+ * `deepseek-v4-pro` — if Flash ever falls short.
+ */
+export const DEEPSEEK_MODEL = process.env["DEEPSEEK_MODEL"]?.trim() || "deepseek-flash";
+
+/**
+ * The rules the analysis is written under. SecScan's promise is that a report
+ * says what was found and what was checked, and nothing else — the AI writes
+ * the explanation, never the findings. A clean site once got "add a
+ * Content-Security-Policy header" for a header it already sent; these rules
+ * exist so that cannot happen again. Exported for tests.
+ */
+export const SYSTEM_PROMPT = [
+  "You are the writer for SecScan, an automated security scanner. You turn one scan's results into a plain-English report for a developer who built their app with an AI coding tool and is not a security expert.",
+  "",
+  "ACCURACY RULES — these override everything else:",
+  "1. The scan data in the user message is your ONLY source of truth. Do not use general knowledge to add problems, and do not assume anything about the site beyond it.",
+  "2. Write only about the findings listed. Never say a header, file, key, setting or weakness is present, missing or misconfigured unless a listed finding says so. Anything not listed was checked and passed, or was not tested — the 'What this scan tested' section says which.",
+  "3. Never call an area safe, secure or clean if the scan did not test it. If active tests were skipped, say they were skipped and why; do not describe the site as free of injection, XSS or access-control problems.",
+  "4. Keep every severity exactly as given. Never raise or lower one, and never call an INFO or LOW finding urgent.",
+  "5. Quote evidence and names as they appear. Never invent file paths, endpoints, keys, versions, CVE numbers, statistics, percentages or studies.",
+  "6. Recommend only fixes for listed findings. No general best-practice advice presented as a problem with this site.",
+  "7. If a fix is not a code change (DNS, hosting settings, domain verification), say so plainly.",
+  "8. If there are no findings, say the scan found nothing to fix — do not fill the space.",
+  "9. Compliance: mention a framework only if a listed finding clearly relates to it, and never state or imply the site is compliant, certified or audited.",
+  "",
+  "STYLE: short sentences, plain words, no jargon without a one-line explanation, specific over general.",
+  "",
+  "OUTPUT: respond with a single JSON object exactly as the user message specifies. No markdown fences, no preamble, no commentary.",
+].join("\n");
+
+/** Never more priorities or quick wins than there are real findings. Exported for tests. */
+export function capToFindings(items: unknown, findingCount: number): string[] {
+  if (!Array.isArray(items)) return [];
+  return items.filter((s): s is string => typeof s === "string" && s.trim() !== "").slice(0, Math.min(5, findingCount));
+}
+
 export async function callDeepSeek(
   targetUrl: string,
   vulnerabilities: ScanVulnerability[],
   technologies: string[],
   tier: string,
+  /** What the scan ran and skipped (testLedger.ts), so the analysis never calls an untested area safe. */
+  tests: TestRecord[] = [],
 ): Promise<AiAnalysisResult | null> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
@@ -178,23 +243,18 @@ export async function callDeepSeek(
   }
 
   const agent = detectAgentEnvironment(technologies, targetUrl);
-  const prompt = buildPrompt(targetUrl, vulnerabilities, technologies, tier, agent);
+  const prompt = buildPrompt(targetUrl, vulnerabilities, technologies, tier, agent, tests);
 
   const body = {
-    model: "deepseek-chat",
+    model: DEEPSEEK_MODEL,
     messages: [
-      {
-        role: "system",
-        content:
-          "You are a senior application security engineer specializing in securing AI-generated (vibe-coded) web applications. Your audience is developers who built their app with Cursor, Claude, or Lovable and have limited security knowledge. Your writing is direct, jargon-free, and highly actionable — every finding includes the exact file/config to change and why it matters in plain English. You are deeply familiar with the most common security mistakes in vibe-coded apps: exposed API keys in frontend bundles, client-side-only authentication, missing CSP, and unauthenticated API endpoints — but you report only what this scan found, never a problem it did not report. Respond only with valid JSON as instructed. Do not add markdown fences, preamble, or explanation.",
-      },
-      {
-        role: "user",
-        content: prompt,
-      },
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: prompt },
     ],
-    temperature: 0.3,
-    max_tokens: 2000,
+    // Low: this is transcription and explanation of fixed facts, not creative
+    // writing, and every point of temperature is room to embellish.
+    temperature: 0.1,
+    max_tokens: 3000,
     response_format: { type: "json_object" },
   };
 
@@ -231,12 +291,10 @@ export async function callDeepSeek(
         typeof parsed.overallRisk === "string"
           ? parsed.overallRisk
           : "Risk assessment unavailable.",
-      topPriorities: Array.isArray(parsed.topPriorities)
-        ? (parsed.topPriorities as string[]).slice(0, 5)
-        : [],
-      quickWins: Array.isArray(parsed.quickWins)
-        ? (parsed.quickWins as string[]).slice(0, 5)
-        : [],
+      // Enforced here, not only asked for in the prompt: a list longer than
+      // the findings can only have been padded with things the scan never said.
+      topPriorities: capToFindings(parsed.topPriorities, vulnerabilities.length),
+      quickWins: capToFindings(parsed.quickWins, vulnerabilities.length),
       complianceNotes:
         typeof parsed.complianceNotes === "string" ? parsed.complianceNotes : null,
       agentFixPrompt:

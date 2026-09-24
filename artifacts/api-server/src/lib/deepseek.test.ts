@@ -67,31 +67,86 @@ describe("the AI analysis is grounded in the scan's own findings", () => {
   // A clean site once got "Missing Content-Security-Policy Header" in its fix
   // prompt: the prompt primed the model with common vibe-coding problems and
   // demanded exactly three priorities, so with one finding it invented two.
-  async function capturePrompt(): Promise<{ system: string; user: string }> {
+  type Sent = { model: string; temperature: number; messages: Array<{ content: string }> };
+  async function capture(
+    vulns: any[] = [],
+    tests: any[] = [],
+    reply: unknown = null,
+  ): Promise<{ system: string; user: string; sent: Sent; result: any }> {
     const { callDeepSeek } = await import("./deepseek.js");
     const realFetch = globalThis.fetch;
     const realKey = process.env.DEEPSEEK_API_KEY;
-    let body: { messages: Array<{ content: string }> } | null = null;
+    let sent: Sent | null = null;
     process.env.DEEPSEEK_API_KEY = "test-key";
     globalThis.fetch = (async (_u: unknown, init: { body: string }) => {
-      body = JSON.parse(init.body);
-      return new Response("{}", { status: 500 });
+      sent = JSON.parse(init.body);
+      return reply
+        ? new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(reply) } }] }), { status: 200 })
+        : new Response("{}", { status: 500 });
     }) as unknown as typeof fetch;
+    let result: any;
     try {
-      await callDeepSeek("https://example.com", [], ["Astro", "React"], "deep");
+      result = await callDeepSeek("https://example.com", vulns, ["Astro", "React"], "deep", tests);
     } finally {
       globalThis.fetch = realFetch;
       if (realKey === undefined) delete process.env.DEEPSEEK_API_KEY;
       else process.env.DEEPSEEK_API_KEY = realKey;
     }
-    return { system: body!.messages[0]!.content, user: body!.messages[1]!.content };
+    return { system: sent!.messages[0]!.content, user: sent!.messages[1]!.content, sent: sent!, result };
   }
+  const capturePrompt = () => capture();
 
   it("forbids reporting problems the scanner did not find", async () => {
     const { system, user } = await capturePrompt();
     expect(user).toMatch(/Never say something is missing, misconfigured, exposed or vulnerable unless a finding above reports it/);
     expect(user).toMatch(/Never assume one of them is present/);
-    expect(system).toMatch(/report only what this scan found/);
+    expect(system).toMatch(/ONLY source of truth/);
+    expect(system).toMatch(/Never say a header, file, key, setting or weakness is present, missing or misconfigured unless a listed finding says so/);
+  });
+
+  it("keeps severities, and bans invented numbers and compliance verdicts", async () => {
+    const { system } = await capturePrompt();
+    expect(system).toMatch(/Keep every severity exactly as given/);
+    expect(system).toMatch(/Never invent file paths, endpoints, keys, versions, CVE numbers, statistics/);
+    expect(system).toMatch(/never state or imply the site is compliant/);
+  });
+
+  it("uses DeepSeek-V4.1-Flash (deepseek-flash) at a low temperature", async () => {
+    const { sent } = await capturePrompt();
+    expect(sent.model).toBe("deepseek-flash");
+    expect(sent.temperature).toBeLessThanOrEqual(0.1);
+  });
+
+  it("tells the model what was NOT tested, so it cannot call it safe", async () => {
+    const { user, system } = await capture([], [
+      { group: "active", name: "injection (XSS, SQLi)", status: "ran", findings: 0, durationMs: 5 },
+      { group: "active", name: "cross-account access control (IDOR)", status: "skipped", findings: 0, durationMs: 0, reason: "needs sign-ins for two test accounts on the scan" },
+    ]);
+    expect(user).toContain("1 of 2 tests ran.");
+    expect(user).toContain("NOT tested on this scan");
+    expect(user).toContain("- cross-account access control (IDOR): needs sign-ins for two test accounts on the scan");
+    expect(system).toMatch(/Never call an area safe, secure or clean if the scan did not test it/);
+  });
+
+  it("cuts priorities and quick wins the model padded beyond the real findings", async () => {
+    const one = [{ id: "1", name: "DMARC Policy Set to None", severity: "medium", category: "Email", description: "d", solution: "s" }];
+    const { result } = await capture(one, [], {
+      overallRisk: "r",
+      topPriorities: ["Fix DMARC", "Add a CSP header", "Rotate keys"],
+      quickWins: ["Add HSTS", "Add X-Frame-Options"],
+      complianceNotes: null,
+      agentFixPrompt: "p",
+    });
+    expect(result.topPriorities).toEqual(["Fix DMARC"]);
+    expect(result.quickWins).toEqual(["Add HSTS"]);
+  });
+
+  it("returns no priorities at all for a scan with no findings", async () => {
+    const { result } = await capture([], [], {
+      overallRisk: "r", topPriorities: ["Add a CSP header"], quickWins: ["Add HSTS"], complianceNotes: null, agentFixPrompt: "p",
+    });
+    expect(result.topPriorities).toEqual([]);
+    expect(result.quickWins).toEqual([]);
   });
 
   it("does not demand a fixed number of priorities", async () => {

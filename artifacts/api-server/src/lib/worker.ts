@@ -458,6 +458,9 @@ export async function processScanJob(job: ScanJob): Promise<void> {
       vulnsForAi,
       scanResult.technologies,
       tier,
+      // What ran and what was skipped, so the analysis never calls an
+      // untested area safe.
+      tests,
     );
     if (aiAnalysis) {
       log.info("DeepSeek analysis complete");
