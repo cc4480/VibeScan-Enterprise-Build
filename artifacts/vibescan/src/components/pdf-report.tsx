@@ -1,5 +1,6 @@
-import { CheckCircle2, Globe, MinusCircle, Search } from "lucide-react";
+import { CheckCircle2, Globe, MinusCircle, Search, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { chunkPrompt } from "@/lib/promptChunks";
 import { APP_ORIGIN } from "@/lib/origin";
 import { CATEGORY_TO_OWASP, OWASP_CATEGORIES, owaspCoverage } from "@/lib/owaspCoverage";
 import {
@@ -55,7 +56,14 @@ export interface PdfReportData {
   technologies: string[];
   server?: string | null;
   tlsGrade?: string | null;
-  aiAnalysis?: { overallRisk: string; topPriorities: string[]; quickWins: string[]; complianceNotes?: string | null } | null;
+  aiAnalysis?: {
+    overallRisk: string;
+    topPriorities: string[];
+    quickWins: string[];
+    complianceNotes?: string | null;
+    /** The prompt written for the user's AI editor; the app shows it as "Fix with your AI agent". */
+    agentFixPrompt?: string | null;
+  } | null;
   compliance?: SharedReportData["data"]["compliance"];
   pagesScanned?: string[];
   tests?: CoverageTest[] | null;
@@ -346,6 +354,40 @@ export function PdfReport(d: PdfReportData) {
           )}
         </div>
       )}
+
+      {/* The AI fix prompt, as the app shows it. Split at paragraph breaks so a page can end between
+          paragraphs; the pieces butt together and read as one card. */}
+      {d.aiAnalysis?.agentFixPrompt &&
+        (() => {
+          const pieces = chunkPrompt(d.aiAnalysis.agentFixPrompt);
+          return pieces.map((piece, i) => {
+            const first = i === 0;
+            const last = i === pieces.length - 1;
+            return (
+              <div
+                key={i}
+                data-pdf-block
+                className={cn(
+                  "glass-card p-5",
+                  first ? "border-t-4 border-t-violet-500 rounded-t-2xl" : "border-t-0 rounded-t-none",
+                  last ? "rounded-b-2xl mb-6" : "rounded-b-none",
+                )}
+              >
+                {first && (
+                  <div className="mb-3">
+                    <h3 className="text-lg font-bold flex items-center gap-2">
+                      <Terminal className="w-5 h-5 text-violet-400" /> Fix with your AI agent
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Paste this into your AI editor (Claude Code, Cursor, Lovable, Bolt). It is written for the code behind this site.
+                    </p>
+                  </div>
+                )}
+                <pre className="text-[10.5px] font-mono whitespace-pre-wrap break-words text-foreground/90 leading-relaxed">{piece}</pre>
+              </div>
+            );
+          });
+        })()}
 
       {d.compliance && d.compliance.frameworks.length > 0 && (
         <div data-pdf-block className="mb-6">

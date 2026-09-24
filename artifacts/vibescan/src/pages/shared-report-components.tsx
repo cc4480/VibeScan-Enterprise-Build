@@ -45,6 +45,8 @@ export interface SharedReportData {
       topPriorities: string[];
       quickWins: string[];
       complianceNotes?: string | null;
+      /** The prompt written for the user's AI editor. */
+      agentFixPrompt?: string | null;
     } | null;
     /** What ran, what was skipped and why. Absent on reports from before test records existed. */
     tests?: CoverageTest[] | null;

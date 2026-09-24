@@ -1717,7 +1717,7 @@ export interface PrintableReportData {
   technologies: string[];
   server?: string | null;
   tlsGrade?: string | null;
-  aiAnalysis?: { overallRisk: string; topPriorities: string[]; quickWins: string[]; complianceNotes?: string | null } | null;
+  aiAnalysis?: { overallRisk: string; topPriorities: string[]; quickWins: string[]; complianceNotes?: string | null; agentFixPrompt?: string | null } | null;
   compliance?: ComplianceData | null;
   categoryCounts: Record<string, number>;
   pagesScanned?: string[];
