@@ -12,6 +12,13 @@ describe("detectTechnologies — server headers", () => {
     expect(detectTechnologies({ server: "cloudflare" }, "")).toContain("Cloudflare"));
   it("detects Vercel from Server header", () =>
     expect(detectTechnologies({ server: "Vercel" }, "")).toContain("Vercel"));
+  it("detects Ghost from its own Server header", () =>
+    expect(detectTechnologies({ server: "Ghost" }, "")).toContain("Ghost"));
+  it("does not read Akamai's AkamaiGHost edge server as the Ghost CMS", () => {
+    // Found on amazon.co.uk: every Akamai-fronted site was listed as running Ghost,
+    // and the CVE monitor matches technology names against advisories.
+    expect(detectTechnologies({ server: "AkamaiGHost" }, "")).not.toContain("Ghost");
+  });
 });
 
 describe("detectTechnologies — CDN / infra headers", () => {

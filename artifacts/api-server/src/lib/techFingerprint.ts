@@ -61,7 +61,10 @@ export function detectTechnologies(headers: Record<string, string>, html: string
   if (/envoy/i.test(server))                      techs.add("Envoy Proxy");
   if (/netlify/i.test(server))                    techs.add("Netlify");
   if (/squarespace/i.test(server))                techs.add("Squarespace");
-  if (/ghost/i.test(server))                      techs.add("Ghost");
+  // Word-bounded: "AkamaiGHost" is Akamai's edge server and contains "ghost", so
+  // every Akamai-fronted site (amazon.co.uk among them) was listed as running the
+  // Ghost blogging platform, and the CVE monitor matches technology names.
+  if (/\bghost\b/i.test(server))                  techs.add("Ghost");
   if (/webflow/i.test(server))                    techs.add("Webflow");
 
   // ── CDN / infrastructure headers ─────────────────────────────────────
