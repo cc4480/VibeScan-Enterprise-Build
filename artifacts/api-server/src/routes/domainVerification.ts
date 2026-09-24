@@ -69,8 +69,13 @@ router.post("/domain-verifications", async (req, res): Promise<void> => {
   }
 
   try {
-    // Re-issuing for an already-verified domain would revoke access the user
-    // already has, so hand back the existing row untouched instead.
+    // Hand back an existing row untouched, verified or not. Re-issuing for a
+    // verified domain would revoke access the user already has; re-issuing for
+    // a pending one silently invalidates the TXT record or file they may have
+    // just published — clicking "verify" twice, or an editor calling
+    // start_domain_verification again, left the published code stale and the
+    // check failing with no hint why. The token proves nothing until it is
+    // published, so keeping it costs no security.
     const [existing] = await db
       .select()
       .from(domainVerificationsTable)
@@ -80,7 +85,7 @@ router.post("/domain-verifications", async (req, res): Promise<void> => {
           eq(domainVerificationsTable.domain, domain),
         ),
       );
-    if (existing?.verifiedAt) {
+    if (existing) {
       res.json({ verification: present(existing) });
       return;
     }
@@ -89,9 +94,11 @@ router.post("/domain-verifications", async (req, res): Promise<void> => {
     const [row] = await db
       .insert(domainVerificationsTable)
       .values({ userId: req.user.id, domain, token })
+      // Two requests racing past the check above: the loser gets the winner's
+      // row back unchanged (a no-op update, so RETURNING still yields it).
       .onConflictDoUpdate({
         target: [domainVerificationsTable.userId, domainVerificationsTable.domain],
-        set: { token, method: null, lastCheckedAt: null },
+        set: { domain },
       })
       .returning();
 

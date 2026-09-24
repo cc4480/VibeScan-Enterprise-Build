@@ -479,7 +479,7 @@ export function buildServer(httpReq: Request, user: TokenUser): McpServer {
       description:
         "Begin proving the user owns a domain, which unlocks active tests (injection, XSS, SSRF, access control) on its scans. " +
         "Returns a file to publish on the site, or a DNS TXT record — an editor can usually add the file to the codebase " +
-        "and deploy it. Then call check_domain_verification. Calling it again issues a new token unless already verified.",
+        "and deploy it. Then call check_domain_verification. Calling it again returns the same token, so a record already published stays valid.",
       inputSchema: { domain: z.string().min(1).max(253).describe("The domain, e.g. example.com or https://example.com") },
       annotations: { idempotentHint: false },
     },
