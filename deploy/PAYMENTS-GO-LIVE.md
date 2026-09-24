@@ -21,13 +21,32 @@ beyond the pricing copy.
 
 ---
 
-## 0. Order
+## 0. Where things stand (2026-09-24)
 
-1. **Test locally** with Stripe test keys (step 1) — nothing is pushed yet.
-2. **Push both repos together**: `VibeScan-Enterprise-Build` (secscan.us) and
-   `secscan-info` (secscan.info). secscan.info's pricing copy quotes SecScan
-   Pro; pushed alone, it would advertise a plan secscan.us cannot sell.
-3. **Go live** on secscan.us with live keys (step 3).
+All payment code is **already deployed** on secscan.us and switched off: no
+`STRIPE_*` variables are set, so every price shows "not live yet" and nothing
+can be bought. secscan.info already describes the plan and the packs.
+
+**Going live is configuration only — no code change, no push:** Stripe
+dashboard settings (below) plus two Railway variables. Do it **last**, after
+QA, once everything else is signed off.
+
+Order: account setup (0b) → test mode locally (1–2) → go live (3).
+
+## 0b. Stripe account setup (once, in the dashboard)
+
+These are what a customer sees on the checkout page and their bank statement.
+
+- **Settings → Business details:** public business name **SecScan**, support
+  email, website `https://secscan.us`.
+- **Settings → Public details → Statement descriptor:** `SECSCAN` (what shows
+  on the card statement; short and recognisable reduces chargebacks).
+- **Settings → Branding:** SecScan logo/icon, brand colour `#22c55e`, accent
+  `#09090b`. Checkout and receipts use these.
+- **Settings → Customer emails:** turn on **Successful payments**, **Refunds**
+  and **Failed payments** (see step 3.5).
+- Payout bank account and identity verification complete — Stripe will not pay
+  out (and may pause charges) until they are.
 
 ## 1. Test mode, locally (do not skip)
 
@@ -55,7 +74,7 @@ Card `4242 4242 4242 4242`, any future date, any CVC.
 - [ ] Stripe → Webhooks → your endpoint: every delivery shows **200**.
 - [ ] Declined card `4000 0000 0000 0002` → nothing is granted.
 
-## 3. Go live (after pushing both repos)
+## 3. Go live (last step, after QA)
 
 1. Toggle **Test mode off**. **Developers → API keys** → copy the live secret
    key (`sk_live_…`).
@@ -101,9 +120,17 @@ Monitoring is free for everyone today. It becomes Pro-only when
 The moment it is set, **every existing free monitor stops** (hourly checks,
 rescans, CVE and certificate alerts) for anyone without a plan.
 
-Before flipping it, decide what existing monitor users get — for example,
-grandfather them (a `billing_subscriptions` row with `grandfathered = true`)
-or email them a notice first. Then update secscan.info's monitoring page,
+Before flipping it, decide what existing monitor users get. To keep them
+monitored for free (recommended — they signed up when monitoring had no plan),
+run the grandfather script first; it is a dry run unless `--apply` is given,
+and safe to re-run:
+
+```
+DATABASE_URL=… npx tsx artifacts/api-server/scripts/grandfather-monitor-users.ts           # shows who
+DATABASE_URL=… npx tsx artifacts/api-server/scripts/grandfather-monitor-users.ts --apply   # does it
+```
+
+Or email them a notice first instead. Then update secscan.info's monitoring page,
 which currently describes monitoring without mentioning a plan.
 
 ## Refunds and disputes
