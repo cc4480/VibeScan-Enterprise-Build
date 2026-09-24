@@ -19,6 +19,9 @@ import { useState, useMemo, useCallback, useEffect, createContext, useContext, u
 import { useSeo } from "@/lib/seo";
 import type { Vulnerability } from "@workspace/api-client-react";
 import { APP_ORIGIN } from "@/lib/origin";
+import { PdfReport } from "@/components/pdf-report";
+import { exportElementToPdf } from "@/lib/pdfExport";
+import { owaspCoverage, CATEGORY_TO_OWASP, OWASP_CATEGORIES, type OwaspState } from "@/lib/owaspCoverage";
 import {
   ComplianceCard, CoverageCard, PrintCoverage, coverageMarkdown, SeverityLegend, SEVERITY_HEX,
   type SharedReportData, type SeverityCounts, type CoverageTest,
@@ -1275,44 +1278,7 @@ function SummaryNewFindings({ categories }: { categories: Record<string, number>
 // ─── OWASP Top 10 breakdown ───────────────────────────────────────────────────
 
 /** Maps each scanner internal category → the OWASP 2021 code(s) it covers */
-const CATEGORY_TO_OWASP: Record<string, string[]> = {
-  "Transport Security":             ["A02"],
-  "Injection Defense":              ["A03"],
-  "Injection":                      ["A03"],
-  "UI Security":                    ["A05"],
-  "Content Sniffing":               ["A05"],
-  "Information Disclosure":         ["A05"],
-  "Browser Feature Control":        ["A05"],
-  "CORS Misconfiguration":          ["A05"],
-  "Session Management":             ["A02", "A07"],
-  "CSRF Protection":                ["A07"],
-  "Source Code Exposure":           ["A03", "A05"],
-  "Credential Exposure":            ["A02"],
-  "Data Exposure":                  ["A01"],
-  "HTTP Security":                  ["A05"],
-  "Unvalidated Redirects":          ["A01"],
-  "Supply Chain Security":          ["A06", "A08"],
-  "Brute Force Protection":         ["A07"],
-  "Email Security":                 ["A05"],
-  "DNS Security":                   ["A05"],
-  "Exposed Secrets / Credentials":  ["A02"],
-  "Security Header Inconsistency":  ["A05"],
-  "Outdated Software / Known CVE":  ["A06"],
-  "Outdated Software":              ["A06"],
-  "Network Exposure":               ["A01"],
-};
-
-const OWASP_CATEGORIES: Array<{ code: string; name: string }> = [
-  { code: "A01", name: "Broken Access Control" },
-  { code: "A02", name: "Cryptographic Failures" },
-  { code: "A03", name: "Injection" },
-  { code: "A05", name: "Security Misconfiguration" },
-  { code: "A06", name: "Vulnerable Components" },
-  { code: "A07", name: "Auth & Session Failures" },
-  { code: "A08", name: "Data Integrity Failures" },
-];
-
-function OwaspBreakdown({ vulnerabilities }: { vulnerabilities: Vulnerability[] }) {
+function OwaspBreakdown({ vulnerabilities, tests }: { vulnerabilities: Vulnerability[]; tests?: CoverageTest[] | null }) {
   // Build per-OWASP-code: { count, worstSeverity }
   const owaspMap = useMemo(() => {
     const map: Record<string, { count: number; worstSeverity: string }> = {};
@@ -1345,14 +1311,21 @@ function OwaspBreakdown({ vulnerabilities }: { vulnerabilities: Vulnerability[] 
     info:     "text-zinc-400",
   };
 
-  const passed  = OWASP_CATEGORIES.filter((c) => !owaspMap[c.code] || owaspMap[c.code].count === 0).length;
-  const failing = OWASP_CATEGORIES.length - passed;
+  // "No findings" is not "passed": a category nothing tested has no findings either. Each row
+  // is judged by whether the tests that cover it ran (see lib/owaspCoverage.ts).
+  const coverage = Object.fromEntries(
+    OWASP_CATEGORIES.map((c) => [c.code, owaspCoverage(c.code, owaspMap[c.code]?.count ?? 0, tests)]),
+  ) as Record<string, ReturnType<typeof owaspCoverage>>;
+  const countOf = (s: OwaspState) => OWASP_CATEGORIES.filter((c) => coverage[c.code]!.state === s).length;
+  const failing = countOf("flagged");
+  const clear = countOf("clear");
+  const notFullyTested = OWASP_CATEGORIES.length - failing - clear;
 
   return (
     <div className="glass-card rounded-2xl p-5">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <OwaspCoverageRing passed={passed} total={OWASP_CATEGORIES.length} />
+          <OwaspCoverageRing passed={clear} total={OWASP_CATEGORIES.length} />
           <div>
             <h3 className="text-sm font-bold flex items-center gap-2 text-muted-foreground uppercase tracking-wider mb-1.5">
               <Activity className="w-4 h-4" /> OWASP Top 10
@@ -1364,8 +1337,13 @@ function OwaspBreakdown({ vulnerabilities }: { vulnerabilities: Vulnerability[] 
                 </span>
               )}
               <span className="px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 font-medium">
-                {passed} passed
+                {clear} clear
               </span>
+              {notFullyTested > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 font-medium">
+                  {notFullyTested} not fully tested
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -1399,8 +1377,21 @@ function OwaspBreakdown({ vulnerabilities }: { vulnerabilities: Vulnerability[] 
                     {data.count}
                   </span>
                 </div>
+              ) : coverage[code]!.state === "clear" ? (
+                <CheckCircle2 className="w-3.5 h-3.5 text-green-500/60 shrink-0" aria-label="Tested, no findings" />
               ) : (
-                <CheckCircle2 className="w-3.5 h-3.5 text-green-500/60 shrink-0" />
+                <span
+                  className="text-[10px] font-medium text-amber-400/80 shrink-0"
+                  title={
+                    coverage[code]!.notRun.length > 0
+                      ? `Not run: ${coverage[code]!.notRun.join(", ")}`
+                      : coverage[code]!.state === "unknown"
+                        ? "This scan kept no test record"
+                        : "No recorded test covers this category"
+                  }
+                >
+                  {coverage[code]!.state === "partial" ? "partly tested" : coverage[code]!.state === "unknown" ? "no record" : "not tested"}
+                </span>
               )}
             </div>
           );
@@ -1408,7 +1399,7 @@ function OwaspBreakdown({ vulnerabilities }: { vulnerabilities: Vulnerability[] 
       </div>
 
       <p className="mt-3 text-[10px] text-muted-foreground/40 leading-relaxed">
-        Based on OWASP Top 10 2021. A04, A09, A10 require authenticated or server-side testing — not in scope for black-box scans.
+        &ldquo;Clear&rdquo; means every test covering the category ran and found nothing; it is not a statement of security. Categories marked not tested or partly tested had tests that were skipped, listed under &ldquo;What this scan tested&rdquo;. Based on OWASP Top 10 2021. A04, A09, A10 require authenticated or server-side testing — not in scope for black-box scans.
       </p>
     </div>
   );
@@ -1749,41 +1740,6 @@ function DownloadPDFButton({ data }: { data: PrintableReportData }) {
       const container = containerRef.current;
       if (!container) return;
 
-      // html2canvas-pro, not html2canvas: this app's Tailwind colours are oklch(), which html2canvas 1.4.1
-      // throws on, so the original library could not produce this PDF at all.
-      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-        import("html2canvas-pro"),
-        import("jspdf"),
-      ]);
-
-      const canvas = await html2canvas(container, {
-        scale: 1.5,
-        useCORS: true,
-        logging: false,
-        backgroundColor: "#ffffff",
-        windowWidth: container.scrollWidth,
-        windowHeight: container.scrollHeight,
-      });
-
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const pageW = pdf.internal.pageSize.getWidth();
-      const pageH = pdf.internal.pageSize.getHeight();
-      const imgHeightMm = (canvas.height / canvas.width) * pageW;
-
-      let heightLeft = imgHeightMm;
-      let yOffset = 0;
-
-      pdf.addImage(imgData, "PNG", 0, yOffset, pageW, imgHeightMm);
-      heightLeft -= pageH;
-
-      while (heightLeft > 0) {
-        yOffset -= pageH;
-        pdf.addPage();
-        pdf.addImage(imgData, "PNG", 0, yOffset, pageW, imgHeightMm);
-        heightLeft -= pageH;
-      }
-
       let filename = "secscan-report.pdf";
       try {
         const host = new URL(data.targetUrl).hostname.replace(/^www\./, "");
@@ -1791,7 +1747,8 @@ function DownloadPDFButton({ data }: { data: PrintableReportData }) {
       } catch {
         // keep default
       }
-      pdf.save(filename);
+      const when = new Date(data.scannedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+      await exportElementToPdf(container, { filename, footer: `Generated by SecScan · ${APP_ORIGIN} · scanned ${when}` });
     } finally {
       setShowOffscreen(false);
       setGenerating(false);
@@ -1809,12 +1766,13 @@ function DownloadPDFButton({ data }: { data: PrintableReportData }) {
             left: "-9999px",
             top: 0,
             width: "794px",
-            backgroundColor: "#ffffff",
+            backgroundColor: "#09090b",
             zIndex: -1,
             pointerEvents: "none",
           }}
         >
-          <PrintableReport {...data} />
+          {/* The app's own dark look, not the white print layout (that stays for Ctrl+P). */}
+          <PdfReport {...data} />
         </div>
       )}
 
@@ -2803,7 +2761,7 @@ export default function ReportViewer() {
         {/* Right Col: OWASP + Category sidebar + AI + Tech */}
         <div className="space-y-8">
           {/* OWASP Top 10 breakdown */}
-          <OwaspBreakdown vulnerabilities={visibleVulns} />
+          <OwaspBreakdown vulnerabilities={visibleVulns} tests={coverageTests} />
 
           {/* Category breakdown */}
           {sortedCategories.length > 0 && (
