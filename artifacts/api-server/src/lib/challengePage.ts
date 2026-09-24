@@ -46,6 +46,15 @@ const BODY_SIGNALS: { vendor: string; re: RegExp; label: string }[] = [
   { vendor: "Cloudflare", re: /<title>\s*Attention Required!\s*\|\s*Cloudflare\s*<\/title>/i, label: "Cloudflare block title" },
   { vendor: "Imperva/Incapsula", re: /_Incapsula_Resource|Incapsula incident ID/i, label: "Incapsula resource marker" },
   { vendor: "Akamai", re: /errors\.edgesuite\.net|AkamaiGHost/i, label: "Akamai error host" },
+  // Akamai Bot Manager's interstitial: a ~2 KB page that posts a proof-of-work
+  // to /_sec/verify and reloads. Found on amazon.co.uk (2026-09-24), where it was
+  // scored as Amazon's homepage — five findings, one HIGH, about a page Amazon
+  // never published. Each token is specific to the challenge script; none appears
+  // in ordinary page content.
+  { vendor: "Akamai Bot Manager", re: /\/_sec\/verify\?provider=interstitial|triggerInterstitialChallenge|[?&'"]bm-verify=/i, label: "Akamai bot-manager interstitial" },
+  // Amazon's own "Continue shopping" robot check, served to non-browser clients.
+  // The form target is a path only that page posts to.
+  { vendor: "Amazon", re: /\/errors(?:_page)?\/validateCaptcha/i, label: "Amazon robot-check form" },
   { vendor: "Sucuri", re: /Sucuri WebSite Firewall|sucuri_cloudproxy/i, label: "Sucuri firewall page" },
   { vendor: "PerimeterX", re: /_pxhd|px-captcha|perimeterx/i, label: "PerimeterX challenge" },
   { vendor: "DataDome", re: /datadome|geo\.captcha-delivery\.com/i, label: "DataDome challenge" },
