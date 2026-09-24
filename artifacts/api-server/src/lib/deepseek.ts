@@ -125,7 +125,12 @@ function buildPrompt(
       `Never assume one of them is present: if no finding below reports it, the scanner checked and it was fine.`
     : "";
 
-  const structuredVulns = vulnerabilities
+  // Most severe first, so "Finding 1" is always the one that matters most and
+  // INFO items sit at the end of what the model reads — the order it writes in
+  // should not depend on the order the scanner happened to find things.
+  const RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+  const structuredVulns = [...vulnerabilities]
+    .sort((a, b) => (RANK[a.severity] ?? 5) - (RANK[b.severity] ?? 5))
     .map((v, i) => {
       const parts = [
         `Finding ${i + 1}: ${v.name}`,
@@ -216,6 +221,7 @@ export const SYSTEM_PROMPT = [
   "7. If a fix is not a code change (DNS, hosting settings, domain verification), say so plainly.",
   "8. If there are no findings, say the scan found nothing to fix — do not fill the space.",
   "9. Compliance: mention a framework only if a listed finding clearly relates to it, and never state or imply the site is compliant, certified or audited.",
+  "10. INFO findings are informational, not problems to fix. Put them after every other finding; never make one a top priority or quick win while any CRITICAL, HIGH, MEDIUM or LOW finding exists; and keep any condition they carry ('only needed if …', 'only if you use …') wherever you mention them, including the fix prompt, so the reader can decide it does not apply.",
   "",
   "STYLE: short sentences, plain words, no jargon without a one-line explanation, specific over general.",
   "",

@@ -141,6 +141,19 @@ describe("the AI analysis is grounded in the scan's own findings", () => {
     expect(result.quickWins).toEqual(["Add HSTS"]);
   });
 
+  it("lists findings most severe first, and keeps INFO last and conditional", async () => {
+    // On seclayer.app an INFO item ("COEP — only if you use SharedArrayBuffer")
+    // came back as priority #2, and the fix prompt dropped the "only if".
+    const { user, system } = await capture([
+      { id: "1", name: "Missing COEP", severity: "info", category: "h", description: "d", solution: "s" },
+      { id: "2", name: "DMARC none", severity: "medium", category: "e", description: "d", solution: "s" },
+    ]);
+    expect(user.indexOf("Finding 1: DMARC none")).toBeGreaterThan(-1);
+    expect(user.indexOf("Finding 2: Missing COEP")).toBeGreaterThan(user.indexOf("Finding 1: DMARC none"));
+    expect(system).toMatch(/never make one a top priority or quick win while any CRITICAL, HIGH, MEDIUM or LOW finding exists/);
+    expect(system).toMatch(/keep any condition they carry/);
+  });
+
   it("returns no priorities at all for a scan with no findings", async () => {
     const { result } = await capture([], [], {
       overallRisk: "r", topPriorities: ["Add a CSP header"], quickWins: ["Add HSTS"], complianceNotes: null, agentFixPrompt: "p",
