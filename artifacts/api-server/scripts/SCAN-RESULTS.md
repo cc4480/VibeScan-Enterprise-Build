@@ -5,7 +5,7 @@ and grade each one produced. Companion to `FALSE-POSITIVE-AUDIT.md`: the audit
 records what was *wrong* and how it was fixed, this records what the scanner
 *returned*.
 
-**111 runs across 39 hosts.** Four passive rounds against third-party sites,
+**141 runs across 39 hosts.** Five passive rounds against third-party sites,
 plus two active rounds against domains we own.
 
 The newest numbers are Rounds 4 and 5 (2026-09-19), the sweep run before the
@@ -27,6 +27,7 @@ checked rather than taken on trust:
 | `scan-results/2026-09-10-active-seclayer.json` | Round 3 |
 | `scan-results/2026-09-19-sweep-20.json` | Round 4 |
 | `scan-results/2026-09-19-active-owned.json` | Round 5 |
+| `scan-results/2026-09-24-sweep-30.json` | Round 6 |
 
 `Set-Cookie` values in those files are replaced with `<redacted>`; names and
 flags are untouched, which is all the cookie findings are derived from.
@@ -121,6 +122,20 @@ Scanner state: pre-`6c97837`. Grades in this table reflect the scanner as it
 was on 2026-09-08, before the DNS-record-type and email-domain fixes landed.
 
 ---
+
+## Round 6 — the Sept 8 thirty re-run on current code, 2026-09-24
+
+Run to replace a snapshot that predated the Sept 10 and 12 fixes. **30 sites, 282
+findings, 98 above Info, 0 critical, 16 high, 44 medium, 38 low, 184 info.** Eight sites
+answered with an interstitial and are ungraded (amazon.co.uk, apnews.com, ebay.com,
+etsy.com, npmjs.com, nytimes.com, reuters.com, stackoverflow.com); of the 22 graded,
+A 3 · B 9 · C 9 · D 1. All 16 highs were checked by hand and are real; the medium and low
+findings were not re-checked this round. See `FALSE-POSITIVE-AUDIT.md` (2026-09-24) for
+the checks and for the false positive it found: amazon.co.uk, whose robot-check pages the
+interstitial detector did not recognise. The table below is from after that fix.
+
+Raw output: `scan-results/2026-09-24-sweep-30.json` (amazon.co.uk replaced by its re-run on
+the fixed scanner; the other 29 rows are the original run).
 
 ## Round 5 — active probing, both owned domains, 2026-09-19
 
@@ -339,8 +354,9 @@ attributed the interstitial's *faults* to the customer; this one attributes its
 *silence* to them as merit. Both come from treating a response the target never
 sent as evidence about the target.
 
-Not yet fixed in either product — it is a scoring-semantics decision, not a
-patch.
+**Fixed the same day** (`92d4b1d`, `fa25678`): an intercepted scan is no longer
+graded. Kept as written above because it is the record of what the audit found. (Seclayer
+is a separate product; this note does not speak for it.)
 
 ## Re-running this
 

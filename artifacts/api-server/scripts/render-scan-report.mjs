@@ -18,6 +18,16 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 const [, , src, outDir] = process.argv;
+// What was checked by hand is a fact about the run, not about the script, so it is
+// passed in. The old header claimed every actionable finding was "verified by hand"
+// on every run, including runs where nobody had looked: a results page must not
+// state a check that did not happen.
+//   --verified "All 16 high findings were checked against the live site."
+const verifiedAt = process.argv.indexOf("--verified");
+const VERIFIED =
+  verifiedAt >= 0 && process.argv[verifiedAt + 1]
+    ? process.argv[verifiedAt + 1]
+    : "These are the scanner's raw findings; none has been individually checked by hand.";
 const raw = JSON.parse(readFileSync(src, "utf8"));
 const SEV = ["critical", "high", "medium", "low", "info"];
 const rank = Object.fromEntries(SEV.map((s, i) => [s, i]));
@@ -78,7 +88,7 @@ out.push("# Scan results");
 out.push("");
 out.push(
   `Passive scans of ${sites.length} sites, captured ${new Date(raw.scannedAt).toISOString().slice(0, 10)}. ` +
-  "Every actionable finding here was verified by hand against the live site. " +
+  VERIFIED + " " +
   "That the scanner still detects real vulnerabilities is shown separately in " +
   "[DETECTION-VALIDATION.md](DETECTION-VALIDATION.md), because a scanner that " +
   "reports nothing would also produce a clean-looking page like this one.",
@@ -87,8 +97,9 @@ out.push("");
 out.push(
   "Passive means HTTP GETs and DNS lookups against publicly served pages. No " +
   "authentication was attempted, no parameters were manipulated, and no state " +
-  "was altered on any site. Every finding below can be reproduced by anyone " +
-  "with `curl` or `dig`.",
+  "was altered on any site. Findings can be checked against the live site with " +
+  "`curl` or `dig`, but some sites answer a scanner and a browser differently, so " +
+  "compare like with like.",
 );
 out.push("");
 out.push(

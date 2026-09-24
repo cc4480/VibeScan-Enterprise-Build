@@ -18,6 +18,50 @@ DATABASE_URL=postgres://localhost/anything \
 `DATABASE_URL` only has to be *set* — the scanner module imports the db layer at
 load time. It is never read by a passive scan.
 
+## 2026-09-24 — 30-site re-sweep, and a false positive on amazon.co.uk
+
+Re-ran the Sept 8 thirty-site list on the current scanner, to replace a published
+snapshot that predated several fixes. Every one of the 16 high findings was then checked
+by hand against the live site (browser and plain user agent, DNS over Cloudflare DoH);
+the 82 medium and low findings were **not** re-checked this round.
+
+**Sixteen of the 17 highs the first pass returned were true. One finding set was false:
+amazon.co.uk, five findings including one of the highs, about a page Amazon never published.**
+
+### Fixed
+
+| Finding | Target | Why it was wrong |
+|---|---|---|
+| `Missing Content-Security-Policy` (HIGH) plus four smaller header findings | amazon.co.uk | The scan recorded HTTP 200, `server: AkamaiGHost`, no structured data and no Open Graph tags: the shape of an interstitial. Amazon serves non-browser clients either a 2 KB Akamai Bot Manager page (proof-of-work posted to `/_sec/verify?provider=interstitial`, reloads with a `bm-verify` token) or a 4 KB "Continue shopping" robot check whose form posts to `/errors_page/validateCaptcha`. `detectChallengePage` recognised neither: its Akamai signal only matched Akamai's *error* host, and the robot check's title is just "Amazon.co.uk". Both are now matched on fingerprints that only those pages carry, with five regression tests, two of which make sure a real page that merely mentions the words, or links to the endpoint from a large document, is left alone. amazon.co.uk went from 12 findings to 2 and is ungraded. Amazon also answers with the AWS WAF `x-amzn-waf-action: challenge` form, which was already covered, so which variant a given run hits varies. |
+| Technology "Ghost" on every Akamai-fronted site | amazon.co.uk | `/ghost/i.test(server)` matched `AkamaiGHost`. Technology names feed the CVE monitor's keyword list, so any monitored Akamai site could have been sent Ghost CMS advisories. Now word-bounded, with a test that `AkamaiGHost` is not Ghost and a bare `Ghost` still is. |
+
+The first pass of the sweep is what made both visible: an interstitial detector proven on
+Cloudflare, DataDome and one AWS WAF variant had never seen Amazon's other two.
+
+### Checked and correct — 2026-09-24 round
+
+| Finding | Target | Verified |
+|---|---|---|
+| `Missing Content-Security-Policy` (HIGH) | european-union.europa.eu, fastly.com, gitlab.com, nasa.gov, shopify.com, slack.com, wikipedia.org, zoom.us | Real. HTTP 200 on both user agents, no CSP header. |
+| `CSP Missing on N Internal Routes` (HIGH) | bbc.co.uk, cloudflare.com, github.com, vercel.com | Real. Root sends a CSP; the routes re-fetched (two or three each) return 200 with none. cloudflare's `/de-de/` answered 403 to the check and was not counted. |
+| `JavaScript Source Map Exposed` (HIGH) | fastly.com, gitlab.com, archive.org | Real. HTTP 200, 126, 301 and 3 source files with content included. archive.org's is a vendored `lit` polyfill, so the exposure is a public library; HIGH is arguably too much, as recorded on 2026-09-08. |
+| `Missing DMARC Record` (HIGH) | european-union.europa.eu | Real. `_dmarc.european-union.europa.eu` and `_dmarc.europa.eu` both NXDOMAIN; `europa.eu` publishes MX. Absent from the Sept 8 snapshot for a reason not established here. |
+
+Confirms two earlier fixes held: `Permissive crossdomain.xml Policy` (theguardian.com) and
+the exposed OpenAPI spec (cloudflare, vercel) no longer appear at Medium.
+
+`live-scan.ts` on the four guarded sites after the change: google 15/6, github 11/5,
+mozilla 7/3, cloudflare 8/3. cloudflare's recorded baseline was 8/4; the difference is the
+OpenAPI reclassification to Info on 2026-09-12, not a regression.
+
+### Note on `render-scan-report.mjs`
+
+Its header stated "Every actionable finding here was verified by hand" on every run,
+including runs where nobody had looked. It now prints what the caller passes with
+`--verified "..."`, defaulting to "none has been individually checked by hand", and no
+longer says every finding can be reproduced with `curl` (some sites answer a scanner and a
+browser differently, as reddit does).
+
 ## 2026-09-19 — full sweep, and the reddit CSP question answered
 
 Ahead of the deploy, and the first round to cover the active probes as well as the
