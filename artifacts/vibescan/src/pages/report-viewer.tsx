@@ -20,7 +20,7 @@ import { useSeo } from "@/lib/seo";
 import type { Vulnerability } from "@workspace/api-client-react";
 import { APP_ORIGIN } from "@/lib/origin";
 import {
-  ComplianceCard, CoverageCard, SeverityLegend, SEVERITY_HEX,
+  ComplianceCard, CoverageCard, PrintCoverage, coverageMarkdown, SeverityLegend, SEVERITY_HEX,
   type SharedReportData, type SeverityCounts, type CoverageTest,
 } from "./shared-report-components";
 import {
@@ -1512,7 +1512,7 @@ function PrintVulnCard({ vuln, index }: { vuln: Vulnerability; index: number }) 
 
 function PrintableReport({
   targetUrl, scannedAt, summary, confirmedVulns, unverifiedVulns,
-  technologies, server, tlsGrade, aiAnalysis, compliance, categoryCounts, pagesScanned,
+  technologies, server, tlsGrade, aiAnalysis, compliance, categoryCounts, pagesScanned, tests,
 }: {
   targetUrl: string;
   scannedAt: string | Date;
@@ -1526,6 +1526,7 @@ function PrintableReport({
   compliance?: ComplianceData | null;
   categoryCounts: Record<string, number>;
   pagesScanned?: string[];
+  tests?: CoverageTest[] | null;
 }) {
   const dateStr = new Date(scannedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
@@ -1578,6 +1579,9 @@ function PrintableReport({
         <h2 className="text-lg font-bold mb-2 text-gray-900">Executive Summary</h2>
         <p className="text-gray-700 leading-relaxed">{summary.executiveSummary}</p>
       </div>
+
+      {/* What was tested, and what was not — a PDF is what gets forwarded, so it carries this. */}
+      <PrintCoverage tests={tests} />
 
       {/* Pages Scanned */}
       {((): React.ReactNode => {
@@ -1726,6 +1730,7 @@ export interface PrintableReportData {
   compliance?: ComplianceData | null;
   categoryCounts: Record<string, number>;
   pagesScanned?: string[];
+  tests?: CoverageTest[] | null;
 }
 
 function DownloadPDFButton({ data }: { data: PrintableReportData }) {
@@ -1744,8 +1749,10 @@ function DownloadPDFButton({ data }: { data: PrintableReportData }) {
       const container = containerRef.current;
       if (!container) return;
 
+      // html2canvas-pro, not html2canvas: this app's Tailwind colours are oklch(), which html2canvas 1.4.1
+      // throws on, so the original library could not produce this PDF at all.
       const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-        import("html2canvas"),
+        import("html2canvas-pro"),
         import("jspdf"),
       ]);
 
@@ -1836,6 +1843,7 @@ interface ReportCopyData {
   tlsGrade?: string | null;
   aiAnalysis?: { overallRisk: string; topPriorities: string[]; quickWins: string[]; complianceNotes?: string | null } | null;
   compliance?: ComplianceData | null;
+  tests?: CoverageTest[] | null;
 }
 
 function formatReportMarkdown(d: ReportCopyData): string {
@@ -1869,6 +1877,7 @@ function formatReportMarkdown(d: ReportCopyData): string {
     ``,
     d.summary.executiveSummary,
     ``,
+    ...coverageMarkdown(d.tests),
   ];
 
   if (d.confirmedVulns.length > 0) {
@@ -2463,6 +2472,7 @@ export default function ReportViewer() {
     tlsGrade: tlsGrade ?? null,
     aiAnalysis: aiAnalysis ?? null,
     compliance,
+    tests: coverageTests,
   };
 
   return (
@@ -2491,6 +2501,7 @@ export default function ReportViewer() {
           compliance={compliance}
           categoryCounts={categoryCounts}
           pagesScanned={pagesScanned ?? []}
+          tests={coverageTests}
         />
       </div>
 
@@ -2515,6 +2526,7 @@ export default function ReportViewer() {
             compliance,
             categoryCounts,
             pagesScanned: pagesScanned ?? [],
+            tests: coverageTests,
           }} />
           <ShareButton reportId={reportId} />
         </div>
@@ -3011,6 +3023,7 @@ export default function ReportViewer() {
             compliance,
             categoryCounts,
             pagesScanned: pagesScanned ?? [],
+            tests: coverageTests,
           }} />
           <ShareButton reportId={reportId} />
         </div>

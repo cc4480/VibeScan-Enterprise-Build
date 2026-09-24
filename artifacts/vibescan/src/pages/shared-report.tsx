@@ -8,7 +8,7 @@ import {
 import { cn, getGradeColor } from "@/lib/utils";
 import { APP_ORIGIN } from "@/lib/origin";
 import {
-  GradeRing, VulnRow, ComplianceCard, CoverageCard, SeverityLegend,
+  GradeRing, VulnRow, ComplianceCard, CoverageCard, PrintCoverage, SeverityLegend,
   SEV_ORDER, VERIFICATION_THRESHOLD,
   type SharedReportData,
 } from "./shared-report-components";
@@ -112,8 +112,10 @@ export default function SharedReport() {
       const container = pdfContainerRef.current;
       if (!container) return;
 
+      // html2canvas-pro, not html2canvas: this app's Tailwind colours are oklch(), which html2canvas 1.4.1
+      // throws on, so the original library could not produce this PDF at all.
       const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-        import("html2canvas"),
+        import("html2canvas-pro"),
         import("jspdf"),
       ]);
 
@@ -361,6 +363,9 @@ export default function SharedReport() {
             <h2 style={{ fontSize: "16px", fontWeight: "bold", marginBottom: "8px" }}>Executive Summary</h2>
             <p style={{ color: "#374151" }}>{summary.executiveSummary}</p>
           </div>
+
+          {/* What was tested and what was not: a downloaded PDF is what gets forwarded. */}
+          <PrintCoverage tests={data.tests ?? null} />
 
           <div style={{ display: "flex", gap: "8px", marginBottom: "24px", flexWrap: "wrap" }}>
             {summary.critical > 0 && <span style={{ padding: "4px 10px", background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca", borderRadius: "4px" }}>🔴 Critical: {summary.critical}</span>}

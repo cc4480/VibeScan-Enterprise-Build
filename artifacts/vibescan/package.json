@@ -81,7 +81,7 @@
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/space-grotesk": "^5.2.10",
-    "html2canvas": "^1.4.1",
+    "html2canvas-pro": "^2.4.5",
     "jspdf": "^4.2.1"
   }
 }

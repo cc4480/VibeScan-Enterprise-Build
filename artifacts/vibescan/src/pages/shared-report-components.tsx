@@ -411,3 +411,93 @@ export function CoverageCard({ tests }: { tests?: CoverageTest[] | null }) {
     </div>
   );
 }
+
+/**
+ * Print and PDF version of the coverage card: plain, light-on-white, no <details>,
+ * because a PDF cannot expand anything. A downloaded report is what gets forwarded
+ * to a client or a manager, so it must carry what was NOT tested with it.
+ */
+export function PrintCoverage({ tests }: { tests?: CoverageTest[] | null }) {
+  const list = Array.isArray(tests) ? tests.filter(isCoverageTest) : [];
+  const heading = <h2 className="text-lg font-bold mb-2 text-gray-900">What this scan tested</h2>;
+
+  if (list.length === 0) {
+    return (
+      <div className="mb-8 pt-6 border-t-2 border-gray-200">
+        {heading}
+        <p className="text-gray-700">
+          Not recorded for this scan, which was run before test records were kept. Do not read the grade as a
+          statement about full coverage.
+        </p>
+      </div>
+    );
+  }
+
+  const ran = list.filter((t) => t.status === "ran").length;
+  const notRun = list.filter((t) => t.status !== "ran");
+  const skipped = notRun.filter((t) => t.status === "skipped").length;
+  const failed = notRun.length - skipped;
+
+  return (
+    <div className="mb-8 pt-6 border-t-2 border-gray-200">
+      {heading}
+      <p className="text-gray-700 mb-2">
+        <strong>{ran} of {list.length} tests ran</strong>
+        {skipped > 0 && `, ${skipped} skipped`}
+        {failed > 0 && `, ${failed} failed`}.
+      </p>
+      {notRun.length > 0 ? (
+        <>
+          <p className="text-sm font-semibold text-gray-800 mb-1">Not tested on this scan</p>
+          <ul className="space-y-1 mb-2">
+            {notRun.map((t, i) => (
+              <li key={`${t.name}-${i}`} className="text-gray-700 text-sm">
+                <strong>{t.name}</strong>
+                <span className="text-gray-500">
+                  {" — "}
+                  {t.status === "failed" ? `failed to run${t.reason ? `: ${t.reason}` : ""}` : (t.reason ?? "skipped")}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-gray-500">A clean result says nothing about these areas.</p>
+        </>
+      ) : (
+        <p className="text-gray-700 text-sm">Every test ran.</p>
+      )}
+    </div>
+  );
+}
+
+/** The same content as markdown lines, for the "Copy report" text an AI editor reads. */
+export function coverageMarkdown(tests?: CoverageTest[] | null): string[] {
+  const list = Array.isArray(tests) ? tests.filter(isCoverageTest) : [];
+  if (list.length === 0) {
+    return [
+      "## What this scan tested",
+      "",
+      "Not recorded for this scan (it predates test records). Do not read the grade as a statement about full coverage.",
+      "",
+    ];
+  }
+  const ran = list.filter((t) => t.status === "ran").length;
+  const notRun = list.filter((t) => t.status !== "ran");
+  const skipped = notRun.filter((t) => t.status === "skipped").length;
+  const failed = notRun.length - skipped;
+  const out = [
+    "## What this scan tested",
+    "",
+    `${ran} of ${list.length} tests ran${skipped > 0 ? `, ${skipped} skipped` : ""}${failed > 0 ? `, ${failed} failed` : ""}.`,
+    "",
+  ];
+  if (notRun.length > 0) {
+    out.push("Not tested on this scan — a clean result says nothing about these:", "");
+    for (const t of notRun) {
+      out.push(`- ${t.name}: ${t.status === "failed" ? `failed to run${t.reason ? ` — ${t.reason}` : ""}` : (t.reason ?? "skipped")}`);
+    }
+    out.push("");
+  } else {
+    out.push("Every test ran.", "");
+  }
+  return out;
+}
