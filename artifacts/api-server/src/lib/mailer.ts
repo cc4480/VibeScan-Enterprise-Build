@@ -113,10 +113,22 @@ interface SendReportEmailOptions {
   totalVulns: number;
   reportUrl: string;
   tier: string;
+  /** How many tests ran, were skipped or failed. Absent means "not recorded", and nothing is claimed. */
+  coverage?: { ran: number; skipped: number; failed: number; total: number };
 }
 
 function buildHtml(opts: SendReportEmailOptions): string {
-  const { targetUrl, grade, riskScore, totalVulns, reportUrl } = opts;
+  const { targetUrl, grade, riskScore, totalVulns, reportUrl, coverage } = opts;
+  // A grade on its own reads as "everything was checked". Say how much was, and that
+  // what was not tested is listed in the report — this email is often all that is read.
+  const notRun = coverage ? coverage.skipped + coverage.failed : 0;
+  const coverageHtml =
+    coverage && coverage.total > 0
+      ? `<p style="margin:0 0 ${notRun > 0 ? "8" : "32"}px;font-size:14px;color:#94a3b8;">Tests run: <strong style="color:#f8fafc;">${coverage.ran} of ${coverage.total}</strong></p>` +
+        (notRun > 0
+          ? `<p style="margin:0 0 32px;font-size:12px;line-height:1.5;color:#94a3b8;">${notRun} not tested. A clean result says nothing about those areas; the report lists them.</p>`
+          : "")
+      : "";
 
   const gradeColors: Record<string, string> = {
     A: "#34d399",
@@ -149,7 +161,8 @@ function buildHtml(opts: SendReportEmailOptions): string {
           </div>
 
           <p style="margin:0 0 8px;font-size:14px;color:#94a3b8;">Risk Score: <strong style="color:#f8fafc;">${riskScore}/100</strong></p>
-          <p style="margin:0 0 32px;font-size:14px;color:#94a3b8;">Vulnerabilities Found: <strong style="color:#f8fafc;">${totalVulns}</strong></p>
+          <p style="margin:0 0 ${coverageHtml ? "8" : "32"}px;font-size:14px;color:#94a3b8;">Vulnerabilities Found: <strong style="color:#f8fafc;">${totalVulns}</strong></p>
+          ${coverageHtml}
 
           <a href="${reportUrl}" style="display:inline-block;background:#6366f1;color:#fff;font-weight:700;font-size:15px;padding:14px 32px;border-radius:10px;text-decoration:none;">View Full Report →</a>
         </td></tr>

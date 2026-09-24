@@ -153,6 +153,44 @@ describe("account mail vs bulk mail sender", () => {
 
     expect(sentFrom()).toBe("SecScan <reports@secscan.us>");
   });
+
+  describe("the report-ready email says how much was tested", () => {
+    /** The HTML of the single Resend call. */
+    function sentHtml(): string {
+      const [, init] = vi.mocked(fetch).mock.calls[0]!;
+      return JSON.parse((init as RequestInit).body as string).html;
+    }
+
+    it("puts the test count and the not-tested warning next to a grade", async () => {
+      const { sendReportReadyEmail } = await import("./mailer.js");
+      await sendReportReadyEmail({ ...REPORT_OPTS, coverage: { ran: 37, skipped: 2, failed: 0, total: 39 } });
+      const html = sentHtml();
+      expect(html).toContain("Tests run:");
+      expect(html).toContain("37 of 39");
+      expect(html).toContain("2 not tested");
+      expect(html).toContain("says nothing about those areas");
+    });
+
+    it("counts failed tests as not tested too", async () => {
+      const { sendReportReadyEmail } = await import("./mailer.js");
+      await sendReportReadyEmail({ ...REPORT_OPTS, coverage: { ran: 36, skipped: 1, failed: 2, total: 39 } });
+      expect(sentHtml()).toContain("3 not tested");
+    });
+
+    it("does not raise a warning when every test ran", async () => {
+      const { sendReportReadyEmail } = await import("./mailer.js");
+      await sendReportReadyEmail({ ...REPORT_OPTS, coverage: { ran: 39, skipped: 0, failed: 0, total: 39 } });
+      const html = sentHtml();
+      expect(html).toContain("39 of 39");
+      expect(html).not.toContain("not tested");
+    });
+
+    it("claims nothing when no record exists", async () => {
+      const { sendReportReadyEmail } = await import("./mailer.js");
+      await sendReportReadyEmail(REPORT_OPTS);
+      expect(sentHtml()).not.toContain("Tests run");
+    });
+  });
 });
 
 /**

@@ -91,3 +91,17 @@ describe("coverageLines — what the report says was tested", () => {
     expect(lines.length).toBeLessThan(35);
   });
 });
+
+describe("countTests", () => {
+  it("counts each outcome and the total", async () => {
+    const { countTests } = await import("./testLedger");
+    expect(
+      countTests([
+        { group: "a", name: "1", status: "ran", findings: 0, durationMs: 1 },
+        { group: "a", name: "2", status: "skipped", findings: 0, durationMs: 0 },
+        { group: "a", name: "3", status: "failed", findings: 0, durationMs: 1 },
+        { group: "a", name: "4", status: "ran", findings: 2, durationMs: 1 },
+      ]),
+    ).toEqual({ ran: 2, skipped: 1, failed: 1, total: 4 });
+  });
+});

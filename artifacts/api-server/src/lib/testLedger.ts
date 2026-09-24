@@ -77,6 +77,12 @@ export function formatTestLine(r: TestRecord): string {
 }
 
 /** The closing line, e.g. "[tests] 34 ran, 3 skipped, 0 failed (37 total)". */
+/** Counts, for places that only have room for a number (the report-ready email). */
+export function countTests(records: TestRecord[]): { ran: number; skipped: number; failed: number; total: number } {
+  const n = (s: TestStatus) => records.filter((r) => r.status === s).length;
+  return { ran: n("ran"), skipped: n("skipped"), failed: n("failed"), total: records.length };
+}
+
 export function formatTestSummary(records: TestRecord[]): string {
   const n = (s: TestStatus) => records.filter((r) => r.status === s).length;
   return `[tests] ${n("ran")} ran, ${n("skipped")} skipped, ${n("failed")} failed (${records.length} total)`;

@@ -26,7 +26,7 @@ import { corroborateMerge } from "./scoring";
 import { findingFingerprint, canonicalizeTargetUrl } from "./fingerprint";
 import { runRecon } from "./recon";
 import { activeProbesUnlocked } from "./activeProbeGate";
-import { formatTestLine, formatTestSummary, NOT_VERIFIED, type TestRecord } from "./testLedger";
+import { countTests, formatTestLine, formatTestSummary, NOT_VERIFIED, type TestRecord } from "./testLedger";
 import { warnIfLocalDataStale, OSV_CACHE_MAX_SIZE } from "./cveCheck";
 import { refreshEolData, loadEolCacheFromDb, EOL_REFRESH_QUEUE } from "./eolFetcher";
 import { callDeepSeek } from "./deepseek";
@@ -834,6 +834,7 @@ export async function processScanJob(job: ScanJob): Promise<void> {
           totalVulns: scanResult.vulnerabilities.length,
           reportUrl,
           tier,
+          coverage: countTests(tests),
         });
       }
     }
