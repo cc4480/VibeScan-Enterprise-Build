@@ -100,7 +100,7 @@ SecScan runs as a remote MCP server, so Claude Code, Cursor and other MCP-capabl
 editors can scan a site and read the report without leaving the editor.
 
 1. In SecScan, open Settings -> AI editors and create a token (shown once).
-2. Claude Code: claude mcp add --transport http secscan https://secscan.us/api/mcp --header "Authorization: Bearer <token>"
+2. Claude Code: claude mcp add --scope user --transport http secscan https://secscan.us/api/mcp --header "Authorization: Bearer <token>"
    Cursor: add {"mcpServers":{"secscan":{"url":"https://secscan.us/api/mcp","headers":{"Authorization":"Bearer <token>"}}}} to ~/.cursor/mcp.json
 3. Ask the editor to scan your site.
 

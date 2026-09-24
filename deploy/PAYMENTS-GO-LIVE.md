@@ -105,6 +105,12 @@ Card `4242 4242 4242 4242`, any future date, any CVC.
    …notify-purchase-intents.ts --send                                         # emails them
    ```
    Safe to re-run: each person is marked as told only once the email is accepted.
+8. **Update the public docs that describe today's state** (repo `~/secscan-info`).
+   While payments are off, `/ai-editors` says "Buying more scans isn't open yet"
+   (troubleshooting table, "You've used all 3 free scans") and the app shows
+   "Paid scans are coming soon". Once checkout is live, change both to point at
+   the pricing. `/monitoring` already advertises SecScan Pro ($50/month, 3 sites,
+   5 on-demand scans); that page is only true once step 6 has passed.
 
 ## Sales tax
 
