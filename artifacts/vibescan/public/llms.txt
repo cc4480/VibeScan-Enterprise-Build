@@ -149,3 +149,4 @@ https://secscan.info/llms.txt:
 Website: https://secscan.us
 Documentation: https://secscan.info
 Reports email: reports@secscan.us
+Founder: Carlos Cuellar — https://secscan.us/about

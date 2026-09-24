@@ -240,7 +240,7 @@ describe("visible breadcrumbs match the structured data", () => {
     const { readFileSync } = await import("node:fs");
     const { resolve } = await import("node:path");
     const layout = readFileSync(resolve(__dirname, "../../../vibescan/src/components/layout.tsx"), "utf8");
-    for (const path of ["/learn", "/privacy", "/terms", "/bot"]) {
+    for (const path of ["/learn", "/privacy", "/terms", "/bot", "/about"]) {
       const crumb = metaForPath(path)?.breadcrumb?.at(-1);
       expect(crumb, `${path} has no breadcrumb in pageMeta`).toBeDefined();
       expect(layout).toContain(`"${path}": "${crumb!.name}"`);

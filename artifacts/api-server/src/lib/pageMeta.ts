@@ -23,6 +23,8 @@ export interface PageMeta {
   noindex?: boolean;
   /** Trail from home to this page, excluding home. Drives BreadcrumbList. */
   breadcrumb?: { name: string; path: string }[];
+  /** schema.org type for the page node, when it is more specific than WebPage. */
+  pageType?: "AboutPage";
 }
 
 const SITE = (process.env["APP_ORIGIN"] ?? "https://secscan.us").replace(/\/$/, "");
@@ -69,6 +71,18 @@ const ROUTES: { match: RegExp; meta: (path: string) => PageMeta }[] = [
       description:
         "What the SecScan scanner is, how to recognise it in your logs by its User-Agent, and how to allow it to scan a site you own.",
       breadcrumb: [{ name: "SecScan bot", path: "/bot" }],
+    }),
+  },
+
+  {
+    match: /^\/about\/?$/,
+    meta: () => ({
+      path: "/about",
+      title: "About SecScan — Carlos Cuellar, founder",
+      description:
+        "Meet Carlos Cuellar, the self-taught builder behind SecScan, and the promises the scanner keeps: report what it found, and say plainly what it didn't test.",
+      breadcrumb: [{ name: "About", path: "/about" }],
+      pageType: "AboutPage",
     }),
   },
 
@@ -163,6 +177,8 @@ function applyJsonLd(html: string, meta: PageMeta, url: string): string {
       return [
         {
           ...node,
+          ...(meta.pageType ? { "@type": meta.pageType } : {}),
+          ...(meta.pageType === "AboutPage" ? { about: { "@id": `${SITE}/#organization` } } : {}),
           "@id": `${url}#webpage`,
           url,
           ...(meta.title ? { name: meta.title } : {}),

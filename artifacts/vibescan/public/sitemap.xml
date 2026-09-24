@@ -26,6 +26,12 @@
     is the one URL here that gets found by people who have never heard of us.
   -->
   <url>
+    <loc>https://secscan.us/about</loc>
+    <lastmod>2026-09-24</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
     <loc>https://secscan.us/bot</loc>
     <lastmod>2026-09-20</lastmod>
     <changefreq>monthly</changefreq>

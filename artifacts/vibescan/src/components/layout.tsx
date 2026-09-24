@@ -16,6 +16,7 @@ const BREADCRUMBS: Record<string, string> = {
   "/privacy": "Privacy policy",
   "/terms": "Terms of service",
   "/bot": "SecScan bot",
+  "/about": "About",
 };
 
 /**
@@ -308,7 +309,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </Link>
       )}
 
-      <footer className="border-t border-white/5 py-12 mt-auto bg-card/30">
+      <footer className="border-t border-white/5 pt-12 pb-24 mt-auto bg-card/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-2 opacity-50">
             <img src="/images/logo-80.webp" alt="" width={20} height={20} className="w-5 h-5 rounded object-cover" />
@@ -328,6 +329,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
               >
                 Reference
               </a>
+              <Link href="/about" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                About
+              </Link>
               <Link href="/privacy" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 Privacy
               </Link>
