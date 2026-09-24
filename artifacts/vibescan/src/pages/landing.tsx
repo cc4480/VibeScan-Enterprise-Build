@@ -33,9 +33,16 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="relative pt-12 pb-20 lg:pt-24 lg:pb-32 overflow-hidden">
         <div className="absolute inset-0 z-0">
+          {/* Decorative, so alt="" (screen readers skip it). WebP at 28 KB —
+              the PNG it replaced was 991 KB and the largest thing on the page. */}
           <img
-            src={`${import.meta.env.BASE_URL}images/hero-bg.png`}
-            alt="Cyber security background"
+            src={`${import.meta.env.BASE_URL}images/hero-bg.webp`}
+            alt=""
+            aria-hidden="true"
+            width={1408}
+            height={768}
+            fetchPriority="high"
+            decoding="async"
             className="w-full h-full object-cover opacity-30 mix-blend-screen"
           />
           <div className="absolute inset-0 bg-gradient-to-b from-background/10 via-background/80 to-background" />

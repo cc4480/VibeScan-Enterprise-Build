@@ -85,7 +85,7 @@ describe("page metadata", () => {
   it("gives a non-JS crawler on /learn that route's subject, not just the homepage noscript copy", () => {
     const html = applyPageMeta(SHELL_WITH_NOSCRIPT, metaForPath("/learn")!);
     expect(html).toContain("<h2>Security Documentation — SecScan</h2>");
-    expect(html).toContain("<p>Plain-English explanations of every security check SecScan runs");
+    expect(html).toContain("<p>Plain-English guides to the key security checks SecScan runs");
     // Still ahead of the nav, so it doesn't look tacked on after the links.
     expect(html.indexOf("<h2>Security Documentation")).toBeLessThan(html.indexOf("<nav>"));
   });
@@ -229,5 +229,21 @@ describe("structured data per route", () => {
     expect(out.match(/application\/ld\+json/g)).toHaveLength(1);
     const page = graphOf(out).find((n) => n["@type"] === "WebPage")!;
     expect(page["name"]).toBe("</script><img src=x onerror=alert(1)>");
+  });
+});
+
+describe("visible breadcrumbs match the structured data", () => {
+  // Google expects BreadcrumbList JSON-LD to describe breadcrumbs the page
+  // actually shows. The visible ones live in the frontend layout; this fails
+  // if either side is renamed without the other.
+  it("names every subpage the same in the layout as in the JSON-LD", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const layout = readFileSync(resolve(__dirname, "../../../vibescan/src/components/layout.tsx"), "utf8");
+    for (const path of ["/learn", "/privacy", "/terms", "/bot"]) {
+      const crumb = metaForPath(path)?.breadcrumb?.at(-1);
+      expect(crumb, `${path} has no breadcrumb in pageMeta`).toBeDefined();
+      expect(layout).toContain(`"${path}": "${crumb!.name}"`);
+    }
   });
 });

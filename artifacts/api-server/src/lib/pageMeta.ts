@@ -34,7 +34,7 @@ const ROUTES: { match: RegExp; meta: (path: string) => PageMeta }[] = [
       path: "/learn",
       title: "Security Documentation — SecScan",
       description:
-        "Plain-English explanations of every security check SecScan runs: HTTPS, HSTS, CSP, X-Frame-Options, CORS, cookie flags, Supabase RLS, and more. With code fixes.",
+        "Plain-English guides to the key security checks SecScan runs: HTTPS, HSTS, CSP, CORS, cookie flags and Supabase RLS, each with a code fix to paste.",
       breadcrumb: [{ name: "Security documentation", path: "/learn" }],
     }),
   },

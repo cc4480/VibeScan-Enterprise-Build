@@ -8,6 +8,9 @@ import { cn } from "@/lib/utils";
 import { useSeo } from "@/lib/seo";
 import { APP_ORIGIN } from "@/lib/origin";
 
+/** Update when the checks below are reviewed against the scanner. Shown on the page. */
+const LEARN_LAST_REVIEWED = "September 24, 2026";
+
 // ─── Data ────────────────────────────────────────────────────────────────────
 
 type Severity = "critical" | "high" | "medium" | "low" | "info";
@@ -770,7 +773,7 @@ function CheckAccordion({ check }: { check: Check }) {
 export default function LearnPage() {
   useSeo({
     title: "Security Documentation — SecScan",
-    description: "Plain-English explanations of every security check SecScan runs: HTTPS, HSTS, CSP, X-Frame-Options, CORS, cookie flags, Supabase RLS, and more. With code fixes.",
+    description: "Plain-English guides to the key security checks SecScan runs: HTTPS, HSTS, CSP, CORS, cookie flags and Supabase RLS, each with a code fix to paste.",
     canonical: `${APP_ORIGIN}/learn`,
   });
 
@@ -801,8 +804,16 @@ export default function LearnPage() {
         <h1 className="text-4xl md:text-5xl font-bold mb-4 tracking-tight">
           Security checks documentation
         </h1>
-        <p className="text-lg text-muted-foreground mb-5">
-          Plain-English explanations of every vulnerability SecScan detects — what it is, why attackers exploit it, how we test for it, and exactly how to fix it.
+        <p className="text-lg text-muted-foreground mb-3">
+          Plain-English explanations of the most important vulnerabilities SecScan detects — what each is, why attackers exploit it, how we test for it, and exactly how to fix it.
+        </p>
+        {/* This page covers the key checks, not all of them. It used to say
+            "every vulnerability" while documenting 19; the complete reference is
+            secscan.info, so say so rather than overclaim. */}
+        <p className="text-sm text-muted-foreground mb-5">
+          Every check SecScan runs is documented in full on{" "}
+          <a href="https://secscan.info/coverage" className="text-primary hover:underline">secscan.info</a>
+          {" "}· Last reviewed {LEARN_LAST_REVIEWED}
         </p>
         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
           <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-primary" />{totalChecks} checks documented</span>

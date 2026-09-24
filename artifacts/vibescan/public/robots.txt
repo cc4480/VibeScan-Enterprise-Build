@@ -19,6 +19,7 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /api/
 
 Sitemap: https://secscan.us/sitemap.xml
 
@@ -42,6 +43,7 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /api/
 
 User-agent: OAI-SearchBot
 Allow: /
@@ -57,6 +59,7 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /api/
 
 User-agent: ChatGPT-User
 Allow: /
@@ -72,6 +75,7 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /api/
 
 User-agent: ClaudeBot
 Allow: /
@@ -87,6 +91,7 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /api/
 
 User-agent: Claude-Web
 Allow: /
@@ -102,6 +107,7 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /api/
 
 User-agent: anthropic-ai
 Allow: /
@@ -117,6 +123,7 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /api/
 
 User-agent: PerplexityBot
 Allow: /
@@ -132,6 +139,7 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /api/
 
 User-agent: Perplexity-User
 Allow: /
@@ -147,6 +155,7 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /api/
 
 User-agent: Google-Extended
 Allow: /
@@ -162,6 +171,7 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /api/
 
 User-agent: Applebot
 Allow: /
@@ -177,6 +187,7 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /api/
 
 User-agent: Applebot-Extended
 Allow: /
@@ -192,6 +203,7 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /api/
 
 User-agent: Amazonbot
 Allow: /
@@ -207,6 +219,7 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /api/
 
 User-agent: CCBot
 Allow: /
@@ -222,6 +235,7 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /api/
 
 User-agent: DuckAssistBot
 Allow: /
@@ -237,6 +251,7 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /api/
 
 User-agent: meta-externalagent
 Allow: /
@@ -252,6 +267,7 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /api/
 
 User-agent: MistralAI-User
 Allow: /
@@ -267,3 +283,4 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /api/

@@ -7,6 +7,18 @@ import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/account-api";
 
 /**
+ * Visible breadcrumbs for the public subpages. The names must match the
+ * BreadcrumbList JSON-LD the server writes for the same paths
+ * (artifacts/api-server/src/lib/pageMeta.ts) — Google expects the two to agree.
+ */
+const BREADCRUMBS: Record<string, string> = {
+  "/learn": "Security documentation",
+  "/privacy": "Privacy policy",
+  "/terms": "Terms of service",
+  "/bot": "SecScan bot",
+};
+
+/**
  * Sign-in control.
  *
  * Accounts are additive here, not a gate: an anonymous visitor is still a real
@@ -120,7 +132,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 its own dark ground and glow, so it needs no gradient tile behind
                 it — just the rounded crop. */}
             <img
-              src="/favicon.png"
+              src="/images/logo-80.webp"
               alt=""
               width={40}
               height={40}
@@ -268,6 +280,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </header>
 
       <main className="flex-1 pt-24 pb-12">
+        {BREADCRUMBS[location] && (
+          <nav aria-label="Breadcrumb" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-6">
+            <ol className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <li>
+                <Link href="/" className="hover:text-foreground transition-colors">Home</Link>
+              </li>
+              <li aria-hidden="true">›</li>
+              <li aria-current="page" className="text-foreground">{BREADCRUMBS[location]}</li>
+            </ol>
+          </nav>
+        )}
         {children}
       </main>
 
@@ -288,7 +311,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <footer className="border-t border-white/5 py-12 mt-auto bg-card/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-2 opacity-50">
-            <img src="/favicon.png" alt="" width={20} height={20} className="w-5 h-5 rounded object-cover" />
+            <img src="/images/logo-80.webp" alt="" width={20} height={20} className="w-5 h-5 rounded object-cover" />
             <span className="font-display font-bold tracking-tight text-foreground">SecScan</span>
           </div>
           <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">

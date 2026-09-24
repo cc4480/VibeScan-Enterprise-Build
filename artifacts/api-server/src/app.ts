@@ -10,6 +10,7 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { isSpaRoute } from "./lib/spaRoutes";
 import { metaForPath, applyPageMeta } from "./lib/pageMeta";
+import { staticCacheControl } from "./lib/cachePolicy";
 import { authMiddleware } from "./middlewares/authMiddleware";
 import { APP_ORIGIN } from "./lib/appOrigin";
 import { configureTrustProxy } from "./lib/clientIp";
@@ -278,7 +279,15 @@ if (process.env.NODE_ENV !== "production") {
 
   if (existsSync(staticDir)) {
     logger.info({ staticDir }, "Production: serving static frontend");
-    app.use(express.static(staticDir, { dotfiles: "allow" }));
+    app.use(
+      express.static(staticDir, {
+        dotfiles: "allow",
+        // express.static defaulted to max-age=0, so Cloudflare revalidated
+        // every asset with Railway on every request (cf-cache-status:
+        // REVALIDATED) — a round trip to origin for files that never change.
+        setHeaders: (res, filePath) => res.setHeader("Cache-Control", staticCacheControl(filePath)),
+      }),
+    );
 
     // The shell is served ONLY for paths the client router actually renders.
     //
