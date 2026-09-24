@@ -1,7 +1,5 @@
 import { useState } from "react";
 import { cn, getGradeColor, formatSeverity } from "@/lib/utils";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from "recharts";
-import { CheckCircle2 } from "lucide-react";
 
 export interface SharedReportData {
   id: string;
@@ -90,70 +88,8 @@ export interface SeverityCounts {
   info: number;
 }
 
-/** Findings by severity, at a glance. Used beside the grade ring because the
- *  grade is one number derived from this exact breakdown — showing the shape
- *  behind the score, not just the score. Shared between the owner's report
- *  view and the public share link so both read the same at a glance. */
-export function SeverityDonut({ counts, size = 192 }: { counts: SeverityCounts; size?: number }) {
-  const data = (["critical", "high", "medium", "low", "info"] as const)
-    .map((sev) => ({ sev, name: formatSeverity(sev), value: counts[sev] }))
-    .filter((d) => d.value > 0);
-
-  const total = data.reduce((sum, d) => sum + d.value, 0);
-
-  if (total === 0) {
-    return (
-      <div style={{ width: size, height: size }} className="flex flex-col items-center justify-center text-center gap-1">
-        <CheckCircle2 className="w-8 h-8 text-green-400/70" />
-        <span className="text-xs text-muted-foreground">No findings</span>
-      </div>
-    );
-  }
-
-  const inner = Math.round(size * 0.32);
-  const outer = Math.round(size * 0.46);
-
-  return (
-    <div className="relative" style={{ width: size, height: size }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Pie
-            data={data}
-            dataKey="value"
-            nameKey="name"
-            innerRadius={inner}
-            outerRadius={outer}
-            paddingAngle={data.length > 1 ? 3 : 0}
-            stroke="none"
-            isAnimationActive
-          >
-            {data.map((d) => (
-              <Cell key={d.sev} fill={SEVERITY_HEX[d.sev]} />
-            ))}
-          </Pie>
-          <RechartsTooltip
-            formatter={(value: number, name: string) => [`${value} finding${value === 1 ? "" : "s"}`, name]}
-            contentStyle={{
-              background: "rgba(15, 15, 20, 0.95)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 8,
-              fontSize: 12,
-            }}
-          />
-        </PieChart>
-      </ResponsiveContainer>
-      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-        <span className="text-3xl font-black leading-none">{total}</span>
-        <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest mt-1">
-          finding{total === 1 ? "" : "s"}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-/** Legend for SeverityDonut — the chart alone doesn't carry the exact numbers
- *  for someone skimming rather than hovering. */
+/** Findings by severity, as counts under the report summary. The header
+ *  shows only the grade; a chart beside it was removed as clutter. */
 export function SeverityLegend({ counts }: { counts: SeverityCounts }) {
   const sevs = (["critical", "high", "medium", "low", "info"] as const).filter((s) => counts[s] > 0);
   if (sevs.length === 0) return null;

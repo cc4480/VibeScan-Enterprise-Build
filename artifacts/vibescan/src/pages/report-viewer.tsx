@@ -20,7 +20,7 @@ import { useSeo } from "@/lib/seo";
 import type { Vulnerability } from "@workspace/api-client-react";
 import { APP_ORIGIN } from "@/lib/origin";
 import {
-  ComplianceCard, SeverityDonut, SeverityLegend, SEVERITY_HEX,
+  ComplianceCard, SeverityLegend, SEVERITY_HEX,
   type SharedReportData, type SeverityCounts,
 } from "./shared-report-components";
 import {
@@ -2522,9 +2522,8 @@ export default function ReportViewer() {
       <div className="glass-panel p-8 md:p-12 rounded-3xl mb-12 relative overflow-hidden flex flex-col md:flex-row items-center gap-12">
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[120px] pointer-events-none" />
 
-        <div className="flex flex-col sm:flex-row items-center gap-4 z-10">
+        <div className="z-10 shrink-0">
           <GradeRing grade={summary.grade} score={summary.riskScore} />
-          <SeverityDonut counts={severityCounts} />
         </div>
 
         <div className="flex-1 text-center md:text-left z-10">

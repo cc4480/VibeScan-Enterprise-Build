@@ -8,7 +8,7 @@ import {
 import { cn, getGradeColor } from "@/lib/utils";
 import { APP_ORIGIN } from "@/lib/origin";
 import {
-  GradeRing, VulnRow, ComplianceCard, SeverityDonut, SeverityLegend,
+  GradeRing, VulnRow, ComplianceCard, SeverityLegend,
   SEV_ORDER, VERIFICATION_THRESHOLD,
   type SharedReportData,
 } from "./shared-report-components";
@@ -177,9 +177,8 @@ export default function SharedReport() {
 
       <div className="glass-panel p-6 md:p-10 rounded-3xl mb-10 relative overflow-hidden flex flex-col sm:flex-row items-center gap-8">
         <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-primary/5 rounded-full blur-[100px] pointer-events-none" />
-        <div className="flex flex-col xs:flex-row items-center gap-4 z-10 shrink-0">
+        <div className="z-10 shrink-0">
           <GradeRing grade={summary.grade} score={summary.riskScore} />
-          <SeverityDonut counts={summary} size={144} />
         </div>
         <div className="flex-1 text-center sm:text-left z-10">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary border border-white/5 text-xs font-medium text-muted-foreground mb-4">
