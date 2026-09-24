@@ -29,6 +29,7 @@ import domainVerificationRouter from "./domainVerification";
 import dismissalsRouter from "./dismissals";
 import checkoutRouter from "./checkout";
 import { APP_ORIGIN } from "../lib/appOrigin";
+import { coverageLines } from "../lib/testLedger";
 import { stripe } from "../lib/stripe";
 import { rateLimitMiddleware } from "../lib/rateLimit";
 
@@ -252,6 +253,9 @@ export function formatReport(
     `Full report: ${APP_ORIGIN}/report/${report.id}`,
     "",
   ];
+  // Next to the grade, on the first page: a clean grade must not read as full
+  // coverage when active tests or access-control tests were skipped.
+  if (firstPage) lines.push(...coverageLines(d.tests));
   // The narrative belongs to the report, not to a page — sent once, on page 1.
   const ai = d.aiAnalysis;
   if (firstPage) {
@@ -382,7 +386,8 @@ export function buildServer(httpReq: Request, user: TokenUser): McpServer {
     {
       title: "Read a scan report",
       description:
-        "The finished report for a scan: grade, prioritised findings with fixes and evidence, and a fix prompt " +
+        "The finished report for a scan: grade, what the scan tested and what it skipped (a clean grade says nothing " +
+        "about skipped areas, so say so), prioritised findings with fixes and evidence, and a fix prompt " +
         `written for the user's AI editor. Findings come ${DEFAULT_PAGE} per page, most severe first — pass offset ` +
         'for the next page, or min_severity (e.g. "high") to focus on what matters most.',
       inputSchema: {

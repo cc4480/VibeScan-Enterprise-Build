@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AlertTriangle, CheckCircle2, MinusCircle } from "lucide-react";
 import { cn, getGradeColor, formatSeverity } from "@/lib/utils";
 
 export interface SharedReportData {
@@ -45,6 +46,8 @@ export interface SharedReportData {
       quickWins: string[];
       complianceNotes?: string | null;
     } | null;
+    /** What ran, what was skipped and why. Absent on reports from before test records existed. */
+    tests?: CoverageTest[] | null;
     compliance?: {
       frameworks: Array<{
         framework: { id: string; name: string; version: string; note: string };
@@ -280,6 +283,131 @@ export function VulnRow({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+
+export interface CoverageTest {
+  group: string;
+  name: string;
+  status: "ran" | "skipped" | "failed";
+  findings: number;
+  durationMs: number;
+  reason?: string;
+}
+
+const isCoverageTest = (t: unknown): t is CoverageTest => {
+  if (!t || typeof t !== "object") return false;
+  const r = t as Record<string, unknown>;
+  return typeof r.name === "string" && (r.status === "ran" || r.status === "skipped" || r.status === "failed");
+};
+
+/**
+ * What the scan tested, and what it did not.
+ *
+ * A grade reads as "everything was checked". It was not: without verified
+ * ownership every active test is skipped, and without a second login access
+ * control is. This card says so beside the grade, so a clean result cannot be
+ * taken as a statement about areas the scan never looked at. Reports from before
+ * test records existed say that instead of implying full coverage.
+ */
+export function CoverageCard({ tests }: { tests?: CoverageTest[] | null }) {
+  const list = Array.isArray(tests) ? tests.filter(isCoverageTest) : [];
+
+  if (list.length === 0) {
+    return (
+      <div className="glass-card rounded-2xl p-6">
+        <h3 className="text-lg font-bold mb-1">What this scan tested</h3>
+        <p className="text-sm text-muted-foreground">
+          Not recorded for this scan, which was run before test records were kept. Do not read the grade as a
+          statement about full coverage.
+        </p>
+      </div>
+    );
+  }
+
+  const ran = list.filter((t) => t.status === "ran");
+  const skipped = list.filter((t) => t.status === "skipped");
+  const failed = list.filter((t) => t.status === "failed");
+  const notRun = list.filter((t) => t.status !== "ran");
+  const groups = Array.from(new Set(list.map((t) => t.group)));
+
+  return (
+    <div className="glass-card rounded-2xl p-6">
+      <h3 className="text-lg font-bold mb-1">What this scan tested</h3>
+      <p className="text-sm text-muted-foreground mb-4">
+        <span className="font-semibold text-foreground">
+          {ran.length} of {list.length} tests ran
+        </span>
+        {skipped.length > 0 && `, ${skipped.length} skipped`}
+        {failed.length > 0 && `, ${failed.length} failed`}.
+      </p>
+
+      {notRun.length > 0 ? (
+        <>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+            Not tested on this scan
+          </p>
+          <ul className="space-y-2 mb-3">
+            {notRun.map((t, i) => (
+              <li key={`${t.name}-${i}`} className="text-sm flex items-start gap-2">
+                {t.status === "failed" ? (
+                  <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-400" />
+                ) : (
+                  <MinusCircle className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />
+                )}
+                <span className="flex-1">
+                  <span className="font-medium">{t.name}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {t.status === "failed" ? `Failed to run${t.reason ? `: ${t.reason}` : ""}` : (t.reason ?? "Skipped")}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-muted-foreground/80 leading-relaxed">
+            A clean result says nothing about these areas.
+          </p>
+        </>
+      ) : (
+        <p className="text-sm flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-green-400" /> Every test ran.
+        </p>
+      )}
+
+      <details className="mt-4 group">
+        <summary className="cursor-pointer text-xs text-primary hover:underline">All {list.length} tests</summary>
+        <div className="mt-3 space-y-3">
+          {groups.map((g) => (
+            <div key={g}>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">{g}</p>
+              <ul className="space-y-1">
+                {list
+                  .filter((t) => t.group === g)
+                  .map((t, i) => (
+                    <li key={`${t.name}-${i}`} className="text-xs flex items-baseline gap-2">
+                      <span
+                        className={cn(
+                          "font-mono text-[10px] shrink-0 w-14",
+                          t.status === "ran" ? "text-green-400" : t.status === "failed" ? "text-amber-400" : "text-muted-foreground",
+                        )}
+                      >
+                        {t.status}
+                      </span>
+                      <span className="flex-1 min-w-0 break-words">{t.name}</span>
+                      {t.status === "ran" && (
+                        <span className="text-muted-foreground shrink-0">
+                          {t.findings} finding{t.findings === 1 ? "" : "s"}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </details>
     </div>
   );
 }

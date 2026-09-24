@@ -20,8 +20,8 @@ import { useSeo } from "@/lib/seo";
 import type { Vulnerability } from "@workspace/api-client-react";
 import { APP_ORIGIN } from "@/lib/origin";
 import {
-  ComplianceCard, SeverityLegend, SEVERITY_HEX,
-  type SharedReportData, type SeverityCounts,
+  ComplianceCard, CoverageCard, SeverityLegend, SEVERITY_HEX,
+  type SharedReportData, type SeverityCounts, type CoverageTest,
 } from "./shared-report-components";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
@@ -2431,6 +2431,8 @@ export default function ReportViewer() {
   // report.data is loosely typed by the client; compliance is frozen in by the
   // worker (see the autoSuppressedCount cast below for the same pattern).
   const compliance = (report.data as { compliance?: ComplianceData | null }).compliance ?? null;
+  // What ran and what was skipped; absent on reports from before test records.
+  const coverageTests = (report.data as { tests?: CoverageTest[] | null }).tests ?? null;
 
   const severityCounts = {
     critical: summary.critical,
@@ -2777,8 +2779,11 @@ export default function ReportViewer() {
           {vulnerabilities.length === 0 && (
             <div className="text-center py-12 glass-card rounded-xl">
               <CheckCircle2 className="w-12 h-12 text-green-400 mx-auto mb-4" />
-              <h3 className="text-xl font-bold mb-2">No vulnerabilities found</h3>
-              <p className="text-muted-foreground">Excellent work. Your application appears secure based on our checks.</p>
+              <h3 className="text-xl font-bold mb-2">No findings from the tests that ran</h3>
+              <p className="text-muted-foreground">
+                Nothing to fix from what this scan checked. A clean result says nothing about the areas listed under
+                &ldquo;What this scan tested&rdquo; as not tested.
+              </p>
             </div>
           )}
         </div>
@@ -2896,6 +2901,10 @@ export default function ReportViewer() {
               for. Same component the shared report uses; renders nothing when
               no findings map to a framework. */}
           <ComplianceCard compliance={compliance} />
+
+          {/* What the scan tested, and what it skipped — beside the grade's context so a
+              clean result is not read as full coverage. */}
+          <CoverageCard tests={coverageTests} />
 
           {/* Fix with your AI agent */}
           {aiAnalysis?.agentFixPrompt && (

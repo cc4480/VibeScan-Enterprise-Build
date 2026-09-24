@@ -74,7 +74,7 @@
     {
       "name": "get_report",
       "title": "Read a scan report",
-      "description": "The finished report for a scan: grade, prioritised findings with fixes and evidence, and a fix prompt written for the user's AI editor. Findings come 25 per page, most severe first — pass offset for the next page, or min_severity (e.g. \"high\") to focus on what matters most.",
+      "description": "The finished report for a scan: grade, what the scan tested and what it skipped (a clean grade says nothing about skipped areas, so say so), prioritised findings with fixes and evidence, and a fix prompt written for the user's AI editor. Findings come 25 per page, most severe first — pass offset for the next page, or min_severity (e.g. \"high\") to focus on what matters most.",
       "inputSchema": {
         "type": "object",
         "properties": {

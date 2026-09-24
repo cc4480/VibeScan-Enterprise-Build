@@ -882,7 +882,9 @@ function buildExecutiveSummary(
   const high = counts["high"] ?? 0;
 
   if (totalVulns === 0) {
-    return `${domain} passed all security checks with a grade of ${grade}. No significant vulnerabilities were detected during this scan. Continue following security best practices and re-scan regularly.`;
+    // Not "passed all security checks": a scan with skipped tests has not checked those areas,
+    // and a clean grade says nothing about them. The report's coverage section lists them.
+    return `${domain} has a grade of ${grade}: the tests that ran found no significant vulnerabilities. That is not a statement about any area this scan did not test, which the report lists. Re-scan regularly.`;
   }
 
   const urgencyPhrase =

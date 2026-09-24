@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TestLedger, formatTestLine, formatTestSummary, NOT_VERIFIED } from "./testLedger";
+import { TestLedger, formatTestLine, formatTestSummary, NOT_VERIFIED, coverageLines } from "./testLedger";
 
 const finding = { id: "1", name: "x", severity: "low", category: "c", description: "d", solution: "s" } as const;
 
@@ -48,5 +48,46 @@ describe("the console lines", () => {
         { group: "a", name: "3", status: "failed", findings: 0, durationMs: 1 },
       ]),
     ).toBe("[tests] 1 ran, 1 skipped, 1 failed (3 total)");
+  });
+});
+
+describe("coverageLines — what the report says was tested", () => {
+  const rec = (name: string, status: "ran" | "skipped" | "failed", reason?: string) => ({
+    group: "g", name, status, findings: 0, durationMs: 1, ...(reason ? { reason } : {}),
+  });
+
+  it("says plainly when everything ran", () => {
+    expect(coverageLines([rec("a", "ran"), rec("b", "ran")])[0]).toBe("What this scan tested: all 2 tests ran.");
+  });
+
+  it("lists what was not tested, with the reason, so a clean grade is not read as full coverage", () => {
+    const t = coverageLines([
+      rec("headers", "ran"),
+      rec("injection (XSS, SQLi)", "skipped", "domain not verified for this account"),
+      rec("SSL Labs", "failed", "assessment unavailable"),
+    ]).join("\n");
+    expect(t).toContain("1 of 3 tests ran, 1 skipped, 1 failed");
+    expect(t).toContain("a clean result says nothing about these");
+    expect(t).toContain("- injection (XSS, SQLi) (g): domain not verified for this account");
+    expect(t).toContain("- SSL Labs (g): failed to run — assessment unavailable");
+    expect(t).not.toContain("- headers");
+  });
+
+  it("states that older reports have no record instead of implying full coverage", () => {
+    for (const none of [undefined, null, [], "nope", [{ junk: 1 }]]) {
+      expect(coverageLines(none).join("\n")).toContain("not recorded");
+    }
+  });
+
+  it("ignores malformed entries without throwing", () => {
+    const t = coverageLines([rec("ok", "ran"), null, 5, { name: "x", status: "weird" }]).join("\n");
+    expect(t).toContain("all 1 tests ran");
+  });
+
+  it("caps a very long list", () => {
+    const many = Array.from({ length: 40 }, (_, i) => rec(`t${i}`, "skipped", "r"));
+    const lines = coverageLines(many);
+    expect(lines.join("\n")).toContain("…and 15 more.");
+    expect(lines.length).toBeLessThan(35);
   });
 });

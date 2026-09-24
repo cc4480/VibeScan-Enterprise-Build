@@ -75,3 +75,34 @@ describe("formatReport paging", () => {
     expect(count(formatReport(report(180), { limit: 500 }))).toBe(50);
   });
 });
+
+describe("formatReport shows what the scan tested", () => {
+  const withTests = (tests: unknown) => {
+    const r = report(5);
+    (r.data as any).tests = tests;
+    return r;
+  };
+
+  it("puts coverage next to the grade, so a clean grade cannot read as full coverage", () => {
+    const t = formatReport(withTests([
+      { group: "passive", name: "headers", status: "ran", findings: 0, durationMs: 1 },
+      { group: "active", name: "injection (XSS, SQLi)", status: "skipped", findings: 0, durationMs: 0, reason: "domain not verified for this account" },
+    ]));
+    expect(t).toContain("What this scan tested: 1 of 2 tests ran, 1 skipped, 0 failed.");
+    expect(t).toContain("- injection (XSS, SQLi) (active): domain not verified for this account");
+    // Before the summary and the findings, directly under the report link.
+    expect(t.indexOf("What this scan tested")).toBeLessThan(t.indexOf("Summary:"));
+    expect(t.indexOf("What this scan tested")).toBeGreaterThan(t.indexOf("Full report:"));
+  });
+
+  it("says so on a report from before test records existed", () => {
+    expect(formatReport(report(5))).toContain("What this scan tested: not recorded");
+  });
+
+  it("sends coverage once, on the first page only", () => {
+    const first = formatReport(withTests([{ group: "g", name: "a", status: "ran", findings: 0, durationMs: 1 }]));
+    const second = formatReport(withTests([{ group: "g", name: "a", status: "ran", findings: 0, durationMs: 1 }]), { offset: 3 });
+    expect(first).toContain("What this scan tested");
+    expect(second).not.toContain("What this scan tested");
+  });
+});

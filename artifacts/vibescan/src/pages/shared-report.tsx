@@ -8,7 +8,7 @@ import {
 import { cn, getGradeColor } from "@/lib/utils";
 import { APP_ORIGIN } from "@/lib/origin";
 import {
-  GradeRing, VulnRow, ComplianceCard, SeverityLegend,
+  GradeRing, VulnRow, ComplianceCard, CoverageCard, SeverityLegend,
   SEV_ORDER, VERIFICATION_THRESHOLD,
   type SharedReportData,
 } from "./shared-report-components";
@@ -225,8 +225,10 @@ export default function SharedReport() {
           {vulnerabilities.length === 0 && (
             <div className="text-center py-12 glass-card rounded-xl">
               <Shield className="w-10 h-10 text-green-400 mx-auto mb-3" />
-              <h3 className="text-lg font-bold mb-1">No vulnerabilities found</h3>
-              <p className="text-muted-foreground text-sm">This application passed all security checks.</p>
+              <h3 className="text-lg font-bold mb-1">No findings from the tests that ran</h3>
+              <p className="text-muted-foreground text-sm">
+                A clean result says nothing about the areas listed under &ldquo;What this scan tested&rdquo; as not tested.
+              </p>
             </div>
           )}
         </div>
@@ -304,7 +306,8 @@ export default function SharedReport() {
 
       {/* Compliance mapping — full width below the grid; the control lists need
           the room. Renders nothing when no findings map to a framework. */}
-      <div className="mt-10">
+      <div className="mt-10 space-y-8">
+        <CoverageCard tests={data.tests ?? null} />
         <ComplianceCard compliance={compliance} />
       </div>
 
