@@ -577,7 +577,7 @@ function SubscriptionCard({ sub, onCancel }: { sub: MonitorSubscription; onCance
               <p className="text-xs text-muted-foreground mt-1">
                 Checked {relativeTime(sub.lastPulseAt)}
                 {sub.responseTimeMs != null && !isDown && ` · ${formatMs(sub.responseTimeMs)}`}
-                {isActive && ` · ${days} day${days !== 1 ? "s" : ""} left on subscription`}
+                {isActive && sub.expiryApplies !== false && ` · ${days} day${days !== 1 ? "s" : ""} left on subscription`}
               </p>
             </div>
           </div>

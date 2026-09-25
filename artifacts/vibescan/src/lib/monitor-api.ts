@@ -17,6 +17,8 @@ export interface MonitorSubscription {
   alertCount: number;
   regressionCount: number;
   certExpiryDays: number | null;
+  /** False once monitoring runs on a paid plan: then the plan ends it, not expiresAt. */
+  expiryApplies?: boolean;
   /** A scan for this target is queued or running right now. */
   scanInProgress: boolean;
   /** Which stage it is at, when one is running: queued | scanning | analyzing. */

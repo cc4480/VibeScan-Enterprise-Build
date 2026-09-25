@@ -12,7 +12,7 @@ import { useSeo } from "@/lib/seo";
 
 // Per document: a change to one must not re-date the other.
 const LAST_UPDATED: Record<"privacy" | "terms", string> = {
-  privacy: "September 22, 2026", // AI analysis now runs on every scan, not only "deep" ones
+  privacy: "September 25, 2026", // AI analysis provider named (DeepSeek)
   terms: "September 24, 2026", // Starter and Pro plans; free scans renew monthly
 };
 const CONTACT = "hello@secscan.us";
@@ -91,10 +91,11 @@ function Privacy() {
           site, so it sees request metadata including your IP.
         </p>
         <p>
-          <strong className="text-foreground">Our AI analysis provider</strong> — generates
-          the written analysis in every report. Every scan sends its findings, including the
-          target URL and evidence fragments, to this provider for that purpose. The provider
-          is based in China, so this is a transfer outside the UK and EEA. There is currently
+          <strong className="text-foreground">DeepSeek</strong> — our AI analysis provider;
+          it generates the written analysis in every report. Every scan sends its findings
+          (with evidence fragments), the target URL and the technologies detected on it to
+          DeepSeek for that purpose. Your
+          account details (name, email, password) are not sent. DeepSeek is based in China, so this is a transfer outside the UK and EEA. There is currently
           no way to run a scan without it, so if you would rather not have findings leave our
           infrastructure, do not run scans.
         </p>

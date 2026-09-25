@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { resolveEntitlement, type BillingRow } from "./entitlements";
+import { describe, it, expect, afterEach } from "vitest";
+import { resolveEntitlement, monitorExpiryApplies, type BillingRow } from "./entitlements";
 import { MONITOR_PLANS, DEFAULT_PLAN, SOLD_PLANS, planByKey, urlLimitForPlan, includedScansForPlan } from "./plans";
 import { PRICE_MAP, CREDITS_MAP } from "./stripe";
 
@@ -143,5 +143,19 @@ describe("MONITOR_PLANS", () => {
       expect(includedScansForPlan(k), k).toBe(0);
       expect(planByKey(k), k).toBeNull();
     }
+  });
+});
+
+describe("monitorExpiryApplies — who ends a monitor", () => {
+  afterEach(() => { delete process.env["MONITORING_REQUIRES_PLAN"]; });
+
+  it("the 1-year expiresAt ends monitors while plans are not enforced", () => {
+    delete process.env["MONITORING_REQUIRES_PLAN"];
+    expect(monitorExpiryApplies()).toBe(true);
+  });
+
+  it("the plan ends them once enforced, so a monthly subscriber is not cut off in month 12", () => {
+    process.env["MONITORING_REQUIRES_PLAN"] = "true";
+    expect(monitorExpiryApplies()).toBe(false);
   });
 });

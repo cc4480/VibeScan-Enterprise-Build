@@ -12,7 +12,7 @@ import { logger } from "../lib/logger";
 import { checkScanTarget } from "../lib/ssrfGuard";
 import { rateLimitMiddleware, scanRateLimitRules } from "../lib/rateLimit";
 import { trialScansExhausted, TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE } from "../lib/freeTrial";
-import { monitorEntitlement } from "../lib/entitlements";
+import { monitorEntitlement, monitorExpiryApplies } from "../lib/entitlements";
 import { hasLivePlan, chargeScan, refundCharge, refundFailedScan, type PaidWith } from "../lib/billing";
 import { creditBalance } from "../lib/credits";
 import { summariseUptime } from "../lib/monitorPulse";
@@ -44,7 +44,7 @@ const CreateMonitorBody = z.object({
 
 // ── POST /api/monitor/subscriptions ──────────────────────────────────────────
 // Create a new monitoring subscription for a URL.
-// Free unless MONITORING_REQUIRES_PLAN is on; then it needs SecScan Pro (see lib/entitlements.ts).
+// Free unless MONITORING_REQUIRES_PLAN is on; then it needs a Starter or Pro plan (see lib/entitlements.ts).
 
 // A subscription schedules recurring scans, so it draws on the same budget.
 // Per user, for the same reason as the scan route: this was IP-keyed, so
@@ -419,6 +419,9 @@ router.get("/monitor/subscriptions", async (req, res): Promise<void> => {
         // alert last fired: the alert row only exists inside 30 days, so
         // without this the dashboard could show nothing for a healthy cert.
         certExpiryDays: newestPulse?.certDaysRemaining ?? certExpiryDays,
+        // False once plans are enforced: the plan decides then, so the card
+        // must not count down to a date that no longer ends anything.
+        expiryApplies: monitorExpiryApplies(),
         scanInProgress: Boolean(inFlight),
         scanStatus: inFlight?.status ?? null,
         lastPulseAt: newestPulse?.checkedAt ?? null,

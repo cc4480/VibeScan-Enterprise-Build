@@ -55,7 +55,7 @@ import {
 } from "./mailer";
 import { fireWebhook } from "./webhook";
 import { APP_ORIGIN } from "./appOrigin";
-import { monitorEntitlement } from "./entitlements";
+import { monitorEntitlement, monitorExpiryApplies } from "./entitlements";
 import { highestSeverity } from "./notificationPrefs";
 import {
   runPulse,
@@ -99,8 +99,10 @@ export function computeNextScanAt(grade: string, from: Date = new Date()): Date 
 export function isSubscriptionDue(
   sub: { expiresAt: Date; nextScanAt: Date | null; lastScanAt: Date | null },
   now: Date = new Date(),
+  /** Off once plans are enforced: the plan, not expiresAt, ends monitoring then. */
+  expiryApplies: boolean = monitorExpiryApplies(),
 ): boolean {
-  if (sub.expiresAt <= now) return false;
+  if (expiryApplies && sub.expiresAt <= now) return false;
   if (!sub.nextScanAt) {
     // No cadence set yet — this is the brand-new-subscription and the
     // legacy-row shape. Treat "never scanned" as due (the baseline scan)
@@ -138,7 +140,8 @@ async function activeEntitledSubscriptions(
     .from(monitorSubscriptionsTable)
     .where(eq(monitorSubscriptionsTable.status, "active"));
 
-  const unexpired = all.filter((sub) => sub.expiresAt > now);
+  // With plans enforced, the entitlement check below is what ends monitoring.
+  const unexpired = monitorExpiryApplies() ? all.filter((sub) => sub.expiresAt > now) : all;
 
   const entitlementByUser = new Map<string, boolean>();
   const subs: ActiveSub[] = [];

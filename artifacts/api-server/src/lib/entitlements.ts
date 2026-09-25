@@ -49,6 +49,20 @@ export function enforcementEnabled(): boolean {
 }
 
 /**
+ * Whether a monitor's own expiresAt still ends it.
+ *
+ * Only while plans are unenforced. expiresAt is a year out from creation and
+ * has nothing to do with payment, so under a monthly plan it would stop a
+ * paying customer's monitors in month 12 and keep a cancelled one running.
+ * Once MONITORING_REQUIRES_PLAN is on, the plan decides: active or past_due
+ * keeps monitors running, cancelled or paused stops them (the rows are kept,
+ * and they resume if the plan does).
+ */
+export function monitorExpiryApplies(): boolean {
+  return !enforcementEnabled();
+}
+
+/**
  * Decide what a user may do, from their billing row alone.
  *
  * Pure on purpose: this is the rule that decides whether a paying customer's

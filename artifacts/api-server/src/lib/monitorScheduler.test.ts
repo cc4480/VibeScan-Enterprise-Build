@@ -109,6 +109,11 @@ describe("isSubscriptionDue — the decision that makes rescans automatic", () =
     expect(isSubscriptionDue({ expiresAt: past(1), nextScanAt: past(5), lastScanAt: past(8) }, now)).toBe(false);
   });
 
+  it("once plans are enforced, the 1-year expiresAt no longer ends a paying customer's monitor", () => {
+    // Month 13 of a monthly plan: the plan (checked by entitlement) decides, not the creation-time date.
+    expect(isSubscriptionDue({ expiresAt: past(30), nextScanAt: past(1), lastScanAt: past(8) }, now, false)).toBe(true);
+  });
+
   it("is due for a subscription that has never been scanned and has no cadence set", () => {
     // The exact shape of a subscription the moment POST /monitor/subscriptions
     // inserts it — before its baseline scan has finished — MUST still read as
