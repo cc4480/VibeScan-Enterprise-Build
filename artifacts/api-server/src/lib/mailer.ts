@@ -301,10 +301,11 @@ export async function sendMonitorCveAlertEmail(opts: SendMonitorCveAlertOptions)
           <div style="display:inline-flex;align-items:center;gap:8px;background:#f8717122;padding:6px 14px;border-radius:20px;margin-bottom:24px;">
             <span style="font-size:13px;font-weight:700;color:#f87171;">⚠ CVE Alert</span>
           </div>
-          <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;">New vulnerabilities affect your stack</h2>
+          <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;">New vulnerabilities in software your site runs</h2>
           <p style="margin:0 0 24px;color:#94a3b8;font-size:14px;">
-            <strong style="color:#f8fafc;">${cveMatches.length} new CVE${cveMatches.length > 1 ? "s" : ""}</strong> published today match technologies detected on
-            <strong style="color:#f8fafc;">${targetUrl}</strong>.
+            <strong style="color:#f8fafc;">${cveMatches.length} CVE${cveMatches.length > 1 ? "s" : ""}</strong>, newly published or newly analysed by the NVD, list software detected on
+            <strong style="color:#f8fafc;">${targetUrl}</strong> as vulnerable.
+            Each one below says whether the version we detected is in the affected range, or whether no version could be detected.
             A rescan has been queued automatically.
           </p>
 
@@ -334,7 +335,7 @@ export async function sendMonitorCveAlertEmail(opts: SendMonitorCveAlertOptions)
       body: resendBody({
         headers: unsubscribeHeaders(APP_ORIGIN, opts.userId),
         to: [opts.toEmail],
-        subject: `⚠ CVE Alert: ${topMatch?.cveId ?? "New vulnerability"}${extra} affects ${targetUrl}`,
+        subject: `⚠ CVE Alert: ${topMatch?.cveId ?? "New vulnerability"}${extra} in software detected on ${targetUrl}`,
         html,
       }),
     });

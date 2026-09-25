@@ -44,7 +44,7 @@ import {
 import { eq, and, lte, lt, desc, isNull, or, inArray } from "drizzle-orm";
 import { enqueueScan } from "./queue";
 import { logger } from "./logger";
-import { fetchRecentCves, matchCvesToTechnologies } from "./cveMonitor";
+import { fetchChangedCves, matchCvesToTechnologies, describeAffected } from "./cveMonitor";
 import {
   sendMonitorCveAlertEmail,
   sendMonitorScanQueuedEmail,
@@ -565,8 +565,14 @@ async function runCveCheck(): Promise<void> {
   const now = new Date();
   const since = new Date(now.getTime() - CVE_LOOKBACK_MS);
 
-  const cves = await fetchRecentCves(since, now);
-  log.info({ cveCount: cves.length, lookbackHours: CVE_LOOKBACK_MS / 3_600_000 }, "Fetched CVEs from NVD");
+  const { cves, ok } = await fetchChangedCves(since, now);
+  const analysed = cves.filter((c) => c.products.length > 0).length;
+  log.info(
+    { cveCount: cves.length, withProductData: analysed, complete: ok, lookbackHours: CVE_LOOKBACK_MS / 3_600_000 },
+    "Fetched changed CVEs from NVD",
+  );
+  // A partial fetch still gets matched: what did arrive is real, and the overlapping
+  // window re-reads the rest next hour. fetchChangedCves has already logged the failure.
   if (cves.length === 0) return;
 
   const { subs: validSubs, total, skippedUnentitled } = await activeEntitledSubscriptions(now);
@@ -663,13 +669,16 @@ async function runCveCheck(): Promise<void> {
         combinedScore(b.cve.id, b.cve.severity) - combinedScore(a.cve.id, a.cve.severity),
       );
 
-      for (const { cve, matchedTech } of sortedMatches) {
+      for (const match of sortedMatches) {
+        const { cve } = match;
         const epss = epssMap.get(cve.id);
         await db.insert(cveAlertsTable).values({
           subscriptionId: sub.id,
           cveId: cve.id,
           cveSummary: cve.description.slice(0, 500),
-          affectedTech: matchedTech,
+          // Says whether the detected version is in the affected range or no
+          // version was detected, so the alert is never read as more than it is.
+          affectedTech: describeAffected(match),
           severity: cve.severity,
           epssScore: epss?.score ?? null,
           epssPercentile: epss?.percentile ?? null,
@@ -683,11 +692,11 @@ async function runCveCheck(): Promise<void> {
           toEmail: sub.userEmail,
           userId: sub.userId,
           targetUrl: sub.targetUrl,
-          cveMatches: sortedMatches.map(({ cve, matchedTech }) => ({
-            cveId: cve.id,
-            summary: cve.description.slice(0, 200),
-            severity: cve.severity,
-            affectedTech: matchedTech,
+          cveMatches: sortedMatches.map((match) => ({
+            cveId: match.cve.id,
+            summary: match.cve.description.slice(0, 200),
+            severity: match.cve.severity,
+            affectedTech: describeAffected(match),
           })),
           scanId: scanId ?? "",
           dashboardUrl: `${appOrigin}/monitor`,
@@ -697,12 +706,16 @@ async function runCveCheck(): Promise<void> {
       // Webhook
       if (sub.webhookUrl) {
         await fireWebhook(sub.webhookUrl, "cve_alert", sub.targetUrl, sub.id, {
-          cves: sortedMatches.map(({ cve, matchedTech }) => {
+          cves: sortedMatches.map((match) => {
+            const { cve } = match;
             const epss = epssMap.get(cve.id);
             return {
               cveId: cve.id,
               severity: cve.severity,
-              affectedTech: matchedTech,
+              affectedTech: match.matchedTech,
+              // "affected": detected version is in the vulnerable range;
+              // "unconfirmed": no version was detected, product only.
+              basis: match.basis,
               epssScore: epss?.score,
               epssPercentile: epss?.percentile,
             };
