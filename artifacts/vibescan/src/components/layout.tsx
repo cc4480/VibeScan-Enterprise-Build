@@ -301,11 +301,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {location !== "/feedback" && (
         <Link
           href="/feedback"
-          aria-label="Send feedback"
           title="Send feedback"
-          className="fixed bottom-5 right-5 z-40 flex items-center justify-center w-12 h-12 rounded-full bg-card border border-white/10 text-muted-foreground shadow-lg shadow-black/40 hover:text-foreground hover:border-primary/40 hover:shadow-primary/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary transition-all"
+          className="group fixed bottom-5 right-5 z-40 flex items-center gap-2 h-11 pl-3.5 pr-4 rounded-full bg-card/95 backdrop-blur border border-white/10 text-muted-foreground shadow-lg shadow-black/40 hover:text-foreground hover:border-primary/40 hover:shadow-primary/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary transition-all"
         >
-          <MessageSquare className="w-5 h-5" />
+          <MessageSquare className="w-[18px] h-[18px] text-primary/80 group-hover:text-primary transition-colors" />
+          <span className="text-[13px] font-medium tracking-wide">Feedback</span>
         </Link>
       )}
 
