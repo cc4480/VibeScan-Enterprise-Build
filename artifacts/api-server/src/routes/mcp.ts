@@ -658,7 +658,8 @@ function hostOf(domain: string): string {
 export function formatAccount(b: any): string {
   const sub = b.subscription;
   return [
-    `Free scans left: ${b.freeScansRemaining} of ${b.freeScanLimit}`,
+    `Free scans left this month: ${b.freeScansRemaining} of ${b.freeScanLimit}` +
+      (b.freeScansResetAt ? ` · renew ${String(b.freeScansResetAt).slice(0, 10)}` : ""),
     `Credits: ${b.credits}`,
     sub
       ? `Plan: ${sub.plan} (${sub.status}) · ${sub.includedScansRemaining} included scans left this period · ` +

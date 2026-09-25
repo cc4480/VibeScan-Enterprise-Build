@@ -1053,7 +1053,7 @@ function AddSubscriptionForm({ onSuccess }: { onSuccess: () => void }) {
       )}
       {refusal === "limit" && (
         <p className="mt-2 text-sm text-muted-foreground">
-          SecScan Pro covers 3 sites. Stop monitoring one below to add another, or{" "}
+          You've reached your plan's site limit. Stop monitoring one below to add another, or{" "}
           <Link href="/settings#billing" className="text-primary underline underline-offset-2">see your plan</Link>.
         </p>
       )}

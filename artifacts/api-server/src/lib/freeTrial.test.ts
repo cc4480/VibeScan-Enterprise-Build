@@ -26,7 +26,7 @@ vi.mock("@workspace/db", () => {
   };
   return {
     db: { select: () => chain },
-    scansTable: { userId: "user_id", origin: "origin", paidWith: "paid_with" },
+    scansTable: { userId: "user_id", origin: "origin", paidWith: "paid_with", createdAt: "created_at" },
   };
 });
 
@@ -34,6 +34,7 @@ vi.mock("drizzle-orm", () => ({
   and: (...a: unknown[]) => ({ op: "and", args: a }),
   eq: (col: unknown, val: unknown) => ({ op: "eq", col, val }),
   or: (...a: unknown[]) => ({ op: "or", args: a }),
+  gte: (col: unknown, val: unknown) => ({ op: "gte", col, val }),
   count: () => ({ op: "count" }),
 }));
 
@@ -145,5 +146,34 @@ describe("trialScansExhausted", () => {
     const { TRIAL_LIMIT_MESSAGE, FREE_TRIAL_SCAN_LIMIT } = await load();
     expect(FREE_TRIAL_SCAN_LIMIT).toBe(3);
     expect(TRIAL_LIMIT_MESSAGE).toContain("3 free scans");
+  });
+});
+
+describe("the free scans renew every month", () => {
+  /** The gte() the last query was built from: only scans from this month count. */
+  function periodFilter(): { col: unknown; val: unknown } | undefined {
+    const w = dbState.lastWhere as { args?: Array<{ op?: string; col?: unknown; val?: unknown }> } | null;
+    return (w?.args ?? []).find((a) => a?.op === "gte") as { col: unknown; val: unknown } | undefined;
+  }
+
+  it("counts only scans since midnight UTC on the 1st of this month", async () => {
+    const { trialScansUsedBy } = await load();
+    dbState.rows = [{ n: 1 }];
+    await trialScansUsedBy("user-1", new Date("2026-09-24T18:30:00Z"));
+    const f = periodFilter();
+    expect(f?.col).toBe("created_at");
+    expect((f?.val as Date).toISOString()).toBe("2026-09-01T00:00:00.000Z");
+  });
+
+  it("starts a fresh allowance on the 1st", async () => {
+    const { freeScanPeriodStart } = await load();
+    expect(freeScanPeriodStart(new Date("2026-10-01T00:00:00Z")).toISOString()).toBe("2026-10-01T00:00:00.000Z");
+    expect(freeScanPeriodStart(new Date("2026-09-30T23:59:59Z")).toISOString()).toBe("2026-09-01T00:00:00.000Z");
+  });
+
+  it("says when the allowance renews, rolling over the year end", async () => {
+    const { freeScansResetAt } = await load();
+    expect(freeScansResetAt(new Date("2026-09-24T12:00:00Z")).toISOString()).toBe("2026-10-01T00:00:00.000Z");
+    expect(freeScansResetAt(new Date("2026-12-31T23:00:00Z")).toISOString()).toBe("2027-01-01T00:00:00.000Z");
   });
 });

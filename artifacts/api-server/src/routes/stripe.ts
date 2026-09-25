@@ -36,7 +36,7 @@ import {
   applyPaidInvoice,
   syncSubscription,
 } from "../lib/billing";
-import { DEFAULT_PLAN } from "../lib/plans";
+import { planByKey } from "../lib/plans";
 
 const router: IRouter = Router();
 
@@ -115,6 +115,8 @@ export async function processStripeEvent(event: Stripe.Event): Promise<EventOutc
               stripeCustomerId: idOf(session.customer),
               stripeSubscriptionId: subscriptionId,
               currentPeriodEnd: null,
+              // Absent on sessions from before there were two plans: Pro.
+              plan: planByKey(meta["plan"]) ?? undefined,
             });
             applied = `subscription started for ${userId}`;
           }
@@ -154,10 +156,11 @@ export async function processStripeEvent(event: Stripe.Event): Promise<EventOutc
           stripeCustomerId: idOf(invoice.customer),
           userId: details?.metadata?.["user_id"] ?? null,
           currentPeriodEnd: periodEnd,
+          plan: planByKey(details?.metadata?.["plan"]) ?? undefined,
         });
         applied =
           result === "applied"
-            ? `period started: ${DEFAULT_PLAN.includedScans} included scans for ${subscriptionId}`
+            ? `period started: plan allowance granted for ${subscriptionId}`
             : `invoice for unknown subscription ${subscriptionId}`;
         break;
       }

@@ -74,12 +74,12 @@ lib/
 - **Artifact router handles external routing**: The Replit artifact router (`REPLIT_ARTIFACT_ROUTER`) proxies `/api` to Express (port 8080) and `/` to Vite (port 18425). The `Start application` webview workflow runs Vite on port 5000 for the Replit preview pane.
 - **No login required**: Auth is a UUID token auto-generated in `localStorage` (`vibescan_client_token`). The `authMiddleware` reads it from the `Authorization: Bearer` header.
 - **Graceful degradation**: All three external services (DeepSeek, Resend, Stripe) check for their env var and skip with a warning if not set — the app remains fully functional.
-- **Payments**: on exactly when `STRIPE_SECRET_KEY` (and `STRIPE_WEBHOOK_SECRET`) are set. Checkout sells SecScan Pro ($50/month) and credit packs; the webhook applies each Stripe event exactly once (see `lib/billing.ts`). Setup: `deploy/PAYMENTS-GO-LIVE.md`.
+- **Payments**: on exactly when `STRIPE_SECRET_KEY` (and `STRIPE_WEBHOOK_SECRET`) are set. Checkout sells SecScan Starter ($19/month) and Pro ($49/month) and credit packs; the webhook applies each Stripe event exactly once (see `lib/billing.ts`). Setup: `deploy/PAYMENTS-GO-LIVE.md`.
 - **Two processes, one image**: `src/index.ts` (the `web` tier) serves the API and frontend and only enqueues; `src/secscan.ts` runs the pg-boss worker, the monitor scheduler, the EOL/CVE refresh, and owns Chromium. The only channel between them is the `scan-job` queue in Postgres. Do not add Playwright imports to anything reachable from `index.ts`.
 
 ## Product
 
-3 free scans per account; then SecScan Pro's included scans, then credits.
+3 free scans per account per calendar month (UTC); then the plan's included scans, then credits.
 `POST /scans` spends in that order and records the source on `scans.paid_with`;
 a scan that fails later is refunded to it. The `tier` column is legacy.
 

@@ -20,9 +20,9 @@ import { Router, type IRouter } from "express";
 import { db, billingSubscriptionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { stripe, PRICE_MAP, CREDITS_MAP, getOrigin } from "../lib/stripe";
-import { DEFAULT_PLAN } from "../lib/plans";
+import { DEFAULT_PLAN, SOLD_PLANS, planByKey } from "../lib/plans";
 import { creditBalance } from "../lib/credits";
-import { trialScansUsedBy, FREE_TRIAL_SCAN_LIMIT } from "../lib/freeTrial";
+import { trialScansUsedBy, FREE_TRIAL_SCAN_LIMIT, freeScansResetAt } from "../lib/freeTrial";
 
 const router: IRouter = Router();
 
@@ -59,16 +59,16 @@ router.get("/checkout/packs", (_req, res): void => {
       name: PRICE_MAP[tier]?.name ?? tier,
       description: PRICE_MAP[tier]?.description ?? "",
     })),
-    // The subscription, priced from the same place the session reads.
-    plan: {
-      key: DEFAULT_PLAN.key,
-      name: DEFAULT_PLAN.name,
-      amountCents: DEFAULT_PLAN.amountCents,
+    // The subscriptions, priced from the same place the session reads.
+    plans: SOLD_PLANS.map((p) => ({
+      key: p.key,
+      name: p.name,
+      amountCents: p.amountCents,
       interval: "month",
-      urlLimit: DEFAULT_PLAN.urlLimit,
-      includedScans: DEFAULT_PLAN.includedScans,
-      description: DEFAULT_PLAN.description,
-    },
+      urlLimit: p.urlLimit,
+      includedScans: p.includedScans,
+      description: p.description,
+    })),
     enabled: stripe !== null,
   });
 });
@@ -155,7 +155,7 @@ async function currentPlan(userId: string) {
 }
 
 /**
- * Start the $50/month subscription.
+ * Start a monthly subscription: body { plan: "starter" | "pro" }.
  *
  * The price is built inline (price_data with a monthly recurring interval)
  * rather than referencing a Price created in the Stripe dashboard, for the same
@@ -187,8 +187,16 @@ router.post("/checkout/subscription", async (req, res): Promise<void> => {
     return;
   }
 
+  // Omitted means Pro, the plan this endpoint sold before there were two.
+  const requested = (req.body as { plan?: unknown } | undefined)?.plan;
+  const plan = requested === undefined ? DEFAULT_PLAN : planByKey(typeof requested === "string" ? requested : null);
+  if (!plan) {
+    res.status(400).json({ error: "Unknown plan.", code: "unknown_plan" });
+    return;
+  }
+
   const origin = getOrigin(req as unknown as { headers: Record<string, string | string[] | undefined> });
-  const metadata = { type: "subscription", user_id: req.user.id, plan: DEFAULT_PLAN.key };
+  const metadata = { type: "subscription", user_id: req.user.id, plan: plan.key };
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -198,9 +206,9 @@ router.post("/checkout/subscription", async (req, res): Promise<void> => {
           quantity: 1,
           price_data: {
             currency: "usd",
-            unit_amount: DEFAULT_PLAN.amountCents,
+            unit_amount: plan.amountCents,
             recurring: { interval: "month" },
-            product_data: { name: DEFAULT_PLAN.name, description: DEFAULT_PLAN.description },
+            product_data: { name: plan.name, description: plan.description },
           },
         },
       ],
@@ -278,6 +286,8 @@ router.get("/billing/status", async (req, res): Promise<void> => {
     res.json({
       freeScansRemaining: Math.max(0, FREE_TRIAL_SCAN_LIMIT - used),
       freeScanLimit: FREE_TRIAL_SCAN_LIMIT,
+      // The free scans renew monthly; this is when the current ones reset.
+      freeScansResetAt: freeScansResetAt().toISOString(),
       credits,
       subscription: row
         ? {

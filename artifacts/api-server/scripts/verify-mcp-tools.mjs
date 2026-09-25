@@ -53,7 +53,7 @@ check("12 tools listed", names.length === 12, names.join(", "));
 
 // ── get_account ──
 let x = await call(A.c, "get_account");
-check("get_account: a new account has 3 of 3 free scans", x.t.includes("Free scans left: 3 of 3"), x.t);
+check("get_account: a new account has 3 of 3 free scans", x.t.includes("Free scans left this month: 3 of 3"), x.t);
 
 // ── add_monitor spends a free scan, exactly like the website ──
 x = await call(A.c, "add_monitor", { url: "https://example.com" });
@@ -87,7 +87,7 @@ check("monitor_scan_now: a malformed id is refused", x.err, x.t);
 x = await call(A.c, "scan_url", { url: "https://example.org" });
 check("scan_url: the last free scan", !x.err && /Paid with: free/.test(x.t), x.t);
 x = await call(A.c, "add_monitor", { url: "https://example.net" });
-check("add_monitor: refused with no free scans and no credits", x.err && /used all 3 free scans/.test(x.t), x.t);
+check("add_monitor: refused with no free scans and no credits", x.err && /used this month.s 3 free scans/.test(x.t), x.t);
 const monitorsAfterRefusal = Number((await db.query("select count(*) from monitor_subscriptions where user_id=$1", [A.id])).rows[0].count);
 check("add_monitor: a refusal creates no monitor", monitorsAfterRefusal === 1, `${monitorsAfterRefusal} monitor(s)`);
 

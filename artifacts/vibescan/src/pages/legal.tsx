@@ -13,7 +13,7 @@ import { useSeo } from "@/lib/seo";
 // Per document: a change to one must not re-date the other.
 const LAST_UPDATED: Record<"privacy" | "terms", string> = {
   privacy: "September 22, 2026", // AI analysis now runs on every scan, not only "deep" ones
-  terms: "September 22, 2026", // SecScan Pro subscription terms added
+  terms: "September 24, 2026", // Starter and Pro plans; free scans renew monthly
 };
 const CONTACT = "hello@secscan.us";
 
@@ -209,34 +209,35 @@ function Terms() {
 
       <Section title="Credits and payment">
         <p>
-          Every account gets 3 free scans. After that, scans are paid for with a SecScan Pro
-          subscription or with scan credits. Prices are shown before you pay, and payment is
+          Every account gets 3 free scans each calendar month (UTC); unused free scans do not
+          carry over. Beyond those, scans are paid for with a subscription or with scan credits. Prices are shown before you pay, and payment is
           taken by Stripe.
         </p>
         <p>
-          Scan credits are sold singly or in packs and do not expire. Because a scan is
+          Scan credits are sold in packs and do not expire. Because a scan is
           delivered immediately and cannot be un-run, a completed scan is not refundable. If a
           scan fails for a reason on our side, the credit is returned to your account
           automatically. Unused credits can be refunded within 30 days of purchase.
         </p>
       </Section>
 
-      <Section title="SecScan Pro subscription">
+      <Section title="Subscriptions">
         <p>
-          SecScan Pro is billed monthly in advance and renews automatically each month until you
-          cancel. It includes continuous monitoring for up to 3 sites and 5 full scans per
-          billing month. Included scans reset at each renewal and do not carry over; while you
+          SecScan Starter and SecScan Pro are billed monthly in advance and renew automatically
+          each month until you cancel. Starter includes continuous monitoring for 1 site and 20
+          full scans per billing month; Pro includes up to 5 sites and 100 full scans per billing
+          month. Included scans reset at each renewal and do not carry over; while you
           have included scans left, they are used before any scan credits.
         </p>
         <p>
           You can cancel at any time from Settings. Cancelling stops the next renewal: you keep
-          SecScan Pro until the end of the month you have paid for, and are not charged again.
+          your plan until the end of the month you have paid for, and are not charged again.
           We do not refund partial months. If a renewal payment fails, Stripe retries it for a
           short period during which your plan stays active; if it still fails, monitoring and
           included scans pause until the payment is updated.
         </p>
         <p>
-          If we change the price of SecScan Pro, we will email you before the change applies to
+          If we change the price of your plan, we will email you before the change applies to
           your subscription, and it will take effect from a renewal after that notice.
         </p>
       </Section>

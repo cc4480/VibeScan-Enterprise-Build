@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { resolveEntitlement, type BillingRow } from "./entitlements";
-import { MONITOR_PLANS, DEFAULT_PLAN, urlLimitForPlan, includedScansForPlan } from "./plans";
-import { PRICE_MAP } from "./stripe";
+import { MONITOR_PLANS, DEFAULT_PLAN, SOLD_PLANS, planByKey, urlLimitForPlan, includedScansForPlan } from "./plans";
+import { PRICE_MAP, CREDITS_MAP } from "./stripe";
 
 /**
  * This is the rule that decides whether a paying customer's site keeps being
@@ -103,35 +103,45 @@ describe("resolveEntitlement — grandfathered accounts", () => {
 });
 
 describe("MONITOR_PLANS", () => {
-  // The plan decided 2026-09-22. These numbers are what the pricing page
+  // The plans decided 2026-09-24. These numbers are what the pricing page
   // promises, so a change here is a change to what customers are sold — it
   // should fail a test and be made on purpose.
-  it("sells one plan: $50/month, 3 sites, 5 scans a month", () => {
-    expect(Object.keys(MONITOR_PLANS)).toEqual(["pro"]);
-    expect(DEFAULT_PLAN.amountCents).toBe(5000);
-    expect(DEFAULT_PLAN.urlLimit).toBe(3);
-    expect(DEFAULT_PLAN.includedScans).toBe(5);
+  it("sells two plans: Starter $19 (1 site, 20 scans) and Pro $49 (5 sites, 100 scans)", () => {
+    expect(SOLD_PLANS.map((p) => p.key)).toEqual(["starter", "pro"]);
+    expect(MONITOR_PLANS.starter).toMatchObject({ amountCents: 1900, urlLimit: 1, includedScans: 20 });
+    expect(MONITOR_PLANS.pro).toMatchObject({ amountCents: 4900, urlLimit: 5, includedScans: 100 });
+    // A subscription started before there were two plans carried no plan key; it was Pro.
+    expect(DEFAULT_PLAN.key).toBe("pro");
   });
 
   it("is priced in whole cents, as Stripe requires", () => {
-    expect(Number.isInteger(DEFAULT_PLAN.amountCents)).toBe(true);
+    for (const p of SOLD_PLANS) expect(Number.isInteger(p.amountCents), p.key).toBe(true);
   });
 
-  it("makes the included scans worth more than buying them as credits", () => {
-    // The subscription is the way to save. If a pack ever beat it on the
-    // scans alone, the pricing page would be arguing against itself.
-    const perIncludedScan = DEFAULT_PLAN.amountCents / DEFAULT_PLAN.includedScans;
-    expect(perIncludedScan).toBeLessThanOrEqual(PRICE_MAP["single"]!.amount);
+  it("makes every plan's included scans cheaper than any credit pack", () => {
+    // The subscription is the way to save. If a pack beat a plan on the scans
+    // alone, the pricing page would be arguing against itself; the first
+    // proposal for these prices did exactly that, and this is what caught it.
+    const cheapestPack = Math.min(
+      ...Object.keys(CREDITS_MAP).map((t) => PRICE_MAP[t]!.amount / CREDITS_MAP[t]!),
+    );
+    for (const p of SOLD_PLANS) {
+      expect(p.amountCents / p.includedScans, p.key).toBeLessThan(cheapestPack);
+    }
   });
 
-  it("resolves limits for the sold plan, and nothing else", () => {
-    expect(urlLimitForPlan("pro")).toBe(3);
-    expect(includedScansForPlan("pro")).toBe(5);
+  it("resolves limits for the sold plans, and nothing else", () => {
+    expect(urlLimitForPlan("starter")).toBe(1);
+    expect(includedScansForPlan("starter")).toBe(20);
+    expect(urlLimitForPlan("pro")).toBe(5);
+    expect(includedScansForPlan("pro")).toBe(100);
+    expect(planByKey("pro")?.name).toBe("SecScan Pro");
     // Designed-but-never-sold tiers and grandfathered rows get their allowance
     // from the row, never from this table.
-    for (const k of ["solo", "studio", "agency", "grandfathered", "enterprise"]) {
+    for (const k of ["solo", "studio", "agency", "grandfathered", "enterprise", "", "constructor"]) {
       expect(urlLimitForPlan(k), k).toBeNull();
       expect(includedScansForPlan(k), k).toBe(0);
+      expect(planByKey(k), k).toBeNull();
     }
   });
 });

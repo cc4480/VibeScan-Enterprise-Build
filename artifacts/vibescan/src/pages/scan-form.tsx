@@ -124,8 +124,8 @@ function TrialExhaustedPanel() {
         <div className="space-y-1">
           <p className="font-semibold text-foreground">That was your last free scan</p>
           <p className="text-sm text-muted-foreground">
-            Keep going with SecScan Pro — monitoring plus scans every month — or buy credits
-            that never expire. Your existing reports stay on your{" "}
+            Keep going with a plan — monitoring plus scans every month — or buy credits
+            that never expire. Your free scans also renew on the 1st of next month. Your existing reports stay on your{" "}
             <Link href="/dashboard" className="text-primary underline underline-offset-2">dashboard</Link>.
           </p>
         </div>
@@ -161,11 +161,11 @@ function NotifyWhenBuyablePanel() {
           </p>
           <p className="text-sm text-muted-foreground">
             {status.data
-              ? `You've used all ${status.data.scanLimit} scans on this account.`
-              : "You've used all of the free scans on this account."}{" "}
-            SecScan Pro will be <span className="text-foreground font-medium">$50/month</span> for
-            monitoring plus 5 scans a month, and credits{" "}
-            <span className="text-foreground font-medium">$12 each or $50 for 5</span>. There's
+              ? `You've used this month's ${status.data.scanLimit} free scans — they renew on the 1st.`
+              : "You've used this month's free scans — they renew on the 1st."}{" "}
+            Plans will start at <span className="text-foreground font-medium">$19/month</span> for
+            monitoring plus 20 scans a month, and credits at{" "}
+            <span className="text-foreground font-medium">10 for $12</span>. There's
             no way to buy yet — so rather than send you to a checkout that doesn't exist,
             we'll email you the moment there is.
           </p>

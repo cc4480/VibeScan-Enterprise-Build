@@ -19,7 +19,7 @@ import {
   stripeEventsTable,
 } from "@workspace/db";
 import { and, eq, gt, inArray, lt, sql } from "drizzle-orm";
-import { DEFAULT_PLAN, includedScansForPlan } from "./plans";
+import { DEFAULT_PLAN, SOLD_PLANS, includedScansForPlan, type MonitorPlan } from "./plans";
 
 /** A transaction handle, or the pool itself — every helper accepts either. */
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -99,15 +99,23 @@ export function mapSubscriptionStatus(
  */
 export async function activateSubscription(
   tx: Executor,
-  opts: { userId: string; stripeCustomerId: string | null; stripeSubscriptionId: string; currentPeriodEnd: Date | null },
+  opts: {
+    userId: string;
+    stripeCustomerId: string | null;
+    stripeSubscriptionId: string;
+    currentPeriodEnd: Date | null;
+    /** The plan bought, from the session or subscription metadata. */
+    plan?: MonitorPlan;
+  },
 ): Promise<void> {
+  const plan = opts.plan ?? DEFAULT_PLAN;
   await tx
     .insert(billingSubscriptionsTable)
     .values({
       userId: opts.userId,
-      plan: DEFAULT_PLAN.key,
+      plan: plan.key,
       status: "active",
-      urlLimit: DEFAULT_PLAN.urlLimit,
+      urlLimit: plan.urlLimit,
       currentPeriodEnd: opts.currentPeriodEnd,
       stripeCustomerId: opts.stripeCustomerId,
       stripeSubscriptionId: opts.stripeSubscriptionId,
@@ -116,9 +124,9 @@ export async function activateSubscription(
     .onConflictDoUpdate({
       target: billingSubscriptionsTable.userId,
       set: {
-        plan: DEFAULT_PLAN.key,
+        plan: plan.key,
         status: "active",
-        urlLimit: DEFAULT_PLAN.urlLimit,
+        urlLimit: plan.urlLimit,
         currentPeriodEnd: opts.currentPeriodEnd,
         stripeCustomerId: opts.stripeCustomerId,
         stripeSubscriptionId: opts.stripeSubscriptionId,
@@ -145,13 +153,21 @@ export async function applyPaidInvoice(
     stripeCustomerId: string | null;
     userId: string | null;
     currentPeriodEnd: Date | null;
+    /** The plan named in the subscription metadata, for the row-does-not-exist-yet case. */
+    plan?: MonitorPlan;
   },
 ): Promise<"applied" | "unknown_subscription"> {
+  // Each plan's allowance, chosen by the plan stored on the row, so a Starter
+  // invoice grants Starter's scans. A row whose plan is not sold keeps what it has.
+  const allowance = sql.join(
+    SOLD_PLANS.map((p) => sql`WHEN ${billingSubscriptionsTable.plan} = ${p.key} THEN ${p.includedScans}`),
+    sql` `,
+  );
   const updated = await tx
     .update(billingSubscriptionsTable)
     .set({
       status: "active",
-      includedScansRemaining: sql`CASE WHEN ${billingSubscriptionsTable.plan} = ${DEFAULT_PLAN.key} THEN ${DEFAULT_PLAN.includedScans} ELSE ${billingSubscriptionsTable.includedScansRemaining} END`,
+      includedScansRemaining: sql`CASE ${allowance} ELSE ${billingSubscriptionsTable.includedScansRemaining} END`,
       currentPeriodEnd: opts.currentPeriodEnd,
       updatedAt: new Date(),
     })
@@ -161,15 +177,17 @@ export async function applyPaidInvoice(
   if (updated.length > 0) return "applied";
   if (!opts.userId) return "unknown_subscription";
 
+  const plan = opts.plan ?? DEFAULT_PLAN;
   await activateSubscription(tx, {
     userId: opts.userId,
     stripeCustomerId: opts.stripeCustomerId,
     stripeSubscriptionId: opts.stripeSubscriptionId,
     currentPeriodEnd: opts.currentPeriodEnd,
+    plan,
   });
   await tx
     .update(billingSubscriptionsTable)
-    .set({ includedScansRemaining: DEFAULT_PLAN.includedScans })
+    .set({ includedScansRemaining: plan.includedScans })
     .where(eq(billingSubscriptionsTable.userId, opts.userId));
   return "applied";
 }

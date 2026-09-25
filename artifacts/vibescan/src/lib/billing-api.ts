@@ -1,7 +1,7 @@
 import { customFetch } from "@workspace/api-client-react";
 
 /**
- * Buying scans and the SecScan Pro subscription.
+ * Buying scans and the SecScan Starter and Pro subscriptions.
  *
  * Every price shown in the app is read from GET /api/checkout/packs — the same
  * table the server builds Checkout Sessions from — so the page can never
@@ -28,7 +28,8 @@ export interface PlanOffer {
 
 export interface BillingCatalog {
   packs: CreditPack[];
-  plan: PlanOffer;
+  /** The subscriptions on sale, cheapest first. */
+  plans: PlanOffer[];
   /** False until Stripe is configured on this deployment. */
   enabled: boolean;
 }
@@ -36,6 +37,8 @@ export interface BillingCatalog {
 export interface BillingStatus {
   freeScansRemaining: number;
   freeScanLimit: number;
+  /** When this month's free scans renew (ISO date, the 1st of next month, UTC). */
+  freeScansResetAt?: string;
   credits: number;
   subscription: {
     plan: string;
@@ -64,9 +67,9 @@ export async function buyPack(tier: string): Promise<void> {
   window.location.assign(checkoutUrl);
 }
 
-/** Start the subscription checkout and hand the browser to Stripe. */
-export async function subscribe(): Promise<void> {
-  const { checkoutUrl } = await post<{ checkoutUrl: string }>("/api/checkout/subscription");
+/** Start a subscription checkout for one plan and hand the browser to Stripe. */
+export async function subscribe(plan: string): Promise<void> {
+  const { checkoutUrl } = await post<{ checkoutUrl: string }>("/api/checkout/subscription", { plan });
   window.location.assign(checkoutUrl);
 }
 
@@ -76,7 +79,7 @@ export async function openBillingPortal(): Promise<void> {
   window.location.assign(url);
 }
 
-/** "$50" for whole dollars, "$12.50" otherwise. */
+/** "$49" for whole dollars, "$12.50" otherwise. */
 export function formatUsd(cents: number): string {
   return cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`;
 }

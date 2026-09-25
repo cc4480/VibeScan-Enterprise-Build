@@ -2941,7 +2941,7 @@ export default function ReportViewer() {
         <div className="flex-1 text-center sm:text-left">
           <h3 className="font-bold text-lg mb-1">Keep watching this URL</h3>
           <p className="text-sm text-muted-foreground">
-            Hourly checks, risk-adaptive rescans and CVE alerts when new vulnerabilities match your tech stack. <span className="text-indigo-400 font-semibold">Part of SecScan Pro — $50/month</span>
+            Hourly checks, risk-adaptive rescans and CVE alerts when new vulnerabilities match your tech stack. <span className="text-indigo-400 font-semibold">Included in every plan — from $19/month</span>
           </p>
         </div>
         <Link

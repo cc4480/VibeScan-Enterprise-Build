@@ -1,15 +1,16 @@
 # Turning payments on
 
-What is sold (decided 2026-09-22):
+What is sold (decided 2026-09-24; replaces the 2026-09-22 single $50 plan):
 
 | Product | Price | What it gives |
 |---|---|---|
-| **SecScan Pro** | $50 / month | Monitoring for up to 3 sites + 5 full scans every month (no rollover) |
-| 1 scan credit | $12 | One full scan, never expires |
-| 5-scan pack | $50 | Five scans, never expire |
-| 20-scan pack | $160 | Twenty scans, never expire |
+| **SecScan Starter** | $19 / month | Monitoring for 1 site + 20 full scans every month (no rollover) |
+| **SecScan Pro** | $49 / month | Monitoring for up to 5 sites + 100 full scans every month (no rollover) |
+| 10-scan pack | $12 | Ten scans, never expire |
+| 50-scan pack | $49 | Fifty scans, never expire |
 
-Every account also gets 3 free scans. Scans are paid for in this order: free →
+Every account also gets 3 free scans each calendar month (UTC), renewing on
+the 1st; unused ones do not carry over. Scans are paid for in this order: free →
 this month's plan scans → credits.
 
 All prices live in code (`lib/stripe.ts` `PRICE_MAP`, `lib/plans.ts`). You do
@@ -96,7 +97,7 @@ Card `4242 4242 4242 4242`, any future date, any CVC.
    **Failed payments** (and the card-update reminders). SecScan emails its own
    receipt for credit packs, but a monthly renewal's receipt — and the "your
    card was declined" email — come only from Stripe.
-6. Buy one real $12 credit with your own card, confirm it lands, refund it from
+6. Buy one real $12 pack (10 credits) with your own card, confirm it lands, refund it from
    the Stripe dashboard.
 7. **Tell the people who asked.** Everyone who clicked "Email me when I can buy
    scans" was promised an email. Dry run first, then send (once):
@@ -107,10 +108,11 @@ Card `4242 4242 4242 4242`, any future date, any CVC.
    Safe to re-run: each person is marked as told only once the email is accepted.
 8. **Update the public docs that describe today's state** (repo `~/secscan-info`).
    While payments are off, `/ai-editors` says "Buying more scans isn't open yet"
-   (troubleshooting table, "You've used all 3 free scans") and the app shows
+   (troubleshooting table, "You've used this month's 3 free scans") and the app shows
    "Paid scans are coming soon". Once checkout is live, change both to point at
-   the pricing. `/monitoring` already advertises SecScan Pro ($50/month, 3 sites,
-   5 on-demand scans); that page is only true once step 6 has passed.
+   the pricing. `/monitoring` already advertises Starter ($19/month, 1 site, 20
+   scans) and Pro ($49/month, 5 sites, 100 scans); that page is only true once
+   step 6 has passed.
 
 ## Sales tax
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 /**
- * The subscription half of checkout: start the $50/month plan, manage it, and
+ * The subscription half of checkout: start a Starter or Pro plan, manage it, and
  * report what a user can do next. The webhook that applies these sessions is
  * tested against a real database in lib/billing.integration.test.ts; this pins
  * what the session is CREATED with, because a session missing its metadata is
@@ -55,6 +55,7 @@ vi.mock("../lib/credits", () => ({ creditBalance: () => Promise.resolve(3) }));
 vi.mock("../lib/freeTrial", () => ({
   trialScansUsedBy: () => Promise.resolve(1),
   FREE_TRIAL_SCAN_LIMIT: 2,
+  freeScansResetAt: () => new Date("2026-10-01T00:00:00Z"),
 }));
 
 function makeRes() {
@@ -103,7 +104,8 @@ beforeEach(() => {
 });
 
 describe("POST /checkout/subscription", () => {
-  it("creates a $50 monthly subscription session carrying the user on BOTH session and subscription", async () => {
+  it("creates a $49 Pro session when no plan is named, carrying the user on BOTH session and subscription", async () => {
+    // No body: the one-plan client this endpoint served before there were two.
     const res = makeRes();
     await (await handlerFor("post", "/checkout/subscription"))(makeReq(), res);
 
@@ -113,13 +115,32 @@ describe("POST /checkout/subscription", () => {
     const args = state.sessionArgs as any;
     expect(args.mode).toBe("subscription");
     const price = args.line_items[0].price_data;
-    expect(price.unit_amount).toBe(5000);
+    expect(price.unit_amount).toBe(4900);
     expect(price.recurring).toEqual({ interval: "month" });
     // The session's metadata reaches checkout.session.completed; the
     // subscription's is snapshotted onto every invoice — invoice.paid needs it
     // to find the customer when it arrives first.
-    expect(args.metadata).toMatchObject({ type: "subscription", user_id: "user-1" });
-    expect(args.subscription_data.metadata).toMatchObject({ type: "subscription", user_id: "user-1" });
+    expect(args.metadata).toMatchObject({ type: "subscription", user_id: "user-1", plan: "pro" });
+    expect(args.subscription_data.metadata).toMatchObject({ type: "subscription", user_id: "user-1", plan: "pro" });
+  });
+
+  it("sells Starter at $19 when asked, and records the plan for the webhook", async () => {
+    const res = makeRes();
+    await (await handlerFor("post", "/checkout/subscription"))(makeReq({ body: { plan: "starter" } }), res);
+    expect(res.statusCode).toBe(201);
+    const args = state.sessionArgs as any;
+    expect(args.line_items[0].price_data.unit_amount).toBe(1900);
+    expect(args.subscription_data.metadata.plan).toBe("starter");
+  });
+
+  it("refuses a plan that is not sold, without starting a session", async () => {
+    for (const plan of ["enterprise", "constructor", 5]) {
+      const res = makeRes();
+      await (await handlerFor("post", "/checkout/subscription"))(makeReq({ body: { plan } }), res);
+      expect(res.statusCode, String(plan)).toBe(400);
+      expect(res.body.code).toBe("unknown_plan");
+    }
+    expect(state.sessionArgs).toBeNull();
   });
 
   it("refuses a second live subscription instead of charging twice", async () => {

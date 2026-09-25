@@ -13,7 +13,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <title>SecScan — Black-Box Security Scanning for Vibe Coders</title>
-    <meta name="description" content="Paste a URL and get a plain-English security report, usually in under a minute. OWASP Top 10-aligned checks, AI-powered analysis, per-agent fix prompts. 3 free scans." />
+    <meta name="description" content="Paste a URL and get a plain-English security report, usually in under a minute. OWASP Top 10-aligned checks, AI-powered analysis, per-agent fix prompts. 3 free scans every month." />
     <meta name="keywords" content="penetration testing, security scan, web security, OWASP, vibe coding, AI security, black-box testing, Supabase RLS, security headers" />
     <!-- max-image-preview:large opts into full-size thumbnails in Google
          Discover and rich results; the snippet limits remove the default
@@ -145,27 +145,40 @@
               "name": "Free trial",
               "price": "0.00",
               "priceCurrency": "USD",
-              "description": "3 free scans per account, every check included"
+              "description": "3 free scans every month, every check included"
+            },
+            {
+              "@type": "Offer",
+              "name": "SecScan Starter",
+              "price": "19.00",
+              "priceCurrency": "USD",
+              "priceSpecification": {
+                "@type": "UnitPriceSpecification",
+                "price": "19.00",
+                "priceCurrency": "USD",
+                "billingDuration": "P1M"
+              },
+              "description": "1 site watched around the clock, plus 20 on-demand full scans every month"
             },
             {
               "@type": "Offer",
               "name": "SecScan Pro",
-              "price": "50.00",
+              "price": "49.00",
               "priceCurrency": "USD",
               "priceSpecification": {
                 "@type": "UnitPriceSpecification",
-                "price": "50.00",
+                "price": "49.00",
                 "priceCurrency": "USD",
                 "billingDuration": "P1M"
               },
-              "description": "Up to 3 sites watched around the clock, plus 5 on-demand full scans every month"
+              "description": "Up to 5 sites watched around the clock, plus 100 on-demand full scans every month"
             },
             {
               "@type": "Offer",
-              "name": "Scan credit",
+              "name": "10 scan credits",
               "price": "12.00",
               "priceCurrency": "USD",
-              "description": "One full scan; also sold as 5 for $50 and 20 for $160. Credits never expire."
+              "description": "Ten full scans; also sold as 50 for $49. Credits never expire."
             }
           ],
           "publisher": { "@id": "https://secscan.us/#organization" }
@@ -204,7 +217,7 @@
               "name": "What is SecScan?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "SecScan is an automated black-box security scanner for web applications. You paste a URL for an app you own or are authorised to test and receive a plain-English security report, usually in under a minute. No installs, agents or code changes required. It is an automated scanner rather than a manual penetration test. Every account gets 3 free scans."
+                "text": "SecScan is an automated black-box security scanner for web applications. You paste a URL for an app you own or are authorised to test and receive a plain-English security report, usually in under a minute. No installs, agents or code changes required. It is an automated scanner rather than a manual penetration test. Every account gets 3 free scans every month."
               }
             },
             {
@@ -257,10 +270,10 @@
             },
             {
               "@type": "Question",
-              "name": "What is SecScan Pro?",
+              "name": "What do SecScan Starter and Pro include?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "SecScan Pro is $50 a month: up to 3 sites watched around the clock, plus 5 on-demand full scans every month. Monitoring checks each site hourly for downtime and weakened security headers, runs automated deep rescans on a schedule that follows your grade — every 14 days for an A down to every 3 days for a D or F — and matches newly published CVEs (Common Vulnerabilities and Exposures) against your detected tech stack every hour. Cancel any time."
+                "text": "SecScan Starter is $19 a month for 1 site watched around the clock plus 20 on-demand full scans every month; SecScan Pro is $49 a month for up to 5 sites plus 100 scans. Monitoring checks each site hourly for downtime and weakened security headers, runs automated deep rescans on a schedule that follows your grade — every 14 days for an A down to every 3 days for a D or F — and matches newly published CVEs (Common Vulnerabilities and Exposures) against your detected tech stack every hour. Cancel any time."
               }
             }
           ]
@@ -283,7 +296,7 @@
       <h1>SecScan — black-box security scanning for vibe coders</h1>
       <p>Paste a URL for a web application you own or are authorised to test and get a plain-English security report, usually in under a minute — no installs, agents or code changes required. Every scan is a full scan; there are no tiers.</p>
       <p>Checks are aligned with the OWASP Top 10: security headers, TLS/HSTS, cookie flags, CORS misconfiguration, exposed secrets and config files, known-CVE component versions, Supabase/Firebase rules exposure, injection (reflected XSS, SQL injection, path traversal), and API surface discovery with missing-authentication, IDOR, BFLA and mass-assignment testing.</p>
-      <p>Reports are generated by AI with a letter grade (A–F), a numeric risk score, and per-agent fix prompts tailored to Cursor, Claude Code, Lovable, Bolt and Replit AI. Every account gets 3 free scans. SecScan Pro ($50/month) has up to 3 sites watched around the clock — hourly checks, grade-based rescans and hourly CVE matching — plus 5 on-demand full scans a month; scan credits are $12 each, 5 for $50 or 20 for $160.</p>
+      <p>Reports are generated by AI with a letter grade (A–F), a numeric risk score, and per-agent fix prompts tailored to Cursor, Claude Code, Lovable, Bolt and Replit AI. Every account gets 3 free scans every month. SecScan Starter ($19/month) watches 1 site around the clock — hourly checks, grade-based rescans and hourly CVE matching — plus 20 on-demand full scans a month; SecScan Pro ($49/month) covers up to 5 sites and 100 scans. Scan credits are 10 for $12 or 50 for $49.</p>
       <p>SecScan needs JavaScript to run a scan interactively. These pages read fine without it:</p>
       <nav>
         <ul>

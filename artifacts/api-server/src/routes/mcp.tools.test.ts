@@ -64,7 +64,7 @@ describe("runAppRoute", () => {
 describe("tool output", () => {
   it("get_account: scans left, credits and plan", () => {
     const t = formatAccount({ freeScansRemaining: 16, freeScanLimit: 20, credits: 5, subscription: null, paymentsEnabled: false });
-    expect(t).toContain("Free scans left: 16 of 20");
+    expect(t).toContain("Free scans left this month: 16 of 20");
     expect(t).toContain("Credits: 5");
     expect(t).toContain("Plan: none");
     expect(t).toContain("Buying scans is not open yet.");

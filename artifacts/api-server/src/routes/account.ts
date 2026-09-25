@@ -369,7 +369,7 @@ router.delete("/account", async (req, res): Promise<void> => {
   const userId = req.user.id;
 
   // Stop the money BEFORE erasing anything. Deleting the rows but leaving a
-  // live Stripe subscription would keep charging $50 a month to an account
+  // live Stripe subscription would keep charging every month to an account
   // that no longer exists, with no way left to sign in and cancel it. So a
   // subscription that cannot be cancelled blocks the deletion: the account
   // stays intact and the person can retry, or cancel from Settings first.

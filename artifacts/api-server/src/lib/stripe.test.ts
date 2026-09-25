@@ -14,7 +14,10 @@ import { PRICE_MAP, CREDITS_MAP } from "./stripe";
 // The retired per-scan tiers price without crediting, on purpose — see the
 // money-leak test in routes/checkout.test.ts. They are excluded here rather
 // than asserted against, because this file is about what IS still sold.
-const RETIRED = new Set(["basic", "deep"]);
+// Retired tiers price without crediting, on purpose — see the money-leak test in
+// routes/checkout.test.ts. "single", "pack_5" and "pack_20" were retired on
+// 2026-09-24, never having been sold.
+const RETIRED = new Set(["basic", "deep", "single", "pack_5", "pack_20"]);
 const sold = Object.keys(PRICE_MAP).filter((t) => !RETIRED.has(t));
 
 describe("every sellable tier is priced and creditable", () => {
@@ -39,38 +42,22 @@ describe("every sellable tier is priced and creditable", () => {
   });
 });
 
-describe("a pack is never priced worse than buying that many singles", () => {
-  const singleAmount = PRICE_MAP["single"]?.amount;
+describe("pack pricing", () => {
+  const perCredit = (tier: string) => PRICE_MAP[tier]!.amount / CREDITS_MAP[tier]!;
+  const packs = [...sold].sort((a, b) => CREDITS_MAP[a]! - CREDITS_MAP[b]!);
 
-  it("has a single-credit tier to measure a pack discount against", () => {
-    // Without this, "X% off buying singles" in a pack's own description is
-    // the same unbacked claim that was already found and removed once.
-    expect(singleAmount, "no 'single' tier — pack discount claims have nothing to be measured against").toBeDefined();
+  it("sells the packs decided on 2026-09-24: 10 for $12, 50 for $49", () => {
+    // What the pricing page promises; a change here is a change to what customers are sold.
+    expect(packs).toEqual(["pack_10", "pack_50"]);
+    expect([PRICE_MAP["pack_10"]!.amount, CREDITS_MAP["pack_10"]]).toEqual([1200, 10]);
+    expect([PRICE_MAP["pack_50"]!.amount, CREDITS_MAP["pack_50"]]).toEqual([4900, 50]);
   });
 
-  it("charges every pack at or below the single-credit rate", () => {
-    for (const tier of sold) {
-      if (tier === "single") continue;
-      const credits = CREDITS_MAP[tier]!;
-      const packAmount = PRICE_MAP[tier]!.amount;
-      const equivalentSingles = credits * singleAmount!;
-      expect(packAmount, `${tier}: ${packAmount}c for ${credits} credits vs ${equivalentSingles}c buying them one at a time`)
-        .toBeLessThanOrEqual(equivalentSingles);
-    }
-  });
-
-  it("gives the largest pack the best or an equal per-credit rate", () => {
-    // Not just cheaper than buying singles — cheaper per unit than the smaller
-    // pack, which is the actual shape a volume discount is supposed to have.
-    // This is the property the old $10-for-5 / $40-for-20 pricing violated:
-    // both worked out to exactly $2/credit, a discount in name only.
-    const perCredit = (tier: string) => PRICE_MAP[tier]!.amount / CREDITS_MAP[tier]!;
-    const packs = sold.filter((t) => t !== "single" && CREDITS_MAP[t]! > 1);
-    const sorted = [...packs].sort((a, b) => CREDITS_MAP[a]! - CREDITS_MAP[b]!);
-
-    for (let i = 1; i < sorted.length; i++) {
-      expect(perCredit(sorted[i]!), `${sorted[i]} should not cost more per credit than ${sorted[i - 1]}`)
-        .toBeLessThanOrEqual(perCredit(sorted[i - 1]!));
+  it("gives the larger pack a better per-credit rate, not just a bigger number", () => {
+    // The old $10-for-5 / $40-for-20 pricing was $2 a credit both ways: a discount in name only.
+    for (let i = 1; i < packs.length; i++) {
+      expect(perCredit(packs[i]!), `${packs[i]} should cost less per credit than ${packs[i - 1]}`)
+        .toBeLessThan(perCredit(packs[i - 1]!));
     }
   });
 });

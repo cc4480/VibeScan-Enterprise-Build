@@ -16,7 +16,7 @@ import {
 } from "@/lib/billing-api";
 
 /**
- * Buying: the SecScan Pro subscription and the credit packs.
+ * Buying: the SecScan Starter and Pro subscriptions, and the credit packs.
  *
  * Prices come from the server (GET /api/checkout/packs), never from this file,
  * so the page cannot show a number the checkout will not charge. Until Stripe
@@ -34,7 +34,7 @@ export function useBillingStatus(enabled = true) {
 
 function friendly(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err ?? "");
-  if (/already_subscribed|already have an active subscription/i.test(msg)) return "You already have SecScan Pro — manage it from Settings.";
+  if (/already_subscribed|already have an active subscription/i.test(msg)) return "You already have a subscription — manage it from Settings.";
   if (/failed to fetch|networkerror/i.test(msg)) return "Could not reach the server. Check your connection and try again.";
   return "Could not start checkout. Please try again.";
 }
@@ -81,8 +81,16 @@ function ActionButton({
   );
 }
 
+/** What every plan includes, beside its own site and scan allowance. */
+const PLAN_FEATURES = [
+  "Hourly uptime, header and certificate checks",
+  "Hourly CVE matching on the software your site runs",
+  "Rescans that tighten as your grade drops",
+  "Cancel any time from Settings",
+];
+
 /**
- * The plan and the three packs, with Buy / Subscribe buttons.
+ * The two plans and the credit packs, with Subscribe / Buy buttons.
  *
  * Signed-out visitors (the landing page) get links to create an account
  * instead: checkout needs an account to attach the purchase to.
@@ -94,7 +102,7 @@ export function BuyOptions({
 }: {
   fallback?: ReactNode;
   compact?: boolean;
-  /** Credits only — for a subscriber topping up, who must not be re-sold the plan they have. */
+  /** Credits only — for a subscriber topping up, who must not be re-sold a plan. */
   packsOnly?: boolean;
 }) {
   const catalog = useBillingCatalog();
@@ -114,9 +122,11 @@ export function BuyOptions({
   }
   if (!catalog.data?.enabled) return <>{fallback ?? null}</>;
 
-  const { plan, packs } = catalog.data;
-  const single = packs.find((p) => p.credits === 1);
+  const { plans, packs } = catalog.data;
   const hasPlan = status.data?.subscription && status.data.subscription.status !== "cancelled";
+  // The priciest pack per scan is the baseline a bigger pack's discount is measured from.
+  const basePerScan = Math.max(...packs.map((p) => perScanCents(p)));
+  const topPlan = plans[plans.length - 1];
 
   const cta = (run: () => Promise<void>, label: string, primary?: boolean) =>
     signedIn ? (
@@ -136,88 +146,86 @@ export function BuyOptions({
     );
 
   return (
-    <div className={cn("grid gap-5", compact || packsOnly ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-[1.15fr_1fr]")}>
-      {/* The subscription — the way to save, so it leads. */}
+    <div className="space-y-6">
+      {/* The subscriptions — the way to save, so they lead. */}
       {!packsOnly && (
-      <div className="glass-panel rounded-2xl p-6 border border-primary/50 shadow-[0_0_30px_rgba(20,184,120,0.08)] flex flex-col relative">
-        <div className="absolute top-0 left-6 -translate-y-1/2 bg-primary text-primary-foreground px-3 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider">
-          Best value
+        <div className={cn("grid gap-5", compact ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2")}>
+          {plans.map((plan) => {
+            const featured = plan.key === topPlan?.key;
+            return (
+              <div
+                key={plan.key}
+                className={cn(
+                  "glass-panel rounded-2xl p-6 flex flex-col relative",
+                  featured ? "border border-primary/50 shadow-[0_0_30px_rgba(20,184,120,0.08)]" : "border border-white/10",
+                )}
+              >
+                {featured && (
+                  <div className="absolute top-0 left-6 -translate-y-1/2 bg-primary text-primary-foreground px-3 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider">
+                    Best value
+                  </div>
+                )}
+                <div className="flex items-center gap-2 mb-1">
+                  <Bell className={cn("w-5 h-5", featured ? "text-primary" : "text-muted-foreground")} />
+                  <h3 className="text-lg font-bold">{plan.name}</h3>
+                </div>
+                <div className="flex items-baseline gap-1 mb-1">
+                  <span className="text-4xl font-bold tabular-nums">{formatUsd(plan.amountCents)}</span>
+                  <span className="text-muted-foreground text-sm">/ month</span>
+                </div>
+                <p className="text-xs text-muted-foreground mb-4 tabular-nums">
+                  {formatUsd(Math.round(plan.amountCents / plan.includedScans))} per scan
+                </p>
+                <ul className="space-y-2 mb-6 flex-1 text-sm">
+                  {[
+                    plan.urlLimit === 1 ? "1 site watched around the clock" : `Up to ${plan.urlLimit} sites watched around the clock`,
+                    `${plan.includedScans} full scans every month`,
+                    ...PLAN_FEATURES,
+                  ].map((f) => (
+                    <li key={f} className="flex items-start gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+                {hasPlan ? (
+                  <p className="text-sm text-primary font-medium text-center py-2.5">You&apos;re subscribed — manage it in Settings.</p>
+                ) : (
+                  cta(() => subscribe(plan.key), `Subscribe — ${formatUsd(plan.amountCents)}/month`, featured)
+                )}
+              </div>
+            );
+          })}
         </div>
-        <div className="flex items-center gap-2 mb-1">
-          <Bell className="w-5 h-5 text-primary" />
-          <h3 className="text-lg font-bold">{plan.name}</h3>
-        </div>
-        <div className="flex items-baseline gap-1 mb-4">
-          <span className="text-4xl font-bold tabular-nums">{formatUsd(plan.amountCents)}</span>
-          <span className="text-muted-foreground text-sm">/ month</span>
-        </div>
-        <ul className="space-y-2 mb-6 flex-1 text-sm">
-          {[
-            `Up to ${plan.urlLimit} sites watched around the clock`,
-            `${plan.includedScans} on-demand full scans every month`,
-            "Hourly uptime, header and certificate checks",
-            "Hourly CVE matching, ranked by exploit likelihood",
-            "Rescans that tighten as your grade drops",
-            "Cancel any time from Settings",
-          ].map((f) => (
-            <li key={f} className="flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-              <span>{f}</span>
-            </li>
-          ))}
-        </ul>
-        {single && (
-          <p className="text-xs text-muted-foreground mb-3">
-            {plan.includedScans} scans alone would cost {formatUsd(single.amountCents * plan.includedScans)} as single credits.
-          </p>
-        )}
-        {hasPlan ? (
-          <p className="text-sm text-primary font-medium text-center py-2.5">You're subscribed — manage it in Settings.</p>
-        ) : (
-          cta(subscribe, `Subscribe — ${formatUsd(plan.amountCents)}/month`, true)
-        )}
-      </div>
       )}
 
       {/* Credit packs — for one-off needs, never expire. */}
       <div className="space-y-3">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Package className="w-4 h-4" /> Or buy scan credits — they never expire
+          <Package className="w-4 h-4" /> Or buy scan credits — no subscription, and they never expire
         </div>
-        {packs.map((pack) => {
-          const saving =
-            single && pack.credits > 1
-              ? Math.round((1 - perScanCents(pack) / single.amountCents) * 100)
-              : 0;
-          return (
-            <div
-              key={pack.tier}
-              className={cn(
-                "glass-panel rounded-xl p-4 border border-white/10 flex gap-3",
-                // Stacked on phones — text above, full-width button below —
-                // and side by side once there is room. In the compact column
-                // (paywall, Settings) "room" arrives later, so it stays stacked
-                // until md.
-                compact || packsOnly ? "flex-col md:flex-row md:items-center md:gap-4" : "flex-col sm:flex-row sm:items-center sm:gap-4",
-              )}
-            >
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold whitespace-nowrap">
-                  {pack.credits} scan{pack.credits === 1 ? "" : "s"}
-                  {saving > 0 && <span className="text-primary text-xs font-semibold ml-2">{saving}% off</span>}
+        <div className={cn("grid gap-3", compact || packsOnly ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2")}>
+          {packs.map((pack) => {
+            const saving = Math.round((1 - perScanCents(pack) / basePerScan) * 100);
+            return (
+              <div
+                key={pack.tier}
+                className="glass-panel rounded-xl p-4 border border-white/10 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold whitespace-nowrap">
+                    {pack.credits} scans
+                    {saving > 0 && <span className="text-primary text-xs font-semibold ml-2">{saving}% off</span>}
+                  </div>
+                  <div className="text-xs text-muted-foreground tabular-nums">
+                    {formatUsd(pack.amountCents)} · {formatUsd(perScanCents(pack))} per scan
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground tabular-nums">
-                  {pack.credits === 1
-                    ? `${formatUsd(pack.amountCents)} per scan`
-                    : `${formatUsd(pack.amountCents)} · ${formatUsd(perScanCents(pack))} per scan`}
-                </div>
+                <div className="shrink-0 w-full sm:w-32">{cta(() => buyPack(pack.tier), `Buy ${formatUsd(pack.amountCents)}`)}</div>
               </div>
-              <div className={cn("shrink-0 w-full", compact || packsOnly ? "md:w-32" : "sm:w-32")}>
-                {cta(() => buyPack(pack.tier), `Buy ${formatUsd(pack.amountCents)}`)}
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -254,7 +262,7 @@ export function BillingSummary() {
     <div className="space-y-5">
       <div className="grid grid-cols-3 gap-3 text-center">
         {[
-          { n: d.freeScansRemaining, l: "free scans left" },
+          { n: d.freeScansRemaining, l: "free scans left this month" },
           { n: sub && sub.status !== "cancelled" ? sub.includedScansRemaining : "—", l: "plan scans left" },
           { n: d.credits, l: "credits" },
         ].map((x) => (
@@ -268,7 +276,7 @@ export function BillingSummary() {
       {sub && label ? (
         <div className="rounded-xl border border-white/10 p-4 flex flex-wrap items-center gap-3">
           <Zap className="w-4 h-4 text-primary" />
-          <span className="font-semibold">SecScan Pro</span>
+          <span className="font-semibold">{sub.plan === "starter" ? "SecScan Starter" : "SecScan Pro"}</span>
           <span className={cn("text-xs px-2 py-0.5 rounded-full border", label.tone)}>{label.text}</span>
           {sub.currentPeriodEnd && sub.status !== "cancelled" && (
             <span className="text-xs text-muted-foreground">
@@ -316,7 +324,7 @@ export function PurchaseResultBanner() {
 
   const text =
     result === "subscribed"
-      ? "Welcome to SecScan Pro. Your monthly scans appear as soon as Stripe confirms the payment — usually a few seconds."
+      ? "Your subscription is active. Your monthly scans appear as soon as Stripe confirms the payment — usually a few seconds."
       : result === "success"
         ? "Payment received. Your credits appear as soon as Stripe confirms it — usually a few seconds."
         : result === "cancelled"

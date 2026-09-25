@@ -372,8 +372,8 @@ export default function LandingPage() {
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold mb-4 uppercase tracking-wider">
             <Zap className="w-3.5 h-3.5" /> Free Trial
           </div>
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">3 free scans, everything included</h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto">Every account gets 3 free scans to try the platform — every check, no tier to pick. After that, subscribe to SecScan Pro for monitoring plus monthly scans, or buy credits that never expire.</p>
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">3 free scans every month, everything included</h2>
+          <p className="text-muted-foreground max-w-2xl mx-auto">Every account gets 3 free scans a month, renewing on the 1st — every check, no tier to pick. Need more? Subscribe for monitoring plus monthly scans, or buy credits that never expire.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
@@ -398,11 +398,11 @@ export default function LandingPage() {
             },
             {
               icon: Bell,
-              title: "SecScan Pro — $50/month",
-              desc: "3 sites watched around the clock, plus 5 on-demand scans a month.",
+              title: "Monitoring — from $19/month",
+              desc: "Starter: 1 site and 20 scans a month. Pro ($49): 5 sites and 100 scans a month.",
               features: [
-                "Up to 3 sites watched around the clock",
-                "5 on-demand full scans every month",
+                "1 site (Starter) or 5 sites (Pro) watched around the clock",
+                "20 or 100 on-demand full scans every month",
                 "Hourly uptime, header and certificate checks",
                 "Hourly CVE matching, ranked by EPSS",
                 "Rescans that follow your grade (A: 14d → F: 3d)",
@@ -483,10 +483,10 @@ function StaticPricing() {
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {[
-          { label: "SecScan Pro", price: "$50", per: "per month · 3 sites watched · 5 scans", note: null, popular: true },
-          { label: "1 Scan Credit", price: "$12", per: "$12.00 / scan", note: null },
-          { label: "5 Scan Pack", price: "$50", per: "$10.00 / scan", note: "17% off" },
-          { label: "20 Scan Pack", price: "$160", per: "$8.00 / scan", note: "33% off" },
+          { label: "SecScan Starter", price: "$19", per: "per month · 1 site watched · 20 scans", note: null },
+          { label: "SecScan Pro", price: "$49", per: "per month · 5 sites watched · 100 scans", note: null, popular: true },
+          { label: "10 Scan Credits", price: "$12", per: "$1.20 / scan", note: null },
+          { label: "50 Scan Credits", price: "$49", per: "$0.98 / scan", note: "18% off" },
         ].map((tier, i) => (
           <div
             key={i}
@@ -510,7 +510,7 @@ function StaticPricing() {
         ))}
       </div>
       <p className="text-center text-xs text-muted-foreground mt-6">
-        Purchasing isn't live yet — <Link href="/scan" className="underline hover:text-foreground">start with your 3 free scans</Link> and we'll email you when plans and credits are ready to buy.
+        Purchasing isn't live yet — <Link href="/scan" className="underline hover:text-foreground">start with this month's 3 free scans</Link> and we'll email you when plans and credits are ready to buy.
       </p>
     </>
   );
