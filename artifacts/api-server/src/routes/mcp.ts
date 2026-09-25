@@ -711,28 +711,52 @@ export function formatMonitors(subs: any[]): string {
     .join("\n\n");
 }
 
-router.post("/mcp", async (req, res): Promise<void> => {
-  const user = await authenticateApiToken(req.headers["authorization"]);
-  if (!user) {
-    res
-      .status(401)
-      .setHeader("WWW-Authenticate", 'Bearer realm="secscan"')
-      .json({ error: `Missing or invalid API token. Create one at ${APP_ORIGIN}/settings#ai-editors.` });
-    return;
-  }
+/**
+ * JSON-RPC methods answered without a token: the handshake and the tool list.
+ *
+ * Directories (Glama, Smithery, the MCP Registry) health-check a server by
+ * connecting and listing its tools. With every request behind a token they got
+ * a 401, marked the connector "Unhealthy", and a list would not accept it. The
+ * tool names and descriptions are already public (server-card.json and
+ * secscan.info/ai-editors), so listing them reveals nothing new.
+ *
+ * Calling a tool is NOT here and never may be: every tools/call still needs a
+ * token, because each one reads or spends something that belongs to a user.
+ */
+const PUBLIC_METHODS = new Set(["initialize", "notifications/initialized", "ping", "tools/list"]);
 
-  // Per-user request budget, checked after authentication so it counts
-  // against the account rather than the address.
-  const decision = mcpRateLimit.decide(Object.assign(Object.create(req), { user, isAuthenticated: () => true }) as Request);
-  if (!decision.allowed) {
-    res
-      .status(429)
-      .setHeader("Retry-After", String(decision.retryAfterSeconds ?? 60))
-      .json({ error: `Too many requests — at most ${decision.rule?.max} per ${decision.rule?.label}. Try again in ${decision.retryAfterSeconds} seconds.` });
-    return;
-  }
+/**
+ * True only when EVERY message in the body is a public method. A batch that
+ * slips one tools/call in among public ones is refused whole. Exported for tests.
+ */
+export function isPublicMcpRequest(body: unknown): boolean {
+  const messages = Array.isArray(body) ? body : [body];
+  return (
+    messages.length > 0 &&
+    messages.every(
+      (m) =>
+        m !== null &&
+        typeof m === "object" &&
+        typeof (m as { method?: unknown }).method === "string" &&
+        PUBLIC_METHODS.has((m as { method: string }).method),
+    )
+  );
+}
 
-  const server = buildServer(req, user);
+/** Tokenless handshakes and tool listings, per IP. A health check makes a few a minute. */
+const mcpPublicRateLimit = rateLimitMiddleware({
+  rules: [{ windowMs: 60_000, max: 30, label: "minute" }],
+  name: "mcp-public",
+});
+
+/**
+ * Stands in for a user on tokenless requests. It can only ever reach
+ * initialize/ping/tools/list (isPublicMcpRequest gates the body), none of
+ * which touch the user — the same placeholder serverCard.ts builds with.
+ */
+const ANONYMOUS = { id: "anonymous", email: null } as never as TokenUser;
+
+async function serve(req: Request, res: Response, server: McpServer): Promise<void> {
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on("close", () => {
     void transport.close();
@@ -747,6 +771,42 @@ router.post("/mcp", async (req, res): Promise<void> => {
       res.status(500).json({ jsonrpc: "2.0", error: { code: -32603, message: "Internal error" }, id: null });
     }
   }
+}
+
+router.post("/mcp", async (req, res): Promise<void> => {
+  const user = await authenticateApiToken(req.headers["authorization"]);
+  if (!user) {
+    if (!isPublicMcpRequest(req.body)) {
+      res
+        .status(401)
+        .setHeader("WWW-Authenticate", 'Bearer realm="secscan"')
+        .json({ error: `Missing or invalid API token. Create one at ${APP_ORIGIN}/settings#ai-editors.` });
+      return;
+    }
+    const publicDecision = mcpPublicRateLimit.decide(req);
+    if (!publicDecision.allowed) {
+      res
+        .status(429)
+        .setHeader("Retry-After", String(publicDecision.retryAfterSeconds ?? 60))
+        .json({ error: "Too many requests. Try again in a minute." });
+      return;
+    }
+    await serve(req, res, buildServer(req, ANONYMOUS));
+    return;
+  }
+
+  // Per-user request budget, checked after authentication so it counts
+  // against the account rather than the address.
+  const decision = mcpRateLimit.decide(Object.assign(Object.create(req), { user, isAuthenticated: () => true }) as Request);
+  if (!decision.allowed) {
+    res
+      .status(429)
+      .setHeader("Retry-After", String(decision.retryAfterSeconds ?? 60))
+      .json({ error: `Too many requests — at most ${decision.rule?.max} per ${decision.rule?.label}. Try again in ${decision.retryAfterSeconds} seconds.` });
+    return;
+  }
+
+  await serve(req, res, buildServer(req, user));
 });
 
 // Stateless: there is no server-initiated stream to open and no session to end.

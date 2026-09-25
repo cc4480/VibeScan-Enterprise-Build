@@ -1,0 +1,103 @@
+import { describe, it, expect, vi } from "vitest";
+import express from "express";
+import request from "supertest";
+
+/**
+ * Without a token, directories may connect and list the tools (so their health
+ * checks pass) — and nothing else. Every tool call still needs a token.
+ */
+
+vi.mock("../lib/apiTokens", () => ({
+  authenticateApiToken: async (header?: string) =>
+    header === "Bearer ssk_good" ? { id: "u1", email: "owner@example.com", firstName: null, lastName: null, profileImageUrl: null } : null,
+}));
+
+const { default: mcpRouter, isPublicMcpRequest } = await import("./mcp");
+
+const app = express();
+app.use(express.json());
+app.use((req, _res, next) => {
+  (req as any).log = { info() {}, warn() {}, error() {} };
+  next();
+});
+app.use(mcpRouter);
+
+const HEADERS = { "Content-Type": "application/json", Accept: "application/json, text/event-stream" };
+const rpc = (method: string, params: Record<string, unknown> = {}, id: number | undefined = 1) =>
+  id === undefined ? { jsonrpc: "2.0", method, params } : { jsonrpc: "2.0", id, method, params };
+const INIT = rpc("initialize", {
+  protocolVersion: "2025-06-18",
+  capabilities: {},
+  clientInfo: { name: "health-check", version: "1" },
+});
+
+/** Streamable HTTP may answer as JSON or as one SSE event; read either. */
+function payload(res: request.Response): any {
+  const text = res.text ?? "";
+  const data = text.split("\n").find((l) => l.startsWith("data: "));
+  return data ? JSON.parse(data.slice(6)) : JSON.parse(text);
+}
+
+describe("isPublicMcpRequest", () => {
+  it("allows the handshake and the tool list", () => {
+    for (const m of ["initialize", "notifications/initialized", "ping", "tools/list"]) {
+      expect(isPublicMcpRequest(rpc(m))).toBe(true);
+    }
+  });
+
+  it("refuses every tool call", () => {
+    expect(isPublicMcpRequest(rpc("tools/call", { name: "get_account", arguments: {} }))).toBe(false);
+  });
+
+  it("refuses a batch that hides one tool call among public messages", () => {
+    expect(isPublicMcpRequest([INIT, rpc("tools/list", {}, 2), rpc("tools/call", { name: "scan_url" }, 3)])).toBe(false);
+  });
+
+  it("refuses anything that is not a JSON-RPC request", () => {
+    for (const body of [undefined, null, "", {}, [], { id: 1, result: {} }, { method: 7 }]) {
+      expect(isPublicMcpRequest(body)).toBe(false);
+    }
+  });
+});
+
+describe("POST /mcp without a token", () => {
+  it("answers initialize, so a directory can connect", async () => {
+    const res = await request(app).post("/mcp").set(HEADERS).send(INIT);
+    expect(res.status).toBe(200);
+    expect(payload(res).result.serverInfo.name).toBe("secscan");
+  });
+
+  it("lists all the tools, so a directory's health check passes", async () => {
+    const res = await request(app).post("/mcp").set(HEADERS).send(rpc("tools/list"));
+    expect(res.status).toBe(200);
+    const names = payload(res).result.tools.map((t: { name: string }) => t.name);
+    expect(names).toContain("scan_url");
+    expect(names).toContain("get_account");
+    expect(names.length).toBeGreaterThanOrEqual(12);
+  });
+
+  it("refuses a tool call with 401 and a Bearer challenge", async () => {
+    const res = await request(app)
+      .post("/mcp")
+      .set(HEADERS)
+      .send(rpc("tools/call", { name: "scan_url", arguments: { url: "https://example.com" } }));
+    expect(res.status).toBe(401);
+    expect(res.headers["www-authenticate"]).toBe('Bearer realm="secscan"');
+  });
+
+  it("refuses a tool call smuggled into a batch", async () => {
+    const res = await request(app)
+      .post("/mcp")
+      .set(HEADERS)
+      .send([rpc("tools/list", {}, 1), rpc("tools/call", { name: "get_account", arguments: {} }, 2)]);
+    expect(res.status).toBe(401);
+  });
+
+  it("refuses a tool call with a wrong token", async () => {
+    const res = await request(app)
+      .post("/mcp")
+      .set({ ...HEADERS, Authorization: "Bearer ssk_wrong" })
+      .send(rpc("tools/call", { name: "get_account", arguments: {} }));
+    expect(res.status).toBe(401);
+  });
+});
