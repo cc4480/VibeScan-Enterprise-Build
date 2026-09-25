@@ -68,12 +68,14 @@ These are what a customer sees on the checkout page and their bank statement.
 
 Card `4242 4242 4242 4242`, any future date, any CVC.
 
-- [ ] Buy the 5-scan pack → Settings shows **5 credits**.
-- [ ] Subscribe to Pro → Settings shows **Active**, **5 plan scans**, a renewal date.
-- [ ] Run a scan → plan scans drop to 4 (credits untouched).
+- [ ] Buy the 10-scan pack → Settings shows **10 credits**; buy the 50-scan pack → **60**.
+- [ ] Subscribe to Starter → Settings shows **SecScan Starter**, **Active**, **20 plan scans**, a renewal date.
+- [ ] Cancel it, then subscribe to Pro → **SecScan Pro**, **100 plan scans**.
+- [ ] Run a scan → plan scans drop by 1 (credits untouched).
 - [ ] Settings → **Manage or cancel** → cancel → Settings shows **Cancelled**, plan scans 0.
 - [ ] Stripe → Webhooks → your endpoint: every delivery shows **200**.
 - [ ] Declined card `4000 0000 0000 0002` → nothing is granted.
+- [ ] With `MONITORING_REQUIRES_PLAN=true` locally: a cancelled plan stops monitors (rows kept); resubscribing restarts them.
 
 ## 3. Go live (last step, after QA)
 
@@ -92,7 +94,9 @@ Card `4242 4242 4242 4242`, any future date, any CVC.
    (at end of billing period), update payment methods, view invoices → **Save**.
    Without this, "Manage or cancel" in Settings cannot open.
 4. Railway → **web** service → **Variables**: add `STRIPE_SECRET_KEY` and
-   `STRIPE_WEBHOOK_SECRET` (the live values), both at once.
+   `STRIPE_WEBHOOK_SECRET` (the live values), both at once. In the same
+   change set `MONITORING_REQUIRES_PLAN=true` on **both** services (web and
+   secscan), so monitoring needs a plan from the moment payments open.
 5. **Settings → Customer emails** → turn on **Successful payments** and
    **Failed payments** (and the card-update reminders). SecScan emails its own
    receipt for credit packs, but a monthly renewal's receipt — and the "your
