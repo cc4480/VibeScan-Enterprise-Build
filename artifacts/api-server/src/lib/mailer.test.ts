@@ -165,24 +165,25 @@ describe("account mail vs bulk mail sender", () => {
       const { sendReportReadyEmail } = await import("./mailer.js");
       await sendReportReadyEmail({ ...REPORT_OPTS, coverage: { ran: 37, skipped: 2, failed: 0, total: 39 } });
       const html = sentHtml();
-      expect(html).toContain("Tests run:");
-      expect(html).toContain("37 of 39");
-      expect(html).toContain("2 not tested");
+      expect(html).toContain("Tests run");
+      expect(html).toContain("37<span");
+      expect(html).toContain("/39");
+      expect(html).toContain("2 tests did not run");
       expect(html).toContain("says nothing about those areas");
     });
 
     it("counts failed tests as not tested too", async () => {
       const { sendReportReadyEmail } = await import("./mailer.js");
       await sendReportReadyEmail({ ...REPORT_OPTS, coverage: { ran: 36, skipped: 1, failed: 2, total: 39 } });
-      expect(sentHtml()).toContain("3 not tested");
+      expect(sentHtml()).toContain("3 tests did not run");
     });
 
     it("does not raise a warning when every test ran", async () => {
       const { sendReportReadyEmail } = await import("./mailer.js");
       await sendReportReadyEmail({ ...REPORT_OPTS, coverage: { ran: 39, skipped: 0, failed: 0, total: 39 } });
       const html = sentHtml();
-      expect(html).toContain("39 of 39");
-      expect(html).not.toContain("not tested");
+      expect(html).toContain("39<span");
+      expect(html).not.toContain("did not run");
     });
 
     it("claims nothing when no record exists", async () => {

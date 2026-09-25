@@ -2365,7 +2365,12 @@ export default function ReportViewer() {
           <p className="max-w-md text-sm text-muted-foreground">
             You're not signed in on this device. Reports are private to the account that ran the scan.
           </p>
-          <a href="/sign-in" className="text-sm text-primary underline underline-offset-4">Sign in</a>
+          <a
+            href={`/sign-in?returnTo=${encodeURIComponent(`/report/${reportId}`)}`}
+            className="text-sm text-primary underline underline-offset-4"
+          >
+            Sign in to see it
+          </a>
         </div>
       );
     }
@@ -2376,8 +2381,8 @@ export default function ReportViewer() {
           <p className="text-base font-medium">This report belongs to a different account</p>
           <p className="max-w-md text-sm text-muted-foreground">
             {signedInAs
-              ? `You're signed in as ${signedInAs}. Switch to the account that ran this scan, or open the link from the report email, which works without signing in.`
-              : "Switch to the account that ran this scan, or open the link from the report email, which works without signing in."}
+              ? `You're signed in as ${signedInAs}. Sign out, then sign in with the account that ran this scan.`
+              : "Sign in with the account that ran this scan."}
           </p>
           <a href="/dashboard" className="text-sm text-primary underline underline-offset-4">Go to your dashboard</a>
         </div>

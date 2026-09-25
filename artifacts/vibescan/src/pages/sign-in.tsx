@@ -28,6 +28,17 @@ const GOOGLE_ERRORS: Record<string, string> = {
   failed: "Google sign-in did not complete. Please try again.",
 };
 
+/**
+ * Where to go after signing in: ?returnTo when it is a path on this site
+ * (so the report-email link lands on the report), the dashboard otherwise.
+ * Only "/something" is accepted — "//evil.com" and "https://…" would make the
+ * sign-in page an open redirect.
+ */
+function returnPath(search: string): string {
+  const to = new URLSearchParams(search).get("returnTo");
+  return to && to.startsWith("/") && !to.startsWith("//") && !to.startsWith("/\\") ? to : "/dashboard";
+}
+
 function googleErrorMessage(search: string): string | null {
   const code = new URLSearchParams(search).get("error");
   if (!code) return null;
@@ -84,7 +95,7 @@ export default function SignInPage() {
       // filled with, so drop everything rather than show the previous user's
       // scans until each query happens to refetch.
       await queryClient.invalidateQueries();
-      setLocation("/dashboard");
+      setLocation(returnPath(typeof window === "undefined" ? "" : window.location.search));
     } catch (err) {
       setError(accountErrorMessage(err, "That code is not valid. Start again to get a new one."));
       setCode("");
@@ -163,7 +174,7 @@ export default function SignInPage() {
         </>
       }
     >
-      <GoogleButton returnTo="/dashboard" />
+      <GoogleButton returnTo={returnPath(typeof window === "undefined" ? "" : window.location.search)} />
       <AuthDivider />
 
       <AuthForm

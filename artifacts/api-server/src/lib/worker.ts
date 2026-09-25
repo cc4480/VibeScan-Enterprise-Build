@@ -32,7 +32,6 @@ import { refreshEolData, loadEolCacheFromDb, EOL_REFRESH_QUEUE } from "./eolFetc
 import { callDeepSeek } from "./deepseek";
 import { checkSslLabs } from "./ssllabs";
 import { sendReportReadyEmail } from "./mailer";
-import { createReportShare, shareUrl } from "./reportShare";
 import { summariseCompliance, COMPLIANCE_DISCLAIMER } from "./compliance";
 import { initBrowser, closeBrowser } from "./browser";
 import { logger } from "./logger";
@@ -818,13 +817,11 @@ export async function processScanJob(job: ScanJob): Promise<void> {
         // see lib/reportShare.ts. If minting it fails the email still goes out
         // with the dashboard link rather than not at all: a link that needs a
         // login beats no notification.
-        let reportUrl = `${appOrigin}/report/${report.id}`;
-        try {
-          const share = await createReportShare(report.id, report.userId);
-          reportUrl = shareUrl(appOrigin, share.token);
-        } catch (shareErr) {
-          log.warn({ err: shareErr }, "Could not mint a share link for the report email — falling back to the dashboard URL");
-        }
+        // The owner's full report, the same page as in the app. Opening it
+        // signed out goes through sign-in and comes straight back here
+        // (sign-in honours ?returnTo), so a phone that is not signed in still
+        // lands on the report rather than a dead end.
+        const reportUrl = `${appOrigin}/report/${report.id}`;
 
         await sendReportReadyEmail({
           toEmail: scan.userEmail,
@@ -835,6 +832,13 @@ export async function processScanJob(job: ScanJob): Promise<void> {
           reportUrl,
           tier,
           coverage: countTests(tests),
+          severity: {
+            critical: severityCounts["critical"] ?? 0,
+            high: severityCounts["high"] ?? 0,
+            medium: severityCounts["medium"] ?? 0,
+            low: severityCounts["low"] ?? 0,
+            info: severityCounts["info"] ?? 0,
+          },
         });
       }
     }
