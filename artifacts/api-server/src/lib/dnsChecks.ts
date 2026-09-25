@@ -370,7 +370,10 @@ export async function checkDnssec(hostname: string): Promise<ScanVulnerability[]
     description: `DNSSEC is not configured for ${hostname}. Without DNSSEC, DNS responses can be forged or tampered with in transit (DNS cache poisoning / Kaminsky attack). Attackers can redirect your domain's traffic to malicious servers without users or servers being able to detect it.`,
     evidence: `No DNSKEY records found for ${checked.join(" or ")} (${statusLabel(firstStatus)}).`,
     solution: "Enable DNSSEC through your domain registrar. Most major registrars (Cloudflare, AWS Route 53, Google Domains) offer one-click DNSSEC. Your DNS hosting provider must also support signed zones. This requires coordination between your registrar and DNS provider.",
-    cweId: "CWE-350",
+    // CWE-345, not CWE-350: this is unauthenticated DNS answers, not takeover.
+    // CWE-350 maps to the ASVS subdomain-takeover control in lib/compliance.ts,
+    // which cited a control this finding has no bearing on.
+    cweId: "CWE-345",
   })];
 }
 

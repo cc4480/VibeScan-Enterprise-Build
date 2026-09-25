@@ -337,12 +337,15 @@ const CWE_CONTROLS: Record<string, ControlRef[]> = {
   ],
   "CWE-350": [
     // V14.5.1's real text is "the application server only accepts the HTTP
-    // methods in use" -- nothing to do with host headers. These findings
-    // (dnsChecks.ts, subdomainTakeover.ts) are genuinely about subdomain
-    // takeover risk, which V10.3.3 names directly.
+    // methods in use" -- nothing to do with host headers. This finding
+    // (subdomainTakeover.ts ONLY) is genuinely about subdomain takeover, which
+    // V10.3.3 names directly. The DNSSEC finding in dnsChecks.ts used to share
+    // this CWE and so cited V10.3.3 for an unsigned zone; it is CWE-345 now.
     { framework: "asvs", control: "V10.3.3", title: "Protected against DNS subdomain takeover" },
   ],
   "CWE-345": [
+    // Also the DNSSEC finding (unsigned zone: DNS answers cannot be
+    // authenticated) -- the same analog, and no closer ASVS control exists.
     // ASVS has no DKIM/email-authenticity control -- this finding
     // (dnsChecks.ts, missing DKIM) is email security, a domain ASVS doesn't
     // cover. V13.2.6 is the closest real analog (message authenticity via

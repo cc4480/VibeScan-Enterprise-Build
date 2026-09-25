@@ -129,3 +129,15 @@ describe("coverage against the CWEs the scanner actually emits", () => {
     expect(unmapped).toEqual([]);
   });
 });
+
+describe("DNS findings cite only the controls they are evidence for", () => {
+  it("an unsigned zone (DNSSEC) does not cite the subdomain-takeover control", () => {
+    const controls = controlsForFinding({ cweId: "CWE-345", category: "DNS Security" }).map((c) => c.control);
+    expect(controls).not.toContain("V10.3.3");
+  });
+
+  it("a real subdomain takeover still cites it", () => {
+    const controls = controlsForFinding({ cweId: "CWE-350", category: "DNS Security" }).map((c) => c.control);
+    expect(controls).toContain("V10.3.3");
+  });
+});

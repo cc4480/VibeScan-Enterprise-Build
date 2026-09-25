@@ -1252,7 +1252,7 @@ const NEW_CATEGORY_LABELS: Record<string, string> = {
   "Supply Chain Security":           "supply chain weaknesses",
   "Session Management":              "JWT / session token weaknesses",
   "Brute Force Protection":          "missing rate limiting",
-  "DNS Security":                    "DNS / subdomain takeover risks",
+  "DNS Security":                    "DNS security issues",
   "Information Disclosure":          "information disclosure (robots.txt, error pages, exposed files)",
   "Transport Security":              "transport security issues (HTTP redirect, HSTS)",
   "UI Security":                     "UI security gaps (clickjacking protection)",
