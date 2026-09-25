@@ -84,9 +84,16 @@ export const usersTable = pgTable("users", {
   // with an email as a real account for that purpose.
   googleSub: varchar("google_sub").unique(),
 
+  // Keyed hash of the network the account was created from (lib/signupNetwork.ts):
+  // the IPv4 address, or the /64 of an IPv6 one. Only ever compared for
+  // equality, to cap new accounts per network — never the raw address, so the
+  // column cannot be read back into anyone's IP. Null on accounts created
+  // before the cap existed, which is why they do not count against it.
+  signupNetwork: varchar("signup_network"),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (table) => [index("IDX_users_signup_network").on(table.signupNetwork, table.createdAt)]);
 
 /**
  * Single-use tokens for email verification and password reset.
@@ -156,6 +163,40 @@ export const pendingLoginsTable = pgTable(
 );
 
 export type PendingLogin = typeof pendingLoginsTable.$inferSelect;
+
+/**
+ * A sign-up waiting for its emailed code.
+ *
+ * The account does not exist until the code is entered: an address nobody can
+ * read never becomes an account, never gets free scans and never counts as
+ * "taken" for its real owner. Same shape and rules as pending_logins — the
+ * challenge and code are stored only as SHA-256, five wrong guesses spend it,
+ * and a new sign-up for the same address retires the earlier one.
+ */
+export const pendingRegistrationsTable = pgTable(
+  "pending_registrations",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    email: varchar("email").notNull(),
+    // Already hashed with the same scrypt as a real account; the raw password
+    // is never stored, even for the ten minutes this row lives.
+    passwordHash: varchar("password_hash").notNull(),
+    // Where the sign-up started (see users.signup_network), so the cap is
+    // checked against the network that asked, not the one that typed the code.
+    signupNetwork: varchar("signup_network"),
+    // A legacy anonymous identity to promote in place, captured at step one.
+    anonUserId: varchar("anon_user_id"),
+    challengeHash: varchar("challenge_hash").notNull().unique(),
+    codeHash: varchar("code_hash").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("IDX_pending_registrations_email").on(table.email)],
+);
+
+export type PendingRegistration = typeof pendingRegistrationsTable.$inferSelect;
 
 /**
  * Addresses we must stop mailing, fed by Resend's bounce and complaint webhooks.

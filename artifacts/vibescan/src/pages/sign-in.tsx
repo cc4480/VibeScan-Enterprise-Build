@@ -23,6 +23,8 @@ const GOOGLE_ERRORS: Record<string, string> = {
   account_conflict:
     "This email is already linked to a different Google account. Sign in with your email and password instead.",
   create_failed: "We could not finish creating your account. Please try again.",
+  network_limit:
+    "This network has reached its limit of new accounts for now. Sign in to an existing account, or contact hello@secscan.us if you need another.",
   failed: "Google sign-in did not complete. Please try again.",
 };
 

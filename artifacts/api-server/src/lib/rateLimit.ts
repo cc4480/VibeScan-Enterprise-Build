@@ -71,12 +71,12 @@ export function scanNetworkRateLimitRules(): RateLimitRule[] {
   return [
     {
       windowMs: HOUR_MS,
-      max: parsePositiveInt(process.env.SCAN_LIMIT_PER_HOUR_PER_IP, 40),
+      max: parsePositiveInt(process.env.SCAN_LIMIT_PER_HOUR_PER_IP, 10),
       label: "hour (network)",
     },
     {
       windowMs: DAY_MS,
-      max: parsePositiveInt(process.env.SCAN_LIMIT_PER_DAY_PER_IP, 200),
+      max: parsePositiveInt(process.env.SCAN_LIMIT_PER_DAY_PER_IP, 30),
       label: "day (network)",
     },
   ];

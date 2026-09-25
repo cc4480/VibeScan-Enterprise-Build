@@ -12,7 +12,7 @@ import { useSeo } from "@/lib/seo";
 
 // Per document: a change to one must not re-date the other.
 const LAST_UPDATED: Record<"privacy" | "terms", string> = {
-  privacy: "September 25, 2026", // AI analysis provider named (DeepSeek)
+  privacy: "September 25, 2026", // DeepSeek named; sign-up network hash disclosed
   terms: "September 24, 2026", // Starter and Pro plans; free scans renew monthly
 };
 const CONTACT = "hello@secscan.us";
@@ -64,6 +64,13 @@ function Privacy() {
         <p>
           <strong className="text-foreground">Operational logs.</strong> Ordinary server
           logs, including IP address and timestamps, kept to run and secure the service.
+        </p>
+        <p>
+          <strong className="text-foreground">Sign-up network.</strong> To limit how many
+          accounts one network can create, we store a one-way keyed hash of the network you
+          signed up from (your IP address, or the /64 block of an IPv6 address) alongside
+          your account. It is only ever compared for equality and cannot be turned back into
+          your IP address.
         </p>
       </Section>
 

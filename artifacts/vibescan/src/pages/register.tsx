@@ -2,8 +2,8 @@ import { useState, type FormEvent } from "react";
 import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSeo } from "@/lib/seo";
-import { AuthShell, AuthForm, Field } from "@/components/auth-shell";
-import { register, accountErrorMessage } from "@/lib/account-api";
+import { AuthShell, AuthForm, Field, CheckSpamNote } from "@/components/auth-shell";
+import { register, verifyRegistration, accountErrorMessage } from "@/lib/account-api";
 import { GoogleButton, AuthDivider } from "@/components/google-button";
 
 const MIN_PASSWORD_LENGTH = 10;
@@ -15,6 +15,11 @@ export default function RegisterPage() {
   const queryClient = useQueryClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // Step two. The account does not exist until the emailed code comes back;
+  // `challenge` is the handle step one returned, never a credential on its own.
+  const [challenge, setChallenge] = useState<string | null>(null);
+  const [sentTo, setSentTo] = useState("");
+  const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -26,13 +31,77 @@ export default function RegisterPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await register(email, password);
-      await queryClient.invalidateQueries();
-      setLocation("/dashboard");
+      const result = await register(email, password);
+      setChallenge(result.challenge);
+      setSentTo(result.sentTo);
+      setCode("");
+      setSubmitting(false);
     } catch (err) {
       setError(accountErrorMessage(err, "Could not create the account. Try again."));
       setSubmitting(false);
     }
+  }
+
+  async function handleCodeSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!challenge) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      await verifyRegistration(challenge, code.replace(/[\s-]/g, ""));
+      await queryClient.invalidateQueries();
+      setLocation("/dashboard");
+    } catch (err) {
+      setError(accountErrorMessage(err, "That code is not valid. Start again to get a new one."));
+      setCode("");
+      setSubmitting(false);
+    }
+  }
+
+  // Back to the details step; submitting again sends a new code and retires this one.
+  function startOver() {
+    setChallenge(null);
+    setCode("");
+    setError(null);
+  }
+
+  // ── Step two: the emailed code ──────────────────────────────────────────────
+  if (challenge) {
+    return (
+      <AuthShell
+        title="Confirm your email"
+        subtitle={`We sent a 6-digit code to ${sentTo}. It expires in 10 minutes. Your account is created when you enter it.`}
+        footer={
+          <button type="button" onClick={startOver} className="text-primary hover:underline underline-offset-4">
+            Use a different email
+          </button>
+        }
+      >
+        <AuthForm
+          onSubmit={handleCodeSubmit}
+          error={error}
+          submitting={submitting}
+          submitLabel="Create account"
+          submittingLabel="Verifying…"
+          disabled={code.replace(/[\s-]/g, "").length !== 6}
+        >
+          <Field
+            label="Confirmation code"
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={7}
+            autoFocus
+            required
+            placeholder="123456"
+            hint="Spaces don't matter. Five wrong tries and you'll need a new code."
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+          />
+        </AuthForm>
+        <CheckSpamNote what="code" />
+      </AuthShell>
+    );
   }
 
   return (
@@ -56,8 +125,8 @@ export default function RegisterPage() {
         error={error}
         submitting={submitting}
         disabled={tooShort}
-        submitLabel="Create account"
-        submittingLabel="Creating account…"
+        submitLabel="Continue"
+        submittingLabel="Sending code…"
       >
         <Field
           label="Email"

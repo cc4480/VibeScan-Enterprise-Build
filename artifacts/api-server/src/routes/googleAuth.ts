@@ -37,6 +37,7 @@ import { db, usersTable } from "@workspace/db";
 import { createSession, SESSION_COOKIE, SESSION_TTL } from "../lib/auth";
 import { clientIp } from "../lib/clientIp";
 import { addToMarketingAudience, sendWelcomeEmail } from "../lib/mailer";
+import { networkKey, networkMaySignUp } from "../lib/signupNetwork";
 
 const router: IRouter = Router();
 
@@ -270,14 +271,23 @@ router.get(
         }
       }
 
-      // 3. Otherwise a new account.
+      // 3. Otherwise a new account — subject to the same per-network cap as
+      // email sign-up (lib/signupNetwork.ts). Signing in to an account that
+      // already exists, above, is never capped.
       if (!row) {
+        const network = networkKey(clientIp(req));
+        if (!(await networkMaySignUp(network))) {
+          req.log.warn("Google sign-up refused: network account limit reached");
+          failToSignIn(res, "network_limit");
+          return;
+        }
         [row] = await db
           .insert(usersTable)
           .values({
             email: normalizedEmail,
             googleSub: sub,
             emailVerifiedAt: new Date(),
+            signupNetwork: network,
             firstName,
             lastName,
             profileImageUrl: picture,

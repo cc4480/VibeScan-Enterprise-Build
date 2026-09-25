@@ -45,6 +45,8 @@ import {
 import { issueToken, redeemToken } from "../lib/authTokens";
 import { LOGIN_CODE_TTL_MS, normalizeLoginCode } from "../lib/loginCode";
 import { abandonLoginChallenges, issueLoginChallenge, redeemLoginChallenge } from "../lib/pendingLogin";
+import { abandonRegistration, issueRegistrationChallenge, redeemRegistrationChallenge } from "../lib/pendingRegistration";
+import { NETWORK_LIMIT_MESSAGE, networkKey, networkMaySignUp } from "../lib/signupNetwork";
 import { sendEmailVerification, sendPasswordReset, sendLoginCode, addToMarketingAudience, sendWelcomeEmail } from "../lib/mailer";
 import { clientIp } from "../lib/clientIp";
 
@@ -127,7 +129,14 @@ async function startSession(req: Request, res: Parameters<Parameters<IRouter["po
   });
 }
 
-// ── Register ─────────────────────────────────────────────────────────────────
+// ── Register (step 1 of 2: details) ──────────────────────────────────────────
+//
+// No account exists yet. This checks the details and the per-network cap, then
+// emails a six-digit code; POST /account/register/verify creates the account
+// only when that code comes back. An address nobody can read therefore never
+// becomes an account, never receives free scans, and never blocks its real
+// owner with "already exists". See lib/pendingRegistration.ts and
+// lib/signupNetwork.ts.
 
 router.post("/account/register", async (req, res): Promise<void> => {
   if (isRateLimited(`register:${clientIp(req)}`)) {
@@ -149,49 +158,122 @@ router.post("/account/register", async (req, res): Promise<void> => {
       return;
     }
 
-    const passwordHash = await hashPassword(password);
+    // Checked BEFORE a code is sent, so a capped network cannot use sign-up to
+    // mail codes to arbitrary addresses either.
+    const network = networkKey(clientIp(req));
+    if (!(await networkMaySignUp(network))) {
+      req.log.warn("Sign-up refused: network account limit reached");
+      res.status(429).json({ error: NETWORK_LIMIT_MESSAGE });
+      return;
+    }
 
-    // If the caller is holding an anonymous identity, promote that row rather
-    // than creating a second one — otherwise their existing scans are stranded
-    // on an id they can no longer authenticate as.
+    // A legacy anonymous identity to promote in place when the account is
+    // created, so its scans follow the user. Captured now because step two may
+    // arrive without it.
     const bearer = req.headers["authorization"]?.startsWith("Bearer ")
       ? req.headers["authorization"].slice(7).trim()
       : undefined;
-
-    let row: typeof usersTable.$inferSelect | undefined;
-
+    let anonUserId: string | null = null;
     if (bearer && UUID_V4.test(bearer)) {
       const [anon] = await db.select().from(usersTable).where(eq(usersTable.id, bearer));
-      // Only claim a row that is genuinely anonymous: no password and no email.
+      if (anon && !anon.passwordHash && !anon.email) anonUserId = anon.id;
+    }
+
+    const passwordHash = await hashPassword(password);
+    const { challenge, code } = await issueRegistrationChallenge({
+      email,
+      passwordHash,
+      signupNetwork: network,
+      anonUserId,
+    });
+
+    // Awaited and not swallowed, as for sign-in: the email IS the next step.
+    try {
+      await sendLoginCode(email, code, Math.round(LOGIN_CODE_TTL_MS / 60000));
+    } catch (err) {
+      await abandonRegistration(email);
+      req.log.error({ err }, "Could not send sign-up code");
+      res.status(502).json({ error: "Could not send your code. Please try again shortly." });
+      return;
+    }
+
+    res.status(202).json({ codeRequired: true, challenge, sentTo: maskEmail(email) });
+  } catch (err) {
+    req.log.error({ err }, "Registration failed");
+    res.status(500).json({ error: "Could not create the account" });
+  }
+});
+
+// ── Register (step 2 of 2: emailed code) ─────────────────────────────────────
+
+router.post("/account/register/verify", async (req, res): Promise<void> => {
+  if (isRateLimited(`register2fa:${clientIp(req)}`)) {
+    res.status(429).json({ error: "Too many attempts. Try again in a few minutes." });
+    return;
+  }
+
+  const challenge = typeof req.body?.challenge === "string" ? req.body.challenge : "";
+  const code = normalizeLoginCode(req.body?.code);
+  if (!challenge || !code) {
+    res.status(400).json({ error: "Enter the 6-digit code from your email" });
+    return;
+  }
+
+  try {
+    const result = await redeemRegistrationChallenge(challenge, code);
+    if (!result.ok) {
+      if (result.reason === "too_many_attempts") {
+        req.log.warn("Sign-up code exhausted its attempts — possible brute force");
+      }
+      res.status(401).json({ error: "That code is not valid. Start again to get a new one." });
+      return;
+    }
+    const { pending } = result;
+
+    // Both re-checked: another sign-up could have taken the address, or the
+    // network's allowance, in the ten minutes since step one.
+    const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, pending.email));
+    if (existing) {
+      res.status(409).json({ error: "An account with that email already exists" });
+      return;
+    }
+    if (pending.signupNetwork && !(await networkMaySignUp(pending.signupNetwork))) {
+      res.status(429).json({ error: NETWORK_LIMIT_MESSAGE });
+      return;
+    }
+
+    // The code proves the mailbox, so the address is verified from the start.
+    const fields = {
+      email: pending.email,
+      passwordHash: pending.passwordHash,
+      emailVerifiedAt: new Date(),
+      signupNetwork: pending.signupNetwork,
+    };
+
+    let row: typeof usersTable.$inferSelect | undefined;
+    if (pending.anonUserId) {
+      const [anon] = await db.select().from(usersTable).where(eq(usersTable.id, pending.anonUserId));
+      // Only claim a row that is still genuinely anonymous.
       if (anon && !anon.passwordHash && !anon.email) {
-        [row] = await db
-          .update(usersTable)
-          .set({ email, passwordHash })
-          .where(eq(usersTable.id, anon.id))
-          .returning();
+        [row] = await db.update(usersTable).set(fields).where(eq(usersTable.id, anon.id)).returning();
       }
     }
-
     if (!row) {
-      [row] = await db.insert(usersTable).values({ email, passwordHash }).returning();
+      [row] = await db.insert(usersTable).values(fields).returning();
     }
-
     if (!row) {
       res.status(500).json({ error: "Could not create the account" });
       return;
     }
 
-    // Best-effort, fire-and-forget: a marketing-audience hiccup must never
-    // block or fail account creation. Each function logs and swallows its
-    // own errors. `email` (not row.email) because RegisterBody guarantees it
-    // non-null here, where the column type alone does not.
-    void addToMarketingAudience(email);
-    void sendWelcomeEmail(email);
+    // Best-effort, fire-and-forget; each logs and swallows its own errors.
+    void addToMarketingAudience(pending.email);
+    void sendWelcomeEmail(pending.email);
 
     await startSession(req, res, row);
     res.status(201).json({ user: publicUser(row) });
   } catch (err) {
-    req.log.error({ err }, "Registration failed");
+    req.log.error({ err }, "Registration verification failed");
     res.status(500).json({ error: "Could not create the account" });
   }
 });

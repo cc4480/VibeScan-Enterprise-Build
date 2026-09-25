@@ -40,11 +40,33 @@ export function accountErrorMessage(err: unknown, fallback: string): string {
   return fallback;
 }
 
-export async function register(email: string, password: string): Promise<{ user: AccountUser }> {
+/**
+ * Step one of creating an account. No account exists yet: the server emails a
+ * six-digit code, and verifyRegistration creates the account only when that
+ * code comes back — proving the address belongs to the person signing up.
+ */
+export interface RegistrationChallenge {
+  codeRequired: true;
+  challenge: string;
+  /** Masked address the code went to. */
+  sentTo: string;
+}
+
+export async function register(email: string, password: string): Promise<RegistrationChallenge> {
   return customFetch("/api/account/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
+    responseType: "json",
+  });
+}
+
+/** Step two: exchange the challenge and the emailed code for the new account and a session. */
+export async function verifyRegistration(challenge: string, code: string): Promise<{ user: AccountUser }> {
+  return customFetch("/api/account/register/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ challenge, code }),
     responseType: "json",
   });
 }
