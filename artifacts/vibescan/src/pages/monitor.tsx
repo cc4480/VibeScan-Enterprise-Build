@@ -27,6 +27,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { ApiError } from "@workspace/api-client-react";
 import { BuyOptions } from "@/components/billing-options";
+import { accountErrorMessage } from "@/lib/account-api";
 
 const SEVERITY_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   CRITICAL: { label: "Critical", color: "text-red-400",    bg: "bg-red-400/10 border-red-400/20" },
@@ -491,8 +492,16 @@ function SubscriptionCard({ sub, onCancel }: { sub: MonitorSubscription; onCance
       await triggerManualScan(sub.id);
       toast({ title: "Scan queued", description: "A fresh full scan has started — most finish in under a minute." });
       queryClient.invalidateQueries({ queryKey: ["monitor-subscriptions"] });
-    } catch {
-      toast({ title: "Failed to start scan", description: "Please try again in a moment.", variant: "destructive" });
+    } catch (err) {
+      // Show the server's reason. Most refusals are not transient: "no scans
+      // left this month" or a rate limit, and "try again in a moment" sent
+      // people pressing the button until the rate limit refused them too.
+      const status = err instanceof ApiError ? err.status : 0;
+      toast({
+        title: status === 403 ? "No scans left" : status === 429 ? "Too many scans for now" : "Couldn't start the scan",
+        description: accountErrorMessage(err, "Please try again in a moment."),
+        variant: "destructive",
+      });
     } finally {
       setScanning(false);
     }
