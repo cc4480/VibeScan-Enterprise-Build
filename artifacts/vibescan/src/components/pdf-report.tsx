@@ -5,7 +5,6 @@ import { APP_ORIGIN } from "@/lib/origin";
 import { CATEGORY_TO_OWASP, OWASP_CATEGORIES, owaspCoverage } from "@/lib/owaspCoverage";
 import {
   ComplianceCard,
-  GradeRing,
   SEV_COLORS,
   SeverityLegend,
   type CoverageTest,
@@ -258,6 +257,46 @@ function Coverage({ tests, part }: { tests?: CoverageTest[] | null; part: "summa
   );
 }
 
+
+const GRADE_HEX: Record<string, string> = { A: "#4ade80", B: "#a3e635", C: "#facc15", D: "#fb923c", F: "#f87171" };
+
+/**
+ * The grade for a printed page. The app's GradeRing draws its arc as the risk score, so an A
+ * (risk 5) is an almost empty ring: fine on screen beside the number, but on paper it reads as
+ * broken. Here the ring is solid in the grade's colour and the risk is written underneath.
+ */
+function PdfGrade({ grade, score }: { grade: string; score: number }) {
+  const graded = grade in GRADE_HEX;
+  const color = graded ? GRADE_HEX[grade]! : "#94a3b8";
+  return (
+    <div
+      className="shrink-0 flex flex-col items-center justify-center rounded-full"
+      style={{ width: 132, height: 132, border: `5px solid ${color}`, background: "#0c0c0f" }}
+    >
+      <span style={{ color, fontSize: 56, fontWeight: 800, lineHeight: 1 }}>{graded ? grade : "—"}</span>
+      <span style={{ color: "#a1a1aa", fontSize: 11, fontWeight: 600, letterSpacing: "0.14em", marginTop: 6 }}>
+        {graded ? `RISK ${score}/100` : "INCOMPLETE"}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Cards in the PDF are solid. The app's glass-card is translucent with a backdrop blur, which
+ * html2canvas cannot draw: the borders came out as pale outlines and the fill as grey.
+ * Scoped to the PDF container, so the on-screen app is unchanged; it also reaches cards inside
+ * shared components (ComplianceCard).
+ */
+const PDF_CSS = `
+.pdf-root .glass-card {
+  background: #121216 !important;
+  border: 1px solid #27272a !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+`;
+
 export function PdfReport(d: PdfReportData) {
   const dateStr = new Date(d.scannedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const s = d.summary;
@@ -266,10 +305,11 @@ export function PdfReport(d: PdfReportData) {
   const pages = Array.from(new Set(d.pagesScanned ?? []));
 
   return (
-    <div className="bg-background text-foreground font-sans" style={{ width: 794, padding: 32, boxSizing: "border-box" }}>
+    <div className="pdf-root text-foreground font-sans" style={{ width: 794, padding: 32, boxSizing: "border-box", background: "#09090b" }}>
+      <style>{PDF_CSS}</style>
       {/* Cover */}
       <div data-pdf-block className="glass-card rounded-3xl p-8 mb-6 flex items-center gap-8">
-        <GradeRing grade={s.grade} score={s.riskScore} />
+        <PdfGrade grade={s.grade} score={s.riskScore} />
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary border border-white/5 text-xs font-medium text-muted-foreground">
