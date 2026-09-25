@@ -133,3 +133,32 @@ export function coverageLines(tests: unknown): string[] {
   lines.push("");
   return lines;
 }
+
+/** A test's identity without its per-scan counts: "site crawl (12 inner pages)" -> "site crawl". */
+function testIdentity(r: { group?: unknown; name?: unknown }): string {
+  return `${String(r.group ?? "")}::${String(r.name ?? "").replace(/\s*\([^)]*\)\s*$/, "")}`;
+}
+
+/**
+ * Tests that ran on this scan but did not run on the previous one.
+ *
+ * Regression detection needs it: a finding absent last time is only a
+ * regression if the test that finds it RAN last time. When a domain is verified
+ * between two scans, every active test runs for the first time, and without
+ * this each of their findings was reported as a check that "started failing".
+ *
+ * Returns [] when the previous scan kept no ledger (older reports), so the
+ * comparison falls back to what it did before rather than claiming anything.
+ */
+export function newlyRunTests(previous: unknown, current: TestRecord[]): string[] {
+  if (!Array.isArray(previous) || previous.length === 0) return [];
+  const ranBefore = new Set(
+    previous
+      .filter((r): r is { group: unknown; name: unknown; status: unknown } => !!r && typeof r === "object")
+      .filter((r) => r.status === "ran")
+      .map(testIdentity),
+  );
+  return current
+    .filter((r) => r.status === "ran" && !ranBefore.has(testIdentity(r)))
+    .map((r) => r.name);
+}

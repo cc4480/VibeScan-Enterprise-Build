@@ -117,22 +117,10 @@ interface SendReportEmailOptions {
   coverage?: { ran: number; skipped: number; failed: number; total: number };
   /** Findings per severity. Absent on callers that do not have it; the row is then left out. */
   severity?: { critical: number; high: number; medium: number; low: number; info: number };
-}
-
-/**
- * A hostname that mail clients will not turn into a link. Gmail and Outlook
- * auto-link anything shaped like a domain, which rendered the scanned site as
- * blue underlined text inviting a click to the site rather than the report.
- * A zero-width space after each dot breaks the pattern and is invisible.
- */
-function unlinkedHost(targetUrl: string): string {
-  let host = targetUrl;
-  try {
-    host = new URL(targetUrl).hostname;
-  } catch {
-    // keep as given
-  }
-  return escapeHtml(host).replace(/\./g, ".&#8203;");
+  /** The report's own summary sentence, so the email says what the report header says. */
+  executiveSummary?: string;
+  /** Pages the scan covered, for the "Scanned N pages" pill. */
+  pagesScanned?: number;
 }
 
 const GRADE_COLORS: Record<string, string> = {
@@ -163,44 +151,54 @@ function verdict(opts: SendReportEmailOptions): string {
   return "No critical or high-severity issues found.";
 }
 
+/**
+ * The report-ready email, built to look like the report page it links to: the
+ * app's nav mark, the grade ring with "RISK", the URL and "Scanned N pages"
+ * pills, the "Security Report" title in the display face, the report's own
+ * summary sentence and its severity dots — so the email reads as SecScan, not
+ * as a generic notification. Colours are the app's tokens (index.css):
+ * background #09090b, card #18181b, border #27272a, primary #22c55e, muted
+ * #a1a1aa; Space Grotesk for display, Inter for text, with system fallbacks
+ * for clients that ignore web fonts. Table layout and inline styles throughout,
+ * because that is what mail clients render reliably.
+ */
 export function buildHtml(opts: SendReportEmailOptions): string {
   const { targetUrl, grade, riskScore, totalVulns, reportUrl, coverage, severity } = opts;
   const gradeColor = GRADE_COLORS[grade] ?? "#71717a";
-  const host = unlinkedHost(targetUrl);
   const href = escapeHtml(reportUrl);
-  const scanned = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
+  const origin = escapeHtml(APP_ORIGIN);
+  const display = "'Space Grotesk','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif";
+  const body = "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+  // The full URL as the report shows it. Gmail and Outlook auto-link anything
+  // shaped like a domain, which invites a click to the scanned site instead of
+  // the report; an invisible zero-width space after each dot prevents that.
+  const shownUrl = escapeHtml(targetUrl).replace(/\./g, ".&#8203;").replace(/:\/\//, ":&#8203;//");
+  const summaryText = opts.executiveSummary?.trim() || verdict(opts);
 
-  // A grade on its own reads as "everything was checked". Say how much was, and
-  // that what was not tested is listed in the report — this email is often all
-  // that is read.
   const notRun = coverage ? coverage.skipped + coverage.failed : 0;
-  const testsCell =
+  const testsTile =
     coverage && coverage.total > 0
-      ? `<td width="33%" style="padding:16px 8px;text-align:center;border-left:1px solid #27272a;">
-            <div style="font-size:22px;font-weight:700;color:#fafafa;line-height:1.2;">${coverage.ran}<span style="font-size:14px;color:#71717a;font-weight:600;">/${coverage.total}</span></div>
-            <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#71717a;margin-top:4px;">Tests run</div>
+      ? `<td width="33%" style="padding:0 0 0 6px;">
+            <div style="background:#18181b;border:1px solid #27272a;border-radius:16px;padding:18px 8px;text-align:center;">
+              <div style="font-family:${display};font-size:26px;font-weight:700;color:#fafafa;line-height:1.1;">${coverage.ran}<span style="font-size:15px;color:#71717a;">/${coverage.total}</span></div>
+              <div style="font-size:12px;color:#a1a1aa;margin-top:6px;">Tests run</div>
+            </div>
           </td>`
       : "";
   const coverageNote =
     notRun > 0
-      ? `<p style="margin:12px 0 0;font-size:12px;line-height:1.6;color:#71717a;text-align:center;">${notRun} ${notRun === 1 ? "test" : "tests"} did not run on this scan. A clean result says nothing about ${notRun === 1 ? "that area" : "those areas"}; the report lists ${notRun === 1 ? "it" : "them"} and why.</p>`
+      ? `<p style="margin:14px 0 0;font-size:12px;line-height:1.6;color:#71717a;text-align:center;">${notRun} ${notRun === 1 ? "test" : "tests"} did not run on this scan. A clean result says nothing about ${notRun === 1 ? "that area" : "those areas"}; the report lists ${notRun === 1 ? "it" : "them"} and why.</p>`
       : "";
 
-  const severityRow = severity
-    ? `<tr><td style="padding:0 32px 8px;">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-          ${SEVERITY_STYLE.map(
-            (s) => `<td style="padding:4px;text-align:center;">
-              <div style="border:1px solid #27272a;border-radius:8px;padding:8px 4px;">
-                <div style="font-size:16px;font-weight:700;color:${severity[s.key] > 0 ? s.color : "#52525b"};">${severity[s.key]}</div>
-                <div style="font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:#71717a;margin-top:2px;">${s.label}</div>
-              </div>
-            </td>`,
-          ).join("")}
-        </tr></table>
-      </td></tr>`
+  // The report header's severity dots: only the severities that occur.
+  const dots = severity
+    ? SEVERITY_STYLE.filter((sv) => severity[sv.key] > 0)
+        .map(
+          (sv) =>
+            `<span style="display:inline-block;margin:0 8px;font-size:13px;color:#a1a1aa;white-space:nowrap;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${sv.color};margin-right:6px;vertical-align:middle;"></span><strong style="color:#fafafa;">${severity[sv.key]}</strong> ${sv.label}</span>`,
+        )
+        .join("")
     : "";
-
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -208,78 +206,84 @@ export function buildHtml(opts: SendReportEmailOptions): string {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
 <meta name="supported-color-schemes" content="dark">
-<title>Your SecScan report</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@700&display=swap" rel="stylesheet">
+<title>Your SecScan security report</title>
 </head>
-<body style="margin:0;padding:0;background:#09090b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#fafafa;-webkit-text-size-adjust:100%;">
-  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Grade ${escapeHtml(grade)} for ${escapeHtml(host.replace(/&#8203;/g, ""))} · ${escapeHtml(verdict(opts))}</div>
+<body style="margin:0;padding:0;background:#09090b;font-family:${body};color:#fafafa;-webkit-text-size-adjust:100%;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Grade ${escapeHtml(grade)} · ${escapeHtml(summaryText)}</div>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#09090b;">
-    <tr><td align="center" style="padding:32px 16px;">
+    <tr><td align="center" style="padding:28px 14px 36px;">
       <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
 
-        <!-- Brand -->
-        <tr><td style="padding:0 4px 20px;">
+        <!-- Nav: the app's mark and wordmark -->
+        <tr><td style="padding:0 2px 22px;">
+          <a href="${origin}" style="text-decoration:none;">
+            <img src="${origin}/icon-192.png" width="34" height="34" alt="SecScan" style="display:inline-block;vertical-align:middle;border:0;border-radius:9px;">
+            <span style="display:inline-block;vertical-align:middle;margin-left:10px;font-family:${display};font-size:19px;font-weight:700;color:#fafafa;letter-spacing:-0.2px;">SecScan</span>
+          </a>
+        </td></tr>
+
+        <!-- Report header, as on the report page -->
+        <tr><td style="background:#111113;background-image:linear-gradient(180deg,#141a16 0%,#111113 60%);border:1px solid #27272a;border-radius:24px;padding:34px 26px 30px;text-align:center;">
+
+          <!-- Grade ring -->
+          <table role="presentation" align="center" cellpadding="0" cellspacing="0" style="margin:0 auto;"><tr><td>
+            <div style="width:136px;height:136px;border-radius:50%;border:7px solid ${gradeColor};box-shadow:0 0 36px ${gradeColor}33;background:#09090b;text-align:center;">
+              <div style="font-family:${display};font-size:58px;font-weight:700;line-height:1;color:${gradeColor};padding-top:30px;">${escapeHtml(grade)}</div>
+              <div style="font-size:11px;letter-spacing:0.14em;color:#a1a1aa;margin-top:8px;font-weight:600;">RISK: ${riskScore}</div>
+            </div>
+          </td></tr></table>
+
+          <!-- Pills -->
+          <div style="margin-top:24px;">
+            <span style="display:inline-block;margin:3px;padding:5px 12px;border-radius:999px;background:#18181b;border:1px solid #27272a;font-size:12px;color:#d4d4d8;">${shownUrl}</span>${
+              opts.pagesScanned && opts.pagesScanned > 0
+                ? `<span style="display:inline-block;margin:3px;padding:5px 12px;border-radius:999px;background:#0c1a2e;border:1px solid #1e3a5f;font-size:12px;color:#60a5fa;">Scanned ${opts.pagesScanned} ${opts.pagesScanned === 1 ? "page" : "pages"}</span>`
+                : ""
+            }
+          </div>
+
+          <h1 style="margin:18px 0 0;font-family:${display};font-size:32px;line-height:1.15;font-weight:700;color:#fafafa;letter-spacing:-0.5px;">Security Report</h1>
+          <p style="margin:12px auto 0;max-width:460px;font-size:15px;line-height:1.65;color:#a1a1aa;">${escapeHtml(summaryText)}</p>
+          ${dots ? `<div style="margin-top:14px;">${dots}</div>` : ""}
+        </td></tr>
+
+        <!-- Numbers, styled like the monitor cards -->
+        <tr><td style="padding:14px 0 0;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-            <td style="font-size:18px;font-weight:800;letter-spacing:-0.3px;color:#fafafa;">
-              <span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#22c55e;margin-right:8px;vertical-align:middle;"></span>SecScan
+            <td width="33%" style="padding:0 6px 0 0;">
+              <div style="background:#18181b;border:1px solid #27272a;border-radius:16px;padding:18px 8px;text-align:center;">
+                <div style="font-family:${display};font-size:26px;font-weight:700;color:${gradeColor};line-height:1.1;">${riskScore}<span style="font-size:15px;color:#71717a;">/100</span></div>
+                <div style="font-size:12px;color:#a1a1aa;margin-top:6px;">Risk score</div>
+              </div>
             </td>
-            <td style="text-align:right;font-size:12px;color:#71717a;">Security report · ${scanned}</td>
+            <td width="33%" style="padding:0 ${testsTile ? 6 : 0}px 0 6px;">
+              <div style="background:#18181b;border:1px solid #27272a;border-radius:16px;padding:18px 8px;text-align:center;">
+                <div style="font-family:${display};font-size:26px;font-weight:700;color:#fafafa;line-height:1.1;">${totalVulns}</div>
+                <div style="font-size:12px;color:#a1a1aa;margin-top:6px;">${totalVulns === 1 ? "Finding" : "Findings"}</div>
+              </div>
+            </td>
+            ${testsTile}
           </tr></table>
         </td></tr>
 
-        <!-- Card -->
-        <tr><td style="background:#111113;border:1px solid #27272a;border-radius:14px;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-
-            <!-- Grade + site -->
-            <tr><td style="padding:32px 32px 24px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-                <td width="84" valign="middle" style="padding-right:20px;">
-                  <div style="width:72px;height:72px;border-radius:14px;background:${gradeColor};text-align:center;line-height:72px;font-size:40px;font-weight:800;color:#09090b;">${escapeHtml(grade)}</div>
-                </td>
-                <td valign="middle">
-                  <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#71717a;">Scan complete</div>
-                  <div style="font-size:20px;font-weight:700;color:#fafafa;margin-top:4px;word-break:break-all;">${host}</div>
-                  <div style="font-size:14px;color:#d4d4d8;margin-top:6px;line-height:1.5;">${escapeHtml(verdict(opts))}</div>
-                </td>
-              </tr></table>
-            </td></tr>
-
-            <!-- Stats -->
-            <tr><td style="padding:0 32px 16px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #27272a;border-radius:10px;"><tr>
-                <td width="33%" style="padding:16px 8px;text-align:center;">
-                  <div style="font-size:22px;font-weight:700;color:#fafafa;line-height:1.2;">${riskScore}<span style="font-size:14px;color:#71717a;font-weight:600;">/100</span></div>
-                  <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#71717a;margin-top:4px;">Risk score</div>
-                </td>
-                <td width="33%" style="padding:16px 8px;text-align:center;border-left:1px solid #27272a;">
-                  <div style="font-size:22px;font-weight:700;color:#fafafa;line-height:1.2;">${totalVulns}</div>
-                  <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#71717a;margin-top:4px;">${totalVulns === 1 ? "Finding" : "Findings"}</div>
-                </td>
-                ${testsCell}
-              </tr></table>
-            </td></tr>
-
-            ${severityRow}
-
-            <!-- Call to action -->
-            <tr><td style="padding:16px 32px 32px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-                <td align="center" style="border-radius:10px;background:#22c55e;">
-                  <a href="${href}" style="display:block;padding:15px 24px;font-size:15px;font-weight:700;color:#09090b;text-decoration:none;border-radius:10px;">Open the full report</a>
-                </td>
-              </tr></table>
-              <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#a1a1aa;text-align:center;">Every finding with its evidence and fix, a prompt for your AI editor, the compliance mapping and a PDF download.</p>
-              ${coverageNote}
-            </td></tr>
-
-          </table>
+        <!-- Primary action -->
+        <tr><td style="padding:22px 0 0;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td align="center" style="border-radius:12px;background:#22c55e;box-shadow:0 0 24px rgba(34,197,94,0.25);">
+              <a href="${href}" style="display:block;padding:16px 24px;font-family:${display};font-size:16px;font-weight:700;color:#09090b;text-decoration:none;border-radius:12px;">View Full Report &rarr;</a>
+            </td>
+          </tr></table>
+          <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#a1a1aa;text-align:center;">Every finding with its evidence and fix, a prompt for your AI editor, OWASP and compliance mapping, and a PDF download.</p>
+          ${coverageNote}
         </td></tr>
 
         <!-- Footer -->
-        <tr><td style="padding:20px 4px 0;font-size:12px;line-height:1.6;color:#71717a;text-align:center;">
-          You're receiving this because you ran a scan on SecScan.<br>
-          <a href="${escapeHtml(APP_ORIGIN)}/settings" style="color:#a1a1aa;text-decoration:underline;">Email settings</a>
-          &nbsp;·&nbsp;
+        <tr><td style="padding:28px 2px 0;font-size:12px;line-height:1.7;color:#71717a;text-align:center;">
+          <span style="font-family:${display};font-weight:700;color:#a1a1aa;">SecScan</span> &middot; Security scanning for apps built fast.<br>
+          You're receiving this because you ran a scan.
+          <a href="${origin}/settings" style="color:#a1a1aa;text-decoration:underline;">Email settings</a>
+          &middot;
           <a href="mailto:hello@secscan.us" style="color:#a1a1aa;text-decoration:underline;">hello@secscan.us</a>
         </td></tr>
 

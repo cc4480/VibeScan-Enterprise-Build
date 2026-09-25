@@ -26,7 +26,7 @@ import { corroborateMerge } from "./scoring";
 import { findingFingerprint, canonicalizeTargetUrl } from "./fingerprint";
 import { runRecon } from "./recon";
 import { activeProbesUnlocked } from "./activeProbeGate";
-import { countTests, formatTestLine, formatTestSummary, NOT_VERIFIED, type TestRecord } from "./testLedger";
+import { countTests, formatTestLine, formatTestSummary, newlyRunTests, NOT_VERIFIED, type TestRecord } from "./testLedger";
 import { warnIfLocalDataStale, OSV_CACHE_MAX_SIZE } from "./cveCheck";
 import { refreshEolData, loadEolCacheFromDb, EOL_REFRESH_QUEUE } from "./eolFetcher";
 import { callDeepSeek } from "./deepseek";
@@ -701,9 +701,26 @@ export async function processScanJob(job: ScanJob): Promise<void> {
               ),
             );
 
-            const newRegressions = scanResult.vulnerabilities.filter(
-              (v) => !prevFingerprints.has(findingFingerprint(v.category, v.name, v.evidence)),
-            );
+            // A finding the previous scan could not have produced — because the
+            // test behind it did not run then (most often: the domain was
+            // verified in between, so the active tests ran for the first time)
+            // — did not "start failing". When coverage grew, there is no honest
+            // baseline for this scan's new findings, so none are called
+            // regressions; they are in the report, and the next scan compares
+            // like with like.
+            const newlyRun = newlyRunTests((prevReport.data as { tests?: unknown }).tests, tests);
+            if (newlyRun.length > 0) {
+              log.info(
+                { subscriptionId: monitorSubscriptionId, newlyRun },
+                "More tests ran than on the previous scan — new findings are not treated as regressions",
+              );
+            }
+            const newRegressions =
+              newlyRun.length > 0
+                ? []
+                : scanResult.vulnerabilities.filter(
+                    (v) => !prevFingerprints.has(findingFingerprint(v.category, v.name, v.evidence)),
+                  );
 
             if (newRegressions.length > 0) {
               log.info(
@@ -832,6 +849,8 @@ export async function processScanJob(job: ScanJob): Promise<void> {
           reportUrl,
           tier,
           coverage: countTests(tests),
+          executiveSummary,
+          pagesScanned: Array.isArray(scanResult.pagesScanned) ? scanResult.pagesScanned.length : undefined,
           severity: {
             critical: severityCounts["critical"] ?? 0,
             high: severityCounts["high"] ?? 0,

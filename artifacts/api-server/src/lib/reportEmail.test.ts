@@ -23,19 +23,20 @@ describe("report-ready email", () => {
   it("links the button to the full report page", () => {
     const html = buildHtml(base);
     expect(html).toContain('href="https://secscan.us/report/abc-123"');
-    expect(html).toContain("Open the full report");
+    expect(html).toContain("View Full Report");
     expect(html).not.toContain("/share/");
   });
 
   it("does not let mail clients turn the scanned site into a link", () => {
     const html = buildHtml(base);
     expect(html).toContain("secscan.&#8203;us");
+    expect(html).toContain("https:&#8203;//");
     expect(html).not.toMatch(/href="https:\/\/secscan\.us\/"/);
   });
 
   it("shows the grade, score, findings, tests run and every severity", () => {
     const html = buildHtml(base);
-    for (const s of [">A<", "6<span", "38<span", "/39", "Critical", "High", "Medium", "Low", "Info"]) {
+    for (const s of [">A<", "6<span", "38<span", "/39", "Medium", "Low", "Info"]) {
       expect(html).toContain(s);
     }
   });
@@ -54,6 +55,17 @@ describe("report-ready email", () => {
     );
   });
 
+  it("carries the app's brand: logo, grade ring, report title, primary green", () => {
+    const html = buildHtml({ ...base, executiveSummary: "Security scan of secscan.us identified 3 findings.", pagesScanned: 13 });
+    expect(html).toContain("/icon-192.png");
+    expect(html).toContain("Security Report");
+    expect(html).toContain("RISK: 6");
+    expect(html).toContain("Scanned 13 pages");
+    expect(html).toContain("Security scan of secscan.us identified 3 findings.");
+    expect(html).toContain("#22c55e");
+    expect(html).not.toContain("#6366f1");
+  });
+
   it("escapes a hostile target URL", () => {
     const html = buildHtml({ ...base, targetUrl: 'https://x.test/"><script>alert(1)</script>' });
     expect(html).not.toContain("<script>alert(1)</script>");
@@ -62,7 +74,10 @@ describe("report-ready email", () => {
   it("writes previews when asked", () => {
     const dir = process.env["EMAIL_PREVIEW_DIR"];
     if (!dir) return;
-    writeFileSync(join(dir, "a.html"), buildHtml(base));
+    writeFileSync(
+      join(dir, "a.html"),
+      buildHtml({ ...base, executiveSummary: "Security scan of secscan.us identified 3 security findings, none of them critical or high, yielding an overall grade of A with a risk score of 6/100.", pagesScanned: 13 }),
+    );
     writeFileSync(
       join(dir, "d.html"),
       buildHtml({

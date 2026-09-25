@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TestLedger, formatTestLine, formatTestSummary, NOT_VERIFIED, coverageLines } from "./testLedger";
+import { TestLedger, formatTestLine, formatTestSummary, NOT_VERIFIED, coverageLines, newlyRunTests } from "./testLedger";
 
 const finding = { id: "1", name: "x", severity: "low", category: "c", description: "d", solution: "s" } as const;
 
@@ -103,5 +103,35 @@ describe("countTests", () => {
         { group: "a", name: "4", status: "ran", findings: 2, durationMs: 1 },
       ]),
     ).toEqual({ ran: 2, skipped: 1, failed: 1, total: 4 });
+  });
+});
+
+describe("newlyRunTests — when a new finding may be called a regression", () => {
+  const rec = (name: string, status: "ran" | "skipped" | "failed", group = "active") => ({
+    group, name, status, findings: 0, durationMs: 1,
+  });
+
+  it("lists tests that ran now but were skipped last time (domain verified in between)", () => {
+    const before = [rec("injection (XSS, SQLi)", "skipped"), rec("JWT analysis", "ran", "passive")];
+    const now = [rec("injection (XSS, SQLi)", "ran"), rec("JWT analysis", "ran", "passive")];
+    expect(newlyRunTests(before, now)).toEqual(["injection (XSS, SQLi)"]);
+  });
+
+  it("is empty when the same tests ran both times, so real regressions still count", () => {
+    const both = [rec("injection (XSS, SQLi)", "ran"), rec("JWT analysis", "ran", "passive")];
+    expect(newlyRunTests(both, both)).toEqual([]);
+  });
+
+  it("ignores per-scan counts in a test's name", () => {
+    expect(newlyRunTests([rec("site crawl (12 inner pages)", "ran", "crawl")], [rec("site crawl (15 inner pages)", "ran", "crawl")])).toEqual([]);
+  });
+
+  it("claims nothing when the previous scan kept no ledger", () => {
+    expect(newlyRunTests(undefined, [rec("injection", "ran")])).toEqual([]);
+    expect(newlyRunTests([], [rec("injection", "ran")])).toEqual([]);
+  });
+
+  it("a test that ran before and is skipped now is not 'newly run'", () => {
+    expect(newlyRunTests([rec("port scan", "ran", "recon")], [rec("port scan", "skipped", "recon")])).toEqual([]);
   });
 });
