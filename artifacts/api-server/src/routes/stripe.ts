@@ -37,6 +37,7 @@ import {
   syncSubscription,
 } from "../lib/billing";
 import { planByKey } from "../lib/plans";
+import { dropDuplicateSubscription } from "../lib/duplicateSubscription";
 
 const router: IRouter = Router();
 
@@ -110,7 +111,7 @@ export async function processStripeEvent(event: Stripe.Event): Promise<EventOutc
           const subscriptionId = idOf(session.subscription);
           if (userId && subscriptionId) {
             // The plan row only. The included scans arrive with invoice.paid.
-            await activateSubscription(tx, {
+            const started = await activateSubscription(tx, {
               userId,
               stripeCustomerId: idOf(session.customer),
               stripeSubscriptionId: subscriptionId,
@@ -118,7 +119,13 @@ export async function processStripeEvent(event: Stripe.Event): Promise<EventOutc
               // Absent on sessions from before there were two plans: Pro.
               plan: planByKey(meta["plan"]) ?? undefined,
             });
-            applied = `subscription started for ${userId}`;
+            if (started === "duplicate") {
+              // Already on a plan from another subscription: end this one, do not overwrite.
+              after.push(() => dropDuplicateSubscription(subscriptionId));
+              applied = `duplicate subscription ${subscriptionId} for ${userId}: cancelled and refunded`;
+            } else {
+              applied = `subscription started for ${userId}`;
+            }
           }
         } else if (meta["type"] === "credits") {
           // "unpaid" = a delayed payment method that has not cleared. Wait for
@@ -158,10 +165,13 @@ export async function processStripeEvent(event: Stripe.Event): Promise<EventOutc
           currentPeriodEnd: periodEnd,
           plan: planByKey(details?.metadata?.["plan"]) ?? undefined,
         });
+        if (result === "duplicate") after.push(() => dropDuplicateSubscription(subscriptionId));
         applied =
           result === "applied"
             ? `period started: plan allowance granted for ${subscriptionId}`
-            : `invoice for unknown subscription ${subscriptionId}`;
+            : result === "duplicate"
+              ? `invoice for duplicate subscription ${subscriptionId}: cancelled and refunded`
+              : `invoice for unknown subscription ${subscriptionId}`;
         break;
       }
 

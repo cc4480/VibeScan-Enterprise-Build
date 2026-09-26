@@ -15,6 +15,10 @@
  * tables between tests.
  */
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
+import { MONITOR_PLANS } from "./plans";
+
+// The plan a subscription with no plan metadata gets (Pro).
+const PRO = MONITOR_PLANS.pro;
 
 const URL_ = process.env["BILLING_TEST_DATABASE_URL"];
 const suite = URL_ ? describe : describe.skip;
@@ -121,9 +125,16 @@ suite("billing (real Postgres)", () => {
     return row ?? null;
   };
 
+  /** Pin the remaining allowance where a test is about spending, not about the plan's size. */
+  const setAllowance = async (userId: string, n: number) => {
+    const { db, billingSubscriptionsTable } = m.db;
+    const { eq } = await import("drizzle-orm");
+    await db.update(billingSubscriptionsTable).set({ includedScansRemaining: n }).where(eq(billingSubscriptionsTable.userId, userId));
+  };
+
   // ── Bug 1: duplicate delivery ──────────────────────────────────────────────
   it("credits a pack exactly once, however many times Stripe delivers it", async () => {
-    const event = packCompleted("u1", "pack_5", "paid");
+    const event = packCompleted("u1", "pack_10", "paid");
     const first = await m.webhook.processStripeEvent(event);
     const again = await m.webhook.processStripeEvent(event);
     const third = await m.webhook.processStripeEvent(event);
@@ -131,15 +142,15 @@ suite("billing (real Postgres)", () => {
     expect(first.duplicate).toBe(false);
     expect(again.duplicate).toBe(true);
     expect(third.duplicate).toBe(true);
-    expect(await balance("u1")).toBe(5); // was 15 before the ledger
+    expect(await balance("u1")).toBe(10); // was 30 before the ledger
   });
 
   it("applies each duplicate once even when the deliveries race each other", async () => {
-    const event = packCompleted("u1", "pack_20", "paid");
+    const event = packCompleted("u1", "pack_50", "paid");
     const results = await Promise.allSettled(Array.from({ length: 8 }, () => m.webhook.processStripeEvent(event)));
     const applied = results.filter((r) => r.status === "fulfilled" && !r.value.duplicate).length;
     expect(applied).toBe(1);
-    expect(await balance("u1")).toBe(20);
+    expect(await balance("u1")).toBe(50);
   });
 
   it("rolls the ledger back with the effect, so a failed delivery's retry still applies", async () => {
@@ -152,9 +163,9 @@ suite("billing (real Postgres)", () => {
       }),
     ).rejects.toThrow();
 
-    const retry = await m.webhook.processStripeEvent(packCompleted("u1", "pack_5", "paid", id));
+    const retry = await m.webhook.processStripeEvent(packCompleted("u1", "pack_10", "paid", id));
     expect(retry.duplicate).toBe(false);
-    expect(await balance("u1")).toBe(5);
+    expect(await balance("u1")).toBe(10);
   });
 
   // ── Bug 2: lost updates ────────────────────────────────────────────────────
@@ -163,22 +174,22 @@ suite("billing (real Postgres)", () => {
     const { spendOneCredit } = await import("./credits");
 
     await Promise.all([
-      ...Array.from({ length: 6 }, () => m.webhook.processStripeEvent(packCompleted("u2", "single", "paid"))),
+      ...Array.from({ length: 6 }, () => m.webhook.processStripeEvent(packCompleted("u2", "pack_10", "paid"))),
       ...Array.from({ length: 4 }, () => spendOneCredit("u2")),
     ]);
-    // 10 + 6 bought - 4 spent. Read-then-write lost some of these.
-    expect(await balance("u2")).toBe(12);
+    // 10 + six 10-packs (60) - 4 spent. Read-then-write lost some of these.
+    expect(await balance("u2")).toBe(66);
   });
 
   // ── Bug 3: money not yet taken ─────────────────────────────────────────────
   it("grants nothing for an unpaid checkout, then grants when the payment clears", async () => {
-    const r = await m.webhook.processStripeEvent(packCompleted("u3", "pack_5", "unpaid"));
+    const r = await m.webhook.processStripeEvent(packCompleted("u3", "pack_10", "unpaid"));
     expect(r.applied).toMatch(/deferred/);
     expect(await balance("u3")).toBe(0);
 
-    const cleared = { ...(packCompleted("u3", "pack_5", "paid") as object), type: "checkout.session.async_payment_succeeded" };
+    const cleared = { ...(packCompleted("u3", "pack_10", "paid") as object), type: "checkout.session.async_payment_succeeded" };
     await m.webhook.processStripeEvent(cleared as never);
-    expect(await balance("u3")).toBe(5);
+    expect(await balance("u3")).toBe(10);
   });
 
   it("ignores a pack that is not sold (a retired per-scan tier grants nothing)", async () => {
@@ -191,22 +202,22 @@ suite("billing (real Postgres)", () => {
     await m.webhook.processStripeEvent(subscriptionCompleted("u4", "sub_A"));
     let row = await plan("u4");
     expect(row?.plan).toBe("pro");
-    expect(row?.urlLimit).toBe(3);
+    expect(row?.urlLimit).toBe(PRO.urlLimit);
     expect(row?.includedScansRemaining).toBe(0);
 
     await m.webhook.processStripeEvent(invoicePaid("sub_A", "u4"));
     row = await plan("u4");
-    expect(row?.includedScansRemaining).toBe(5);
+    expect(row?.includedScansRemaining).toBe(PRO.includedScans);
     expect(row?.currentPeriodEnd).not.toBeNull();
   });
 
   it("works when Stripe delivers invoice.paid BEFORE checkout.session.completed", async () => {
     await m.webhook.processStripeEvent(invoicePaid("sub_B", "u5"));
-    expect((await plan("u5"))?.includedScansRemaining).toBe(5);
+    expect((await plan("u5"))?.includedScansRemaining).toBe(PRO.includedScans);
 
     await m.webhook.processStripeEvent(subscriptionCompleted("u5", "sub_B"));
     // Checkout arriving late must not wipe the allowance the invoice granted.
-    expect((await plan("u5"))?.includedScansRemaining).toBe(5);
+    expect((await plan("u5"))?.includedScansRemaining).toBe(PRO.includedScans);
   });
 
   it("does not roll unused scans over, and a redelivered invoice cannot stack them", async () => {
@@ -215,18 +226,19 @@ suite("billing (real Postgres)", () => {
     await m.webhook.processStripeEvent(march);
     await m.billing.spendIncludedScan("u6");
     await m.billing.spendIncludedScan("u6");
-    expect((await plan("u6"))?.includedScansRemaining).toBe(3);
+    expect((await plan("u6"))?.includedScansRemaining).toBe(PRO.includedScans - 2);
 
     await m.webhook.processStripeEvent(march); // redelivery
-    expect((await plan("u6"))?.includedScansRemaining).toBe(3);
+    expect((await plan("u6"))?.includedScansRemaining).toBe(PRO.includedScans - 2);
 
     await m.webhook.processStripeEvent(invoicePaid("sub_C", "u6")); // next month
-    expect((await plan("u6"))?.includedScansRemaining).toBe(5); // reset, not 8
+    expect((await plan("u6"))?.includedScansRemaining).toBe(PRO.includedScans); // reset, not stacked
   });
 
   it("never lets two concurrent scans both take the last included scan", async () => {
     await m.webhook.processStripeEvent(subscriptionCompleted("u7", "sub_D"));
     await m.webhook.processStripeEvent(invoicePaid("sub_D", "u7"));
+    await setAllowance("u7", 5);
     const spends = await Promise.all(Array.from({ length: 12 }, () => m.billing.spendIncludedScan("u7")));
     expect(spends.filter((r) => r !== null)).toHaveLength(5);
     expect((await plan("u7"))?.includedScansRemaining).toBe(0);
@@ -274,7 +286,7 @@ suite("billing (real Postgres)", () => {
     const scanId = await insertScan("u10", "included");
 
     expect(await m.billing.refundFailedScan(scanId)).toBe("included");
-    expect((await plan("u10"))?.includedScansRemaining).toBe(5);
+    expect((await plan("u10"))?.includedScansRemaining).toBe(PRO.includedScans);
     expect(await balance("u10")).toBe(0);
   });
 
@@ -339,6 +351,7 @@ suite("billing (real Postgres)", () => {
     const trial = await import("./freeTrial");
     await m.webhook.processStripeEvent(subscriptionCompleted("u20", "sub_H"));
     await m.webhook.processStripeEvent(invoicePaid("sub_H", "u20"));
+    await setAllowance("u20", 5);
     await m.billing.addCredits(m.db.db, "u20", 1);
 
     const seen: string[] = [];

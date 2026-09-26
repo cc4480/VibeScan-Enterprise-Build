@@ -19,7 +19,7 @@ import {
   stripeEventsTable,
 } from "@workspace/db";
 import { and, eq, gt, inArray, lt, sql } from "drizzle-orm";
-import { DEFAULT_PLAN, SOLD_PLANS, includedScansForPlan, type MonitorPlan } from "./plans";
+import { includedScansForPlan } from "./plans";
 
 /** A transaction handle, or the pool itself — every helper accepts either. */
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -64,152 +64,14 @@ export async function addCredits(tx: Executor, userId: string, amount: number): 
 }
 
 // ── Subscription ────────────────────────────────────────────────────────────
-
-/** Stripe's subscription status mapped onto ours. See entitlements.ts. */
-export function mapSubscriptionStatus(
-  stripeStatus: string,
-): "active" | "past_due" | "paused" | "cancelled" {
-  switch (stripeStatus) {
-    case "active":
-    case "trialing":
-      return "active";
-    // Stripe is still retrying the card. Access continues — cutting off a
-    // paying customer over a card that is about to succeed is the worse error.
-    case "past_due":
-      return "past_due";
-    // Retries exhausted, or the subscription was paused: stop scanning, keep
-    // history readable.
-    case "unpaid":
-    case "paused":
-    case "incomplete":
-      return "paused";
-    // canceled, incomplete_expired
-    default:
-      return "cancelled";
-  }
-}
-
-/**
- * Create or refresh the user's plan row when a subscription starts.
- *
- * Does NOT grant the included scans: the paid invoice does that. Checkout
- * completing and the first invoice being paid are separate events that Stripe
- * may deliver in either order, and allowance must follow money actually taken,
- * not the checkout page closing.
- */
-export async function activateSubscription(
-  tx: Executor,
-  opts: {
-    userId: string;
-    stripeCustomerId: string | null;
-    stripeSubscriptionId: string;
-    currentPeriodEnd: Date | null;
-    /** The plan bought, from the session or subscription metadata. */
-    plan?: MonitorPlan;
-  },
-): Promise<void> {
-  const plan = opts.plan ?? DEFAULT_PLAN;
-  await tx
-    .insert(billingSubscriptionsTable)
-    .values({
-      userId: opts.userId,
-      plan: plan.key,
-      status: "active",
-      urlLimit: plan.urlLimit,
-      currentPeriodEnd: opts.currentPeriodEnd,
-      stripeCustomerId: opts.stripeCustomerId,
-      stripeSubscriptionId: opts.stripeSubscriptionId,
-      grandfathered: false,
-    })
-    .onConflictDoUpdate({
-      target: billingSubscriptionsTable.userId,
-      set: {
-        plan: plan.key,
-        status: "active",
-        urlLimit: plan.urlLimit,
-        currentPeriodEnd: opts.currentPeriodEnd,
-        stripeCustomerId: opts.stripeCustomerId,
-        stripeSubscriptionId: opts.stripeSubscriptionId,
-        updatedAt: new Date(),
-      },
-    });
-}
-
-/**
- * A subscription invoice was paid: (re)start the period's included scans.
- *
- * SETS the allowance to the plan's amount rather than adding to it. Unused
- * scans therefore do not roll over, and — together with the event ledger — a
- * redelivered invoice.paid cannot stack a second month's scans.
- *
- * If the plan row does not exist yet (invoice.paid can beat
- * checkout.session.completed), it is created from the invoice's own
- * subscription metadata, so the order Stripe happens to use does not matter.
- */
-export async function applyPaidInvoice(
-  tx: Executor,
-  opts: {
-    stripeSubscriptionId: string;
-    stripeCustomerId: string | null;
-    userId: string | null;
-    currentPeriodEnd: Date | null;
-    /** The plan named in the subscription metadata, for the row-does-not-exist-yet case. */
-    plan?: MonitorPlan;
-  },
-): Promise<"applied" | "unknown_subscription"> {
-  // Each plan's allowance, chosen by the plan stored on the row, so a Starter
-  // invoice grants Starter's scans. A row whose plan is not sold keeps what it has.
-  const allowance = sql.join(
-    SOLD_PLANS.map((p) => sql`WHEN ${billingSubscriptionsTable.plan} = ${p.key} THEN ${p.includedScans}`),
-    sql` `,
-  );
-  const updated = await tx
-    .update(billingSubscriptionsTable)
-    .set({
-      status: "active",
-      includedScansRemaining: sql`CASE ${allowance} ELSE ${billingSubscriptionsTable.includedScansRemaining} END`,
-      currentPeriodEnd: opts.currentPeriodEnd,
-      updatedAt: new Date(),
-    })
-    .where(eq(billingSubscriptionsTable.stripeSubscriptionId, opts.stripeSubscriptionId))
-    .returning({ id: billingSubscriptionsTable.id });
-
-  if (updated.length > 0) return "applied";
-  if (!opts.userId) return "unknown_subscription";
-
-  const plan = opts.plan ?? DEFAULT_PLAN;
-  await activateSubscription(tx, {
-    userId: opts.userId,
-    stripeCustomerId: opts.stripeCustomerId,
-    stripeSubscriptionId: opts.stripeSubscriptionId,
-    currentPeriodEnd: opts.currentPeriodEnd,
-    plan,
-  });
-  await tx
-    .update(billingSubscriptionsTable)
-    .set({ includedScansRemaining: plan.includedScans })
-    .where(eq(billingSubscriptionsTable.userId, opts.userId));
-  return "applied";
-}
-
-/** Mirror a subscription's status and period from Stripe onto the plan row. */
-export async function syncSubscription(
-  tx: Executor,
-  opts: { stripeSubscriptionId: string; stripeStatus: string; currentPeriodEnd: Date | null },
-): Promise<void> {
-  const status = mapSubscriptionStatus(opts.stripeStatus);
-  await tx
-    .update(billingSubscriptionsTable)
-    .set({
-      status,
-      currentPeriodEnd: opts.currentPeriodEnd,
-      // A cancelled plan keeps nothing it has not used. Otherwise the scans
-      // would outlive the subscription that paid for them.
-      ...(status === "cancelled" ? { includedScansRemaining: 0 } : {}),
-      updatedAt: new Date(),
-    })
-    .where(eq(billingSubscriptionsTable.stripeSubscriptionId, opts.stripeSubscriptionId));
-}
+// Lives in subscriptions.ts; re-exported so callers keep importing from here.
+export {
+  mapSubscriptionStatus,
+  hasOtherLiveSubscription,
+  activateSubscription,
+  applyPaidInvoice,
+  syncSubscription,
+} from "./subscriptions";
 
 // ── Spending a scan ─────────────────────────────────────────────────────────
 
