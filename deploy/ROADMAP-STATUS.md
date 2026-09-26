@@ -12,14 +12,14 @@ Status: **done**, **partial**, **todo**.
 | U2 | Methodology, data handling, disclosure | done | secscan.info/security, security.txt |
 | U3 | Make failed probes visible | done | Already built; shown live |
 | U4 | Send less to the language model, provider choice | partial | Redaction and LLM_ENDPOINT done; no user-facing choice |
-| U5 | Third-party script check that understands first-party CDNs | todo | |
+| U5 | Third-party script check that understands first-party CDNs | done | first-party CDNs and provider-updated scripts exempt; 11 to 4 flagged sites on the 20-site run |
 | U6 | A public status page | todo | Needs the user's UptimeRobot page |
 | U7 | GitHub Action, CLI and SARIF | **done** | deploy/cli (CLI + action.yml); SARIF at /v1/scans/:id/sarif. To publish the Action, copy deploy/cli to its own repo and tag v1 (needs the user) |
 | U8 | Alert destinations and ticketing | todo | |
 | U9 | Verify the fix | **done** | "Fixed this? Check it" on each finding: a free, limited (10 a day) re-scan judged against that one finding. Fixed only if its test ran again; otherwise "could not be re-checked". Full re-scan for now; a targeted single-test re-run would be faster (later) |
 | U10 | Supabase and Firebase in depth | todo | |
 | U11 | Checks for AI features inside the app | todo | |
-| U12 | One defect, one finding | todo | |
+| U12 | One defect, one finding | needs decision | merging conflicts with per-finding fixture/benchmark and changes grades |
 | U13 | Fix prompts that know the platform | todo | |
 | U14 | Easy two-account testing | partial | Works; setup still manual |
 | U15 | Wider injection coverage | todo | Approved 2026-09-26; each class with a clean twin |

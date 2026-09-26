@@ -7,6 +7,7 @@
  * rate limiting, directory listing, and clickjacking verification.
  */
 
+import { expectsIntegrity } from "./sriPolicy";
 import { type TestLedger, NOT_VERIFIED } from "./testLedger";
 import { randomUUID } from "node:crypto";
 import { scanFetch, type HttpResult } from "./http";
@@ -358,7 +359,9 @@ export async function checkSRI(html: string, baseUrl: string): Promise<ScanVulne
   const checkTag = (tag: string, src: string) => {
     try {
       const u = new URL(src, baseUrl);
-      if (u.hostname !== baseHost && !tag.includes("integrity=")) {
+      // Third-party only, and not a provider that updates the script in place (lib/sriPolicy.ts):
+      // the site's own CDN needs no SRI, and SRI on Stripe.js or Tag Manager breaks them.
+      if (expectsIntegrity(baseHost, u) && !tag.includes("integrity=")) {
         // Skip resources whose URL pathname contains a long hex content hash.
         // Content-addressed URLs (e.g. webpack chunks: "/chunk.a1b2c3d4e5f6a7b8.js")
         // are effectively pinned by the hash in the filename — SRI is redundant
