@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import express, { Router, type Request } from "express";
-import { runAppRoute, formatAccount, formatVerification, formatMonitors } from "./mcp";
+import { formatAccount, formatVerification, formatMonitors } from "./mcp";
+import { runAppRoute } from "./appRouteRunner";
 
 /**
  * The tools added in MCP 1.1 do not reimplement anything: each runs the

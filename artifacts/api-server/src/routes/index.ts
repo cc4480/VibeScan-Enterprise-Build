@@ -20,6 +20,7 @@ import feedbackRouter from "./feedback";
 import checkoutRouter from "./checkout";
 import apiTokensRouter from "./apiTokens";
 import mcpRouter from "./mcp";
+import v1Router from "./v1";
 
 const router: IRouter = Router();
 
@@ -44,5 +45,6 @@ router.use(feedbackRouter);
 router.use(checkoutRouter);
 router.use(apiTokensRouter);
 router.use(mcpRouter);
+router.use(v1Router);
 
 export default router;

@@ -165,9 +165,9 @@ export default function SettingsPage() {
             <Bot className="w-6 h-6 text-primary" />
           </div>
           <div>
-            <h2 className="text-xl font-bold mb-1">AI editors</h2>
+            <h2 className="text-xl font-bold mb-1">AI editors and API</h2>
             <p className="text-sm text-muted-foreground">
-              Scan and read reports from Claude Code, Cursor or any MCP-capable editor. Create a token, paste the
+              Scan and read reports from Claude Code, Cursor or any MCP-capable editor, or from a script or CI job through the REST API. Create a token, paste the
               setup line, then ask your editor to scan your site.
             </p>
           </div>

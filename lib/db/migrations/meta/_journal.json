@@ -127,6 +127,13 @@
       "when": 1790410540009,
       "tag": "0017_brown_calypso",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790421391056,
+      "tag": "0018_boring_wonder_man",
+      "breakpoints": true
     }
   ]
 }

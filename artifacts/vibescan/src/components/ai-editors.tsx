@@ -5,17 +5,23 @@ import { Check, Copy, KeyRound, Loader2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * Settings → AI editors: API tokens for the MCP endpoint, and the exact setup
- * lines for Claude Code and Cursor.
+ * Settings → AI editors and API: personal tokens, and the exact setup lines for the
+ * MCP endpoint (Claude Code, Cursor) or the REST API (scripts and CI).
+ *
+ * A token has one scope. "mcp" opens the MCP endpoint only and "api" opens the REST API
+ * only, so a token pasted into an editor config cannot also drive CI, or the reverse.
  *
  * A token is shown ONCE, at creation, already inlined into the setup commands
  * so there is nothing to assemble by hand — the server keeps only its hash.
  */
 
+type Scope = "mcp" | "api";
+
 interface TokenRow {
   id: string;
   name: string;
   prefix: string;
+  scope: Scope;
   createdAt: string;
   lastUsedAt: string | null;
 }
@@ -67,9 +73,11 @@ export function AiEditorsSection() {
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [fresh, setFresh] = useState<{ name: string; token: string } | null>(null);
+  const [scope, setScope] = useState<Scope>("mcp");
+  const [fresh, setFresh] = useState<{ name: string; token: string; scope: Scope } | null>(null);
 
   const endpoint = `${window.location.origin}/api/mcp`;
+  const apiBase = `${window.location.origin}/api/v1`;
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -79,9 +87,9 @@ export function AiEditorsSection() {
       const row = await customFetch<TokenRow & { token: string }>("/api/account/tokens", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim() || "AI editor" }),
+        body: JSON.stringify({ name: name.trim() || (scope === "api" ? "CI" : "AI editor"), scope }),
       });
-      setFresh({ name: row.name, token: row.token });
+      setFresh({ name: row.name, token: row.token, scope: row.scope ?? scope });
       setName("");
       await queryClient.invalidateQueries({ queryKey: ["api-tokens"] });
     } catch (err) {
@@ -103,12 +111,29 @@ export function AiEditorsSection() {
 
   return (
     <div className="space-y-6">
+      <div role="radiogroup" aria-label="What the token is for" className="flex flex-wrap gap-2">
+        {([["mcp", "AI editor (MCP)"], ["api", "Scripts and CI (REST API)"]] as const).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={scope === value}
+            onClick={() => setScope(value)}
+            className={cn(
+              "px-3.5 py-1.5 rounded-full text-sm border transition-colors",
+              scope === value ? "bg-primary/15 border-primary/50 text-foreground" : "border-white/10 text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <form onSubmit={create} className="flex flex-col sm:flex-row gap-3">
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={60}
-          placeholder="Name it — e.g. Claude Code on my laptop"
+          placeholder={scope === "api" ? "Name it — e.g. GitHub Actions" : "Name it — e.g. Claude Code on my laptop"}
           aria-label="Token name"
           className="flex-1 min-w-0 bg-background/60 border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary/50"
         />
@@ -131,6 +156,25 @@ export function AiEditorsSection() {
               Anyone with it can run scans on your account. Revoke it below if it ever leaks.
             </span>
           </p>
+          {fresh.scope === "api" ? (
+            <>
+              <CopyBlock
+                label="Start a scan"
+                value={`curl -X POST ${apiBase}/scans -H "Authorization: Bearer ${fresh.token}" -H "Content-Type: application/json" -d '{"url":"https://your-site.example"}'`}
+              />
+              <CopyBlock
+                label="Wait for the result (up to 60 s) — replace SCAN_ID"
+                value={`curl "${apiBase}/scans/SCAN_ID?wait=60" -H "Authorization: Bearer ${fresh.token}"`}
+              />
+              <CopyBlock label="The token alone" value={fresh.token} />
+              <p className="text-xs text-muted-foreground">
+                This token opens the REST API only, not the MCP endpoint or your account. Scans use your free scans,
+                plan scans or credits, and active tests run only on domains you've verified. The full description is
+                at {apiBase}/openapi.json.
+              </p>
+            </>
+          ) : (
+            <>
           <CopyBlock
             label="Claude Code — run in a terminal"
             value={`claude mcp add --scope user --transport http secscan ${endpoint} --header "Authorization: Bearer ${fresh.token}"`}
@@ -150,6 +194,8 @@ export function AiEditorsSection() {
             scans or credits, exactly as on this site, and active tests run only on domains you've verified.
             Step-by-step help: secscan.info/ai-editors
           </p>
+            </>
+          )}
           <button type="button" onClick={() => setFresh(null)} className="text-xs text-muted-foreground hover:text-foreground underline">
             I've saved it
           </button>
@@ -166,7 +212,7 @@ export function AiEditorsSection() {
               <div className="flex-1 min-w-0">
                 <div className="font-medium truncate">{t.name}</div>
                 <div className="text-xs text-muted-foreground font-mono">
-                  {t.prefix}… · {relative(t.lastUsedAt)}
+                  {t.scope === "api" ? "API" : "MCP"} · {t.prefix}… · {relative(t.lastUsedAt)}
                 </div>
               </div>
               <button

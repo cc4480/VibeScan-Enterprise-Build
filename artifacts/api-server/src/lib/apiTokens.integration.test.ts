@@ -47,6 +47,25 @@ suite("API tokens (real Postgres)", () => {
     expect(await tokens.authenticateApiToken(`Bearer ${token}`)).toBeNull();
   });
 
+  it("a token carries one scope: an mcp token is refused by the API and an api token by MCP", async () => {
+    const { db, usersTable, apiTokensTable } = dbMod;
+    const [u] = await db.insert(usersTable).values({ email: `tok-scope-${Date.now()}@example.com` }).returning({ id: usersTable.id });
+    const mcp = tokens.generateToken();
+    const api = tokens.generateToken();
+    await db.insert(apiTokensTable).values([
+      { userId: u!.id, name: "editor", tokenHash: mcp.hash, prefix: mcp.prefix }, // scope defaults to mcp
+      { userId: u!.id, name: "ci", tokenHash: api.hash, prefix: api.prefix, scope: "api" },
+    ]);
+
+    expect((await tokens.authenticateApiToken(`Bearer ${mcp.token}`))?.id).toBe(u!.id);
+    expect((await tokens.authenticateApiToken(`Bearer ${mcp.token}`, "mcp"))?.id).toBe(u!.id);
+    expect(await tokens.authenticateApiToken(`Bearer ${mcp.token}`, "api")).toBeNull();
+
+    expect((await tokens.authenticateApiToken(`Bearer ${api.token}`, "api"))?.id).toBe(u!.id);
+    expect(await tokens.authenticateApiToken(`Bearer ${api.token}`)).toBeNull();
+    expect(await tokens.authenticateApiToken(`Bearer ${api.token}`, "mcp")).toBeNull();
+  });
+
   it("refuses a well-formed token that was never issued", async () => {
     expect(await tokens.authenticateApiToken(`Bearer ${tokens.generateToken().token}`)).toBeNull();
   });

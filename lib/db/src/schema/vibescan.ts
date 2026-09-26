@@ -298,6 +298,10 @@ export const apiTokensTable = pgTable("api_tokens", {
   name: text("name").notNull(),
   tokenHash: text("token_hash").notNull().unique(),
   prefix: text("prefix").notNull(),
+  // What the token may reach. "mcp" reaches only the MCP endpoint (every token before
+  // this column); "api" reaches only the REST API under /api/v1. Never both: a token
+  // pasted into an editor config should not also be able to drive CI, and the reverse.
+  scope: text("scope", { enum: ["mcp", "api"] }).notNull().default("mcp"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),

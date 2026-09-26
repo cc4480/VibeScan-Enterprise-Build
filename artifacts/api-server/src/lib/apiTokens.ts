@@ -8,13 +8,20 @@
  * already uniformly random at full strength, so there is nothing for a slow
  * hash to protect, and lookups must be a single indexed equality.
  *
- * These authenticate routes/mcp.ts ONLY. See api_tokens in the schema for why.
+ * A token has ONE scope. "mcp" authenticates routes/mcp.ts only; "api" authenticates
+ * the REST API (routes/v1.ts) only. Neither can reach an account route, mint or
+ * revoke tokens, or the other's endpoint, so a token leaked from an editor config
+ * cannot drive CI, and one leaked from CI cannot be pointed at an editor. See
+ * api_tokens in the schema.
  */
 import { createHash, randomBytes } from "node:crypto";
 import { db, apiTokensTable, usersTable } from "@workspace/db";
 import { and, eq, isNull, count } from "drizzle-orm";
 
 export const TOKEN_PREFIX = "ssk_";
+
+export type TokenScope = "mcp" | "api";
+export const TOKEN_SCOPES: readonly TokenScope[] = ["mcp", "api"];
 /** Enough for a few editors and machines; a cap keeps a leaked session from minting hundreds. */
 export const MAX_TOKENS_PER_USER = 10;
 /** last_used_at is refreshed at most this often, so a busy editor is not a write per request. */
@@ -44,7 +51,7 @@ export interface TokenUser {
  * a real account, for the same reason checkout refuses legacy anonymous
  * identities (routes/checkout.ts).
  */
-export async function authenticateApiToken(authorization: string | undefined): Promise<TokenUser | null> {
+export async function authenticateApiToken(authorization: string | undefined, scope: TokenScope = "mcp"): Promise<TokenUser | null> {
   if (!authorization?.startsWith("Bearer ")) return null;
   const token = authorization.slice(7).trim();
   if (!token.startsWith(TOKEN_PREFIX) || token.length < 20 || token.length > 200) return null;
@@ -52,6 +59,7 @@ export async function authenticateApiToken(authorization: string | undefined): P
   const [row] = await db
     .select({
       tokenId: apiTokensTable.id,
+      tokenScope: apiTokensTable.scope,
       lastUsedAt: apiTokensTable.lastUsedAt,
       id: usersTable.id,
       email: usersTable.email,
@@ -65,6 +73,8 @@ export async function authenticateApiToken(authorization: string | undefined): P
     .limit(1);
 
   if (!row || !row.email) return null;
+  // A valid token used on the wrong surface is refused exactly like an unknown one.
+  if (row.tokenScope !== scope) return null;
 
   if (!row.lastUsedAt || Date.now() - row.lastUsedAt.getTime() > LAST_USED_REFRESH_MS) {
     // Best effort: "last used" is a convenience for spotting stale tokens, and

@@ -9,11 +9,15 @@ import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { db, apiTokensTable } from "@workspace/db";
 import { and, desc, eq, isNull } from "drizzle-orm";
-import { generateToken, liveTokenCount, MAX_TOKENS_PER_USER } from "../lib/apiTokens";
+import { generateToken, liveTokenCount, MAX_TOKENS_PER_USER, TOKEN_SCOPES } from "../lib/apiTokens";
 
 const router: IRouter = Router();
 
-const CreateBody = z.object({ name: z.string().trim().min(1).max(60) });
+const CreateBody = z.object({
+  name: z.string().trim().min(1).max(60),
+  // Omitted means "mcp": what this endpoint issued before there was an API.
+  scope: z.enum(TOKEN_SCOPES as [string, ...string[]]).default("mcp"),
+});
 
 router.get("/account/tokens", async (req, res): Promise<void> => {
   if (!req.isAuthenticated() || !req.user.email) {
@@ -25,6 +29,7 @@ router.get("/account/tokens", async (req, res): Promise<void> => {
       id: apiTokensTable.id,
       name: apiTokensTable.name,
       prefix: apiTokensTable.prefix,
+      scope: apiTokensTable.scope,
       createdAt: apiTokensTable.createdAt,
       lastUsedAt: apiTokensTable.lastUsedAt,
     })
@@ -54,8 +59,8 @@ router.post("/account/tokens", async (req, res): Promise<void> => {
   const { token, hash, prefix } = generateToken();
   const [row] = await db
     .insert(apiTokensTable)
-    .values({ userId: req.user.id, name: parsed.data.name, tokenHash: hash, prefix })
-    .returning({ id: apiTokensTable.id, name: apiTokensTable.name, prefix: apiTokensTable.prefix, createdAt: apiTokensTable.createdAt });
+    .values({ userId: req.user.id, name: parsed.data.name, tokenHash: hash, prefix, scope: parsed.data.scope as "mcp" | "api" })
+    .returning({ id: apiTokensTable.id, name: apiTokensTable.name, prefix: apiTokensTable.prefix, scope: apiTokensTable.scope, createdAt: apiTokensTable.createdAt });
 
   req.log.info({ tokenId: row!.id }, "API token created");
   // The only time the token itself is ever returned.
