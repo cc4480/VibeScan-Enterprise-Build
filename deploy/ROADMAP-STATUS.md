@@ -20,7 +20,7 @@ Status: **done**, **partial**, **todo**.
 | U10 | Supabase and Firebase in depth | todo | |
 | U11 | Checks for AI features inside the app | todo | |
 | U12 | One defect, one finding | needs decision | merging conflicts with per-finding fixture/benchmark and changes grades |
-| U13 | Fix prompts that know the platform | todo | |
+| U13 | Fix prompts that know the platform | done | added hosted builders, Firebase, Vercel, Netlify to the existing five; prompts are model-written, so wording is steered not guaranteed |
 | U14 | Easy two-account testing | partial | Works; setup still manual |
 | U15 | Wider injection coverage | todo | Approved 2026-09-26; each class with a clean twin |
 | U16 | Reproduce steps for confirmable findings | done | curl replay only when evidence is a plain GET/HEAD/OPTIONS; nothing guessed |

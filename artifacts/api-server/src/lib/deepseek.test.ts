@@ -34,6 +34,28 @@ describe("detectAgentEnvironment", () => {
     expect(detectAgentEnvironment(["Supabase", "React"], "https://app.com")).toBe("supabase");
   });
 
+  it.each([["Shopify"], ["Wix"], ["Squarespace"], ["Webflow"]])("detects the hosted builder %s", (t) => {
+    expect(detectAgentEnvironment([t, "Google Analytics"], "https://shop.example.com")).toBe("hosted");
+  });
+
+  it("detects Vercel, Netlify and Firebase when no framework is present", () => {
+    expect(detectAgentEnvironment(["Vercel"], "https://a.example.com")).toBe("vercel");
+    expect(detectAgentEnvironment(["Netlify"], "https://a.example.com")).toBe("netlify");
+    expect(detectAgentEnvironment(["Firebase", "React"], "https://a.example.com")).toBe("firebase");
+  });
+
+  it("a framework wins over its host: Next.js on Vercel is still nextjs, Astro on Netlify is not netlify", () => {
+    expect(detectAgentEnvironment(["Next.js 14", "Vercel"], "https://a.example.com")).toBe("nextjs");
+    expect(detectAgentEnvironment(["Astro", "Netlify"], "https://a.example.com")).toBe("generic");
+  });
+
+  it("gives every environment its own instructions, and the hosted one never invites editing server files", async () => {
+    const { agentPromptInstructions } = await import("./deepseek-prompts.js");
+    for (const e of ["vercel", "netlify", "firebase", "hosted"] as const) expect(agentPromptInstructions(e, "x.com")).toContain("AGENT TARGET");
+    expect(agentPromptInstructions("hosted", "x.com")).toContain("Never suggest editing server files");
+    expect(agentPromptInstructions("firebase", "x.com")).toContain("designed to be public");
+  });
+
   it("Supabase + Next.js returns nextjs (Next.js wins)", () => {
     expect(detectAgentEnvironment(["Supabase", "Next.js 14"], "https://app.com")).toBe("nextjs");
   });

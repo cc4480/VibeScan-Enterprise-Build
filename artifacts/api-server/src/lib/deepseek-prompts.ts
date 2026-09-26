@@ -1,4 +1,6 @@
-export type AgentEnvironment = "lovable" | "nextjs" | "bolt" | "wordpress" | "supabase" | "generic";
+import { hostPromptInstructions, type HostEnvironment } from "./deepseekPromptsHosts";
+
+export type AgentEnvironment = "lovable" | "nextjs" | "bolt" | "wordpress" | "supabase" | HostEnvironment | "generic";
 
 export function agentPromptInstructions(agent: AgentEnvironment, domain: string): string {
   switch (agent) {
@@ -61,6 +63,12 @@ Rules for agentFixPrompt:
   2. "Supabase Dashboard changes:" — specific navigation paths and toggle settings
   3. "Code changes:" — environment variable and client initialization fixes
 - Close with: "Apply all SQL policies, change the dashboard settings, and update the code."`;
+
+    case "vercel":
+    case "netlify":
+    case "firebase":
+    case "hosted":
+      return hostPromptInstructions(agent, domain);
 
     case "generic":
     default:

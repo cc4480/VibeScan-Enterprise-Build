@@ -61,6 +61,16 @@ export function detectAgentEnvironment(
   );
   if (hasSupabase && !hasMajorFramework) return "supabase";
 
+  // Hosted site builders: the owner cannot edit server code, only what the platform exposes.
+  if (techs.some((t) => ["shopify", "wix", "squarespace", "webflow"].some((p) => t.startsWith(p)))) return "hosted";
+
+  // Host or backend platforms, only when no framework already says how the code is edited.
+  if (!hasMajorFramework) {
+    if (techs.some((t) => t.startsWith("firebase"))) return "firebase";
+    if (techs.some((t) => t.startsWith("vercel"))) return "vercel";
+    if (techs.some((t) => t.startsWith("netlify"))) return "netlify";
+  }
+
   return "generic";
 }
 
