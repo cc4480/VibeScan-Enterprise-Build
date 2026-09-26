@@ -1015,6 +1015,15 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
   // Every test's outcome — ran, skipped (and why) or failed — for the per-test
   // log the worker writes and the coverage line in the report. See testLedger.ts.
   const ledger = new TestLedger(onTest);
+  // The header, cookie and CSP checks above ran on the first response before the
+  // ledger existed. Record them now, so they are counted like every other test, and
+  // never as run when a bot-protection page answered instead of the site (their
+  // findings are withheld below, so nothing was actually checked).
+  ledger.records.push(
+    challengeVerdict.isChallenge
+      ? { group: "passive", name: "response headers and cookies", status: "skipped", findings: 0, durationMs: 0, reason: "a bot-protection page answered instead of the site" }
+      : { group: "passive", name: "response headers and cookies", status: "ran", findings: vulnerabilities.filter((v) => v.category !== "Scan Coverage").length, durationMs: 0 },
+  );
   const crawlStarted = Date.now();
 
   // Run crawl separately to capture pagesVisited alongside findings

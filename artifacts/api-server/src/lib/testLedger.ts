@@ -24,6 +24,8 @@ export interface TestRecord {
   durationMs: number;
   /** Why it was skipped or how it failed. */
   reason?: string;
+  /** The names of the findings it raised, so a check-by-check view can say which check fired. */
+  found?: string[];
 }
 
 /**
@@ -62,7 +64,10 @@ export class TestLedger {
     const started = Date.now();
     return run.then(
       (found) => {
-        this.records.push({ group, name, status: "ran", findings: found.length, durationMs: Date.now() - started });
+        this.records.push({
+          group, name, status: "ran", findings: found.length, durationMs: Date.now() - started,
+          ...(found.length > 0 ? { found: found.slice(0, 40).map((v) => v.name) } : {}),
+        });
         return found;
       },
       (err: unknown) => {

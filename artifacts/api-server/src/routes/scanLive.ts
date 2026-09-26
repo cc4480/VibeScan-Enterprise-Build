@@ -10,6 +10,8 @@ import { Router, type IRouter } from "express";
 import { and, eq } from "drizzle-orm";
 import { db, scansTable } from "@workspace/db";
 import { isTestRecord } from "../lib/testLedger";
+import { resolveTest } from "../lib/checkOutcomes";
+import { TOTAL_CHECKS } from "../lib/checkCatalog";
 
 const router: IRouter = Router();
 
@@ -32,10 +34,10 @@ router.get("/scans/:id/live", async (req, res): Promise<void> => {
 
   // Polled every second, and never worth caching: the point is the latest.
   res.setHeader("Cache-Control", "no-store");
-  res.json({
-    status: scan.status,
-    tests: Array.isArray(scan.liveTests) ? scan.liveTests.filter(isTestRecord) : [],
-  });
+  // Each test comes with the checks inside it and what became of each (checkOutcomes.ts),
+  // and the total a full scan carries, so the page can show that the two add up.
+  const records = Array.isArray(scan.liveTests) ? scan.liveTests.filter(isTestRecord) : [];
+  res.json({ status: scan.status, totalChecks: TOTAL_CHECKS, tests: records.map(resolveTest) });
 });
 
 export default router;
