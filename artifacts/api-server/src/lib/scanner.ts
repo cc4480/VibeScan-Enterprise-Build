@@ -398,6 +398,8 @@ export async function runScan(
   // rescan or a test can call runScan without one; SSRF detection is simply
   // skipped when it and a callback host are both absent.
   scanId?: string | null,
+  // Hears each test the moment it is recorded, for the live progress page.
+  onTest?: (record: TestRecord) => void,
 ): Promise<ScanResult> {
   // Credentials go into the scan context, where lib/http.ts attaches them only
   // to in-scope requests and drops them on any redirect that leaves the target.
@@ -412,7 +414,7 @@ export async function runScan(
           }
         : {}),
     },
-    () => runScanInner(targetUrl, tier, allowActiveProbes, auth, scanId ?? null),
+    () => runScanInner(targetUrl, tier, allowActiveProbes, auth, scanId ?? null, onTest),
   );
 }
 
@@ -521,6 +523,7 @@ async function runScanInner(
   allowActiveProbes: boolean,
   auth?: RunScanAuth,
   scanId: string | null = null,
+  onTest?: (record: TestRecord) => void,
 ): Promise<ScanResult> {
   const startedAt = Date.now();
 
@@ -1011,7 +1014,7 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
   // traversal.
   // Every test's outcome — ran, skipped (and why) or failed — for the per-test
   // log the worker writes and the coverage line in the report. See testLedger.ts.
-  const ledger = new TestLedger();
+  const ledger = new TestLedger(onTest);
   const crawlStarted = Date.now();
 
   // Run crawl separately to capture pagesVisited alongside findings

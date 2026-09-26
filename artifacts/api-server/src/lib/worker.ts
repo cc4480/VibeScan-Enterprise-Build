@@ -26,6 +26,7 @@ import { corroborateMerge } from "./scoring";
 import { findingFingerprint, canonicalizeTargetUrl } from "./fingerprint";
 import { runRecon } from "./recon";
 import { activeProbesUnlocked } from "./activeProbeGate";
+import { createLiveProgress } from "./liveProgress";
 import { countTests, formatTestLine, formatTestSummary, newlyRunTests, NOT_VERIFIED, type TestRecord } from "./testLedger";
 import { warnIfLocalDataStale, OSV_CACHE_MAX_SIZE } from "./cveCheck";
 import { refreshEolData, loadEolCacheFromDb, EOL_REFRESH_QUEUE } from "./eolFetcher";
@@ -193,6 +194,8 @@ export async function processScanJob(job: ScanJob): Promise<void> {
   let httpCredentials: Awaited<ReturnType<typeof toScanHttpCredentials>> = null;
   let reauthenticate: (() => Promise<Awaited<ReturnType<typeof toScanHttpCredentials>>>) | null = null;
   let secondaryCredentials: Awaited<ReturnType<typeof toScanHttpCredentials>> = null;
+  // Finished tests, saved as they happen so the progress page shows real ones.
+  const live = createLiveProgress(scanId);
   try {
     const scanTimeout = new Promise<never>((_, reject) =>
       setTimeout(
@@ -264,6 +267,7 @@ export async function processScanJob(job: ScanJob): Promise<void> {
         // Threads the scan id through to the SSRF probe so its out-of-band
         // callbacks correlate back to this scan.
         scanId,
+        live.add,
       ),
       scanTimeout,
     ]);
@@ -279,6 +283,7 @@ export async function processScanJob(job: ScanJob): Promise<void> {
       "HTTP scan complete",
     );
   } catch (scanErr) {
+    await live.finish();
     const errMsg = scanErr instanceof Error ? scanErr.message : String(scanErr);
     log.error({ err: scanErr }, "Scan failed during HTTP fetch");
     await db
@@ -359,6 +364,9 @@ export async function processScanJob(job: ScanJob): Promise<void> {
   } else {
     tests.push({ group: "recon", name: "reconnaissance (DNS, subdomains, ports)", status: "failed", findings: 0, durationMs: sideMs, reason: "recon did not return results" });
   }
+  // The scanner's own tests were sent live as they ended; these were added here.
+  for (const t of tests.slice(scanResult.tests?.length ?? 0)) live.add(t);
+  await live.finish();
   for (const t of tests) {
     const line = formatTestLine(t);
     if (t.status === "failed") log.warn({ test: t }, line);

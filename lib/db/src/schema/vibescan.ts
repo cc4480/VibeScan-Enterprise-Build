@@ -7,6 +7,9 @@ export const scansTable = pgTable("scans", {
   userId: text("user_id").notNull(),
   userEmail: text("user_email").notNull(),
   targetUrl: text("target_url").notNull(),
+  // The tests finished so far, written while the scan runs so the progress page
+  // shows what actually happened. See lib/liveProgress.ts. Null until the first one.
+  liveTests: jsonb("live_tests").$type<unknown[] | null>(),
   tier: text("tier", { enum: ["basic", "deep", "pack_5", "pack_20"] }).notNull(),
   status: text("status", {
     enum: ["pending", "paid", "queued", "scanning", "analyzing", "complete", "failed"],

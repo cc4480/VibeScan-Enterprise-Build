@@ -26,8 +26,33 @@ export interface TestRecord {
   reason?: string;
 }
 
+/**
+ * A list of records that tells a listener about each one as it is added, however
+ * it is added: the scanner records some tests through track() and pushes others
+ * straight onto the list. Species is plain Array so filter()/map() on it do not
+ * build another observed list.
+ */
+class ObservedRecords extends Array<TestRecord> {
+  static override get [Symbol.species]() {
+    return Array;
+  }
+  listener?: (record: TestRecord) => void;
+  override push(...items: TestRecord[]): number {
+    const length = super.push(...items);
+    for (const item of items) this.listener?.(item);
+    return length;
+  }
+}
+
 export class TestLedger {
-  readonly records: TestRecord[] = [];
+  readonly records: TestRecord[];
+
+  /** `onRecord` hears every test as it is recorded: how a running scan shows real progress. */
+  constructor(onRecord?: (record: TestRecord) => void) {
+    const records = new ObservedRecords();
+    if (onRecord) records.listener = onRecord;
+    this.records = records;
+  }
 
   /**
    * Time a test that has already started (the promise is created by the
@@ -91,7 +116,7 @@ export function formatTestSummary(records: TestRecord[]): string {
 /** Why the verified-domain tests did not run. One wording, used everywhere. */
 export const NOT_VERIFIED = "domain not verified for this account (active tests need proof of ownership)";
 
-const isTestRecord = (t: unknown): t is TestRecord => {
+export const isTestRecord = (t: unknown): t is TestRecord => {
   if (!t || typeof t !== "object") return false;
   const r = t as Record<string, unknown>;
   return typeof r["name"] === "string" && (r["status"] === "ran" || r["status"] === "skipped" || r["status"] === "failed");
