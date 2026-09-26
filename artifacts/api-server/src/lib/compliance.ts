@@ -32,10 +32,14 @@
  * it needs "order matters (most specific first)" comments to stay correct.
  * `category` is the fallback for the minority of findings with no CWE.
  *
+ * (NIST SP 800-53 and the HIPAA Security Rule are mapped in complianceExtra.ts.)
+ *
  * Framework versions are pinned in FRAMEWORKS so a report can state which
  * revision it mapped against — control numbering changes between revisions, and
  * an unversioned control reference is not checkable.
  */
+
+import { EXTRA_FRAMEWORKS, extraControlsForFinding } from "./complianceExtra";
 
 export interface FrameworkMeta {
   id: string;
@@ -46,6 +50,7 @@ export interface FrameworkMeta {
 }
 
 export const FRAMEWORKS: Record<string, FrameworkMeta> = {
+  ...EXTRA_FRAMEWORKS,
   soc2: {
     id: "soc2",
     name: "SOC 2",
@@ -450,9 +455,8 @@ export function controlsForFinding(finding: {
   category?: string | null;
 }): ControlRef[] {
   const byCwe = finding.cweId ? CWE_CONTROLS[finding.cweId] : undefined;
-  if (byCwe?.length) return byCwe;
-  const byCategory = finding.category ? CATEGORY_CONTROLS[finding.category] : undefined;
-  return byCategory ?? [];
+  const base = byCwe?.length ? byCwe : ((finding.category ? CATEGORY_CONTROLS[finding.category] : undefined) ?? []);
+  return [...base, ...extraControlsForFinding(finding, Boolean(byCwe?.length))];
 }
 
 export interface FrameworkCoverage {

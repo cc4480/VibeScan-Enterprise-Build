@@ -141,3 +141,40 @@ describe("DNS findings cite only the controls they are evidence for", () => {
     expect(controls).toContain("V10.3.3");
   });
 });
+
+describe("NIST SP 800-53 and HIPAA mapping", () => {
+  const ids = (f: { cweId?: string; category?: string }) => controlsForFinding(f).map((r) => `${r.framework}:${r.control}`);
+
+  it("maps a weakness to the new frameworks alongside the original four", () => {
+    const got = ids({ cweId: "CWE-319" });
+    expect(got).toContain("nist80053:SC-8");
+    expect(got).toContain("hipaa:164.312(e)(1)");
+    expect(got).toContain("pci:4.2.1");
+  });
+
+  it("does not stretch HIPAA over weaknesses its technical safeguards do not speak to", () => {
+    for (const cwe of ["CWE-79", "CWE-89", "CWE-16", "CWE-1021", "CWE-200"]) {
+      expect(ids({ cweId: cwe }).some((c) => c.startsWith("hipaa:")), cwe).toBe(false);
+    }
+  });
+
+  it("a finding with a specific CWE never falls through to its category's controls", () => {
+    // CWE-345 is mapped by the original frameworks only; its DNS Security category must not add NIST controls.
+    expect(ids({ cweId: "CWE-345", category: "Network Exposure" }).some((c) => c.startsWith("nist80053:SC-7"))).toBe(false);
+  });
+
+  it("uses the category only when the finding has no mapped CWE", () => {
+    expect(ids({ category: "Network Exposure" })).toContain("nist80053:SC-7");
+  });
+
+  it("states a pinned version and the applicability limit for each new framework", () => {
+    expect(FRAMEWORKS.nist80053!.version).toBe("Rev. 5");
+    expect(FRAMEWORKS.hipaa!.note).toMatch(/only to covered entities/i);
+  });
+
+  it("only ever emits controls for frameworks that exist", () => {
+    for (const cwe of ["CWE-89", "CWE-798", "CWE-613", "CWE-778", "CWE-347"]) {
+      for (const r of controlsForFinding({ cweId: cwe })) expect(FRAMEWORKS[r.framework]).toBeDefined();
+    }
+  });
+});

@@ -34,7 +34,7 @@ Status: **done**, **partial**, **todo**.
 | U24 | Changes since the last scan | **done** | Report card, report email line, API (counts on status, full lists on the report). A finding is "fixed" only if its test ran again; otherwise "not re-checked" |
 | U25 | Test the free tier | todo | Needs real traffic |
 | U26 | One-click MCP sign-in with OAuth | **done** | OAuth 2.1: discovery, dynamic registration, PKCE S256, consent page, 1 h access and rotating refresh tokens with reuse detection, Connected apps in Settings. Run the real-database suites with --no-file-parallelism |
-| U27 | More control frameworks | todo | |
+| U27 | More control frameworks | done | NIST SP 800-53 Rev. 5 and HIPAA 164.312 added in complianceExtra.ts; conservative, HIPAA only where a technical safeguard speaks to the weakness; CIS Controls and GDPR not added |
 | U28 | Third-party proof of own security | todo | Needs an outside firm |
 | U29 | Content from sources buyers trust | todo | |
 | U30 | Brand and search collision | todo | User's decision |
