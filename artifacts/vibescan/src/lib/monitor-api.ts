@@ -12,6 +12,8 @@ export interface MonitorSubscription {
   lastReportId: string | null;
   nextScanAt: string | null;
   webhookUrl: string | null;
+  /** When the owner paused this monitor; null while it is running. */
+  pausedAt: string | null;
   createdAt: string;
   lastReport: { id: string; grade: string | null; riskScore: number | null } | null;
   alertCount: number;
@@ -112,6 +114,14 @@ export async function createMonitorSubscription(
 
 export async function cancelMonitorSubscription(id: string): Promise<void> {
   await customFetch(`/api/monitor/subscriptions/${id}`, { method: "DELETE" });
+}
+
+export async function setMonitorPaused(id: string, paused: boolean): Promise<void> {
+  await customFetch(`/api/monitor/subscriptions/${id}/pause`, {
+    method: "PATCH",
+    body: JSON.stringify({ paused }),
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 export async function listCveAlerts(subscriptionId: string): Promise<CveAlert[]> {

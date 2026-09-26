@@ -132,13 +132,14 @@ type ActiveSub = typeof monitorSubscriptionsTable.$inferSelect;
  * would have stopped being rescanned while still receiving alerts about the
  * scans it was no longer getting.
  */
-async function activeEntitledSubscriptions(
+export async function activeEntitledSubscriptions(
   now: Date,
 ): Promise<{ subs: ActiveSub[]; total: number; skippedUnentitled: number }> {
   const all = await db
     .select()
     .from(monitorSubscriptionsTable)
-    .where(eq(monitorSubscriptionsTable.status, "active"));
+    // A paused monitor is skipped by every job, so it neither scans nor alerts.
+    .where(and(eq(monitorSubscriptionsTable.status, "active"), isNull(monitorSubscriptionsTable.pausedAt)));
 
   // With plans enforced, the entitlement check below is what ends monitoring.
   const unexpired = monitorExpiryApplies() ? all.filter((sub) => sub.expiresAt > now) : all;

@@ -10,6 +10,7 @@ import {
   Webhook, Lock, Activity, Gauge, Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MonitorPauseButton } from "@/components/monitor-pause-button";
 import {
   listMonitorSubscriptions,
   createMonitorSubscription,
@@ -582,6 +583,11 @@ function SubscriptionCard({ sub, onCancel }: { sub: MonitorSubscription; onCance
                 )}>
                   {sub.status === "active" ? "Active" : sub.status === "cancelled" ? "Cancelled" : "Expired"}
                 </span>
+                {isActive && sub.pausedAt && (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold border bg-amber-400/10 border-amber-400/20 text-amber-400" title="No scans, uptime checks or alerts until you resume">
+                    Paused
+                  </span>
+                )}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 Checked {relativeTime(sub.lastPulseAt)}
@@ -621,6 +627,7 @@ function SubscriptionCard({ sub, onCancel }: { sub: MonitorSubscription; onCance
                 {scanning ? "Scanning…" : "Scan Now"}
               </button>
             )}
+            {isActive && <MonitorPauseButton sub={sub} />}
             {isActive && (
               <button
                 onClick={handleCancel}

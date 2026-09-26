@@ -206,6 +206,10 @@ export const monitorSubscriptionsTable = pgTable("monitor_subscriptions", {
   lastReportId: uuid("last_report_id"),
   nextScanAt: timestamp("next_scan_at", { withTimezone: true }),
   webhookUrl: text("webhook_url"),
+  // Set while the owner has paused this monitor: no scans, pulse checks or alerts, and nothing
+  // is lost. Null means running. Kept separate from status so a pause is never confused with a
+  // cancellation or an unpaid plan, and resuming needs no re-subscription.
+  pausedAt: timestamp("paused_at", { withTimezone: true }),
   stripeSubscriptionId: text("stripe_subscription_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
