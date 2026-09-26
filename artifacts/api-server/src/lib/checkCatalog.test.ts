@@ -13,7 +13,7 @@ const src = (file: string) => readFileSync(join(LIB, file), "utf8");
 describe("the catalog matches the scanner's source", () => {
   it("carries the number of checks the site claims, itemised", () => {
     // Deliberate: changing the count is a public-claim change, so it must be edited here too.
-    expect(TOTAL_CHECKS).toBe(131);
+    expect(TOTAL_CHECKS).toBe(134);
     expect(CATALOG.flatMap((t) => t.checks)).toHaveLength(TOTAL_CHECKS);
   });
 

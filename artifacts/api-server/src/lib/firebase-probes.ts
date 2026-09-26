@@ -5,6 +5,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { probeFirebaseStorage } from "./baasDepth";
 import type { ScanVulnerability } from "./scanner";
 
 const TIMEOUT_MS = 10_000;
@@ -170,6 +171,8 @@ export async function runFirebaseProbes(
   if (!config) return;
 
   const { apiKey, projectId, databaseURL } = config;
+
+  await probeFirebaseStorage(content, findings);
 
   // Run Firestore and Realtime DB checks in parallel
   const [firestoreOpen, rtdbOpen] = await Promise.all([

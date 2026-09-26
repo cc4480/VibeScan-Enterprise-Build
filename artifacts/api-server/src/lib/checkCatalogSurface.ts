@@ -44,6 +44,9 @@ export const CATALOG_SURFACE: CatalogTest[] = [
     ["critical", "Firestore Security Rules Allow Unauthenticated Read Access", "Firestore Security Rules Allow Unauthenticated Read Access", "firebase-probes.ts"],
     ["info", "Firebase Backend Detected — Firestore Rules Appear Restrictive", "Firebase Backend Detected — Firestore Rules Appear Restrictive", "firebase-probes.ts"],
     ["critical", "Firebase Realtime Database Open to Unauthenticated Access", "Firebase Realtime Database Open to Unauthenticated Access", "firebase-probes.ts"],
+    ["low", "Supabase Email Confirmation Disabled", "Supabase Email Confirmation Disabled", "baasDepth.ts"],
+    ["medium", "Supabase Storage Files Listable Without Authentication", "Supabase Storage Files Listable Without Authentication", "baasDepth.ts"],
+    ["high", "Firebase Storage Files Listable Without Authentication", "Firebase Storage Files Listable Without Authentication", "baasDepth.ts"],
   ]),
   test("cross-account access control", "Broken Access Control", "accessControlProbe.ts", [
     ["critical", "Broken Object-Level Authorisation (IDOR)", "Broken Object-Level Authorisation (IDOR)"],

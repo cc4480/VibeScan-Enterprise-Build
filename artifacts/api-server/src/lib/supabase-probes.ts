@@ -5,6 +5,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { probeSupabaseAuth, probeSupabaseStorageContents } from "./baasDepth";
 import type { ScanVulnerability } from "./scanner";
 import { logger } from "./logger";
 
@@ -374,6 +375,9 @@ export async function runSupabaseProbes(
   if (!config) return;
 
   const { projectRef, anonKey, baseUrl } = config;
+
+  await probeSupabaseAuth(baseUrl, anonKey, findings);
+  await probeSupabaseStorageContents(baseUrl, anonKey, findings);
 
   // Enumerate tables. The REST schema listing is the more complete source
   // when it works, but Supabase now restricts it to service_role on new
