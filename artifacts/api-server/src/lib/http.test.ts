@@ -407,6 +407,44 @@ describe("session expiry mid-scan", () => {
     expect(logins).toBe(1);
   });
 
+  it("does not sign in again for a reply that was sent with the old session", async () => {
+    // Deterministic version of the race above: /fast answers at once and
+    // triggers the re-login; /slow was sent with the same dead session but
+    // answers only after that re-login finished. The slow reply must be
+    // retried with the new session, not spend a second sign-in.
+    const { port } = await serve((req, res) => {
+      const reply = () => {
+        const fresh = /sid=v2/.test(req.headers.cookie ?? "");
+        res.writeHead(200, { "content-type": "text/html" });
+        res.end(fresh ? "<h1>Members area</h1>" : `<h1>Please log in</h1><form><input type="password" name="p"></form>`);
+      };
+      if (req.url?.startsWith("/slow") && !/sid=v2/.test(req.headers.cookie ?? "")) setTimeout(reply, 150);
+      else reply();
+    });
+    let logins = 0;
+
+    const bodies = await runWithScanHttp(
+      {
+        targetUrl: `http://localhost:${port}/`,
+        credentials: { cookie: "sid=v1" },
+        detectSignedOut,
+        onSessionLost: async () => {
+          logins++;
+          await new Promise((r) => setTimeout(r, 10));
+          return { cookie: "sid=v2" };
+        },
+      },
+      async () =>
+        Promise.all([scanFetch(`http://localhost:${port}/slow`), scanFetch(`http://localhost:${port}/fast`)]).then((rs) =>
+          rs.map((r) => r?.body ?? ""),
+        ),
+    );
+
+    expect(logins).toBe(1);
+    // Both callers still get the authenticated page.
+    expect(bodies.every((b) => b.includes("Members area"))).toBe(true);
+  });
+
   it("leaves an unauthenticated scan alone", async () => {
     const { port } = await expiringTarget(0);
     const lost = await runWithScanHttp(

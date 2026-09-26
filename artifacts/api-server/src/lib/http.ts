@@ -368,6 +368,11 @@ async function perform(url: string, options: ScanFetchOptions): Promise<Outcome>
 
     await throttle(ctx, current);
 
+    // Which session this request goes out with. Parallel probes share one
+    // context, so by the time a reply says "signed out" another probe may
+    // already have signed back in — see the session-expiry block below.
+    const credentialsSent = ctx?.credentials;
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -427,6 +432,15 @@ async function perform(url: string, options: ScanFetchOptions): Promise<Outcome>
         ctx.detectSignedOut?.(result.body, result.finalUrl, url)
       ) {
         ctx.sessionWasLost = true;
+        // Sent with a session that has since been replaced: that reply says
+        // nothing about the NEW session. Retry with it instead of signing in
+        // again — otherwise a slow reply arriving after another probe's
+        // re-login spends a second one of the scan's two re-auth attempts,
+        // and on a slow target the scan can run out of them.
+        if (ctx.credentials !== credentialsSent) {
+          reauthRetried = true;
+          continue;
+        }
         if (await tryReauthenticate(ctx)) {
           reauthRetried = true;
           continue;
