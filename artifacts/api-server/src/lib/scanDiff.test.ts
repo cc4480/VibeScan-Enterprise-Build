@@ -134,3 +134,42 @@ describe("summariseChanges", () => {
     expect(summariseChanges(c)).toMatch(/^1 new, 1 fixed, 1 not re-checked since your last scan \(20 Sep\)$/);
   });
 });
+
+import { verdictFor } from "./scanDiff";
+
+describe("verdictFor: the verdict on one finding after a fix", () => {
+  const before = scan([f(CSP, "high"), f(CORS_REFLECT, "high", "CORS Misconfiguration")], [t(HEADERS), t(CORS)]);
+  const asked = { name: CSP, category: "HTTP Security" };
+  const askedCors = { name: CORS_REFLECT, category: "CORS Misconfiguration" };
+
+  it("still_present when the new scan finds it again", () => {
+    expect(verdictFor(before, scan([f(CSP, "high")], [t(HEADERS), t(CORS)]), asked)).toBe("still_present");
+  });
+
+  it("fixed when it is gone and its test ran again", () => {
+    expect(verdictFor(before, scan([], [t(HEADERS), t(CORS)]), asked)).toBe("fixed");
+  });
+
+  it("not_rechecked when it is gone but its test did not run: never called fixed", () => {
+    expect(verdictFor(before, scan([], [t(HEADERS), t(CORS, "skipped")]), askedCors)).toBe("not_rechecked");
+    expect(verdictFor(before, scan([], [t(HEADERS), t(CORS, "failed")]), askedCors)).toBe("not_rechecked");
+    expect(verdictFor(before, scan([], [t(HEADERS)]), askedCors)).toBe("not_rechecked");
+  });
+
+  it("judges by the test that raises THIS finding, not the others", () => {
+    // CORS is skipped, but the asked-about finding comes from the headers test, which ran.
+    expect(verdictFor(before, scan([], [t(HEADERS), t(CORS, "skipped")]), asked)).toBe("fixed");
+  });
+
+  it("an unmappable finding is fixed only if every earlier test ran again", () => {
+    const unknown = { name: "Some Finding No Catalog Entry Names", category: "X" };
+    const b = scan([{ ...f(unknown.name), category: "X" }], [t(HEADERS), t(CORS)]);
+    expect(verdictFor(b, scan([], [t(HEADERS), t(CORS)]), unknown)).toBe("fixed");
+    expect(verdictFor(b, scan([], [t(HEADERS)]), unknown)).toBe("not_rechecked");
+  });
+
+  it("not_rechecked with no ledger to check against, and survives malformed data", () => {
+    expect(verdictFor({ vulnerabilities: [f(CSP)] }, { vulnerabilities: [] }, { name: "Unmapped", category: "x" })).toBe("not_rechecked");
+    for (const bad of [null, undefined, "x", {}]) expect(() => verdictFor(bad, bad, asked)).not.toThrow();
+  });
+});

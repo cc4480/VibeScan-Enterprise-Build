@@ -27,6 +27,7 @@ import { findingFingerprint, canonicalizeTargetUrl } from "./fingerprint";
 import { runRecon } from "./recon";
 import { activeProbesUnlocked } from "./activeProbeGate";
 import { createLiveProgress } from "./liveProgress";
+import { completeVerification, failVerificationForScan } from "./verifyFix";
 import { changesForReport } from "./scanDiffLoader";
 import { summariseChanges } from "./scanDiff";
 import { countTests, formatTestLine, formatTestSummary, newlyRunTests, NOT_VERIFIED, type TestRecord } from "./testLedger";
@@ -128,8 +129,8 @@ import { refundFailedScan, reapStuckScans } from "./billing";
  * would mean standing up pg-boss to assert on a branch that is pure logic.
  */
 export async function processScanJob(job: ScanJob): Promise<void> {
-  const { scanId, userId, targetUrl, tier, monitorSubscriptionId } = job.data;
-  const log = logger.child({ scanId, targetUrl, tier, monitorSubscriptionId });
+  const { scanId, userId, targetUrl, tier, monitorSubscriptionId, verificationId } = job.data;
+  const log = logger.child({ scanId, targetUrl, tier, monitorSubscriptionId, verificationId });
 
   log.info("Scan job started");
 
@@ -294,6 +295,7 @@ export async function processScanJob(job: ScanJob): Promise<void> {
       // a customer's password is exactly the row that should not keep it.
       .set({ status: "failed", error: errMsg, completedAt: new Date(), credentialsEncrypted: null, secondaryCredentialsEncrypted: null })
       .where(eq(scansTable.id, scanId));
+    await failVerificationForScan(scanId).catch(() => {});
     await refundIfPaid(scanId, log);
     return;
   }
@@ -462,7 +464,7 @@ export async function processScanJob(job: ScanJob): Promise<void> {
       "Confidence-gated findings passed to AI",
     );
 
-    aiAnalysis = await callDeepSeek(
+    aiAnalysis = verificationId ? null : await callDeepSeek(
       targetUrl,
       vulnsForAi,
       scanResult.technologies,
@@ -605,6 +607,15 @@ export async function processScanJob(job: ScanJob): Promise<void> {
       .where(eq(scansTable.id, scanId));
 
     log.info({ reportId: report.id, grade, riskScore }, "Scan complete");
+
+    // A re-check of one finding (lib/verifyFix.ts): judge it against the report that held it.
+    if (verificationId) {
+      const verdict = await completeVerification(verificationId, reportData).catch((err) => {
+        log.error({ err }, "Could not record the verification verdict");
+        return null;
+      });
+      log.info({ verificationId, verdict }, "Verification complete");
+    }
 
     // ── 8. Update monitor subscription + write score history + detect regressions ──
     if (monitorSubscriptionId) {
@@ -827,7 +838,7 @@ export async function processScanJob(job: ScanJob): Promise<void> {
         .from(scansTable)
         .where(eq(scansTable.id, scanId));
 
-      if (scan?.userEmail) {
+      if (scan?.userEmail && !verificationId) {
         const appOrigin = APP_ORIGIN;
 
         // The emailed link must resolve WITHOUT a session. /report/:id requires
@@ -886,6 +897,7 @@ export async function processScanJob(job: ScanJob): Promise<void> {
         completedAt,
       })
       .where(eq(scansTable.id, scanId));
+    await failVerificationForScan(scanId).catch(() => {});
     await refundIfPaid(scanId, log);
   }
 }

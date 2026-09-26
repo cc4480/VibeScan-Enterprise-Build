@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { db, scansTable, reportsTable, usersTable } from "@workspace/db";
-import { eq, and, desc, inArray, gte, count } from "drizzle-orm";
+import { eq, and, desc, inArray, gte, count, ne } from "drizzle-orm";
 import {
   CreateScanBody,
   ListScansResponseItem,
@@ -63,7 +63,8 @@ router.get("/scans", async (req, res): Promise<void> => {
     const scans = await db
       .select()
       .from(scansTable)
-      .where(eq(scansTable.userId, req.user.id))
+      // Re-checks of a single finding (origin "verify") are not scans the person asked for; they appear on the finding.
+      .where(and(eq(scansTable.userId, req.user.id), ne(scansTable.origin, "verify")))
       .orderBy(desc(scansTable.createdAt));
 
     // Batch-fetch reports for all complete scans to avoid N+1

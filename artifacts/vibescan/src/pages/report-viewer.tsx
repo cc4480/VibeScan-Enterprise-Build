@@ -15,6 +15,7 @@ import {
 import { cn, formatSeverity, getSeverityColors, getGradeColor } from "@/lib/utils";
 import { GradeRing } from "@/components/grade-ring";
 import { ReportChangesCard } from "@/components/report-changes-card";
+import { VerifyFixButton } from "@/components/verify-fix-button";
 import type { ScanChanges } from "@/lib/report-changes";
 import { categoryHex } from "@/lib/category-colors";
 import { getAuthHeaders } from "@/lib/auth-token";
@@ -531,6 +532,7 @@ function VulnCard({
                   <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 text-sm text-foreground/90 leading-relaxed">
                     <div className="whitespace-pre-wrap">{vuln.solution}</div>
                   </div>
+                  <VerifyFixButton findingId={vuln.id} />
 
                   {(vuln.cweId || vuln.cvssScore != null || vuln.wstgId || vuln.confidence != null) && (
                     <div className="mt-4 flex gap-3 flex-wrap">

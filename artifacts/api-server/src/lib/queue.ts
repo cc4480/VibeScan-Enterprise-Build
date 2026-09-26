@@ -58,6 +58,8 @@ export interface ScanJobData {
   tier: string;
   /** Set when this scan was triggered by the monitor scheduler */
   monitorSubscriptionId?: string;
+  /** Set when this scan re-checks one finding (lib/verifyFix.ts): no AI analysis, no email, and a verdict at the end. */
+  verificationId?: string;
 }
 
 export async function enqueueScan(data: ScanJobData): Promise<string | null> {

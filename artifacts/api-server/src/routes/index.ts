@@ -21,6 +21,7 @@ import checkoutRouter from "./checkout";
 import apiTokensRouter from "./apiTokens";
 import mcpRouter from "./mcp";
 import v1Router from "./v1";
+import verifyRouter from "./verify";
 import oauthPublicRouter from "./oauthPublic";
 import oauthConsentRouter from "./oauthConsent";
 
@@ -48,6 +49,7 @@ router.use(checkoutRouter);
 router.use(apiTokensRouter);
 router.use(mcpRouter);
 router.use(v1Router);
+router.use(verifyRouter);
 router.use(oauthPublicRouter);
 router.use(oauthConsentRouter);
 

@@ -157,3 +157,35 @@ export function summariseChanges(c: ScanChanges): string {
   const when = c.since.scannedAt ? ` (${shortDate(c.since.scannedAt)})` : "";
   return `${parts.join(", ")} since your last scan${when}`;
 }
+
+export type VerifyVerdict = "fixed" | "still_present" | "not_rechecked";
+
+/**
+ * The verdict on ONE finding after someone says they fixed it and a new scan has run.
+ * Same rule as the comparison above, applied to a single finding:
+ *
+ *   still in the new scan                                   → still_present
+ *   gone, and the test that raises it ran again             → fixed
+ *   gone, but that test did not run (or nothing can tell)   → not_rechecked
+ *
+ * "Gone" alone never counts as fixed: a finding also disappears when a test is
+ * skipped, fails, or is blocked. not_rechecked tells the person exactly that.
+ */
+export function verdictFor(
+  previousData: unknown,
+  currentData: unknown,
+  finding: { name: string; category: string; evidence?: string | null },
+): VerifyVerdict {
+  const before = side(previousData);
+  const now = side(currentData);
+  const key = findingFingerprint(finding.category, finding.name, finding.evidence || null);
+  if (now.vulnerabilities.some((v) => fp(v) === key)) return "still_present";
+
+  const test = testFor(finding.name);
+  const ranNow = ranKeys(now.tests);
+  const ranBefore = ranKeys(before.tests);
+  if (test) return ranNow.has(test) ? "fixed" : "not_rechecked";
+  // An unmappable finding is judged by the whole ledger: fixed only if every test that ran before ran again.
+  const everythingRanAgain = before.tests.length > 0 && now.tests.length > 0 && [...ranBefore].every((k) => ranNow.has(k));
+  return everythingRanAgain ? "fixed" : "not_rechecked";
+}

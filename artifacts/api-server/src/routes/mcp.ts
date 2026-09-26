@@ -21,7 +21,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import { db, scansTable, reportsTable, domainVerificationsTable } from "@workspace/db";
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull, ne } from "drizzle-orm";
 import { authenticateApiToken, type TokenUser } from "../lib/apiTokens";
 import { PROTECTED_RESOURCE_URL } from "./oauthMetadata";
 import { runAppRoute, launchScan, ownScan, reportForScan, UUID } from "./appRouteRunner";
@@ -298,7 +298,8 @@ export function buildServer(httpReq: Request, user: TokenUser): McpServer {
       const rows = await db
         .select({ id: scansTable.id, targetUrl: scansTable.targetUrl, status: scansTable.status, createdAt: scansTable.createdAt })
         .from(scansTable)
-        .where(eq(scansTable.userId, user.id))
+        // Re-checks of a single finding (origin "verify") are not scans the person asked for; they appear on the finding.
+        .where(and(eq(scansTable.userId, user.id), ne(scansTable.origin, "verify")))
         .orderBy(desc(scansTable.createdAt))
         .limit(limit ?? 10);
       if (rows.length === 0) return text("No scans yet.");

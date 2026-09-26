@@ -24,7 +24,7 @@ export const scansTable = pgTable("scans", {
   // outlives the subscription, and cascading a delete into NULL here would
   // silently reclassify an old monitor scan as user-initiated and start
   // charging it against the trial.
-  origin: text("origin", { enum: ["user", "monitor"] }).notNull().default("user"),
+  origin: text("origin", { enum: ["user", "monitor", "verify"] }).notNull().default("user"),
 
   // What paid for this scan, recorded at launch so a scan that fails later can
   // be refunded to the SAME place. Without it a failure could not tell a free

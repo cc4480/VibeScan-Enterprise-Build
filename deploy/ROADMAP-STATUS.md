@@ -16,7 +16,7 @@ Status: **done**, **partial**, **todo**.
 | U6 | A public status page | todo | Needs the user's UptimeRobot page |
 | U7 | GitHub Action, CLI and SARIF | **done** | deploy/cli (CLI + action.yml); SARIF at /v1/scans/:id/sarif. To publish the Action, copy deploy/cli to its own repo and tag v1 (needs the user) |
 | U8 | Alert destinations and ticketing | todo | |
-| U9 | Verify the fix | todo | |
+| U9 | Verify the fix | **done** | "Fixed this? Check it" on each finding: a free, limited (10 a day) re-scan judged against that one finding. Fixed only if its test ran again; otherwise "could not be re-checked". Full re-scan for now; a targeted single-test re-run would be faster (later) |
 | U10 | Supabase and Firebase in depth | todo | |
 | U11 | Checks for AI features inside the app | todo | |
 | U12 | One defect, one finding | todo | |

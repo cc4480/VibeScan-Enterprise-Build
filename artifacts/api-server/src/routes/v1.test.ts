@@ -43,7 +43,7 @@ vi.mock("@workspace/db", () => ({
   scansTable: {},
   db: { select: () => ({ from: () => ({ where: () => ({ orderBy: () => ({ limit: async () => [{ id: SCAN_ID, url: "https://a.example", status: "complete" }] }) }) }) }) },
 }));
-vi.mock("drizzle-orm", () => ({ desc: () => ({}), eq: () => ({}) }));
+vi.mock("drizzle-orm", () => ({ desc: () => ({}), eq: () => ({}), and: () => ({}), ne: () => ({}) }));
 
 import v1 from "./v1";
 import { API_V1_SPEC } from "../lib/apiV1Spec";

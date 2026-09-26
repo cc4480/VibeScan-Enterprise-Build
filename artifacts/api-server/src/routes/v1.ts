@@ -21,7 +21,7 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { z } from "zod";
 import { db, scansTable } from "@workspace/db";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import { authenticateApiToken, type TokenUser } from "../lib/apiTokens";
 import { APP_ORIGIN } from "../lib/appOrigin";
 import { rateLimitMiddleware } from "../lib/rateLimit";
@@ -119,7 +119,8 @@ router.get("/v1/scans", authenticate, async (req, res): Promise<void> => {
   const rows = await db
     .select({ id: scansTable.id, url: scansTable.targetUrl, status: scansTable.status, createdAt: scansTable.createdAt, completedAt: scansTable.completedAt })
     .from(scansTable)
-    .where(eq(scansTable.userId, user.id))
+    // Re-checks of a single finding (origin "verify") are not scans the person asked for; they appear on the finding.
+    .where(and(eq(scansTable.userId, user.id), ne(scansTable.origin, "verify")))
     .orderBy(desc(scansTable.createdAt))
     .limit(limit);
   res.json({ scans: rows });
