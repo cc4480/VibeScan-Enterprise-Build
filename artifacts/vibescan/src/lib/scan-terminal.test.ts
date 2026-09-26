@@ -1,5 +1,18 @@
 import { describe, it, expect } from "vitest";
-import { toRow, orderForDisplay, revealDelayMs, progressPercent, EXPECTED_TESTS, type LiveTest } from "./scan-terminal";
+import {
+  toRow,
+  toCheckRow,
+  flattenItems,
+  orderForDisplay,
+  revealDelayMs,
+  tally,
+  progressPercent,
+  EXPECTED_TESTS,
+  TEST_MS,
+  CHECK_MS,
+  type LiveCheck,
+  type LiveTest,
+} from "./scan-terminal";
 
 const test = (over: Partial<LiveTest>): LiveTest => ({
   group: "passive",
@@ -9,6 +22,7 @@ const test = (over: Partial<LiveTest>): LiveTest => ({
   durationMs: 40,
   ...over,
 });
+const check = (outcome: LiveCheck["outcome"], name = "A check"): LiveCheck => ({ name, severity: "low", outcome });
 
 describe("toRow: every line reflects the test's real outcome", () => {
   it("shows a clean pass only for a test that ran and found nothing", () => {
@@ -40,13 +54,37 @@ describe("toRow: every line reflects the test's real outcome", () => {
     expect(row.result).toBe("did not run: timed out");
   });
 
-  it("does not show a clean pass for a skipped test even if a stale finding count is attached", () => {
-    expect(toRow(test({ status: "skipped", findings: 0 })).tone).not.toBe("clean");
-  });
-
   it("copes with a missing reason", () => {
     expect(toRow(test({ status: "skipped" })).result).toContain("no reason recorded");
     expect(toRow(test({ status: "failed" })).result).toContain("unknown error");
+  });
+});
+
+describe("toCheckRow: a check is only ever shown as clear when the server said so", () => {
+  it("maps each outcome to its own mark and words", () => {
+    expect(toCheckRow(check("clear"))).toMatchObject({ mark: "✓", result: "clear", tone: "clean" });
+    expect(toCheckRow(check("finding"))).toMatchObject({ mark: "!", result: "FOUND", tone: "finding" });
+    expect(toCheckRow(check("checked"))).toMatchObject({ result: "checked", tone: "neutral" });
+    expect(toCheckRow(check("not_run"))).toMatchObject({ mark: "–", result: "not run", tone: "skipped" });
+  });
+
+  it("never gives 'checked' or 'not run' the pass mark", () => {
+    expect(toCheckRow(check("checked")).mark).not.toBe("✓");
+    expect(toCheckRow(check("not_run")).mark).not.toBe("✓");
+  });
+});
+
+describe("flattenItems: each test, then the checks inside it", () => {
+  it("keeps every check under its own test, in order", () => {
+    const a = test({ name: "A", checks: [check("clear", "a1"), check("clear", "a2")] });
+    const b = test({ name: "B", checks: [] });
+    const c = test({ name: "C", checks: [check("finding", "c1")] });
+    const items = flattenItems([a, b, c]);
+    expect(items.map((i) => (i.kind === "test" ? `T:${i.test.name}` : `c:${i.check.name}`))).toEqual(["T:A", "c:a1", "c:a2", "T:B", "T:C", "c:c1"]);
+  });
+
+  it("copes with a test that has no checks field (an older record)", () => {
+    expect(flattenItems([test({})])).toHaveLength(1);
   });
 });
 
@@ -56,8 +94,7 @@ describe("orderForDisplay: real results first, what was not run after", () => {
   const failed = (name: string) => test({ name, status: "failed", reason: "boom" });
 
   it("holds skipped tests back while the scan is running", () => {
-    const tests = [skipped("s1"), ran("a"), skipped("s2"), ran("b")];
-    expect(orderForDisplay(tests, false).map((t) => t.name)).toEqual(["a", "b"]);
+    expect(orderForDisplay([skipped("s1"), ran("a"), skipped("s2"), ran("b")], false).map((t) => t.name)).toEqual(["a", "b"]);
   });
 
   it("lists them after everything that ran once the scan is over, and drops none", () => {
@@ -72,23 +109,55 @@ describe("orderForDisplay: real results first, what was not run after", () => {
   });
 });
 
-describe("revealDelayMs: slow enough to read, fast enough not to lag the scan", () => {
-  it("is readable when few tests are waiting", () => {
-    expect(revealDelayMs(1)).toBeGreaterThanOrEqual(600);
-    expect(revealDelayMs(12)).toBeGreaterThanOrEqual(600);
+describe("tally: the closing numbers always add up to the total", () => {
+  const tests = [
+    test({ name: "A", checks: [check("clear"), check("clear"), check("finding")] }),
+    test({ name: "B", status: "skipped", reason: "x", checks: [check("not_run"), check("not_run")] }),
+    test({ name: "C", status: "failed", reason: "boom", checks: [check("not_run")] }),
+    test({ name: "D", findings: 1, checks: [check("checked"), check("checked")] }),
+  ];
+
+  it("counts each outcome", () => {
+    expect(tally(tests, 8)).toMatchObject({ tests: 4, ran: 2, skipped: 1, failed: 1, clear: 2, finding: 1, checked: 2, notRun: 3, unrecorded: 0 });
   });
 
-  it("speeds up as the backlog grows, never getting faster than a glance", () => {
-    expect(revealDelayMs(30)).toBeLessThan(revealDelayMs(5));
-    expect(revealDelayMs(60)).toBeLessThan(revealDelayMs(30));
-    expect(revealDelayMs(500)).toBeGreaterThanOrEqual(300);
+  it("says so when the recorded tests do not account for every check, instead of hiding the gap", () => {
+    const t = tally(tests, 130);
+    expect(t.unrecorded).toBe(130 - 8);
+    expect(t.clear + t.finding + t.checked + t.notRun + t.unrecorded).toBe(130);
   });
 
-  it("clears a full 40-test burst in about 20 seconds at most", () => {
+  it("never reports a negative gap", () => {
+    expect(tally(tests, 3).unrecorded).toBe(0);
+  });
+});
+
+describe("revealDelayMs: slow enough to read", () => {
+  const testItem = flattenItems([test({})])[0]!;
+  const checkItem = flattenItems([test({ checks: [check("clear")] })])[1]!;
+
+  it("shows tests slower than the checks inside them", () => {
+    expect(revealDelayMs(testItem, 10)).toBe(TEST_MS);
+    expect(revealDelayMs(checkItem, 10)).toBe(CHECK_MS);
+    expect(TEST_MS).toBeGreaterThan(CHECK_MS);
+  });
+
+  it("stays readable for a normal backlog", () => {
+    expect(revealDelayMs(testItem, 200)).toBeGreaterThanOrEqual(600);
+    expect(revealDelayMs(checkItem, 200)).toBeGreaterThanOrEqual(120);
+  });
+
+  it("only speeds up when a huge backlog would leave the page replaying long after the scan", () => {
+    expect(revealDelayMs(testItem, 400)).toBeLessThan(TEST_MS);
+    expect(revealDelayMs(checkItem, 400)).toBeGreaterThanOrEqual(60);
+  });
+
+  it("shows a full scan (40 tests, 130 checks) in under a minute and a half, and over half a minute", () => {
     let total = 0;
-    for (let waiting = 40; waiting > 0; waiting--) total += revealDelayMs(waiting);
-    expect(total).toBeLessThan(25_000);
-    expect(total).toBeGreaterThan(12_000);
+    for (let i = 0; i < 40; i++) total += TEST_MS;
+    for (let i = 0; i < 130; i++) total += CHECK_MS;
+    expect(total).toBeLessThan(90_000);
+    expect(total).toBeGreaterThan(30_000);
   });
 });
 

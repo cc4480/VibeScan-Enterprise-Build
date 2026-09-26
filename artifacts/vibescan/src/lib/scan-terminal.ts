@@ -1,12 +1,20 @@
 /**
  * What the scan terminal shows, and how fast.
  *
- * Every line is a test the scanner really finished (the same ledger the report
- * prints as "what this scan tested"). Nothing here invents a result. The only
- * thing this file decides is pacing: tests finish in bursts, often a dozen in the
- * first second, far faster than anyone can read, so they are revealed one at a
- * time. That delays the display, never the scan, and never changes a line.
+ * Every line is real: a test the scanner finished, or one of the checks inside it
+ * with what became of it (lib/checkOutcomes.ts on the server decides that, and only
+ * ever calls a check clear when it is certain). Nothing here invents a result. The
+ * only thing decided here is pacing: tests finish in bursts, far faster than anyone
+ * can read, so lines are revealed one at a time. That delays the display, never the
+ * scan, and never changes a line.
  */
+
+export interface LiveCheck {
+  name: string;
+  severity: "critical" | "high" | "medium" | "low" | "info" | "varies";
+  outcome: "clear" | "finding" | "checked" | "not_run";
+  category?: string;
+}
 
 export interface LiveTest {
   group: string;
@@ -15,9 +23,12 @@ export interface LiveTest {
   findings: number;
   durationMs: number;
   reason?: string;
+  /** Finding category, for colour. Null for a step with no findings of its own. */
+  category?: string | null;
+  checks?: LiveCheck[];
 }
 
-export type RowTone = "clean" | "finding" | "skipped" | "failed";
+export type RowTone = "clean" | "finding" | "skipped" | "failed" | "neutral";
 
 export interface TerminalRow {
   mark: string;
@@ -44,6 +55,30 @@ export function toRow(t: LiveTest): TerminalRow {
   return { mark: "✓", tone: "clean", group: t.group, name: t.name, result: "no issues found" };
 }
 
+/** One check inside a test. "checked" means it ran but a finding could not be placed, so it is not called clear. */
+export function toCheckRow(c: LiveCheck): { mark: string; tone: RowTone; result: string } {
+  switch (c.outcome) {
+    case "clear":
+      return { mark: "✓", tone: "clean", result: "clear" };
+    case "finding":
+      return { mark: "!", tone: "finding", result: "FOUND" };
+    case "checked":
+      return { mark: "·", tone: "neutral", result: "checked" };
+    default:
+      return { mark: "–", tone: "skipped", result: "not run" };
+  }
+}
+
+/** What the terminal steps through: each test, then the checks inside it. */
+export type TerminalItem = { kind: "test"; test: LiveTest } | { kind: "check"; test: LiveTest; check: LiveCheck };
+
+export function flattenItems(tests: LiveTest[]): TerminalItem[] {
+  return tests.flatMap<TerminalItem>((test) => [
+    { kind: "test", test },
+    ...(test.checks ?? []).map<TerminalItem>((check) => ({ kind: "check", test, check })),
+  ]);
+}
+
 /**
  * The order tests are shown in. Skipped tests are recorded up front, before any
  * test has run, so shown in arrival order they bury the real results under a wall
@@ -55,26 +90,60 @@ export function orderForDisplay(tests: LiveTest[], scanOver: boolean): LiveTest[
   return scanOver ? [...active, ...tests.filter((t) => t.status === "skipped")] : active;
 }
 
+/** Milliseconds a test row stays before the next line, and a check row. Readable, not fast. */
+export const TEST_MS = 700;
+export const CHECK_MS = 140;
+
 /**
- * Milliseconds before the next waiting test is shown. Readable when the backlog
- * is small, faster only when it is large enough that a slow pace would leave the
- * page still replaying long after the scan ended (about 20 seconds at most).
+ * Delay before the next waiting line. Faster only when the backlog is large enough
+ * that this pace would leave the page still replaying long after the scan ended.
  */
-export function revealDelayMs(waiting: number): number {
-  if (waiting > 40) return 320;
-  if (waiting > 25) return 450;
-  return 620;
+export function revealDelayMs(item: TerminalItem, waiting: number): number {
+  const base = item.kind === "test" ? TEST_MS : CHECK_MS;
+  return waiting > 260 ? Math.round(base * 0.5) : base;
+}
+
+export interface Tally {
+  tests: number;
+  ran: number;
+  skipped: number;
+  failed: number;
+  clear: number;
+  finding: number;
+  checked: number;
+  notRun: number;
+  /** Checks in a full scan that no recorded test accounts for: said, never hidden. */
+  unrecorded: number;
+}
+
+/** The closing numbers. clear + finding + checked + notRun + unrecorded is always the total. */
+export function tally(tests: LiveTest[], totalChecks: number): Tally {
+  const count = (s: LiveTest["status"]) => tests.filter((t) => t.status === s).length;
+  const outcomes = tests.flatMap((t) => t.checks ?? []);
+  const n = (o: LiveCheck["outcome"]) => outcomes.filter((c) => c.outcome === o).length;
+  const accounted = outcomes.length;
+  return {
+    tests: tests.length,
+    ran: count("ran"),
+    skipped: count("skipped"),
+    failed: count("failed"),
+    clear: n("clear"),
+    finding: n("finding"),
+    checked: n("checked"),
+    notRun: n("not_run"),
+    unrecorded: Math.max(0, totalChecks - accounted),
+  };
 }
 
 /** The scanner runs about this many tests; only used to shape the progress bar. */
 export const EXPECTED_TESTS = 40;
 
 /** Bar position from what is actually on screen, so it never runs ahead of the lines. */
-export function progressPercent(status: string, revealed: number): number {
+export function progressPercent(status: string, revealedTests: number): number {
   if (status === "complete") return 100;
   if (status === "failed") return 0;
-  if (["queued", "paid", "pending"].includes(status)) return Math.min(8, 2 + revealed);
-  const scanning = 10 + Math.round((Math.min(revealed, EXPECTED_TESTS) / EXPECTED_TESTS) * 78);
+  if (["queued", "paid", "pending"].includes(status)) return Math.min(8, 2 + revealedTests);
+  const scanning = 10 + Math.round((Math.min(revealedTests, EXPECTED_TESTS) / EXPECTED_TESTS) * 78);
   return status === "analyzing" ? Math.max(scanning, 92) : Math.min(scanning, 88);
 }
 
@@ -83,4 +152,5 @@ export const rowColor: Record<RowTone, string> = {
   finding: "text-amber-300",
   skipped: "text-zinc-500",
   failed: "text-amber-400",
+  neutral: "text-zinc-400",
 };

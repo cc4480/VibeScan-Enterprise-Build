@@ -5,7 +5,7 @@ import { CheckCircle2, XCircle, Loader2, Clock, AlertTriangle } from "lucide-rea
 import { cn } from "@/lib/utils";
 import { useSeo } from "@/lib/seo";
 import { ScanTerminal } from "@/components/scan-terminal";
-import { orderForDisplay, progressPercent } from "@/lib/scan-terminal";
+import { flattenItems, orderForDisplay, progressPercent, revealDelayMs } from "@/lib/scan-terminal";
 import { useLiveTests, useRevealed } from "@/lib/use-live-tests";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -43,19 +43,27 @@ export default function ScanProgressPage() {
   });
 
   const status = data?.status ?? "queued";
-  const liveTests = useLiveTests(scanId, data?.status);
+  const { tests: liveTests, totalChecks } = useLiveTests(scanId, data?.status);
   const scanOver = status === "analyzing" || status === "complete" || status === "failed";
   const tests = useMemo(() => orderForDisplay(liveTests, scanOver), [liveTests, scanOver]);
+  // Each test, then the checks inside it: the terminal steps through these one line at a time.
+  const items = useMemo(() => flattenItems(tests), [tests]);
 
   // A scan that was already over when this page opened has nothing to watch:
   // show everything at once instead of replaying it.
   const openedFinished = useRef<boolean | null>(null);
   if (openedFinished.current === null && data) openedFinished.current = status === "complete" || status === "failed";
-  const { shown, caughtUp } = useRevealed(tests, openedFinished.current === true);
+  const { shown, caughtUp } = useRevealed(items, openedFinished.current === true, revealDelayMs);
 
   const isComplete = status === "complete";
-  const isFailed = status === "failed";
-  const isQueued = ["queued", "paid", "pending"].includes(status);
+
+  // The scan can be over long before the terminal has shown its results. Until it has,
+  // the page says "scanning" rather than announcing a finish it is still replaying.
+  const replaying = (status === "analyzing" || isComplete) && !caughtUp && openedFinished.current !== true;
+  const uiStatus = replaying ? "scanning" : status;
+  const isFailed = uiStatus === "failed";
+  const isQueued = ["queued", "paid", "pending"].includes(uiStatus);
+  const uiComplete = uiStatus === "complete";
 
   // Open the report once the terminal has shown every test, so the viewer sees
   // what was checked before it disappears.
@@ -88,7 +96,7 @@ export default function ScanProgressPage() {
   }
 
   const domain = getDomain(data?.targetUrl ?? "");
-  const progress = progressPercent(status, shown.length);
+  const progress = progressPercent(uiStatus, shown.filter((i) => i.kind === "test").length);
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
@@ -96,10 +104,10 @@ export default function ScanProgressPage() {
         <div
           className={cn(
             "w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 border",
-            isComplete ? "bg-green-500/10 border-green-500/20" : isFailed ? "bg-red-500/10 border-red-500/20" : "bg-primary/10 border-primary/20",
+            uiComplete ? "bg-green-500/10 border-green-500/20" : isFailed ? "bg-red-500/10 border-red-500/20" : "bg-primary/10 border-primary/20",
           )}
         >
-          {isComplete ? (
+          {uiComplete ? (
             <CheckCircle2 className="w-7 h-7 text-green-500" />
           ) : isFailed ? (
             <XCircle className="w-7 h-7 text-red-400" />
@@ -110,18 +118,19 @@ export default function ScanProgressPage() {
           )}
         </div>
         <h1 className="text-xl font-bold tracking-tight">
-          {isComplete ? "Scan Complete" : isFailed ? "Scan Failed" : domain || "Security Scan"}
+          {uiComplete ? "Scan Complete" : isFailed ? "Scan Failed" : domain || "Security Scan"}
         </h1>
-        <p className="text-sm text-muted-foreground">{STATUS_LABEL[status] ?? "Processing…"}</p>
+        <p className="text-sm text-muted-foreground">{replaying ? "Showing every check as it was run…" : (STATUS_LABEL[uiStatus] ?? "Processing…")}</p>
       </div>
 
       <ScanTerminal
         domain={domain}
         sessionId={data?.id ?? ""}
-        status={status}
+        status={uiStatus}
         error={data?.error}
         shown={shown}
         all={tests}
+        totalChecks={totalChecks}
         caughtUp={caughtUp}
         progress={progress}
       />

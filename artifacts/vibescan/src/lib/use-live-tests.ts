@@ -1,24 +1,25 @@
 /**
- * The tests a running scan has finished, and a paced view of them.
+ * The tests a running scan has finished, and a paced view of what to show.
  *
- * useLiveTests polls the API. useRevealed hands them out one at a time so they
- * can be read; `instant` shows everything at once (a scan that had already
- * finished when the page opened has nothing to watch).
+ * useLiveTests polls the API. useRevealed hands items out one at a time so they can
+ * be read; `instant` shows everything at once (a scan that had already finished when
+ * the page opened has nothing to watch).
  */
 import { useEffect, useRef, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
-import { revealDelayMs, type LiveTest } from "./scan-terminal";
+import type { LiveTest } from "./scan-terminal";
 
 interface LiveResponse {
   status: string;
+  totalChecks: number;
   tests: LiveTest[];
 }
 
 const POLL_MS = 1000;
 
 /** Polls until the scan is over, then once more so the last tests are not missed. */
-export function useLiveTests(scanId: string | undefined, status: string | undefined): LiveTest[] {
-  const [tests, setTests] = useState<LiveTest[]>([]);
+export function useLiveTests(scanId: string | undefined, status: string | undefined): { tests: LiveTest[]; totalChecks: number } {
+  const [state, setState] = useState<{ tests: LiveTest[]; totalChecks: number }>({ tests: [], totalChecks: 0 });
   const over = status === "complete" || status === "failed";
   const finalFetched = useRef(false);
 
@@ -30,7 +31,7 @@ export function useLiveTests(scanId: string | undefined, status: string | undefi
       try {
         const res = await customFetch<LiveResponse>(`/api/scans/${scanId}/live`);
         // Never shrink: a stale response must not un-show a test.
-        if (!stopped) setTests((prev) => (res.tests.length >= prev.length ? res.tests : prev));
+        if (!stopped) setState((prev) => (res.tests.length >= prev.tests.length ? { tests: res.tests, totalChecks: res.totalChecks } : prev));
       } catch {
         /* progress is a display; the status poll reports real failures */
       }
@@ -52,13 +53,17 @@ export function useLiveTests(scanId: string | undefined, status: string | undefi
     };
   }, [scanId, over]);
 
-  return tests;
+  return state;
 }
 
-/** The first N tests, N growing at a readable pace. `caughtUp` is true once all are shown. */
-export function useRevealed(tests: LiveTest[], instant: boolean): { shown: LiveTest[]; caughtUp: boolean } {
+/** The first N items, N growing at a pace set per item. `caughtUp` is true once all are shown. */
+export function useRevealed<T>(
+  items: T[],
+  instant: boolean,
+  delayOf: (item: T, waiting: number) => number,
+): { shown: T[]; caughtUp: boolean } {
   const [count, setCount] = useState(0);
-  const total = tests.length;
+  const total = items.length;
 
   useEffect(() => {
     if (instant) {
@@ -66,10 +71,12 @@ export function useRevealed(tests: LiveTest[], instant: boolean): { shown: LiveT
       return undefined;
     }
     if (count >= total) return undefined;
-    const timer = setTimeout(() => setCount((c) => Math.min(c + 1, total)), revealDelayMs(total - count));
+    const timer = setTimeout(() => setCount((c) => Math.min(c + 1, total)), delayOf(items[count] as T, total - count));
     return () => clearTimeout(timer);
+    // delayOf is a pure function of its arguments; it is not a dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [count, total, instant]);
 
-  const shown = instant ? tests : tests.slice(0, count);
+  const shown = instant ? items : items.slice(0, count);
   return { shown, caughtUp: shown.length >= total };
 }
