@@ -99,6 +99,8 @@ export const CATALOG_SURFACE: CatalogTest[] = [
   ]),
   test("JavaScript secret scanning", "Credential Exposure", "jsScanner.ts", [
     ["varies", "Credential found in JavaScript (34 secret patterns)", "name: f.pattern.name"],
+    ["low", "AI provider called directly from the browser", "AI Provider Called Directly From the Browser", "aiFeatureProbe.ts", "AI Feature Security"],
+    ["low", "AI system prompt shipped in client-side code", "AI System Prompt Shipped in Client-Side Code", "aiFeatureProbe.ts", "AI Feature Security"],
   ]),
   test("site crawl", "Information Disclosure", "crawler.ts", [
     ["varies", "Sensitive path found on a crawled page (8 paths per page)", "name: probe.name"],

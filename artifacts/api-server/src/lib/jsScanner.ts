@@ -25,6 +25,8 @@ function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
 
 import { type SecretPattern, SECRET_PATTERNS } from "./secret-pattern-data";
 import { scanFetch } from "./http";
+import { scanAiUsage } from "./aiFeatureProbe";
+import { isFirstParty } from "./sriPolicy";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EXTRACT SCRIPT CONTENT
@@ -204,6 +206,15 @@ export async function scanJavaScriptForSecrets(
       wstgId: "WSTG-CONF-04",
     }));
   }
+
+  // 4. AI features in the site's own code (not a vendor's widget script): a provider called
+  // from the browser, a system prompt in the bundle.
+  const ownHost = (() => { try { return new URL(baseUrl).hostname; } catch { return ""; } })();
+  const ownCode = externalContents.map((r, i) => {
+    const host = (() => { try { return new URL(externalUrls[i]!).hostname; } catch { return ""; } })();
+    return r.status === "fulfilled" && isFirstParty(ownHost, host) ? r.value ?? "" : "";
+  });
+  vulns.push(...scanAiUsage([inlineContent, ...ownCode].join(String.fromCharCode(10))));
 
   return vulns;
 }

@@ -121,6 +121,10 @@ const EXPECTED: Array<{ module: string; label: string; match: RegExp }> = [
   { module: "jwtAnalysis.ts", label: "JWT excessive lifetime", match: /JWT Token Lifetime Is .* Days/i },
   { module: "jwtAnalysis.ts", label: "sensitive data in JWT payload", match: /Sensitive Data Stored in JWT Payload/i },
 
+  // ── aiFeatureProbe.ts (ai-widget.js is vulnerable; ai-chat.js is its clean twin)
+  { module: "aiFeatureProbe.ts", label: "AI provider called from the browser", match: /AI Provider Called Directly From the Browser/i },
+  { module: "aiFeatureProbe.ts", label: "AI system prompt in client code", match: /AI System Prompt Shipped in Client-Side Code/i },
+
   // ── sourceMaps.ts ────────────────────────────────────────────────────────
   { module: "sourceMaps.ts", label: "source map exposed", match: /Source Map Exposed/i },
 

@@ -48,6 +48,7 @@ export const CATEGORY_FAMILY: Record<string, FamilyKey> = {
 
   "Credential Exposure": "secrets",
   "Exposed Secrets / Credentials": "secrets",
+  "AI Feature Security": "secrets",
   "Secret Exposed in Page HTML": "secrets",
 
   "Session Management": "sessions",

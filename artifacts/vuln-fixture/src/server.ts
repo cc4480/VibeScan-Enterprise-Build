@@ -32,6 +32,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { SENSITIVE_PATHS } from "./sensitive-paths.js";
+import { AI_WIDGET_JS, AI_CHAT_CLEAN_JS } from "./ai-assets.js";
 import {
   SECRETS_JS,
   NEXT_DATA_PROPS,
@@ -176,6 +177,8 @@ app.get("/openapi.json", (_req, res) => res.json(OPENAPI_SPEC));
 // JS bundle — secret-pattern-data.ts (jsScanner), external-file path, plus a
 // source map reference (sourceMaps.ts) whose map embeds a secret too.
 // ─────────────────────────────────────────────────────────────────────────────
+app.get("/assets/ai-widget.js", (_req, res) => { res.type("application/javascript").send(AI_WIDGET_JS); });
+app.get("/assets/ai-chat.js", (_req, res) => { res.type("application/javascript").send(AI_CHAT_CLEAN_JS); });
 app.get("/assets/app.js", (_req, res) => {
   res.type("application/javascript").send(SECRETS_JS + "\n//# sourceMappingURL=/assets/app.js.map\n");
 });
@@ -261,6 +264,8 @@ app.get("/", (req, res) => {
 <span data-token="${JWT_EXCESSIVE_LIFETIME}"></span>
 <span data-token="${JWT_SENSITIVE_PAYLOAD}"></span>
 <script src="/assets/app.js"></script>
+<script src="/assets/ai-widget.js"></script>
+<script src="/assets/ai-chat.js"></script>
 <script src="https://cdn.example.net/analytics.js"></script>
 </body></html>`);
 });

@@ -18,7 +18,7 @@ Status: **done**, **partial**, **todo**.
 | U8 | Alert destinations and ticketing | todo | |
 | U9 | Verify the fix | **done** | "Fixed this? Check it" on each finding: a free, limited (10 a day) re-scan judged against that one finding. Fixed only if its test ran again; otherwise "could not be re-checked". Full re-scan for now; a targeted single-test re-run would be faster (later) |
 | U10 | Supabase and Firebase in depth | done | Supabase auth confirmation + storage file listing, Firebase storage listing (baasDepth.ts); tested with mocked responses and clean twins, not the live-host fixture (these hit supabase.co / googleapis.com) |
-| U11 | Checks for AI features inside the app | todo | |
+| U11 | Checks for AI features inside the app | done | passive only: provider called from browser, system prompt in bundle (aiFeatureProbe.ts, first-party JS only). No prompt-injection probing on purpose: model replies are not a stable signal |
 | U12 | One defect, one finding | needs decision | merging conflicts with per-finding fixture/benchmark and changes grades |
 | U13 | Fix prompts that know the platform | done | added hosted builders, Firebase, Vercel, Netlify to the existing five; prompts are model-written, so wording is steered not guaranteed |
 | U14 | Easy two-account testing | partial | Works; setup still manual |
