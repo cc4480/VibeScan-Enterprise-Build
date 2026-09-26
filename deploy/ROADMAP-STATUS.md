@@ -11,7 +11,7 @@ Status: **done**, **partial**, **todo**.
 | U1 | Public head-to-head, rerunnable | todo | Needs the user's accounts on rival services and a throwaway host |
 | U2 | Methodology, data handling, disclosure | done | secscan.info/security, security.txt |
 | U3 | Make failed probes visible | done | Already built; shown live |
-| U4 | Send less to the language model, provider choice | partial | Redaction and LLM_ENDPOINT done; no user-facing choice |
+| U4 | Send less to the language model, provider choice | done | account-level switch (Settings, Privacy) that stops findings being sent to the AI provider; the scan and findings are unchanged and the report says the analysis is off. Migration 0022, real-Postgres tested. The worker skip path is not covered by an automated test. Choosing between providers is not offered: LLM_ENDPOINT remains an operator setting |
 | U5 | Third-party script check that understands first-party CDNs | done | first-party CDNs and provider-updated scripts exempt; 11 to 4 flagged sites on the 20-site run |
 | U6 | A public status page | todo | Needs the user's UptimeRobot page |
 | U7 | GitHub Action, CLI and SARIF | **done** | deploy/cli (CLI + action.yml); SARIF at /v1/scans/:id/sarif. To publish the Action, copy deploy/cli to its own repo and tag v1 (needs the user) |
@@ -38,4 +38,4 @@ Status: **done**, **partial**, **todo**.
 | U28 | Third-party proof of own security | todo | Needs an outside firm |
 | U29 | Content from sources buyers trust | todo | |
 | U30 | Brand and search collision | todo | User's decision |
-| U31 | Directory presence | partial | Registry listed; Smithery, cursor.directory to do |
+| U31 | Directory presence | partial | listing copy for Smithery and cursor.directory is ready in deploy/mcp-registry/SUBMISSIONS.md; submitting needs the owner's account on each |

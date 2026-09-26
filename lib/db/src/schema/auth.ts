@@ -29,6 +29,10 @@ export const usersTable = pgTable("users", {
   // Neither covers account mail — password resets, email verification and
   // purchase receipts still send, because switching those off would lock
   // people out of their own account.
+  // Privacy choice, separate from the email flags: when true, this user's findings are never
+  // sent to the language-model provider that writes the plain-English analysis. The scan and
+  // every finding are unchanged; only the written commentary is left out.
+  aiAnalysisOptedOut: boolean("ai_analysis_opted_out").notNull().default(false),
   marketingOptedOut: boolean("marketing_opted_out").notNull().default(false),
   alertEmailsOptedOut: boolean("alert_emails_opted_out").notNull().default(false),
 

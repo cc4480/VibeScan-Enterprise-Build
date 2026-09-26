@@ -39,6 +39,7 @@ import { sendReportReadyEmail } from "./mailer";
 import { summariseCompliance, COMPLIANCE_DISCLAIMER } from "./compliance";
 import { initBrowser, closeBrowser } from "./browser";
 import { logger } from "./logger";
+import { isAiAnalysisOptedOut, AI_OPT_OUT_NOTE } from "./aiOptOut";
 import { randomUUID } from "node:crypto";
 import * as tls from "node:tls";
 import type { Job } from "pg-boss";
@@ -464,7 +465,11 @@ export async function processScanJob(job: ScanJob): Promise<void> {
       "Confidence-gated findings passed to AI",
     );
 
-    aiAnalysis = verificationId ? null : await callDeepSeek(
+    // The owner may have chosen not to have findings sent to the language-model provider.
+    const aiOptedOut = verificationId ? false : await isAiAnalysisOptedOut(userId).catch(() => false);
+    if (aiOptedOut) log.info("AI analysis skipped: turned off by the account owner");
+
+    aiAnalysis = verificationId || aiOptedOut ? null : await callDeepSeek(
       targetUrl,
       vulnsForAi,
       scanResult.technologies,
@@ -473,7 +478,18 @@ export async function processScanJob(job: ScanJob): Promise<void> {
       // untested area safe.
       tests,
     );
-    if (aiAnalysis) {
+    if (aiOptedOut) {
+      scanResult.vulnerabilities.push({
+        id: randomUUID(),
+        ...AI_OPT_OUT_NOTE,
+        severity: "info",
+        category: "Scan Coverage",
+        cweId: null,
+        cvssScore: null,
+        wstgId: null,
+        confidence: 100,
+      } satisfies ScanVulnerability);
+    } else if (aiAnalysis) {
       log.info("DeepSeek analysis complete");
     } else {
       log.warn("DeepSeek analysis skipped or failed — continuing without AI");

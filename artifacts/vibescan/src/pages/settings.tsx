@@ -6,6 +6,7 @@ import { Trash2, Loader2, AlertTriangle, Mail, CreditCard, Bot } from "lucide-re
 import { AiEditorsSection } from "@/components/ai-editors";
 import { ConnectedAppsSection } from "@/components/connected-apps";
 import { BillingSummary } from "@/components/billing-options";
+import { PrivacyCard } from "@/components/privacy-card";
 import { cn } from "@/lib/utils";
 
 /**
@@ -159,6 +160,8 @@ export default function SettingsPage() {
         </div>
         <BillingSummary />
       </div>
+
+      <PrivacyCard />
 
       <div id="ai-editors" className="glass-panel p-6 sm:p-10 rounded-3xl mb-8 scroll-mt-24">
         <div className="flex items-start gap-4 mb-6">
