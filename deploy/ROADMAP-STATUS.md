@@ -31,7 +31,7 @@ Status: **done**, **partial**, **todo**.
 | U21 | Teams | todo | |
 | U22 | A REST API | **done** | /api/v1, api-scope tokens, OpenAPI at /api/v1/openapi.json |
 | U23 | Monitoring controls | todo | |
-| U24 | Changes since the last scan | todo | |
+| U24 | Changes since the last scan | **done** | Report card, report email line, API (counts on status, full lists on the report). A finding is "fixed" only if its test ran again; otherwise "not re-checked" |
 | U25 | Test the free tier | todo | Needs real traffic |
 | U26 | One-click MCP sign-in with OAuth | **done** | OAuth 2.1: discovery, dynamic registration, PKCE S256, consent page, 1 h access and rotating refresh tokens with reuse detection, Connected apps in Settings. Run the real-database suites with --no-file-parallelism |
 | U27 | More control frameworks | todo | |

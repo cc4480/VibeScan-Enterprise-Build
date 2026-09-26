@@ -19,6 +19,19 @@ const base = {
   severity: { critical: 0, high: 0, medium: 1, low: 1, info: 1 },
 };
 
+describe("report-ready email: what changed", () => {
+  it("shows the change line when there is one, escaped", () => {
+    const html = buildHtml({ ...base, changesLine: "2 new, 3 fixed since your last scan (20 Sep)" });
+    expect(html).toContain("2 new, 3 fixed since your last scan (20 Sep)");
+    expect(buildHtml({ ...base, changesLine: "<script>x</script>" })).not.toContain("<script>x</script>");
+  });
+
+  it("has no such line on a first scan or when nothing changed", () => {
+    expect(buildHtml(base)).not.toContain("since your last scan");
+    expect(buildHtml({ ...base, changesLine: "" })).not.toContain("since your last scan");
+  });
+});
+
 describe("report-ready email", () => {
   it("links the button to the full report page", () => {
     const html = buildHtml(base);

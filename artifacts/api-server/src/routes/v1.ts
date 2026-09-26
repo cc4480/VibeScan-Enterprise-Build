@@ -29,6 +29,7 @@ import { launchScan, ownScan, reportForScan, UUID } from "./appRouteRunner";
 import { API_V1_SPEC } from "../lib/apiV1Spec";
 import { summariseReport } from "../lib/apiV1Report";
 import { toSarif } from "../lib/sarif";
+import { changesForReport } from "../lib/scanDiffLoader";
 
 const router: IRouter = Router();
 
@@ -164,7 +165,13 @@ router.get("/v1/scans/:id", authenticate, async (req, res): Promise<void> => {
     return;
   }
   const report = await reportForScan(user.id, scan.id);
-  res.json({ ...base, ...(report ? summariseReport(report.data) : {}), links: { report: `${APP_ORIGIN}/api/v1/scans/${scan.id}/report`, web: report ? `${APP_ORIGIN}/report/${report.id}` : null } });
+  // Counts only here; the lists are in the report. A failed comparison leaves the field out.
+  const changes = report ? await changesForReport(user.id, { scanId: scan.id, targetUrl: report.targetUrl, scannedAt: report.scannedAt, data: report.data }).catch(() => null) : null;
+  res.json({
+    ...base,
+    ...(report ? summariseReport(report.data) : {}),
+    ...(changes ? { changes: { since: changes.since, new: changes.added.length + changes.firstSeen.length, fixed: changes.fixed.length, notRechecked: changes.notRechecked.length, unchanged: changes.unchanged } } : {}),
+    links: { report: `${APP_ORIGIN}/api/v1/scans/${scan.id}/report`, web: report ? `${APP_ORIGIN}/report/${report.id}` : null } });
 });
 
 router.get("/v1/scans/:id/report", authenticate, async (req, res): Promise<void> => {
@@ -184,7 +191,8 @@ router.get("/v1/scans/:id/report", authenticate, async (req, res): Promise<void>
     fail(res, 409, "not_ready", "The report is still being saved. Try again in a moment.");
     return;
   }
-  res.json({ id: scan.id, url: report.targetUrl, scannedAt: report.scannedAt, report: report.data });
+  const changes = await changesForReport(user.id, { scanId: scan.id, targetUrl: report.targetUrl, scannedAt: report.scannedAt, data: report.data }).catch(() => null);
+  res.json({ id: scan.id, url: report.targetUrl, scannedAt: report.scannedAt, report: report.data, ...(changes ? { changes } : {}) });
 });
 
 // The same findings as SARIF 2.1.0, for GitHub code scanning and other CI tools.

@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { cn, formatSeverity, getSeverityColors, getGradeColor } from "@/lib/utils";
 import { GradeRing } from "@/components/grade-ring";
+import { ReportChangesCard } from "@/components/report-changes-card";
+import type { ScanChanges } from "@/lib/report-changes";
 import { categoryHex } from "@/lib/category-colors";
 import { getAuthHeaders } from "@/lib/auth-token";
 import { motion, AnimatePresence } from "framer-motion";
@@ -2388,6 +2390,8 @@ export default function ReportViewer() {
   const compliance = (report.data as { compliance?: ComplianceData | null }).compliance ?? null;
   // What ran and what was skipped; absent on reports from before test records.
   const coverageTests = (report.data as { tests?: CoverageTest[] | null }).tests ?? null;
+  // What changed since the last scan of this site (computed by the server; absent for a first scan).
+  const changes = (report.data as { changes?: ScanChanges | null }).changes ?? null;
 
   const severityCounts = {
     critical: summary.critical,
@@ -2514,6 +2518,8 @@ export default function ReportViewer() {
           )}
         </div>
       </div>
+
+      {changes ? <ReportChangesCard changes={changes} /> : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
         {/* Left Col: Findings */}

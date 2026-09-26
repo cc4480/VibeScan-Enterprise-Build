@@ -121,6 +121,8 @@ interface SendReportEmailOptions {
   executiveSummary?: string;
   /** Pages the scan covered, for the "Scanned N pages" pill. */
   pagesScanned?: number;
+  /** "2 new, 3 fixed since your last scan (20 Sep)" (lib/scanDiff.ts). Absent for a first scan or when nothing changed. */
+  changesLine?: string;
 }
 
 const GRADE_COLORS: Record<string, string> = {
@@ -245,6 +247,7 @@ export function buildHtml(opts: SendReportEmailOptions): string {
 
           <h1 style="margin:18px 0 0;font-family:${display};font-size:32px;line-height:1.15;font-weight:700;color:#fafafa;letter-spacing:-0.5px;">Security Report</h1>
           <p style="margin:12px auto 0;max-width:460px;font-size:15px;line-height:1.65;color:#a1a1aa;">${escapeHtml(summaryText)}</p>
+          ${opts.changesLine ? `<p style="margin:10px auto 0;max-width:460px;font-size:13px;line-height:1.5;color:#22c55e;">${escapeHtml(opts.changesLine)}</p>` : ""}
           ${dots ? `<div style="margin-top:14px;">${dots}</div>` : ""}
         </td></tr>
 

@@ -30,6 +30,15 @@ vi.mock("./appRouteRunner", () => ({
   reportForScan: async (_userId: string, id: string) => state.reports[id] ?? null,
 }));
 
+// The comparison with the previous scan is tested in scanDiff*.test.ts; here it is a stand-in.
+const changesState: { value: unknown; fail: boolean } = { value: null, fail: false };
+vi.mock("../lib/scanDiffLoader", () => ({
+  changesForReport: async () => {
+    if (changesState.fail) throw new Error("db down");
+    return changesState.value;
+  },
+}));
+
 vi.mock("@workspace/db", () => ({
   scansTable: {},
   db: { select: () => ({ from: () => ({ where: () => ({ orderBy: () => ({ limit: async () => [{ id: SCAN_ID, url: "https://a.example", status: "complete" }] }) }) }) }) },
@@ -139,6 +148,27 @@ describe("GET /v1/scans/:id", () => {
       coverage: { ran: 1, skipped: 1, failed: 0, total: 2 },
     });
     expect(body.links.report).toContain(`/scans/${SCAN_ID}/report`);
+  });
+
+  it("adds counts of what changed since the last scan, and the full lists on the report", async () => {
+    const f = (name: string) => ({ name, severity: "high", category: "c" });
+    changesState.value = { since: { scanId: "s0", scannedAt: "2026-09-20T00:00:00.000Z" }, unchanged: 4, added: [f("a")], firstSeen: [f("b")], fixed: [f("c"), f("d")], notRechecked: [f("e")], newlyRun: [], noLongerRun: [], differentAccess: false };
+    const status = await (await get(`/v1/scans/${SCAN_ID}`)).json();
+    expect(status.changes).toEqual({ since: { scanId: "s0", scannedAt: "2026-09-20T00:00:00.000Z" }, new: 2, fixed: 2, notRechecked: 1, unchanged: 4 });
+    const report = await (await get(`/v1/scans/${SCAN_ID}/report`)).json();
+    expect(report.changes.fixed).toHaveLength(2);
+    changesState.value = null;
+  });
+
+  it("leaves changes out for a first scan and when the comparison fails, and still answers", async () => {
+    changesState.value = null;
+    expect((await (await get(`/v1/scans/${SCAN_ID}`)).json()).changes).toBeUndefined();
+    changesState.fail = true;
+    const res = await get(`/v1/scans/${SCAN_ID}`);
+    expect(res.status).toBe(200);
+    expect((await res.json()).grade).toBe("B");
+    expect((await get(`/v1/scans/${SCAN_ID}/report`)).status).toBe(200);
+    changesState.fail = false;
   });
 
   it("returns only the status while a scan is running", async () => {

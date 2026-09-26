@@ -27,6 +27,8 @@ import { findingFingerprint, canonicalizeTargetUrl } from "./fingerprint";
 import { runRecon } from "./recon";
 import { activeProbesUnlocked } from "./activeProbeGate";
 import { createLiveProgress } from "./liveProgress";
+import { changesForReport } from "./scanDiffLoader";
+import { summariseChanges } from "./scanDiff";
 import { countTests, formatTestLine, formatTestSummary, newlyRunTests, NOT_VERIFIED, type TestRecord } from "./testLedger";
 import { warnIfLocalDataStale, OSV_CACHE_MAX_SIZE } from "./cveCheck";
 import { refreshEolData, loadEolCacheFromDb, EOL_REFRESH_QUEUE } from "./eolFetcher";
@@ -848,8 +850,13 @@ export async function processScanJob(job: ScanJob): Promise<void> {
         // lands on the report rather than a dead end.
         const reportUrl = `${appOrigin}/report/${report.id}`;
 
+        // What changed since the last scan of this site. Optional flavour for the email: a failure
+        // here must never stop the report being delivered.
+        const changes = await changesForReport(userId, { scanId, targetUrl: report.targetUrl, scannedAt: report.scannedAt, data: report.data }).catch(() => null);
+
         await sendReportReadyEmail({
           toEmail: scan.userEmail,
+          ...(changes && summariseChanges(changes) ? { changesLine: summariseChanges(changes) } : {}),
           targetUrl: scanResult.finalUrl || targetUrl,
           grade,
           riskScore,
