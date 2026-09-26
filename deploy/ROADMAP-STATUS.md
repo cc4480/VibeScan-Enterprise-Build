@@ -23,7 +23,7 @@ Status: **done**, **partial**, **todo**.
 | U13 | Fix prompts that know the platform | todo | |
 | U14 | Easy two-account testing | partial | Works; setup still manual |
 | U15 | Wider injection coverage | todo | Approved 2026-09-26; each class with a clean twin |
-| U16 | Reproduce steps for confirmable findings | todo | |
+| U16 | Reproduce steps for confirmable findings | done | curl replay only when evidence is a plain GET/HEAD/OPTIONS; nothing guessed |
 | U17 | Faster first result | partial | Live results done; median time not published |
 | U18 | Runtime-aware crawling for SPAs | todo | |
 | U19 | GraphQL and WebSocket depth | todo | |

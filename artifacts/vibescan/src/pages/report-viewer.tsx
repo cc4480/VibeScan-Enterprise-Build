@@ -26,6 +26,7 @@ import type { Vulnerability } from "@workspace/api-client-react";
 import { APP_ORIGIN } from "@/lib/origin";
 import { PdfReport } from "@/components/pdf-report";
 import { exportElementToPdf } from "@/lib/pdfExport";
+import { ReproSteps } from "@/components/repro-steps";
 import { owaspCoverage, CATEGORY_TO_OWASP, OWASP_CATEGORIES, type OwaspState } from "@/lib/owaspCoverage";
 import {
   ComplianceCard, CoverageCard, PrintCoverage, coverageMarkdown, SeverityLegend, SEVERITY_HEX,
@@ -1470,6 +1471,7 @@ function PrintVulnCard({ vuln, index }: { vuln: Vulnerability; index: number }) 
             <pre className="text-xs bg-gray-50 border border-gray-200 rounded p-2 whitespace-pre-wrap text-gray-600 font-mono">{vuln.evidence}</pre>
           </div>
         )}
+        <ReproSteps evidence={vuln.evidence} />
         <div>
           <p className="text-xs font-bold uppercase text-gray-400 mb-1 tracking-wider">How to Fix</p>
           <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-gray-800 whitespace-pre-wrap">{vuln.solution}</div>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { AlertTriangle, CheckCircle2, MinusCircle } from "lucide-react";
 import { cn, formatSeverity } from "@/lib/utils";
 import { categoryHex } from "@/lib/category-colors";
+import { ReproSteps } from "@/components/repro-steps";
 
 export interface SharedReportData {
   id: string;
@@ -213,6 +214,7 @@ export function VulnRow({
               </div>
             </div>
           )}
+          <ReproSteps evidence={vuln.evidence} dark />
 
           <div>
             <p className="text-xs font-bold text-primary uppercase tracking-wider mb-1.5">Recommended Fix</p>
