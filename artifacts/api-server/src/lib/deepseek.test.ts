@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { detectAgentEnvironment } from "./deepseek.js";
+import { detectAgentEnvironment, redactForLlm } from "./deepseek.js";
 
 describe("detectAgentEnvironment", () => {
   it("detects Lovable by tech prefix", () => {
@@ -177,5 +177,31 @@ describe("the AI analysis is grounded in the scan's own findings", () => {
   it("carries no unsourced statistics into the report", async () => {
     const { user } = await capturePrompt();
     expect(user).not.toMatch(/91\.5%/);
+  });
+});
+
+describe("nothing shaped like a credential is sent to the language model", () => {
+  const cases: Array<[string, string]> = [
+    ["a JWT", "token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijk1234"],
+    ["a Stripe live key", "found sk_live_51H8abcdefghijkl in main.js"],
+    ["an OpenAI-style key", "OPENAI=sk-proj-abcdefghijklmnop1234"],
+    ["an AWS access key", "AKIAIOSFODNN7EXAMPLE"],
+    ["a GitHub token", "ghp_abcdefghijklmnopqrstuvwx1234"],
+    ["a Google API key", "AIzaSyA-abcdefghijklmnopqrstuvwxyz12345"],
+    ["a database password in a URL", "postgres://admin:hunter2secret@db.example.com/app"],
+    ["a bearer token", "Authorization: Bearer abcdef1234567890xyz"],
+    ["a password assignment", 'password: "correcthorse9"'],
+    ["a long opaque value", "value=" + "a1B2c3D4".repeat(6)],
+  ];
+  for (const [name, input] of cases) {
+    it("redacts " + name, () => {
+      const out = redactForLlm(input);
+      expect(out).toContain("<redacted");
+      expect(out).not.toMatch(/hunter2secret|correcthorse9|AKIAIOSFODNN7EXAMPLE|sk_live_51H8|ghp_abc|abcdef1234567890xyz/);
+    });
+  }
+  it("leaves ordinary evidence alone", () => {
+    const plain = "GET https://example.com/ -> 200; Header X-Frame-Options missing";
+    expect(redactForLlm(plain)).toBe(plain);
   });
 });
