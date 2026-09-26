@@ -108,6 +108,7 @@ import { collectApiSurface, runApiProbes } from "./apiProbe";
 import { runSsrfProbes } from "./ssrfProbe";
 import type { ApiEndpoint } from "./apiSurface";
 import { isSpa, renderPage } from "./browser";
+import type { ObservedRequest } from "./apiRuntime";
 import { SCANNER_USER_AGENT } from "./appOrigin";
 
 export interface ScanVulnerability {
@@ -557,12 +558,14 @@ async function runScanInner(
   // via headless browser so content analysis operates on the fully-rendered DOM.
   // HTTP security headers stay from the raw fetch above — they're identical.
   let renderedWithBrowser = false;
+  let observedRequests: ObservedRequest[] = [];
   if (isSpa(html)) {
     const rendered = await renderPage(finalUrl).catch(() => null);
     if (rendered) {
       html = rendered.html;
       finalUrl = rendered.finalUrl || finalUrl;
       renderedWithBrowser = true;
+      observedRequests = rendered.observed;
     }
   }
 
@@ -1215,7 +1218,7 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
   if (allowActiveProbes) {
     const origin = new URL(finalUrl).origin;
     const discoveryStarted = Date.now();
-    const endpoints = await collectApiSurface(origin, html)
+    const endpoints = await collectApiSurface(origin, html, observedRequests)
       .then((found) => {
         ledger.records.push({
           group: "active", name: `API surface discovery (${found.length} endpoints)`, status: "ran",

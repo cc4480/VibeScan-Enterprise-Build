@@ -17,6 +17,7 @@
 import { logger } from "./logger";
 import { CHROMIUM_ARGS } from "./browserArgs";
 import { getScanHttpContext } from "./http";
+import { jsonBodyKeys, type ObservedRequest } from "./apiRuntime";
 
 // ── Chromium executable resolution ──────────────────────────────────────────
 //
@@ -139,6 +140,8 @@ export interface RenderedPage {
   status: number;
   /** Final URL after all redirects */
   finalUrl: string;
+  /** The fetch/XHR requests the page made while rendering (shape only, see apiRuntime.ts) */
+  observed: ObservedRequest[];
 }
 
 const NAVIGATION_TIMEOUT_MS = 25_000;
@@ -248,6 +251,17 @@ export async function renderPage(url: string): Promise<RenderedPage | null> {
     let responseStatus = 200;
     let responseUrl = url;
 
+    // The page's own API calls, as the browser makes them. Method, URL and body key names
+    // only; capped so a chatty page cannot grow this without bound.
+    const observed: ObservedRequest[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    page.on("request", (req: any) => {
+      const type = req.resourceType();
+      if ((type === "fetch" || type === "xhr") && observed.length < 200) {
+        observed.push({ method: req.method(), url: req.url(), bodyKeys: jsonBodyKeys(req.postData()) });
+      }
+    });
+
     // Capture HTTP response headers from the main document only
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     page.on("response", (resp: any) => {
@@ -304,6 +318,7 @@ export async function renderPage(url: string): Promise<RenderedPage | null> {
       setCookies,
       status: responseStatus,
       finalUrl: effectiveFinalUrl,
+      observed,
     };
   } catch (err) {
     logger.warn({ err, url }, "Browser render failed — caller will fall back to fetch");

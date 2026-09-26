@@ -33,6 +33,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { SENSITIVE_PATHS } from "./sensitive-paths.js";
 import { mountInjectionExtras, INJECTION_EXTRA_LINKS } from "./injection-extra-routes.js";
+import { mountRuntimeApi } from "./runtime-api-routes.js";
 import { AI_WIDGET_JS, AI_CHAT_CLEAN_JS } from "./ai-assets.js";
 import {
   SECRETS_JS,
@@ -265,6 +266,7 @@ app.get("/", (req, res) => {
 <span data-token="${JWT_EXCESSIVE_LIFETIME}"></span>
 <span data-token="${JWT_SENSITIVE_PAYLOAD}"></span>
 <script src="/assets/app.js"></script>
+<script src="/assets/boot.js"></script>
 <script src="/assets/ai-widget.js"></script>
 <script src="/assets/ai-chat.js"></script>
 <script src="https://cdn.example.net/analytics.js"></script>
@@ -341,6 +343,7 @@ function searchHandler(req: Request, res: Response) {
   res.type("text/html").send(`<html><body><h1>Results for: ${q}</h1><p>No records found.</p></body></html>`);
 }
 mountInjectionExtras(app);
+mountRuntimeApi(app);
 app.get("/search", searchHandler);
 app.post("/api/search", searchHandler);
 

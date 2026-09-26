@@ -40,6 +40,7 @@ import {
   mergeEndpoints,
   type ApiEndpoint,
 } from "./apiSurface";
+import { endpointsFromRuntime, type ObservedRequest } from "./apiRuntime";
 import { collectJavaScript } from "./jsScanner";
 
 const TIMEOUT_MS = 8_000;
@@ -618,6 +619,7 @@ const SPEC_PATHS = [
 export async function collectApiSurface(
   origin: string,
   html: string,
+  observed: ObservedRequest[] = [],
 ): Promise<ApiEndpoint[]> {
   const [specEndpoints, bundleEndpoints] = await Promise.all([
     (async () => {
@@ -639,5 +641,6 @@ export async function collectApiSurface(
     })().catch(() => [] as ApiEndpoint[]),
   ]);
 
-  return mergeEndpoints(bundleEndpoints, specEndpoints);
+  // Runtime last: a bundle or spec entry for the same endpoint carries better parameters.
+  return mergeEndpoints(bundleEndpoints, specEndpoints, endpointsFromRuntime(observed, origin));
 }

@@ -21,6 +21,7 @@ process.env["DATABASE_URL"] ??= "postgres://localhost/verify-vuln-fixture";
 
 import { runScan } from "../src/lib/scanner.js";
 import { isOobConfigured } from "../src/lib/oobServer.js";
+import { initBrowser, closeBrowser } from "../src/lib/browser.js";
 
 const TARGET = process.argv.slice(2).find((a) => !a.startsWith("--")) ?? "http://127.0.0.1:4100";
 
@@ -182,7 +183,10 @@ async function main(): Promise<void> {
   const secondary = { cookie: "session=bob-session-token" };
 
   console.log(`[verify] scanning ${TARGET} (active + credentialed, two accounts)`);
+  await initBrowser();
   const result = await runScan(TARGET, "deep", true, { credentials: primary, secondary }, null);
+
+  await closeBrowser();
 
   const names = result.vulnerabilities.map((v) => v.name);
   console.log(`\nFindings returned: ${result.vulnerabilities.length}\n`);
@@ -218,6 +222,10 @@ async function main(): Promise<void> {
 
   // Clean twins: safe routes doing the same job as vulnerable ones. Any finding whose
   // text names one of them is a false positive, and fails the run like a missed check.
+  // Found only by watching the rendered page make its own requests (apiRuntime.ts).
+  const runtimeFound = result.vulnerabilities.some((v) => `${v.evidence ?? ""} ${v.description}`.includes("/api/runtime/lookup"));
+  console.log(`  [${runtimeFound ? "FOUND " : "MISSED"}] apiRuntime.ts            API discovered only at runtime`);
+
   const CLEAN_TWINS = ["/hello?", "/lang2?", "echoq", "/assets/ai-chat.js"];
   const falseAlarms = result.vulnerabilities.filter((v) => CLEAN_TWINS.some((t) => `${v.evidence ?? ""} ${v.description}`.includes(t)));
   if (falseAlarms.length) {
@@ -232,9 +240,12 @@ async function main(): Promise<void> {
     }
   }
 
+  if (!runtimeFound) {
+    console.log("\nThe API that only a running browser can find was not tested. Is Chromium installed (npx playwright install chromium)?");
+    process.exit(1);
+  }
   if (falseAlarms.length > 0) {
-    console.log(`
-${falseAlarms.length} finding(s) named a clean twin: a false positive.`);
+    console.log(`\n${falseAlarms.length} finding(s) named a clean twin: a false positive.`);
     process.exit(1);
   }
   if (missed.length > 0) {

@@ -25,7 +25,7 @@ Status: **done**, **partial**, **todo**.
 | U15 | Wider injection coverage | done | server-side template injection and CRLF header injection, each with clean twins; also fixed reflected XSS counting JSON/plain-text echoes. Not added: command/NoSQL/XXE injection (no confirmation that is stable enough to trust) |
 | U16 | Reproduce steps for confirmable findings | done | curl replay only when evidence is a plain GET/HEAD/OPTIONS; nothing guessed |
 | U17 | Faster first result | partial | Live results done; median time not published |
-| U18 | Runtime-aware crawling for SPAs | todo | |
+| U18 | Runtime-aware crawling for SPAs | partial | the rendered page's own fetch/XHR calls now feed API testing (apiRuntime.ts), verified with real Chromium on a fixture API no bundle string names. Not done: rendering each inner route in the browser; inner routes are still fetched raw |
 | U19 | GraphQL and WebSocket depth | todo | |
 | U20 | Evidence packs, trust page, white-label | todo | |
 | U21 | Teams | todo | |

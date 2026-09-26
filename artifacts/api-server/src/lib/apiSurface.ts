@@ -33,7 +33,7 @@ export interface ApiEndpoint {
   url: string;
   method: string;
   params: ApiParam[];
-  source: "spec" | "bundle";
+  source: "spec" | "bundle" | "runtime";
 }
 
 const HTTP_METHODS = ["get", "post", "put", "patch", "delete", "head", "options"];
