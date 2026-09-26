@@ -93,3 +93,18 @@ describe("catalogFor", () => {
     expect(catalogFor("API surface discovery (9 endpoints)")).toBeNull();
   });
 });
+
+describe("every category the catalog uses has a colour", () => {
+  // The palette lives in the web app; reading its source keeps the two from drifting apart.
+  const palette = readFileSync(join(LIB, "../../../vibescan/src/lib/category-colors.ts"), "utf8");
+
+  it("finds each test's and check's category in the palette", () => {
+    const used = new Set<string>();
+    for (const t of CATALOG) {
+      used.add(t.category);
+      for (const c of t.checks) if (c.category) used.add(c.category);
+    }
+    const missing = [...used].filter((c) => !palette.includes(`"${c}":`));
+    expect(missing).toEqual([]);
+  });
+});

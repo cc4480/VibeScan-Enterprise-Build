@@ -13,6 +13,8 @@ import {
   ArrowUpDown, HelpCircle, Download, Copy, Check, Bell, ChevronDown, Search, Minus, Flag, RotateCcw,
 } from "lucide-react";
 import { cn, formatSeverity, getSeverityColors, getGradeColor } from "@/lib/utils";
+import { GradeRing } from "@/components/grade-ring";
+import { categoryHex } from "@/lib/category-colors";
 import { getAuthHeaders } from "@/lib/auth-token";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useMemo, useCallback, useEffect, createContext, useContext, useRef } from "react";
@@ -129,6 +131,20 @@ const CATEGORY_META: Record<string, CategoryMeta> = {
   "Outdated Software / Known CVE":   { label: "Outdated Software / CVE",        icon: <GitBranch className="w-4 h-4" />,     color: "text-red-400" },
   "Outdated Software":               { label: "Outdated Software",              icon: <GitBranch className="w-4 h-4" />,     color: "text-red-400" },
   "Network Exposure":                { label: "Network Exposure",               icon: <Network className="w-4 h-4" />,       color: "text-red-400" },
+  "Broken Access Control":           { label: "Broken Access Control",          icon: <ShieldAlert className="w-4 h-4" />,   color: "" },
+  "API Security":                    { label: "API Security",                   icon: <Network className="w-4 h-4" />,       color: "" },
+  "Database Security":               { label: "Database Security",              icon: <Database className="w-4 h-4" />,      color: "" },
+  "Cloud Storage Misconfiguration":  { label: "Cloud Storage",                  icon: <Package className="w-4 h-4" />,       color: "" },
+  "BaaS Misconfiguration":           { label: "BaaS Misconfiguration",          icon: <Database className="w-4 h-4" />,      color: "" },
+  "Injection":                       { label: "Injection",                      icon: <Code2 className="w-4 h-4" />,         color: "" },
+  "Insecure Deserialization":        { label: "Insecure Deserialization",       icon: <Code2 className="w-4 h-4" />,         color: "" },
+  "Server-Side Request Forgery":     { label: "Server-Side Request Forgery",    icon: <Network className="w-4 h-4" />,       color: "" },
+  "Vulnerable Components":           { label: "Vulnerable Components",          icon: <Package className="w-4 h-4" />,       color: "" },
+  "Mail Transport Security":         { label: "Mail Transport Security",        icon: <Mail className="w-4 h-4" />,          color: "" },
+  "Security Misconfiguration":        { label: "Security Misconfiguration",      icon: <Settings className="w-4 h-4" />,      color: "" },
+  "Technology Fingerprint":          { label: "Technology Fingerprint",         icon: <Eye className="w-4 h-4" />,           color: "" },
+  "Structured Data":                 { label: "Structured Data",                icon: <Info className="w-4 h-4" />,          color: "" },
+  "Secret Exposed in Page HTML":     { label: "Secret in Page HTML",            icon: <EyeOff className="w-4 h-4" />,        color: "" },
 };
 
 // Maps a WSTG ID like "WSTG-CONF-07" to its OWASP Testing Guide URL path fragment
@@ -158,10 +174,13 @@ function wstgCategoryPath(id: string): string {
 }
 
 function getCategoryMeta(category: string): CategoryMeta {
-  return CATEGORY_META[category] ?? {
-    label: category,
-    icon: <Globe className="w-4 h-4" />,
-    color: "text-muted-foreground",
+  const known = CATEGORY_META[category];
+  // The colour always comes from the shared palette (lib/category-colors.ts) so the
+  // report and the scan terminal agree, and every category has one.
+  return {
+    label: known?.label ?? category,
+    icon: known?.icon ?? <Globe className="w-4 h-4" />,
+    color: categoryHex(category),
   };
 }
 
@@ -211,43 +230,6 @@ function parseTechVersion(tech: string): { name: string; version: string | null 
 const SEVERITY_ORDER: Record<string, number> = {
   critical: 0, high: 1, medium: 2, low: 3, info: 4,
 };
-
-// ─── Grade ring ───────────────────────────────────────────────────────────────
-
-function GradeRing({ grade, score }: { grade: string; score: number }) {
-  const colorMap: Record<string, string> = {
-    A: "#4ade80", B: "#a3e635", C: "#facc15", D: "#fb923c", F: "#f87171",
-  };
-  // "N/A" from a bot-intercepted scan: its risk score is 0 only because the
-  // findings that deduct were withheld, so grade and "Risk: 0" would both read
-  // as a perfect result. Show the incomplete state instead.
-  const graded = grade in colorMap;
-  const color = graded ? colorMap[grade] : "#94a3b8";
-
-  return (
-    <div className="relative w-48 h-48 flex items-center justify-center">
-      <svg className="w-full h-full transform -rotate-90 absolute inset-0">
-        <circle cx="96" cy="96" r="88" fill="none" stroke="currentColor" strokeWidth="8" className="text-secondary" />
-        <circle
-          cx="96" cy="96" r="88" fill="none" stroke={color} strokeWidth="8"
-          strokeDasharray={`${2 * Math.PI * 88}`}
-          strokeDashoffset={`${2 * Math.PI * 88 * (1 - (graded ? score / 100 : 1))}`}
-          strokeLinecap="round"
-          className="transition-all duration-1000 ease-out"
-        />
-      </svg>
-      <div className="flex flex-col items-center justify-center bg-background w-36 h-36 rounded-full border-4 border-card shadow-2xl z-10 relative">
-        <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent rounded-full" />
-        <span className={cn("text-6xl font-black font-display leading-none", graded ? getGradeColor(grade) : "text-muted-foreground")}>
-          {graded ? grade : "—"}
-        </span>
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-widest mt-1">
-          {graded ? `Risk: ${score}` : "Coverage incomplete"}
-        </span>
-      </div>
-    </div>
-  );
-}
 
 // ─── Category breakdown bar chart ─────────────────────────────────────────────
 
@@ -459,6 +441,7 @@ function VulnCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(0.05 * index, 0.4) }}
       className="glass-card rounded-xl overflow-hidden border border-white/5"
+      style={{ borderLeft: `3px solid ${meta.color}` }}
     >
       <button
         onClick={() => setExpanded(!expanded)}
@@ -484,7 +467,7 @@ function VulnCard({
             )}
           </div>
         </div>
-        <div className={cn("hidden md:flex items-center gap-1.5 text-xs font-medium shrink-0 ml-4", meta.color)}>
+        <div className="hidden md:flex items-center gap-1.5 text-xs font-medium shrink-0 ml-4" style={{ color: meta.color }}>
           {meta.icon}
           <span className="whitespace-nowrap">{meta.label}</span>
         </div>
@@ -1175,14 +1158,14 @@ function CategorySection({
   }, null);
 
   return (
-    <div className="rounded-xl overflow-hidden border border-white/5 bg-secondary/10">
+    <div className="rounded-xl overflow-hidden border border-white/5 bg-secondary/10" style={{ borderLeft: `3px solid ${meta.color}` }}>
       <button
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         aria-label={`${meta.label} — ${vulns.length} finding${vulns.length !== 1 ? "s" : ""}, ${open ? "collapse" : "expand"}`}
         className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-white/[0.03] transition-colors text-left"
       >
-        <span className={meta.color}>{meta.icon}</span>
+        <span style={{ color: meta.color }}>{meta.icon}</span>
         <span className="font-bold text-sm text-foreground flex-1">{meta.label}</span>
         {highestSeverity && (
           <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border shrink-0", getSeverityColors(highestSeverity))}>
@@ -1228,7 +1211,7 @@ function CategoryPill({
           : "bg-secondary/50 border-white/5 text-muted-foreground hover:border-white/15 hover:text-foreground",
       )}
     >
-      <span className={cn(active ? "text-primary" : meta.color)}>{meta.icon}</span>
+      <span className={active ? "text-primary" : undefined} style={active ? undefined : { color: meta.color }}>{meta.icon}</span>
       <span>{meta.label}</span>
       <span className={cn(
         "ml-1 rounded-full px-1.5 py-0.5 font-bold",
@@ -2500,7 +2483,7 @@ export default function ReportViewer() {
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[120px] pointer-events-none" />
 
         <div className="z-10 shrink-0">
-          <GradeRing grade={summary.grade} score={summary.riskScore} />
+          <GradeRing grade={summary.grade} score={summary.riskScore} size="lg" />
         </div>
 
         <div className="flex-1 text-center md:text-left z-10">
@@ -2811,7 +2794,7 @@ export default function ReportViewer() {
                       )}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <span className={meta.color}>{meta.icon}</span>
+                        <span style={{ color: meta.color }}>{meta.icon}</span>
                         <span className={cn("truncate text-xs", isActive ? "text-foreground font-medium" : "text-muted-foreground")}>
                           {meta.label}
                         </span>
