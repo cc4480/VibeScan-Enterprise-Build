@@ -11,6 +11,7 @@ import {
   type ScanCredentialsValue,
   type SecondAccountValue,
 } from "@/components/scan-credentials-fields";
+import { secondCredentialsPayload } from "@/components/second-account";
 import { Shield, Zap, Globe, Lock, CheckCircle2, Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -289,14 +290,7 @@ export default function ScanFormPage() {
     // A second account only travels with a first one — the server rejects it
     // alone, and access control is a comparison between two identities.
     const secondCreds =
-      creds && secondAccountReady(secondAccount)
-        ? {
-            mode: "session" as const,
-            authorized: true,
-            cookie: secondAccount.cookie.trim() || null,
-            bearerToken: secondAccount.bearerToken.trim() || null,
-          }
-        : undefined;
+      creds && secondAccountReady(secondAccount, credentials) ? secondCredentialsPayload(secondAccount, credentials) : undefined;
 
     createScan.mutate(
       {

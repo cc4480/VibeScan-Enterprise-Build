@@ -21,7 +21,7 @@ Status: **done**, **partial**, **todo**.
 | U11 | Checks for AI features inside the app | done | passive only: provider called from browser, system prompt in bundle (aiFeatureProbe.ts, first-party JS only). No prompt-injection probing on purpose: model replies are not a stable signal |
 | U12 | One defect, one finding | needs decision | merging conflicts with per-finding fixture/benchmark and changes grades |
 | U13 | Fix prompts that know the platform | done | added hosted builders, Firebase, Vercel, Netlify to the existing five; prompts are model-written, so wording is steered not guaranteed |
-| U14 | Easy two-account testing | partial | Works; setup still manual |
+| U14 | Easy two-account testing | done | second account can now sign in with a username and password (reusing the first account's sign-in page) instead of only pasted sessions; UI and payload tested, the browser sign-in itself is the same code path as the first account and was not re-run end to end |
 | U15 | Wider injection coverage | done | server-side template injection and CRLF header injection, each with clean twins; also fixed reflected XSS counting JSON/plain-text echoes. Not added: command/NoSQL/XXE injection (no confirmation that is stable enough to trust) |
 | U16 | Reproduce steps for confirmable findings | done | curl replay only when evidence is a plain GET/HEAD/OPTIONS; nothing guessed |
 | U17 | Faster first result | partial | Live results done; median time not published |
