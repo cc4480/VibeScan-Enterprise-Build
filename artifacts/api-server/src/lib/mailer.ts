@@ -1232,7 +1232,7 @@ export async function sendPaymentsLiveEmail(toEmail: string): Promise<"sent" | "
   const heading = "You can keep scanning now";
   const body =
     "You asked us to tell you when you could buy more scans on SecScan. You can now.<br><br>" +
-    "<strong>SecScan Starter</strong> — $19 a month: 1 site watched around the clock, " +
+    "<strong>SecScan Starter</strong> — $19 a month: up to 3 sites watched around the clock, " +
     "plus 20 on-demand full scans every month.<br>" +
     "<strong>SecScan Pro</strong> — $49 a month: up to 5 sites watched around the clock, " +
     "plus 100 on-demand full scans every month. Cancel either any time.<br>" +

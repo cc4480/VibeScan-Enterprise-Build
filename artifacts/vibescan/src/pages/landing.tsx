@@ -399,9 +399,9 @@ export default function LandingPage() {
             {
               icon: Bell,
               title: "Monitoring — from $19/month",
-              desc: "Starter: 1 site and 20 scans a month. Pro ($49): 5 sites and 100 scans a month.",
+              desc: "Starter: 3 sites and 20 scans a month. Pro ($49): 5 sites and 100 scans a month.",
               features: [
-                "1 site (Starter) or 5 sites (Pro) watched around the clock",
+                "3 sites (Starter) or 5 sites (Pro) watched around the clock",
                 "20 or 100 on-demand full scans every month",
                 "Hourly uptime, header and certificate checks",
                 "Hourly CVE matching, ranked by EPSS",
@@ -483,7 +483,7 @@ function StaticPricing() {
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {[
-          { label: "SecScan Starter", price: "$19", per: "per month · 1 site watched · 20 scans", note: null },
+          { label: "SecScan Starter", price: "$19", per: "per month · 3 sites watched · 20 scans", note: null },
           { label: "SecScan Pro", price: "$49", per: "per month · 5 sites watched · 100 scans", note: null, popular: true },
           { label: "10 Scan Credits", price: "$12", per: "$1.20 / scan", note: null },
           { label: "50 Scan Credits", price: "$49", per: "$0.98 / scan", note: "18% off" },

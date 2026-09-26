@@ -232,7 +232,7 @@ function Terms() {
       <Section title="Subscriptions">
         <p>
           SecScan Starter and SecScan Pro are billed monthly in advance and renew automatically
-          each month until you cancel. Starter includes continuous monitoring for 1 site and 20
+          each month until you cancel. Starter includes continuous monitoring for up to 3 sites and 20
           full scans per billing month; Pro includes up to 5 sites and 100 full scans per billing
           month. Included scans reset at each renewal and do not carry over; while you
           have included scans left, they are used before any scan credits.

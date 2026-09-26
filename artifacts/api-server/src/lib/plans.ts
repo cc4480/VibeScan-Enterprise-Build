@@ -6,7 +6,7 @@
  * scans). The single $50 plan it replaced gave 3 sites and 5 scans, several times
  * the market's price per scan.
  *
- *   Starter  $19/month  1 site watched   20 scans a month
+ *   Starter  $19/month  3 sites watched  20 scans a month
  *   Pro      $49/month  5 sites watched  100 scans a month
  *
  * Kept beside the credit pricing in stripe.ts rather than inside it, because a
@@ -39,9 +39,9 @@ export const MONITOR_PLANS: Record<PlanKey, MonitorPlan> = {
     key: "starter",
     name: "SecScan Starter",
     amountCents: 1900,
-    urlLimit: 1,
+    urlLimit: 3,
     includedScans: 20,
-    description: "1 site watched around the clock, plus 20 full scans every month",
+    description: "Up to 3 sites watched around the clock, plus 20 full scans every month",
   },
   pro: {
     key: "pro",

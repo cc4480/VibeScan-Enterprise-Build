@@ -4,7 +4,7 @@ What is sold (decided 2026-09-24; replaces the 2026-09-22 single $50 plan):
 
 | Product | Price | What it gives |
 |---|---|---|
-| **SecScan Starter** | $19 / month | Monitoring for 1 site + 20 full scans every month (no rollover) |
+| **SecScan Starter** | $19 / month | Monitoring for 3 sites + 20 full scans every month (no rollover) |
 | **SecScan Pro** | $49 / month | Monitoring for up to 5 sites + 100 full scans every month (no rollover) |
 | 10-scan pack | $12 | Ten scans, never expire |
 | 50-scan pack | $49 | Fifty scans, never expire |
@@ -114,7 +114,7 @@ Card `4242 4242 4242 4242`, any future date, any CVC.
    While payments are off, `/ai-editors` says "Buying more scans isn't open yet"
    (troubleshooting table, "You've used this month's 3 free scans") and the app shows
    "Paid scans are coming soon". Once checkout is live, change both to point at
-   the pricing. `/monitoring` already advertises Starter ($19/month, 1 site, 20
+   the pricing. `/monitoring` already advertises Starter ($19/month, 3 sites, 20
    scans) and Pro ($49/month, 5 sites, 100 scans); that page is only true once
    step 6 has passed.
 

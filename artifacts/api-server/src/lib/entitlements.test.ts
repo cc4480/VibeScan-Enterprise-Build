@@ -106,9 +106,9 @@ describe("MONITOR_PLANS", () => {
   // The plans decided 2026-09-24. These numbers are what the pricing page
   // promises, so a change here is a change to what customers are sold — it
   // should fail a test and be made on purpose.
-  it("sells two plans: Starter $19 (1 site, 20 scans) and Pro $49 (5 sites, 100 scans)", () => {
+  it("sells two plans: Starter $19 (3 sites, 20 scans) and Pro $49 (5 sites, 100 scans)", () => {
     expect(SOLD_PLANS.map((p) => p.key)).toEqual(["starter", "pro"]);
-    expect(MONITOR_PLANS.starter).toMatchObject({ amountCents: 1900, urlLimit: 1, includedScans: 20 });
+    expect(MONITOR_PLANS.starter).toMatchObject({ amountCents: 1900, urlLimit: 3, includedScans: 20 });
     expect(MONITOR_PLANS.pro).toMatchObject({ amountCents: 4900, urlLimit: 5, includedScans: 100 });
     // A subscription started before there were two plans carried no plan key; it was Pro.
     expect(DEFAULT_PLAN.key).toBe("pro");
@@ -131,7 +131,7 @@ describe("MONITOR_PLANS", () => {
   });
 
   it("resolves limits for the sold plans, and nothing else", () => {
-    expect(urlLimitForPlan("starter")).toBe(1);
+    expect(urlLimitForPlan("starter")).toBe(3);
     expect(includedScansForPlan("starter")).toBe(20);
     expect(urlLimitForPlan("pro")).toBe(5);
     expect(includedScansForPlan("pro")).toBe(100);
