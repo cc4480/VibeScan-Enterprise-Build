@@ -139,6 +139,8 @@ const EXPECTED: Array<{ module: string; label: string; match: RegExp }> = [
 
   // ── injectionProbe.ts (needs --active) ──────────────────────────────────
   { module: "injectionProbe.ts", label: "Reflected XSS", match: /Reflected Cross-Site Scripting/i },
+  { module: "injectionExtra.ts", label: "Server-side template injection", match: /Server-Side Template Injection/i },
+  { module: "injectionExtra.ts", label: "HTTP header injection (CRLF)", match: /HTTP Header Injection/i },
   { module: "injectionProbe.ts", label: "SQL injection (error-based)", match: /SQL Injection \(Error-Based\)/i },
 
   // ── pathTraversal.ts (needs --active) ───────────────────────────────────
@@ -214,6 +216,15 @@ async function main(): Promise<void> {
     for (const e of missed) console.log(`  [MISSED] ${e.module.padEnd(24)} ${e.label}`);
   }
 
+  // Clean twins: safe routes doing the same job as vulnerable ones. Any finding whose
+  // text names one of them is a false positive, and fails the run like a missed check.
+  const CLEAN_TWINS = ["/hello?", "/lang2?", "echoq", "/assets/ai-chat.js"];
+  const falseAlarms = result.vulnerabilities.filter((v) => CLEAN_TWINS.some((t) => `${v.evidence ?? ""} ${v.description}`.includes(t)));
+  if (falseAlarms.length) {
+    console.log("");
+    for (const v of falseAlarms) console.log(`  [FALSE ALARM] ${v.name}: names a clean twin`);
+  }
+
   if (process.argv.includes("--list")) {
     console.log("\nEvery finding returned:");
     for (const v of result.vulnerabilities.sort((a, b) => a.severity.localeCompare(b.severity))) {
@@ -221,6 +232,11 @@ async function main(): Promise<void> {
     }
   }
 
+  if (falseAlarms.length > 0) {
+    console.log(`
+${falseAlarms.length} finding(s) named a clean twin: a false positive.`);
+    process.exit(1);
+  }
   if (missed.length > 0) {
     console.log(`\n${missed.length} planted finding(s) not detected. See README.md before assuming the fixture is wrong.`);
     process.exit(1);

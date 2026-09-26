@@ -24,6 +24,7 @@ import { randomUUID, randomBytes } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 import { SCANNER_USER_AGENT } from "./appOrigin";
 import { isDestructiveUrl } from "./destructive";
+import { runExtraInjectionProbes } from "./injectionExtra";
 
 const TIMEOUT_MS = 7_000;
 const MAX_CASES = 20;
@@ -65,6 +66,7 @@ export const SQL_ERROR_SIGNATURES: RegExp[] = [
 interface Probed {
   status: number;
   body: string;
+  contentType: string;
 }
 
 async function safeGet(url: string): Promise<Probed | null> {
@@ -77,12 +79,23 @@ async function safeGet(url: string): Promise<Probed | null> {
       headers: { "User-Agent": SCANNER_USER_AGENT },
     });
     const body = await res.text().catch(() => "");
-    return { status: res.status, body };
+    return { status: res.status, body, contentType: res.headers.get("content-type") ?? "" };
   } catch {
     return null;
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * A reflected "<token>" is only cross-site scripting if a browser will parse the response as
+ * HTML. The same bytes in application/json, text/plain or an image are inert, and an API that
+ * echoes a query back as JSON is not vulnerable. A response with no Content-Type is treated as
+ * HTML, which is what a browser would sniff it as.
+ */
+export function rendersAsHtml(contentType: string): boolean {
+  const ct = contentType.toLowerCase();
+  return ct === "" || ct.includes("text/html") || ct.includes("application/xhtml");
 }
 
 interface Case { path: string; param: string }
@@ -168,7 +181,7 @@ export async function runInjectionProbes(
     const xssUrl = new URL(`${origin}${path}`);
     xssUrl.searchParams.set(param, xssPayload);
     const xssRes = await safeGet(xssUrl.toString());
-    if (xssRes && xssRes.body.includes(`<${token}>`)) {
+    if (xssRes && xssRes.body.includes(`<${token}>`) && rendersAsHtml(xssRes.contentType)) {
       if (!xssParams.includes(param)) xssParams.push(param);
     }
 
@@ -193,7 +206,7 @@ export async function runInjectionProbes(
     }
   }
 
-  const findings: ScanVulnerability[] = [];
+  const findings: ScanVulnerability[] = await runExtraInjectionProbes(origin, cases);
 
   if (xssParams.length > 0) {
     const list = xssParams.join(", ");

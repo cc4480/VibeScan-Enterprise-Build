@@ -139,6 +139,16 @@ const CWE_CONTROLS: Record<string, ControlRef[]> = {
     { framework: "iso27001", control: "A.8.28", title: "Secure coding" },
     { framework: "soc2", control: "CC6.6", title: "Logical access — protection against external threats" },
   ],
+  "CWE-1336": [
+    { framework: "asvs", control: "V5.2.5", title: "Template injection prevented by sanitising or sandboxing user input" },
+    { framework: "pci", control: "6.2.4", title: "Software engineering techniques prevent injection attacks" },
+    { framework: "iso27001", control: "A.8.28", title: "Secure coding" },
+    { framework: "soc2", control: "CC6.6", title: "Logical access — protection against external threats" },
+  ],
+  "CWE-113": [
+    { framework: "pci", control: "6.2.4", title: "Software engineering techniques prevent injection attacks" },
+    { framework: "iso27001", control: "A.8.28", title: "Secure coding" },
+  ],
   "CWE-915": [
     { framework: "asvs", control: "V5.1.2", title: "Mass assignment / parameter binding controlled" },
     { framework: "iso27001", control: "A.8.28", title: "Secure coding" },

@@ -6,12 +6,12 @@ import { runInjectionProbes } from "./injectionProbe.js";
 afterEach(() => vi.unstubAllGlobals());
 
 /** Build a fetch mock that turns each request into a body via `render(value)`. */
-function mockFetch(render: (value: string, endsWithQuote: boolean) => string) {
+function mockFetch(render: (value: string, endsWithQuote: boolean) => string, contentType = "text/html; charset=utf-8") {
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL) => {
     const u = new URL(String(input));
     const value = [...u.searchParams.values()][0] ?? "";
     const body = render(value, value.endsWith("'"));
-    return { status: 200, text: async () => body } as unknown as Response;
+    return { status: 200, text: async () => body, headers: new Headers({ "content-type": contentType }) } as unknown as Response;
   }));
 }
 
@@ -34,6 +34,23 @@ describe("runInjectionProbes — reflected XSS", () => {
     mockFetch((value) => `<html><body>Results for: ${encode(value)}</body></html>`);
     const findings = await runInjectionProbes(`${TARGET}?q=test`, "");
     expect(findings.find((f) => f.name === "Reflected Cross-Site Scripting (XSS)")).toBeUndefined();
+  });
+});
+
+describe("runInjectionProbes — reflected XSS needs a response a browser renders as HTML", () => {
+  const reflect = (value: string) => `{"echo":"${value}"}`;
+  it("does NOT flag a JSON API that echoes the input back with the angle brackets intact", async () => {
+    mockFetch(reflect, "application/json");
+    const findings = await runInjectionProbes(`${TARGET}?q=test`, "");
+    expect(findings.find((f) => f.name === "Reflected Cross-Site Scripting (XSS)")).toBeUndefined();
+  });
+  it("does NOT flag plain text either", async () => {
+    mockFetch((v) => v, "text/plain");
+    expect((await runInjectionProbes(`${TARGET}?q=test`, "")).find((f) => f.name.includes("Cross-Site"))).toBeUndefined();
+  });
+  it("still flags the same echo when it is served as HTML", async () => {
+    mockFetch(reflect, "text/html");
+    expect((await runInjectionProbes(`${TARGET}?q=test`, "")).find((f) => f.name.includes("Cross-Site"))).toBeDefined();
   });
 });
 

@@ -22,7 +22,7 @@ Status: **done**, **partial**, **todo**.
 | U12 | One defect, one finding | needs decision | merging conflicts with per-finding fixture/benchmark and changes grades |
 | U13 | Fix prompts that know the platform | done | added hosted builders, Firebase, Vercel, Netlify to the existing five; prompts are model-written, so wording is steered not guaranteed |
 | U14 | Easy two-account testing | partial | Works; setup still manual |
-| U15 | Wider injection coverage | todo | Approved 2026-09-26; each class with a clean twin |
+| U15 | Wider injection coverage | done | server-side template injection and CRLF header injection, each with clean twins; also fixed reflected XSS counting JSON/plain-text echoes. Not added: command/NoSQL/XXE injection (no confirmation that is stable enough to trust) |
 | U16 | Reproduce steps for confirmable findings | done | curl replay only when evidence is a plain GET/HEAD/OPTIONS; nothing guessed |
 | U17 | Faster first result | partial | Live results done; median time not published |
 | U18 | Runtime-aware crawling for SPAs | todo | |

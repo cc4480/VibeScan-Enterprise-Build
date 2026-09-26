@@ -48,7 +48,7 @@ interface Topic {
 
 const TOPICS: Topic[] = [
   // ── NIST SP 800-53 Rev. 5 ─────────────────────────────────────────────────
-  { fw: "nist80053", control: "SI-10", title: "Information input validation", cwes: ["CWE-89", "CWE-79", "CWE-22", "CWE-918", "CWE-502", "CWE-915", "CWE-601"] },
+  { fw: "nist80053", control: "SI-10", title: "Information input validation", cwes: ["CWE-89", "CWE-79", "CWE-22", "CWE-918", "CWE-502", "CWE-915", "CWE-601", "CWE-1336", "CWE-113"] },
   { fw: "nist80053", control: "SI-16", title: "Memory protection", cwes: ["CWE-119"] },
   { fw: "nist80053", control: "SI-2", title: "Flaw remediation", cwes: ["CWE-1104", "CWE-1395"], categories: ["CVE / Known Vulnerability", "Outdated Software"] },
   { fw: "nist80053", control: "RA-5", title: "Vulnerability monitoring and scanning", cwes: ["CWE-1104", "CWE-1395"], categories: ["CVE / Known Vulnerability", "Outdated Software"] },

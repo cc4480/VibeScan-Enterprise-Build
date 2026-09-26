@@ -32,6 +32,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { SENSITIVE_PATHS } from "./sensitive-paths.js";
+import { mountInjectionExtras, INJECTION_EXTRA_LINKS } from "./injection-extra-routes.js";
 import { AI_WIDGET_JS, AI_CHAT_CLEAN_JS } from "./ai-assets.js";
 import {
   SECRETS_JS,
@@ -252,7 +253,7 @@ app.get("/", (req, res) => {
   <a href="/app/dashboard">Dashboard</a>
   <a href="/account/1001">My account</a>
   <a href="/uploads/">Uploads</a>
-  <a href="/search?q=test">Search</a>
+  <a href="/search?q=test">Search</a>${INJECTION_EXTRA_LINKS}
   <a href="/download?file=invoice-2026-01.pdf">Download invoice</a>
   <a href="/login">Sign in</a>
   <a href="/app/graphql">API explorer</a>
@@ -328,7 +329,10 @@ app.get("/download", (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 function searchHandler(req: Request, res: Response) {
   const q = String((req.method === "GET" ? req.query.q : req.body?.q) ?? "");
-  if (q.includes("'")) {
+  // Input carrying markup is reflected as HTML (the XSS). It is checked first because the
+  // XSS probe's payload also contains a quote, which would otherwise take the SQL-error
+  // branch below and come back as text/plain, where it is not exploitable.
+  if (!q.includes("<") && q.includes("'")) {
     // A believable SQLite error, matched by injectionProbe's SQL_ERROR_SIGNATURES.
     res.status(500).type("text/plain").send(`SQLITE_ERROR: near "'": syntax error while compiling: SELECT * FROM records WHERE name = '${q}'`);
     return;
@@ -336,6 +340,7 @@ function searchHandler(req: Request, res: Response) {
   // Reflected, unescaped — the XSS.
   res.type("text/html").send(`<html><body><h1>Results for: ${q}</h1><p>No records found.</p></body></html>`);
 }
+mountInjectionExtras(app);
 app.get("/search", searchHandler);
 app.post("/api/search", searchHandler);
 

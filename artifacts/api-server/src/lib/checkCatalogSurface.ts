@@ -77,6 +77,8 @@ export const CATALOG_SURFACE: CatalogTest[] = [
   ]),
   test("injection", "Injection", "injectionProbe.ts", [
     ["high", "Reflected Cross-Site Scripting (XSS)", "Reflected Cross-Site Scripting (XSS)"],
+    ["critical", "Server-Side Template Injection", "Server-Side Template Injection", "injectionExtra.ts"],
+    ["medium", "HTTP Header Injection (CRLF)", "HTTP Header Injection (CRLF)", "injectionExtra.ts"],
     ["critical", "SQL Injection (Error-Based)", "SQL Injection (Error-Based)"],
   ]),
   test("path traversal", "Injection", "pathTraversal.ts", [
