@@ -33,6 +33,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { SENSITIVE_PATHS } from "./sensitive-paths.js";
 import { mountInjectionExtras, INJECTION_EXTRA_LINKS } from "./injection-extra-routes.js";
+import { mountGraphqlExtras } from "./graphql-extra-routes.js";
 import { mountRuntimeApi } from "./runtime-api-routes.js";
 import { AI_WIDGET_JS, AI_CHAT_CLEAN_JS } from "./ai-assets.js";
 import {
@@ -344,6 +345,7 @@ function searchHandler(req: Request, res: Response) {
 }
 mountInjectionExtras(app);
 mountRuntimeApi(app);
+mountGraphqlExtras(app);
 app.get("/search", searchHandler);
 app.post("/api/search", searchHandler);
 
@@ -459,6 +461,11 @@ function graphqlIntrospectionResult() {
   };
 }
 app.post("/graphql", (req, res) => {
+  // Batching: an array of operations is run and answered as an array (graphqlExtra.ts).
+  if (Array.isArray(req.body)) {
+    res.json(req.body.map(() => ({ data: { __typename: "Query" } })));
+    return;
+  }
   const query = String(req.body?.query ?? "");
   if (/__schema/.test(query)) {
     res.json(graphqlIntrospectionResult());

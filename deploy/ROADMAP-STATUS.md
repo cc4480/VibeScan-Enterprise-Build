@@ -26,7 +26,7 @@ Status: **done**, **partial**, **todo**.
 | U16 | Reproduce steps for confirmable findings | done | curl replay only when evidence is a plain GET/HEAD/OPTIONS; nothing guessed |
 | U17 | Faster first result | partial | Live results done; median time not published |
 | U18 | Runtime-aware crawling for SPAs | partial | the rendered page's own fetch/XHR calls now feed API testing (apiRuntime.ts), verified with real Chromium on a fixture API no bundle string names. Not done: rendering each inner route in the browser; inner routes are still fetched raw |
-| U19 | GraphQL and WebSocket depth | todo | |
+| U19 | GraphQL and WebSocket depth | partial | GraphQL batching and exposed-IDE checks done with a clean twin. WebSocket not done: an open WebSocket handshake is legitimate on many public sites, so no finding would be trustworthy without credentials and a known-private socket |
 | U20 | Evidence packs, trust page, white-label | todo | |
 | U21 | Teams | todo | |
 | U22 | A REST API | **done** | /api/v1, api-scope tokens, OpenAPI at /api/v1/openapi.json |

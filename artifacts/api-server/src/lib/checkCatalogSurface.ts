@@ -74,6 +74,8 @@ export const CATALOG_SURFACE: CatalogTest[] = [
   test("GraphQL introspection", "API Security", "graphqlProbe.ts", [
     ["medium", "GraphQL Introspection Enabled in Production", "GraphQL Introspection Enabled in Production"],
     ["low", "GraphQL Field Suggestions Enabled", "GraphQL Field Suggestions Enabled"],
+    ["low", "GraphQL Query Batching Enabled", "GraphQL Query Batching Enabled", "graphqlExtra.ts"],
+    ["medium", "GraphQL IDE Exposed", "GraphQL IDE Exposed", "graphqlExtra.ts"],
   ]),
   test("injection", "Injection", "injectionProbe.ts", [
     ["high", "Reflected Cross-Site Scripting (XSS)", "Reflected Cross-Site Scripting (XSS)"],

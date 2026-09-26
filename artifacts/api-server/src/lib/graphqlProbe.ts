@@ -18,6 +18,7 @@
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 import { scanFetch } from "./http";
+import { probeBatching, probeIde } from "./graphqlExtra";
 
 const TIMEOUT_MS = 8_000;
 
@@ -250,6 +251,9 @@ async function checkEndpoint(url: string): Promise<ScanVulnerability[]> {
     }));
   }
 
+  const batching = await probeBatching(url).catch(() => null);
+  if (batching) findings.push(batching);
+
   return findings;
 }
 
@@ -270,9 +274,10 @@ export async function runGraphqlProbe(
   const pathUrls = GRAPHQL_SPECIFIC_PATHS.map((p) => origin + p);
   const candidates = [...new Set([...jsUrls, ...pathUrls])];
 
-  const settled = await Promise.allSettled(
-    candidates.map((url) => checkEndpoint(url).catch(() => [])),
-  );
+  const [settled, ide] = await Promise.all([
+    Promise.allSettled(candidates.map((url) => checkEndpoint(url).catch(() => []))),
+    probeIde(origin).catch(() => null),
+  ]);
 
   // Deduplicate — report each finding name only once even if on multiple paths
   const seen = new Set<string>();
@@ -287,5 +292,6 @@ export async function runGraphqlProbe(
     }
   }
 
+  if (ide) all.push(ide);
   return all;
 }

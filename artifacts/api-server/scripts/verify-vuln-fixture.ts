@@ -136,6 +136,8 @@ const EXPECTED: Array<{ module: string; label: string; match: RegExp }> = [
 
   // ── graphqlProbe.ts (needs --active) ────────────────────────────────────
   { module: "graphqlProbe.ts", label: "GraphQL introspection enabled", match: /GraphQL Introspection Enabled/i },
+  { module: "graphqlExtra.ts", label: "GraphQL query batching enabled", match: /GraphQL Query Batching Enabled/i },
+  { module: "graphqlExtra.ts", label: "GraphQL IDE exposed", match: /GraphQL IDE Exposed/i },
   { module: "graphqlProbe.ts", label: "GraphQL field suggestions leak", match: /Field Suggestions Enabled/i },
 
   // ── injectionProbe.ts (needs --active) ──────────────────────────────────
@@ -226,7 +228,7 @@ async function main(): Promise<void> {
   const runtimeFound = result.vulnerabilities.some((v) => `${v.evidence ?? ""} ${v.description}`.includes("/api/runtime/lookup"));
   console.log(`  [${runtimeFound ? "FOUND " : "MISSED"}] apiRuntime.ts            API discovered only at runtime`);
 
-  const CLEAN_TWINS = ["/hello?", "/lang2?", "echoq", "/assets/ai-chat.js"];
+  const CLEAN_TWINS = ["/api/graphql", "/hello?", "/lang2?", "echoq", "/assets/ai-chat.js"];
   const falseAlarms = result.vulnerabilities.filter((v) => CLEAN_TWINS.some((t) => `${v.evidence ?? ""} ${v.description}`.includes(t)));
   if (falseAlarms.length) {
     console.log("");

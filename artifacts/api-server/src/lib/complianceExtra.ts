@@ -69,7 +69,7 @@ const TOPICS: Topic[] = [
   { fw: "nist80053", control: "SI-7", title: "Software, firmware and information integrity", cwes: ["CWE-347", "CWE-353"] },
   { fw: "nist80053", control: "SI-11", title: "Error handling", cwes: ["CWE-209"] },
   { fw: "nist80053", control: "AU-2", title: "Event logging", cwes: ["CWE-778"] },
-  { fw: "nist80053", control: "CM-6", title: "Configuration settings", cwes: ["CWE-16", "CWE-693", "CWE-1021", "CWE-942", "CWE-548"] },
+  { fw: "nist80053", control: "CM-6", title: "Configuration settings", cwes: ["CWE-16", "CWE-693", "CWE-489", "CWE-1021", "CWE-942", "CWE-548"] },
 
   // ── HIPAA Security Rule, 45 CFR 164.312 ───────────────────────────────────
   { fw: "hipaa", control: "164.312(a)(1)", title: "Access control", cwes: ["CWE-284", "CWE-862", "CWE-639", "CWE-552", "CWE-538"], categories: ["BaaS Misconfiguration", "Cloud Storage Misconfiguration", "Database Security"] },

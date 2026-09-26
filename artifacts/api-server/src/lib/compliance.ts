@@ -149,6 +149,10 @@ const CWE_CONTROLS: Record<string, ControlRef[]> = {
     { framework: "pci", control: "6.2.4", title: "Software engineering techniques prevent injection attacks" },
     { framework: "iso27001", control: "A.8.28", title: "Secure coding" },
   ],
+  "CWE-489": [
+    { framework: "asvs", control: "V14.3.2", title: "Source and debug artefacts not exposed" },
+    { framework: "iso27001", control: "A.8.9", title: "Configuration management" },
+  ],
   "CWE-915": [
     { framework: "asvs", control: "V5.1.2", title: "Mass assignment / parameter binding controlled" },
     { framework: "iso27001", control: "A.8.28", title: "Secure coding" },
