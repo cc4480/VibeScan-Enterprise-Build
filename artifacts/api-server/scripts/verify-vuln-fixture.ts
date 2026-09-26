@@ -126,6 +126,8 @@ const EXPECTED: Array<{ module: string; label: string; match: RegExp }> = [
 
   // ── apiDocsProbe.ts ──────────────────────────────────────────────────────
   { module: "apiDocsProbe.ts", label: "OpenAPI spec exposed", match: /Exposed API Documentation/i },
+  // ── healthEndpointProbe.ts (the clean /api/health must be passed over) ──
+  { module: "healthEndpointProbe.ts", label: "Health endpoint discloses runtime details", match: /Health Endpoint Discloses Runtime Details/i },
 
   // ── graphqlProbe.ts (needs --active) ────────────────────────────────────
   { module: "graphqlProbe.ts", label: "GraphQL introspection enabled", match: /GraphQL Introspection Enabled/i },

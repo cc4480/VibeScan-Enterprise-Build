@@ -100,6 +100,7 @@ import { detectTechnologies } from "./techFingerprint";
 import { runBaasProbes } from "./baasProbes";
 import { runGraphqlProbe } from "./graphqlProbe";
 import { runApiDocsProbe } from "./apiDocsProbe";
+import { runHealthEndpointProbe } from "./healthEndpointProbe";
 import { runNextjsProbe } from "./nextjsProbe";
 import { runStorageProbe } from "./storageProbe";
 import { runAccessControlProbes } from "./accessControlProbe";
@@ -1108,6 +1109,7 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
     { family: "source map exposure", run: checkSourceMaps(html, finalUrl) },
     // Exposed API docs: Swagger/OpenAPI/ReDoc — fetching published doc paths
     { family: "exposed API documentation", run: runApiDocsProbe(finalUrl) },
+    { family: "health endpoint disclosure", run: runHealthEndpointProbe(finalUrl) },
     // Next.js __NEXT_DATA__ prop leaks — read from the page already fetched
     { family: "Next.js __NEXT_DATA__ secrets", run: runNextjsProbe(finalUrl, html) },
   ];

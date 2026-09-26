@@ -88,6 +88,9 @@ export const CATALOG_SURFACE: CatalogTest[] = [
   test("exposed API documentation", "API Security", "apiDocsProbe.ts", [
     ["medium", "Exposed API Documentation (OpenAPI / Swagger)", "Exposed API Documentation"],
   ]),
+  test("health endpoint disclosure", "Information Disclosure", "healthEndpointProbe.ts", [
+    ["info", "Health Endpoint Discloses Runtime Details", "Health Endpoint Discloses Runtime Details"],
+  ]),
   test("subdomain takeover", "DNS Security", "subdomainTakeover.ts", [
     ["critical", "Dangling CNAME to a Claimable Service", "Subdomain Takeover —"],
   ]),

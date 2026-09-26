@@ -606,6 +606,16 @@ app.post("/login", express.urlencoded({ extended: false }), (req, res) => {
   res.redirect(302, "/account/1001");
 });
 
+// healthEndpointProbe.ts. Both in one app, in the order the probe tries them:
+// /api/health is the CLEAN twin (a bare status, which must be passed over),
+// /api/system/health leaks runtime details (the shape seen on a real site).
+app.get("/api/health", (_req, res) => {
+  res.json({ status: "ok", checks: { database: "ok", memory: "ok" } });
+});
+app.get("/api/system/health", (_req, res) => {
+  res.json({ status: "Online", version: "public beta", uptimeSeconds: 45090, instance: "c7e7ccb7", memory: { rssMb: 100 } });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 404 for everything else — real, not a catch-all shell, EXCEPT for the
 // error-disclosure probe: a random nonexistent path must leak the Werkzeug
