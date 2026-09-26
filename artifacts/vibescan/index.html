@@ -14,7 +14,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <title>SecScan — Black-Box Security Scanning for Vibe Coders</title>
     <meta name="description" content="Paste a URL and get a plain-English security report, usually in under a minute. OWASP Top 10-aligned checks, AI-powered analysis, per-agent fix prompts. 3 free scans every month." />
-    <meta name="keywords" content="penetration testing, security scan, web security, OWASP, vibe coding, AI security, black-box testing, Supabase RLS, security headers" />
+    <meta name="keywords" content="website vulnerability scanner, web application security scanner, black-box security scan, DAST scanner, OWASP Top 10 scanner, security scan for vibe coded apps, AI generated app security, Lovable security scan, Bolt.new security scan, Cursor app security check, Replit app security, Supabase RLS checker, Firebase security rules test, exposed API keys scanner, security headers checker, CSP checker, HSTS check, CORS misconfiguration test, IDOR test, broken access control scanner, SQL injection scanner, XSS scanner, API security testing, GraphQL introspection check, subdomain takeover check, TLS SSL grade, CVE monitoring, continuous security monitoring, MCP security scanner, security scan from Claude Code, penetration testing for developers, SecScan" />
     <!-- max-image-preview:large opts into full-size thumbnails in Google
          Discover and rich results; the snippet limits remove the default
          truncation that would otherwise clip an answer mid-sentence. -->
@@ -120,6 +120,9 @@
           "@type": "SoftwareApplication",
           "@id": "https://secscan.us/#app",
           "name": "SecScan",
+          "alternateName": ["SecScan.us", "SecScan Web Security Scanner", "SecScan black-box scanner"],
+          "disambiguatingDescription": "SecScan at secscan.us is a black-box web application security scanner for developers and AI-built apps. It is not the SecScan.io IT baseline product and not an open-source source-code secret scanner.",
+          "keywords": "web application security scanner, vulnerability scanner, DAST, OWASP Top 10, vibe coding security, Supabase, Firebase, API security, MCP",
           "url": "https://secscan.us",
           "applicationCategory": "SecurityApplication",
           "applicationSubCategory": "Security Scanning",
@@ -136,7 +139,16 @@
             "AI plain-English reports",
             "Per-agent fix prompts (Cursor, Claude Code, Lovable, Bolt, Replit AI)",
             "Letter-grade security score (A–F)",
-            "Continuous monitoring with CVE feed"
+            "Continuous monitoring with CVE feed",
+            "Firebase and Supabase security rule and storage exposure checks",
+            "Exposed API keys and secrets in JavaScript (OpenAI, Anthropic, Stripe, AWS and more)",
+            "SQL injection, reflected XSS, template injection and path traversal probing",
+            "Broken access control and IDOR testing with two accounts",
+            "GraphQL introspection, batching and exposed IDE detection",
+            "Subdomain takeover and DNS, SPF, DKIM and DMARC checks",
+            "Compliance evidence mapping to SOC 2, PCI DSS, ISO 27001, OWASP ASVS, NIST 800-53 and HIPAA controls",
+            "Verify a fix and see what changed since the last scan",
+            "REST API, CLI, GitHub Action and MCP server for Claude Code and Cursor"
           ],
           "screenshot": "https://secscan.us/opengraph.jpg",
           "offers": [
@@ -322,6 +334,18 @@
         <a href="https://secscan.info/how-it-works">how scanning works</a> and
         <a href="https://secscan.info/guides">remediation guides</a>.
       </p>
+      <h2>What SecScan checks</h2>
+      <ul>
+        <li>Security headers and TLS: Content-Security-Policy, HSTS, X-Frame-Options, SSL/TLS grade, cookie flags, CORS.</li>
+        <li>Exposed secrets: API keys for OpenAI, Anthropic, Stripe, AWS, GitHub and others found in your JavaScript, plus exposed .env, .git and backup files.</li>
+        <li>AI-built app backends: Supabase row level security, Supabase and Firebase storage exposure, Firestore and Realtime Database rules.</li>
+        <li>Injection and access control: SQL injection, cross-site scripting, template injection, path traversal, IDOR and broken object-level authorisation.</li>
+        <li>APIs: OpenAPI and GraphQL exposure, GraphQL introspection, batching and IDEs, missing authentication, mass assignment.</li>
+        <li>DNS and email: SPF, DKIM, DMARC, DNSSEC, subdomain takeover.</li>
+        <li>Known vulnerabilities: outdated components matched to CVEs, with continuous monitoring and alerts.</li>
+      </ul>
+      <h2>Made for apps built with AI tools</h2>
+      <p>SecScan scans sites made with Lovable, Bolt.new, Cursor, Claude Code, Replit, v0, Next.js, Supabase and Firebase, and writes fix prompts you can paste back into the tool you built with. It also runs as an MCP server for Claude Code and Cursor, and as a REST API, CLI and GitHub Action.</p>
     </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
