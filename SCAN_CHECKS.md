@@ -7,7 +7,7 @@ Every finding the scanner can emit, read out of `artifacts/api-server/src/lib`. 
 complete list; [SCAN_COVERAGE.md](SCAN_COVERAGE.md) is the readable one, grouped by module with
 the Basic/Deep tier and the methodology behind each group.
 
-**284 findings across 28 modules**, in 36 categories. 87 critical, 74 high, 61 medium, 21 low, 41 info.
+**295 findings across 33 modules**, in 38 categories. 88 critical, 75 high, 64 medium, 25 low, 43 info.
 
 A finding is a distinct name the scanner can put in a report, which is not the same as a check
 type: the data-table modules below define many findings from one piece of detection logic —
@@ -23,31 +23,36 @@ module does. `none` — neither, so no test exercises it at all.
 |---|---:|---:|---:|---|
 | `probes-data.ts` | 78 | 838 | 29 | direct |
 | `secret-pattern-data.ts` | 34 | 506 | 17 | direct |
-| `probes.ts` | 16 | 967 | 15 | direct |
+| `probes.ts` | 16 | 980 | 15 | direct |
 | `recon-data.ts` | 14 | 178 | 12 | direct |
-| `dnsChecks.ts` | 9 | 490 | 26 | direct |
+| `dnsChecks.ts` | 9 | 493 | 26 | direct |
 | `nextjsProbe.ts` | 9 | 248 | 7 | direct |
 | `structuredData.ts` | 9 | 415 | 34 | direct |
 | `crawler-data.ts` | 8 | 152 | 26 | direct |
-| `apiProbe.ts` | 7 | 644 | 31 | direct |
+| `apiProbe.ts` | 7 | 647 | 31 | direct |
 | `crawler.ts` | 7 | 778 | 42 | direct |
-| `supabase-probes.ts` | 7 | 589 | 7 | direct |
+| `supabase-probes.ts` | 7 | 593 | 7 | direct |
 | `jwtAnalysis.ts` | 6 | 262 | 9 | direct |
 | `cveCheck.ts` | 4 | 594 | 10 | direct |
 | `accessControlProbe.ts` | 3 | 377 | 18 | direct |
-| `firebase-probes.ts` | 3 | 261 | 5 | direct |
+| `baasDepth.ts` | 3 | 148 | 11 | direct |
+| `firebase-probes.ts` | 3 | 264 | 5 | direct |
 | `mailTls.ts` | 3 | 337 | 13 | direct |
 | `storageProbe.ts` | 3 | 262 | 8 | direct |
+| `aiFeatureProbe.ts` | 2 | 94 | 10 | direct |
 | `baasProbes.ts` | 2 | 265 | 6 | direct |
-| `graphqlProbe.ts` | 2 | 292 | 8 | direct |
-| `injectionProbe.ts` | 2 | 237 | 7 | direct |
+| `graphqlExtra.ts` | 2 | 105 | 8 | direct |
+| `graphqlProbe.ts` | 2 | 298 | 8 | direct |
+| `injectionExtra.ts` | 2 | 140 | 9 | direct |
+| `injectionProbe.ts` | 2 | 250 | 10 | direct |
 | `sourceMaps.ts` | 2 | 172 | 11 | direct |
+| `worker.ts` | 2 | 1071 | 3 | direct |
 | `apiDocsProbe.ts` | 1 | 300 | 9 | direct |
 | `deserializationProbe.ts` | 1 | 105 | 9 | direct |
+| `healthEndpointProbe.ts` | 1 | 114 | 10 | direct |
 | `pathTraversal.ts` | 1 | 195 | 4 | direct |
 | `ssrfProbe.ts` | 1 | 192 | 6 | direct |
-| `worker.ts` | 1 | 906 | 3 | direct |
-| `scanner.ts` | 32 | 1320 | — | indirect, via challengePage.test.ts, firebase-probes.test.ts, grading.test.ts, scoring.test.ts |
+| `scanner.ts` | 32 | 1417 | — | indirect, via baasDepth.test.ts, challengePage.test.ts, firebase-probes.test.ts, grading.test.ts, scoring.test.ts |
 | `subdomain-service-data.ts` | 19 | 152 | — | indirect, via subdomainTakeover.test.ts |
 
 ## Findings by module
@@ -62,6 +67,15 @@ module does. `none` — neither, so no test exercises it at all.
 | Records Enumerable by Editing the Identifier | Critical | Broken Access Control | 8.6 | CWE-639 | WSTG-ATHZ-04 |
 | Records Readable Without Signing In | High | Broken Access Control | 7.5 | CWE-306 | WSTG-ATHZ-02 |
 
+### `aiFeatureProbe.ts`
+
+*2 findings · 94 lines · 10 tests.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| AI Provider Called Directly From the Browser | Low | AI Feature Security | 3.7 | CWE-522 | WSTG-CONF-04 |
+| AI System Prompt Shipped in Client-Side Code | Low | AI Feature Security | 3.7 | CWE-200 | WSTG-CONF-04 |
+
 ### `apiDocsProbe.ts`
 
 *1 findings · 300 lines · 9 tests.*
@@ -72,7 +86,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `apiProbe.ts`
 
-*7 findings · 644 lines · 31 tests.*
+*7 findings · 647 lines · 31 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -83,6 +97,16 @@ module does. `none` — neither, so no test exercises it at all.
 | Sensitive Fields Returned by the API | High | Information Disclosure | 7.5 | CWE-213 | WSTG-ATHZ-04 |
 | API Endpoints Without Rate Limiting | Medium | Security Misconfiguration | 5.3 | CWE-770 | WSTG-ATHN-04 |
 | Privilege Fields Accepted in Request Bodies | Medium | Broken Access Control | 6.5 | CWE-915 | WSTG-BUSL-01 |
+
+### `baasDepth.ts`
+
+*3 findings · 148 lines · 11 tests.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| Firebase Storage Files Listable Without Authentication | High | Broken Access Control | 7.5 | CWE-284 | WSTG-ATHZ-01 |
+| Supabase Storage Files Listable Without Authentication | Medium | Information Disclosure | 5.3 | CWE-200 | WSTG-CONF-04 |
+| Supabase Email Confirmation Disabled | Low | Authentication | 3.7 | — | WSTG-IDNT-02 |
 
 ### `baasProbes.ts`
 
@@ -143,7 +167,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `dnsChecks.ts`
 
-*9 findings · 490 lines · 26 tests.*
+*9 findings · 493 lines · 26 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -155,11 +179,11 @@ module does. `none` — neither, so no test exercises it at all.
 | No DKIM Records Found | Low | Email Security | — | CWE-345 | — |
 | SPF Record Exceeds DNS Lookup Limit | Low | Email Security | — | CWE-290 | — |
 | DMARC Record Missing Aggregate Report Address (rua=) | Info | Email Security | — | CWE-778 | — |
-| DNSSEC Not Enabled | Info | DNS Security | — | CWE-350 | — |
+| DNSSEC Not Enabled | Info | DNS Security | — | CWE-345 | — |
 
 ### `firebase-probes.ts`
 
-*3 findings · 261 lines · 5 tests.*
+*3 findings · 264 lines · 5 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -167,18 +191,44 @@ module does. `none` — neither, so no test exercises it at all.
 | Firestore Security Rules Allow Unauthenticated Read Access | Critical | Broken Access Control | 9.3 | CWE-284 | WSTG-ATHZ-01 |
 | Firebase Backend Detected — Firestore Rules Appear Restrictive | Info | Technology Fingerprint | 0 | — | — |
 
+### `graphqlExtra.ts`
+
+*2 findings · 105 lines · 8 tests.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| GraphQL IDE Exposed | Medium | API Security | 5.3 | CWE-489 | WSTG-CONF-05 |
+| GraphQL Query Batching Enabled | Low | API Security | 3.7 | CWE-770 | WSTG-BUSL-05 |
+
 ### `graphqlProbe.ts`
 
-*2 findings · 292 lines · 8 tests.*
+*2 findings · 298 lines · 8 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
 | GraphQL Introspection Enabled in Production | High | API Security | 7.5 | CWE-200 | WSTG-INFO-01 |
 | GraphQL Field Suggestions Enabled ("Did you mean…" Leaks) | Low | API Security | 3.7 | CWE-209 | — |
 
+### `healthEndpointProbe.ts`
+
+*1 findings · 114 lines · 10 tests.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| Health Endpoint Discloses Runtime Details | Info | Information Disclosure | — | CWE-200 | WSTG-INFO-02 |
+
+### `injectionExtra.ts`
+
+*2 findings · 140 lines · 9 tests.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| Server-Side Template Injection | Critical | Injection | 9.8 | CWE-1336 | WSTG-INPV-18 |
+| HTTP Header Injection (CRLF) | Medium | Injection | 6.1 | CWE-113 | WSTG-INPV-15 |
+
 ### `injectionProbe.ts`
 
-*2 findings · 237 lines · 7 tests.*
+*2 findings · 250 lines · 10 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -234,7 +284,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `probes.ts`
 
-*16 findings · 967 lines · 15 tests.*
+*16 findings · 980 lines · 15 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -363,7 +413,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `scanner.ts`
 
-*32 findings · 1320 lines · no test file.*
+*32 findings · 1417 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -512,7 +562,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `supabase-probes.ts`
 
-*7 findings · 589 lines · 7 tests.*
+*7 findings · 593 lines · 7 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -526,11 +576,12 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `worker.ts`
 
-*1 findings · 906 lines · 3 tests.*
+*2 findings · 1071 lines · 3 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
 | AI analysis could not be completed for this scan | Info | Scan Coverage | — | — | — |
+| _(dynamic name)_ | Info | Scan Coverage | — | — | — |
 
 ## How this was read
 
@@ -541,5 +592,5 @@ finding literals are uniform; the assumptions are:
 - Its name comes from `name:` in the same literal — or `header:`, for the header-gap table whose names are composed at the emit site.
 - A ternary severity or name means the check emits two variants (session vs non-session cookies, for example).
 
-Every finding resolved to a name, so none of these currently fails.
+**1 findings could not be named** — an assumption above no longer holds, and the parser needs a look.
 
