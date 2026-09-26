@@ -28,6 +28,7 @@ import { rateLimitMiddleware } from "../lib/rateLimit";
 import { launchScan, ownScan, reportForScan, UUID } from "./appRouteRunner";
 import { API_V1_SPEC } from "../lib/apiV1Spec";
 import { summariseReport } from "../lib/apiV1Report";
+import { toSarif } from "../lib/sarif";
 
 const router: IRouter = Router();
 
@@ -184,6 +185,23 @@ router.get("/v1/scans/:id/report", authenticate, async (req, res): Promise<void>
     return;
   }
   res.json({ id: scan.id, url: report.targetUrl, scannedAt: report.scannedAt, report: report.data });
+});
+
+// The same findings as SARIF 2.1.0, for GitHub code scanning and other CI tools.
+router.get("/v1/scans/:id/sarif", authenticate, async (req, res): Promise<void> => {
+  const user = (req as Authed).apiUser;
+  const id = String(req.params["id"]);
+  const scan = UUID.test(id) ? await ownScan(user.id, id) : null;
+  if (!scan) {
+    fail(res, 404, "not_found", "No scan with that id.");
+    return;
+  }
+  const report = scan.status === "complete" ? await reportForScan(user.id, scan.id) : null;
+  if (!report) {
+    fail(res, 409, "not_ready", `That scan is ${scan.status === "complete" ? "still being saved" : scan.status}, not ready yet.`);
+    return;
+  }
+  res.type("application/sarif+json").send(JSON.stringify(toSarif({ targetUrl: report.targetUrl, scannedAt: report.scannedAt, data: report.data })));
 });
 
 // Any other /v1 path: the same error shape, so a client never has to parse an HTML 404.

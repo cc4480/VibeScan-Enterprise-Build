@@ -180,6 +180,26 @@ describe("GET /v1/scans/:id/report", () => {
   });
 });
 
+describe("GET /v1/scans/:id/sarif", () => {
+  it("returns the findings as a SARIF log", async () => {
+    state.reports[SCAN_ID]!.data = {
+      vulnerabilities: [{ name: "Open Redirect Vulnerability", severity: "medium", description: "d", evidence: "GET https://a.example/r", solution: "s" }],
+    };
+    const res = await get(`/v1/scans/${SCAN_ID}/sarif`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("sarif+json");
+    const log = await res.json();
+    expect(log.version).toBe("2.1.0");
+    expect(log.runs[0].results).toHaveLength(1);
+  });
+
+  it("says not_ready for an unfinished scan and 404s someone else's", async () => {
+    state.scans[SCAN_ID]!.status = "scanning";
+    expect((await get(`/v1/scans/${SCAN_ID}/sarif`)).status).toBe(409);
+    expect((await get(`/v1/scans/${OTHER_ID}/sarif`)).status).toBe(404);
+  });
+});
+
 describe("the rest of /v1", () => {
   it("lists recent scans", async () => {
     const body = await (await get("/v1/scans")).json();

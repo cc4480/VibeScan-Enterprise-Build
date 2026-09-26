@@ -1,0 +1,12 @@
+{
+  "name": "@secscan/cli",
+  "version": "0.1.0",
+  "description": "Scan a deployed URL from CI with SecScan and fail the build on findings.",
+  "type": "module",
+  "bin": { "secscan": "secscan.mjs" },
+  "files": ["secscan.mjs", "README.md"],
+  "engines": { "node": ">=18" },
+  "license": "UNLICENSED",
+  "homepage": "https://secscan.info",
+  "private": true
+}

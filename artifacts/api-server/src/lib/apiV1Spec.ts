@@ -72,6 +72,20 @@ export const API_V1_SPEC = {
         },
       },
     },
+    "/scans/{id}/sarif": {
+      get: {
+        summary: "The findings as SARIF 2.1.0",
+        description:
+          "For GitHub code scanning and other CI tools. A scan of a running site has no file or line, so each result is located at the URL it was found at.",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        responses: {
+          "200": { description: "A SARIF 2.1.0 log", content: { "application/sarif+json": { schema: { type: "object" } } } },
+          "409": { description: "The scan has not finished", content: { "application/json": { schema: error } } },
+          "404": { description: "No such scan (or not yours)", content: { "application/json": { schema: error } } },
+          ...errorResponses,
+        },
+      },
+    },
     "/openapi.json": {
       get: { summary: "This document", security: [], responses: { "200": { description: "OpenAPI 3.1" } } },
     },

@@ -14,7 +14,7 @@ Status: **done**, **partial**, **todo**.
 | U4 | Send less to the language model, provider choice | partial | Redaction and LLM_ENDPOINT done; no user-facing choice |
 | U5 | Third-party script check that understands first-party CDNs | todo | |
 | U6 | A public status page | todo | Needs the user's UptimeRobot page |
-| U7 | GitHub Action, CLI and SARIF | todo | Builds on U22 |
+| U7 | GitHub Action, CLI and SARIF | **done** | deploy/cli (CLI + action.yml); SARIF at /v1/scans/:id/sarif. To publish the Action, copy deploy/cli to its own repo and tag v1 (needs the user) |
 | U8 | Alert destinations and ticketing | todo | |
 | U9 | Verify the fix | todo | |
 | U10 | Supabase and Firebase in depth | todo | |
