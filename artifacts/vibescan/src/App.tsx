@@ -11,6 +11,7 @@ import LandingPage from "@/pages/landing";
 import DashboardPage from "@/pages/dashboard";
 import ScanFormPage from "@/pages/scan-form";
 import ScanProgressPage from "@/pages/scan-progress";
+import OAuthAuthorizePage from "@/pages/oauth-authorize";
 import ReportViewer from "@/pages/report-viewer";
 import MonitorPage from "@/pages/monitor";
 import SharedReport from "@/pages/shared-report";
@@ -175,6 +176,9 @@ function Router() {
           confirmation link arrives by email and has to work whatever the
           session state is, including none at all. */}
       <Route path="/sign-in" component={SignInPage} />
+      {/* The consent screen an AI editor sends people to. It checks the session itself and sends
+          anyone signed out to /sign-in and back, so it sits outside ProtectedRoute. */}
+      <Route path="/oauth/authorize" component={OAuthAuthorizePage} />
       <Route path="/register" component={RegisterPage} />
       <Route path="/forgot-password" component={ForgotPasswordPage} />
       <Route path="/reset-password" component={ResetPasswordPage} />

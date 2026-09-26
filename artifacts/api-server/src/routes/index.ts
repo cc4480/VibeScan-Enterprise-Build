@@ -21,6 +21,8 @@ import checkoutRouter from "./checkout";
 import apiTokensRouter from "./apiTokens";
 import mcpRouter from "./mcp";
 import v1Router from "./v1";
+import oauthPublicRouter from "./oauthPublic";
+import oauthConsentRouter from "./oauthConsent";
 
 const router: IRouter = Router();
 
@@ -46,5 +48,7 @@ router.use(checkoutRouter);
 router.use(apiTokensRouter);
 router.use(mcpRouter);
 router.use(v1Router);
+router.use(oauthPublicRouter);
+router.use(oauthConsentRouter);
 
 export default router;

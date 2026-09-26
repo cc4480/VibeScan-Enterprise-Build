@@ -34,6 +34,8 @@ export const SPA_ROUTES: RegExp[] = [
   /^\/forgot-password\/?$/,
   /^\/reset-password\/?$/,
   /^\/verify-email\/?$/,
+  // Where an AI editor sends the person to approve a connection (lib/oauthConsent.ts).
+  /^\/oauth\/authorize\/?$/,
 ];
 
 /** Whether the SPA shell should be served for this path. */

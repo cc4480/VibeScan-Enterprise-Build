@@ -4,6 +4,7 @@ import { useSeo } from "@/lib/seo";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2, Loader2, AlertTriangle, Mail, CreditCard, Bot } from "lucide-react";
 import { AiEditorsSection } from "@/components/ai-editors";
+import { ConnectedAppsSection } from "@/components/connected-apps";
 import { BillingSummary } from "@/components/billing-options";
 import { cn } from "@/lib/utils";
 
@@ -173,6 +174,9 @@ export default function SettingsPage() {
           </div>
         </div>
         <AiEditorsSection />
+        <div className="mt-8 pt-6 border-t border-white/10">
+          <ConnectedAppsSection />
+        </div>
       </div>
 
       <div className="glass-panel p-6 sm:p-10 rounded-3xl mb-8">

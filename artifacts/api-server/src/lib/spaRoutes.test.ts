@@ -26,6 +26,7 @@ describe("isSpaRoute", () => {
       "/forgot-password",
       "/reset-password",
       "/verify-email",
+      "/oauth/authorize",
     ]) {
       expect(isSpaRoute(path), path).toBe(true);
     }

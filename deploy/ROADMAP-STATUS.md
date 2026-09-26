@@ -33,7 +33,7 @@ Status: **done**, **partial**, **todo**.
 | U23 | Monitoring controls | todo | |
 | U24 | Changes since the last scan | todo | |
 | U25 | Test the free tier | todo | Needs real traffic |
-| U26 | One-click MCP sign-in with OAuth | todo | Builds on U22 |
+| U26 | One-click MCP sign-in with OAuth | **done** | OAuth 2.1: discovery, dynamic registration, PKCE S256, consent page, 1 h access and rotating refresh tokens with reuse detection, Connected apps in Settings. Run the real-database suites with --no-file-parallelism |
 | U27 | More control frameworks | todo | |
 | U28 | Third-party proof of own security | todo | Needs an outside firm |
 | U29 | Content from sources buyers trust | todo | |

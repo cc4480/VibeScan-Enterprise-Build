@@ -16,7 +16,7 @@
  */
 import { createHash, randomBytes } from "node:crypto";
 import { db, apiTokensTable, usersTable } from "@workspace/db";
-import { and, eq, isNull, count } from "drizzle-orm";
+import { and, eq, gt, isNull, count, or } from "drizzle-orm";
 
 export const TOKEN_PREFIX = "ssk_";
 
@@ -69,7 +69,8 @@ export async function authenticateApiToken(authorization: string | undefined, sc
     })
     .from(apiTokensTable)
     .innerJoin(usersTable, eq(usersTable.id, apiTokensTable.userId))
-    .where(and(eq(apiTokensTable.tokenHash, hashToken(token)), isNull(apiTokensTable.revokedAt)))
+    // An expired token (an OAuth access token after its hour) is refused like an unknown one.
+    .where(and(eq(apiTokensTable.tokenHash, hashToken(token)), isNull(apiTokensTable.revokedAt), or(isNull(apiTokensTable.expiresAt), gt(apiTokensTable.expiresAt, new Date()))))
     .limit(1);
 
   if (!row || !row.email) return null;
@@ -99,6 +100,7 @@ export async function liveTokenCount(userId: string): Promise<number> {
   const [row] = await db
     .select({ n: count() })
     .from(apiTokensTable)
-    .where(and(eq(apiTokensTable.userId, userId), isNull(apiTokensTable.revokedAt)));
+    // Pasted tokens only: apps connected by OAuth are listed and limited separately.
+    .where(and(eq(apiTokensTable.userId, userId), isNull(apiTokensTable.revokedAt), isNull(apiTokensTable.oauthClientId)));
   return row?.n ?? 0;
 }

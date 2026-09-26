@@ -82,7 +82,10 @@ describe("POST /mcp without a token", () => {
       .set(HEADERS)
       .send(rpc("tools/call", { name: "scan_url", arguments: { url: "https://example.com" } }));
     expect(res.status).toBe(401);
-    expect(res.headers["www-authenticate"]).toBe('Bearer realm="secscan"');
+    // The challenge names the realm and, for OAuth-capable clients, where the sign-in metadata is.
+    expect(res.headers["www-authenticate"]).toContain('Bearer realm="secscan"');
+    expect(res.headers["www-authenticate"]).toContain("/.well-known/oauth-protected-resource/api/mcp");
+    expect(res.headers["www-authenticate"]).toContain("resource_metadata=");
   });
 
   it("refuses a tool call smuggled into a batch", async () => {

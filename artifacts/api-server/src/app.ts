@@ -7,6 +7,7 @@ import nodePath from "node:path";
 import { fileURLToPath } from "node:url";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import router from "./routes";
+import oauthMetadataRouter from "./routes/oauthMetadata";
 import { logger } from "./lib/logger";
 import { isSpaRoute } from "./lib/spaRoutes";
 import { metaForPath, applyPageMeta } from "./lib/pageMeta";
@@ -210,6 +211,9 @@ app.use(
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+// OAuth discovery documents live at the site root, as the standards require. Public, and
+// before authMiddleware: they need no identity and must not create one.
+app.use(oauthMetadataRouter);
 app.use(authMiddleware);
 
 app.use("/api", router);

@@ -34,7 +34,8 @@ router.get("/account/tokens", async (req, res): Promise<void> => {
       lastUsedAt: apiTokensTable.lastUsedAt,
     })
     .from(apiTokensTable)
-    .where(and(eq(apiTokensTable.userId, req.user.id), isNull(apiTokensTable.revokedAt)))
+    // Apps connected by OAuth appear under "Connected apps", not here.
+    .where(and(eq(apiTokensTable.userId, req.user.id), isNull(apiTokensTable.revokedAt), isNull(apiTokensTable.oauthClientId)))
     .orderBy(desc(apiTokensTable.createdAt));
   res.json({ tokens: rows, max: MAX_TOKENS_PER_USER });
 });

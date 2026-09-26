@@ -23,6 +23,7 @@ import { z } from "zod";
 import { db, scansTable, reportsTable, domainVerificationsTable } from "@workspace/db";
 import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { authenticateApiToken, type TokenUser } from "../lib/apiTokens";
+import { PROTECTED_RESOURCE_URL } from "./oauthMetadata";
 import { runAppRoute, launchScan, ownScan, reportForScan, UUID } from "./appRouteRunner";
 import monitorRouter from "./monitor";
 import domainVerificationRouter from "./domainVerification";
@@ -654,7 +655,8 @@ router.post("/mcp", async (req, res): Promise<void> => {
     if (!isPublicMcpRequest(req.body)) {
       res
         .status(401)
-        .setHeader("WWW-Authenticate", 'Bearer realm="secscan"')
+        // resource_metadata (RFC 9728) tells an OAuth-capable client where to sign the person in.
+        .setHeader("WWW-Authenticate", `Bearer realm="secscan", resource_metadata="${PROTECTED_RESOURCE_URL}"`)
         .json({ error: `Missing or invalid API token. Create one at ${APP_ORIGIN}/settings#ai-editors.` });
       return;
     }

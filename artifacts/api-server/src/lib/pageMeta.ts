@@ -101,6 +101,7 @@ const ROUTES: { match: RegExp; meta: (path: string) => PageMeta }[] = [
   { match: /^\/forgot-password\/?$/, meta: () => ({ path: "/forgot-password", title: "Reset your password — SecScan", noindex: true }) },
   { match: /^\/reset-password\/?$/, meta: () => ({ path: "/reset-password", title: "Choose a new password — SecScan", noindex: true }) },
   { match: /^\/verify-email\/?$/, meta: () => ({ path: "/verify-email", title: "Confirming your email — SecScan", noindex: true }) },
+  { match: /^\/oauth\/authorize\/?$/, meta: () => ({ path: "/oauth/authorize", title: "Connect an app — SecScan", noindex: true }) },
 
   // A report and a share link both point at somebody's scan findings. The share
   // link is meant to be openable by whoever holds it — that is not the same as

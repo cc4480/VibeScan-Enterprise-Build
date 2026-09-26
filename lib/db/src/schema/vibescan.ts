@@ -302,6 +302,12 @@ export const apiTokensTable = pgTable("api_tokens", {
   // this column); "api" reaches only the REST API under /api/v1. Never both: a token
   // pasted into an editor config should not also be able to drive CI, and the reverse.
   scope: text("scope", { enum: ["mcp", "api"] }).notNull().default("mcp"),
+  // Set for tokens minted by the OAuth flow (lib/oauthTokens.ts): they expire, belong to an app
+  // and a family (so replaying a refresh token revokes them all), and are listed under
+  // "Connected apps", not as pasted tokens. Null for tokens the user created by hand.
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  oauthClientId: text("oauth_client_id"),
+  oauthFamilyId: uuid("oauth_family_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
