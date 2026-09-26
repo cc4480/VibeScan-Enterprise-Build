@@ -66,3 +66,5 @@ Thumbs.db
 # --app-version stamped at deploy time), not a static file to track in git.
 # See artifacts/api-server/scripts/benchmark/generate-manifest.ts.
 /artifacts/vuln-fixture/manifest.json
+.secscan.log
+.web.log
