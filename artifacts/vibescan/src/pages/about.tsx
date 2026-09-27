@@ -31,7 +31,7 @@ function Section({
 
 export default function AboutPage() {
   useSeo({
-    title: "About SecScan — Carlos Cuellar, founder",
+    title: "About SecScan.us — Carlos Cuellar, founder",
     description:
       "Meet Carlos Cuellar, the self-taught builder behind SecScan, and the promises the scanner keeps: report what it found, and say plainly what it didn't test.",
   });

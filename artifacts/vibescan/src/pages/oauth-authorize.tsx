@@ -31,7 +31,7 @@ async function readJson(res: Response): Promise<unknown> {
 }
 
 export default function OAuthAuthorizePage() {
-  useSeo({ title: "Connect an app — SecScan", noindex: true });
+  useSeo({ title: "Connect an app — SecScan.us", noindex: true });
   const [, setLocation] = useLocation();
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const here = typeof window === "undefined" ? "" : window.location.pathname + window.location.search;

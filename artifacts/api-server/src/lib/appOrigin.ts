@@ -26,7 +26,7 @@ export const SCANNER_USER_AGENT: string =
 
 /** From address for notification email. Must be a domain verified with Resend. */
 export const FROM_EMAIL: string =
-  process.env.FROM_EMAIL ?? `SecScan <reports@${APP_DOMAIN}>`;
+  process.env.FROM_EMAIL ?? `SecScan.us <reports@${APP_DOMAIN}>`;
 
 /**
  * From address for account mail — sign-in codes, password resets, email

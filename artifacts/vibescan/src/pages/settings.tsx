@@ -81,7 +81,7 @@ function getFriendlyError(err: unknown): string {
 }
 
 export default function SettingsPage() {
-  useSeo({ title: "Settings — SecScan", noindex: true });
+  useSeo({ title: "Settings — SecScan.us", noindex: true });
   const { toast } = useToast();
 
   // Typing the word is the confirmation. A dialog with a red button is too easy

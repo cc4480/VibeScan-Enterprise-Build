@@ -140,16 +140,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
               className="w-10 h-10 rounded-xl object-cover shadow-lg shadow-primary/20 group-hover:shadow-primary/40 transition-all"
             />
             <span className="font-display font-bold text-xl tracking-tight text-foreground">
-              SecScan
+              SecScan<span className="text-primary">.us</span>
             </span>
           </Link>
 
           {/* Desktop Nav */}
           {/* Signed in, the bar holds five links, the account, Sign out and New
-              Scan. Below 1100px they do not fit, and they used to slide under the
-              logo ("SecScanHome"), so the phone menu takes over until 1100px. The
+              Scan. Below 1180px they do not fit, and they used to slide under the
+              logo ("SecScanHome"), so the phone menu takes over until 1180px. The
               logo is the Home link here, so the bar does not repeat it. */}
-          <nav className="hidden min-[1100px]:flex items-center gap-5 2xl:gap-7 whitespace-nowrap">
+          <nav className="hidden min-[1180px]:flex items-center gap-5 2xl:gap-7 whitespace-nowrap">
             <Link
               href="/dashboard"
               className={cn(
@@ -212,7 +212,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               just "button". */}
           <button
             type="button"
-            className="min-[1100px]:hidden p-2 text-foreground"
+            className="min-[1180px]:hidden p-2 text-foreground"
             aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
             aria-expanded={mobileMenuOpen}
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -223,7 +223,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Mobile menu */}
         {mobileMenuOpen && (
-          <div className="min-[1100px]:hidden absolute top-full left-0 right-0 bg-background/95 backdrop-blur-xl border-b border-white/5 py-4 px-4 flex flex-col gap-3 shadow-2xl">
+          <div className="min-[1180px]:hidden absolute top-full left-0 right-0 bg-background/95 backdrop-blur-xl border-b border-white/5 py-4 px-4 flex flex-col gap-3 shadow-2xl">
             <Link
               href="/"
               onClick={() => setMobileMenuOpen(false)}
@@ -313,7 +313,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-2 opacity-50">
             <img src="/images/logo-80.webp" alt="" width={20} height={20} className="w-5 h-5 rounded object-cover" />
-            <span className="font-display font-bold tracking-tight text-foreground">SecScan</span>
+            <span className="font-display font-bold tracking-tight text-foreground">SecScan.us</span>
           </div>
           <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
             <nav className="flex items-center gap-5">
@@ -340,7 +340,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </Link>
             </nav>
             <p className="text-sm text-muted-foreground">
-              Your app is live. Is it safe? © {new Date().getFullYear()} SecScan
+              Your app is live. Is it safe? © {new Date().getFullYear()} SecScan.us
             </p>
           </div>
         </div>

@@ -24,8 +24,8 @@ export default function SharedReport() {
   const [error, setError] = useState<{ status: number; message: string } | null>(null);
 
   const seoTitle = report
-    ? `Grade ${report.data.summary.grade} — ${(() => { try { return new URL(report.targetUrl).hostname; } catch { return report.targetUrl; } })()} | SecScan Security Report`
-    : "Security Report — SecScan";
+    ? `Grade ${report.data.summary.grade} — ${(() => { try { return new URL(report.targetUrl).hostname; } catch { return report.targetUrl; } })()} | SecScan.us Security Report`
+    : "Security Report — SecScan.us";
   const seoDescription = report
     ? `Security scan of ${report.targetUrl}: Grade ${report.data.summary.grade}, risk score ${report.data.summary.riskScore}/100, ${report.data.summary.totalVulnerabilities} finding${report.data.summary.totalVulnerabilities !== 1 ? "s" : ""}. Powered by SecScan.`
     : "View this security scan report powered by SecScan — automated black-box security scanning for web applications.";

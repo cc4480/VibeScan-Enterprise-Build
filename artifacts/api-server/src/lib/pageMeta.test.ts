@@ -84,7 +84,7 @@ describe("page metadata", () => {
 
   it("gives a non-JS crawler on /learn that route's subject, not just the homepage noscript copy", () => {
     const html = applyPageMeta(SHELL_WITH_NOSCRIPT, metaForPath("/learn")!);
-    expect(html).toContain("<h2>Security Documentation — SecScan</h2>");
+    expect(html).toContain("<h2>Security Documentation — SecScan.us</h2>");
     expect(html).toContain("<p>Plain-English guides to the key security checks SecScan runs");
     // Still ahead of the nav, so it doesn't look tacked on after the links.
     expect(html.indexOf("<h2>Security Documentation")).toBeLessThan(html.indexOf("<nav>"));
@@ -102,7 +102,7 @@ describe("page metadata", () => {
   it("updates og and twitter tags alongside the canonical", () => {
     const html = applyPageMeta(SHELL, metaForPath("/learn")!);
     expect(html).toContain('og:url" content="https://secscan.us/learn"');
-    expect(html).toContain('og:title" content="Security Documentation — SecScan"');
+    expect(html).toContain('og:title" content="Security Documentation — SecScan.us"');
     expect(html).not.toContain("Old description.");
     expect(html).not.toContain("Old twitter description.");
   });
@@ -163,7 +163,7 @@ describe("structured data per route", () => {
 
     expect(page["url"]).toBe("https://secscan.us/learn");
     expect(page["@id"]).toBe("https://secscan.us/learn#webpage");
-    expect(page["name"]).toBe("Security Documentation — SecScan");
+    expect(page["name"]).toBe("Security Documentation — SecScan.us");
   });
 
   it("agrees with the canonical tag on the same page", () => {

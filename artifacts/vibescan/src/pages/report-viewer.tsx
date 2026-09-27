@@ -2109,7 +2109,7 @@ function ShareButton({ reportId }: { reportId: string }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ReportViewer() {
-  useSeo({ title: "Security Report — SecScan", noindex: true });
+  useSeo({ title: "Security Report — SecScan.us", noindex: true });
   const [, params] = useRoute("/report/:id");
   const reportId = params?.id || "";
   // Read only to NAME the signed-in account in the wrong-account error below.

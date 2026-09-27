@@ -213,7 +213,7 @@ function GlobeIcon(props: React.SVGProps<SVGSVGElement>) {
 }
 
 export default function DashboardPage() {
-  useSeo({ title: "Dashboard — SecScan", noindex: true });
+  useSeo({ title: "Dashboard — SecScan.us", noindex: true });
   const params = new URLSearchParams(
     typeof window !== "undefined" ? window.location.search : "",
   );

@@ -15,7 +15,7 @@ function getFriendlyError(err: unknown): string {
  *  No sign-in required — account creation must never be the price of being heard. */
 export default function FeedbackPage() {
   useSeo({
-    title: "Feedback — SecScan",
+    title: "Feedback — SecScan.us",
     description: "Tell us what worked and what didn't after scanning your app.",
   });
   const { toast } = useToast();

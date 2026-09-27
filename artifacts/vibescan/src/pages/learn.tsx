@@ -772,7 +772,7 @@ function CheckAccordion({ check }: { check: Check }) {
 
 export default function LearnPage() {
   useSeo({
-    title: "Security Documentation — SecScan",
+    title: "Security Documentation — SecScan.us",
     description: "Plain-English guides to the key security checks SecScan runs: HTTPS, HSTS, CSP, CORS, cookie flags and Supabase RLS, each with a code fix to paste.",
     canonical: `${APP_ORIGIN}/learn`,
   });

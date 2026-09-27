@@ -157,7 +157,7 @@ function VerificationCard({ v }: { v: DomainVerification }) {
 }
 
 export default function DomainsPage() {
-  useSeo({ title: "Verified domains — SecScan", noindex: true });
+  useSeo({ title: "Verified domains — SecScan.us", noindex: true });
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [domainInput, setDomainInput] = useState("");

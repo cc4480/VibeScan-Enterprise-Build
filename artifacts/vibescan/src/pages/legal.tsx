@@ -282,7 +282,7 @@ export default function LegalPage({ kind }: { kind: "privacy" | "terms" }) {
   const title = isPrivacy ? "Privacy Policy" : "Terms of Service";
 
   useSeo({
-    title: `${title} — SecScan`,
+    title: `${title} — SecScan.us`,
     description: isPrivacy
       ? "What SecScan collects, why, and who else sees it."
       : "The terms that apply when you use SecScan, including what you may scan.",

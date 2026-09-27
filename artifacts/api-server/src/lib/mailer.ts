@@ -321,7 +321,7 @@ export async function sendReportReadyEmail(opts: SendReportEmailOptions): Promis
       },
       body: resendBody({
         to: [opts.toEmail],
-        subject: `Your SecScan report is ready — Grade ${opts.grade} for ${opts.targetUrl}`,
+        subject: `Your SecScan.us report is ready — Grade ${opts.grade} for ${opts.targetUrl}`,
         html: buildHtml(opts),
       }),
     });
@@ -1090,7 +1090,7 @@ export async function sendLoginCode(toEmail: string, code: string, ttlMinutes: n
     body: resendBody({
       from: AUTH_FROM_EMAIL,
       to: [toEmail],
-      subject: `${spaced} is your SecScan sign-in code`,
+      subject: `${spaced} is your SecScan.us sign-in code`,
       html,
       // Written out rather than derived. This is the message a user reads when
       // they cannot get into their account, sometimes on a phone with images
@@ -1121,7 +1121,7 @@ export async function sendPasswordReset(toEmail: string, resetUrl: string): Prom
   await healBounceSuppression(toEmail);
   await sendAccountMessage(
     toEmail,
-    "Reset your SecScan password",
+    "Reset your SecScan.us password",
     {
       heading: "Reset your password",
       body: "Use the link below to choose a new password. Signing in again will end any other sessions on your account.",
@@ -1217,7 +1217,7 @@ export async function addToMarketingAudience(email: string, firstName?: string |
 export async function sendWelcomeEmail(toEmail: string, firstName?: string | null): Promise<void> {
   await sendAccountMessage(
     toEmail,
-    "Welcome to SecScan",
+    "Welcome to SecScan.us",
     {
       heading: firstName ? `Welcome, ${firstName}` : "Welcome to SecScan",
       body: "SecScan runs real vulnerability checks, not a checklist: SQL injection, exposed secrets, misconfigured databases, and more. We'll email you when there's something worth knowing: new features, security research, and the occasional product update. Account and security emails (password resets, scan reports) always go out regardless.",
@@ -1265,7 +1265,7 @@ export async function sendPaymentsLiveEmail(toEmail: string): Promise<"sent" | "
       body: resendBody({
         from: AUTH_FROM_EMAIL,
         to: [toEmail],
-        subject: "You can keep scanning on SecScan now",
+        subject: "You can keep scanning on SecScan.us now",
         html: buildAccountHtml(heading, body, ctaLabel, ctaUrl, footnote),
         text: buildAccountText(heading, body, ctaLabel, ctaUrl, footnote),
       }),

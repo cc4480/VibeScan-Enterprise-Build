@@ -34,7 +34,7 @@ const ROUTES: { match: RegExp; meta: (path: string) => PageMeta }[] = [
     match: /^\/learn\/?$/,
     meta: () => ({
       path: "/learn",
-      title: "Security Documentation — SecScan",
+      title: "Security Documentation — SecScan.us",
       description:
         "Plain-English guides to the key security checks SecScan runs: HTTPS, HSTS, CSP, CORS, cookie flags and Supabase RLS, each with a code fix to paste.",
       breadcrumb: [{ name: "Security documentation", path: "/learn" }],
@@ -44,7 +44,7 @@ const ROUTES: { match: RegExp; meta: (path: string) => PageMeta }[] = [
     match: /^\/privacy\/?$/,
     meta: () => ({
       path: "/privacy",
-      title: "Privacy Policy — SecScan",
+      title: "Privacy Policy — SecScan.us",
       description:
         "What SecScan collects when you run a scan, who it is shared with, how long it is kept, and how to have it deleted.",
       breadcrumb: [{ name: "Privacy policy", path: "/privacy" }],
@@ -54,7 +54,7 @@ const ROUTES: { match: RegExp; meta: (path: string) => PageMeta }[] = [
     match: /^\/terms\/?$/,
     meta: () => ({
       path: "/terms",
-      title: "Terms of Service — SecScan",
+      title: "Terms of Service — SecScan.us",
       description:
         "The terms that apply when you use SecScan, including what you are permitted to scan.",
       breadcrumb: [{ name: "Terms of service", path: "/terms" }],
@@ -78,7 +78,7 @@ const ROUTES: { match: RegExp; meta: (path: string) => PageMeta }[] = [
     match: /^\/about\/?$/,
     meta: () => ({
       path: "/about",
-      title: "About SecScan — Carlos Cuellar, founder",
+      title: "About SecScan.us — Carlos Cuellar, founder",
       description:
         "Meet Carlos Cuellar, the self-taught builder behind SecScan, and the promises the scanner keeps: report what it found, and say plainly what it didn't test.",
       breadcrumb: [{ name: "About", path: "/about" }],
@@ -89,30 +89,30 @@ const ROUTES: { match: RegExp; meta: (path: string) => PageMeta }[] = [
   // Everything below is private, thin, or both. A signed-in page has nothing to
   // offer a searcher, and a sign-in form on an indexed URL is the shape that
   // gets a domain flagged as deceptive.
-  { match: /^\/dashboard\/?$/, meta: () => ({ path: "/dashboard", title: "Dashboard — SecScan", noindex: true }) },
-  { match: /^\/scan\/?$/, meta: () => ({ path: "/scan", title: "New scan — SecScan", noindex: true }) },
-  { match: /^\/scan\/[A-Za-z0-9_-]+\/?$/, meta: (p) => ({ path: p, title: "Scan in progress — SecScan", noindex: true }) },
-  { match: /^\/monitor\/?$/, meta: () => ({ path: "/monitor", title: "Monitor — SecScan", noindex: true }) },
-  { match: /^\/domains\/?$/, meta: () => ({ path: "/domains", title: "Verified domains — SecScan", noindex: true }) },
-  { match: /^\/settings\/?$/, meta: () => ({ path: "/settings", title: "Settings — SecScan", noindex: true }) },
-  { match: /^\/feedback\/?$/, meta: () => ({ path: "/feedback", title: "Feedback — SecScan", noindex: true }) },
-  { match: /^\/sign-in\/?$/, meta: () => ({ path: "/sign-in", title: "Sign in — SecScan", noindex: true }) },
-  { match: /^\/register\/?$/, meta: () => ({ path: "/register", title: "Create an account — SecScan", noindex: true }) },
-  { match: /^\/forgot-password\/?$/, meta: () => ({ path: "/forgot-password", title: "Reset your password — SecScan", noindex: true }) },
-  { match: /^\/reset-password\/?$/, meta: () => ({ path: "/reset-password", title: "Choose a new password — SecScan", noindex: true }) },
-  { match: /^\/verify-email\/?$/, meta: () => ({ path: "/verify-email", title: "Confirming your email — SecScan", noindex: true }) },
-  { match: /^\/oauth\/authorize\/?$/, meta: () => ({ path: "/oauth/authorize", title: "Connect an app — SecScan", noindex: true }) },
+  { match: /^\/dashboard\/?$/, meta: () => ({ path: "/dashboard", title: "Dashboard — SecScan.us", noindex: true }) },
+  { match: /^\/scan\/?$/, meta: () => ({ path: "/scan", title: "New scan — SecScan.us", noindex: true }) },
+  { match: /^\/scan\/[A-Za-z0-9_-]+\/?$/, meta: (p) => ({ path: p, title: "Scan in progress — SecScan.us", noindex: true }) },
+  { match: /^\/monitor\/?$/, meta: () => ({ path: "/monitor", title: "Monitor — SecScan.us", noindex: true }) },
+  { match: /^\/domains\/?$/, meta: () => ({ path: "/domains", title: "Verified domains — SecScan.us", noindex: true }) },
+  { match: /^\/settings\/?$/, meta: () => ({ path: "/settings", title: "Settings — SecScan.us", noindex: true }) },
+  { match: /^\/feedback\/?$/, meta: () => ({ path: "/feedback", title: "Feedback — SecScan.us", noindex: true }) },
+  { match: /^\/sign-in\/?$/, meta: () => ({ path: "/sign-in", title: "Sign in — SecScan.us", noindex: true }) },
+  { match: /^\/register\/?$/, meta: () => ({ path: "/register", title: "Create an account — SecScan.us", noindex: true }) },
+  { match: /^\/forgot-password\/?$/, meta: () => ({ path: "/forgot-password", title: "Reset your password — SecScan.us", noindex: true }) },
+  { match: /^\/reset-password\/?$/, meta: () => ({ path: "/reset-password", title: "Choose a new password — SecScan.us", noindex: true }) },
+  { match: /^\/verify-email\/?$/, meta: () => ({ path: "/verify-email", title: "Confirming your email — SecScan.us", noindex: true }) },
+  { match: /^\/oauth\/authorize\/?$/, meta: () => ({ path: "/oauth/authorize", title: "Connect an app — SecScan.us", noindex: true }) },
 
   // A report and a share link both point at somebody's scan findings. The share
   // link is meant to be openable by whoever holds it — that is not the same as
   // being listed in search results for anyone to find.
   {
     match: /^\/report\/[A-Za-z0-9_-]+\/?$/,
-    meta: (p) => ({ path: p, title: "Security report — SecScan", noindex: true }),
+    meta: (p) => ({ path: p, title: "Security report — SecScan.us", noindex: true }),
   },
   {
     match: /^\/share\/[A-Za-z0-9_-]+\/?$/,
-    meta: (p) => ({ path: p, title: "Shared security report — SecScan", noindex: true }),
+    meta: (p) => ({ path: p, title: "Shared security report — SecScan.us", noindex: true }),
   },
 ];
 

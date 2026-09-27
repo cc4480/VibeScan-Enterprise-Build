@@ -46,7 +46,7 @@ function googleErrorMessage(search: string): string | null {
 }
 
 export default function SignInPage() {
-  useSeo({ title: "Sign in — SecScan", noindex: true });
+  useSeo({ title: "Sign in — SecScan.us", noindex: true });
 
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();

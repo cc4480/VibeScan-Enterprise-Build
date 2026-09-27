@@ -250,7 +250,7 @@ const COVERAGE: { title: string; items: string[] }[] = [
 ];
 
 export default function ScanFormPage() {
-  useSeo({ title: "New Scan — SecScan", noindex: true });
+  useSeo({ title: "New Scan — SecScan.us", noindex: true });
   const [url, setUrl] = useState("");
   const [credentials, setCredentials] = useState<ScanCredentialsValue>(emptyCredentials);
   const [secondAccount, setSecondAccount] = useState<SecondAccountValue>(emptySecondAccount);
