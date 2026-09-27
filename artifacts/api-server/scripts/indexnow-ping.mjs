@@ -7,7 +7,14 @@
 // Run from CI after a push to the deploy branch; a failure here should never
 // fail the build, so callers should treat a non-zero exit as informational.
 
+import { readFile } from 'node:fs/promises';
+
 const SITE = process.argv[2] || process.env.SITE_URL;
+// Optional local copy of the sitemap. CI passes the repo file: the live one
+// sits behind Cloudflare, which answers GitHub runners with a 403, and that
+// silently stopped every ping from 2026-09-20 on.
+const SITEMAP_FILE = process.argv[3];
+
 const KEY = '9accf697f6284608d522578041abe59e';
 
 if (!SITE) {
@@ -28,7 +35,9 @@ async function fetchLocs(url) {
 }
 
 async function main() {
-  let urlList = await fetchLocs(`${origin}/sitemap.xml`);
+  let urlList = SITEMAP_FILE
+    ? [...(await readFile(SITEMAP_FILE, 'utf8')).matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1])
+    : await fetchLocs(`${origin}/sitemap.xml`);
   if (urlList.every((u) => u.endsWith('.xml'))) {
     const child = await Promise.all(urlList.map(fetchLocs));
     urlList = child.flat();
