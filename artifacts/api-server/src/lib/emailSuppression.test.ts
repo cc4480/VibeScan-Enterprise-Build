@@ -55,7 +55,8 @@ vi.mock("@workspace/db", () => ({
   },
 }));
 
-const { suppressEmail, isSuppressed, unsuppressEmail, suppressionForEvent } = await import("./emailSuppression");
+const { suppressEmail, isSuppressed, unsuppressEmail, suppressionForEvent, healBounceSuppression } =
+  await import("./emailSuppression");
 
 beforeEach(() => {
   rows.length = 0;
@@ -169,5 +170,26 @@ describe("unsuppressEmail", () => {
     await suppressEmail("fixed@example.com", "all", "hard_bounce");
     await unsuppressEmail("fixed@example.com");
     expect(await isSuppressed("fixed@example.com", "account")).toBe(false);
+  });
+});
+
+describe("healBounceSuppression", () => {
+  it("lifts a hard-bounce suppression", async () => {
+    await suppressEmail("retry@example.com", "all", "hard_bounce");
+    await healBounceSuppression("retry@example.com");
+    expect(await isSuppressed("retry@example.com", "account")).toBe(false);
+  });
+
+  // A complaint is someone saying stop, not a delivery failure. Asking for a
+  // password reset must never be read as consent to resume mailing them.
+  it("does NOT lift a complaint-based suppression", async () => {
+    await suppressEmail("cross@example.com", "bulk", "complaint");
+    await healBounceSuppression("cross@example.com");
+    expect(await isSuppressed("cross@example.com", "bulk")).toBe(true);
+  });
+
+  it("does nothing for an address that was never suppressed", async () => {
+    await healBounceSuppression("fine@example.com");
+    expect(rows).toHaveLength(0);
   });
 });

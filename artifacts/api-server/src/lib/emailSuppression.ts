@@ -97,6 +97,34 @@ export async function unsuppressEmail(email: string): Promise<void> {
 }
 
 /**
+ * Give a bounced address one more try, at the moment someone demonstrates
+ * they can receive mail there right now: a password-reset request, or a
+ * correct password at sign-in (see sendLoginCode's own comment on why that
+ * moment is trustworthy). A hard bounce from weeks ago does not mean the
+ * mailbox is still dead, and nothing else in this app ever clears one — without
+ * this, one bounce silently and permanently locks a real account out of every
+ * account email it will ever need, with no error and no way back.
+ *
+ * Only reason "hard_bounce" is lifted. A complaint is someone saying stop, not
+ * a delivery failure, and is left alone here on purpose.
+ *
+ * Fails silently, matching isSuppressed above: this runs on every sign-in and
+ * password-reset send, so a database hiccup here must never become a hiccup
+ * in signing in.
+ */
+export async function healBounceSuppression(email: string): Promise<void> {
+  try {
+    const row = await getSuppression(email);
+    if (row?.reason === "hard_bounce") {
+      await unsuppressEmail(email);
+    }
+  } catch {
+    // Best-effort. The send that follows still goes through isSuppressed,
+    // which fails open on the same kind of error.
+  }
+}
+
+/**
  * Map a Resend webhook event to a suppression, or null if it warrants none.
  *
  * Kept as a pure function so the decision table is testable without a database

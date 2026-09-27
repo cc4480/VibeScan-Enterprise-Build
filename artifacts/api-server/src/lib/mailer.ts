@@ -10,7 +10,7 @@ import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { unsubscribeHeaders } from "./emailPrefs";
 import { htmlToPlainText } from "./htmlToText";
-import { isSuppressed } from "./emailSuppression";
+import { isSuppressed, healBounceSuppression } from "./emailSuppression";
 import {
   notificationPrefs,
   shouldNotify,
@@ -1054,6 +1054,12 @@ export async function sendLoginCode(toEmail: string, code: string, ttlMinutes: n
     throw new Error("RESEND_API_KEY is not set — two-factor sign-in codes cannot be sent");
   }
 
+  // Reaching this point already means a correct password was just typed — the
+  // strongest proof of legitimate access this app has short of the code itself
+  // — so a stale hard bounce is given one more try before the check below can
+  // block it. See healBounceSuppression.
+  await healBounceSuppression(toEmail);
+
   // A hard bounce means this mailbox does not exist, so the code has nowhere to
   // go. THROWS rather than skipping, like the missing-key case above and for
   // the same reason: silently returning would tell the caller a code is on its
@@ -1105,6 +1111,14 @@ export async function sendLoginCode(toEmail: string, code: string, ttlMinutes: n
 }
 
 export async function sendPasswordReset(toEmail: string, resetUrl: string): Promise<void> {
+  // Asking to reset a password is itself a signal someone can receive mail
+  // here right now, so a stale hard bounce gets one more try. This is the ONLY
+  // account-mail sender given that treatment on an anonymous request rather
+  // than a proven password — deliberately so: the alternative is a bounce
+  // permanently and silently stranding the real account owner, with the
+  // /account/password/forgot route unable to say so without turning itself
+  // into an account-existence oracle. See healBounceSuppression.
+  await healBounceSuppression(toEmail);
   await sendAccountMessage(
     toEmail,
     "Reset your SecScan password",
