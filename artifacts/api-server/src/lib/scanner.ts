@@ -1270,7 +1270,7 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
     ledger.skip("active", "API endpoint testing (auth, injection, IDOR, mass assignment)", NOT_VERIFIED);
     ledger.skip("active", "SSRF (out-of-band callback)", NOT_VERIFIED);
     ledger.skip("active", "LLM prompt injection (system prompt extraction)", NOT_VERIFIED);
-    if (extra?.raceConditionTesting) ledger.skip("active", "race condition (one-time action)", NOT_VERIFIED);
+    ledger.skip("active", "race condition (one-time action)", NOT_VERIFIED);
   }
   if (allowActiveProbes) {
     const origin = new URL(finalUrl).origin;
@@ -1362,6 +1362,9 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
           });
         vulnerabilities.push(...raceFindings);
       }
+    } else {
+      // Logged so every scan shows this test and why it did not run, rather than leaving no trace.
+      ledger.skip("active", "race condition (one-time action)", "not requested for this scan (opt-in only, because it acts on the test account)");
     }
 
     // ── A10: SSRF via the out-of-band collector ─────────────────────────────

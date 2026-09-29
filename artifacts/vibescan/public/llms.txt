@@ -47,7 +47,7 @@ every coding session.
 
 Every account gets 3 free scans every month (renewing on the 1st, UTC), every check included.
 
-- SecScan Starter — $19/month: 1 site watched around the clock, plus 20 on-demand full
+- SecScan Starter — $19/month: up to 3 sites watched around the clock, plus 20 on-demand full
   scans every month (unused scans do not roll over). Cancel any time.
 - SecScan Pro — $49/month: up to 5 sites watched around the clock, plus 100 on-demand full
   scans every month (unused scans do not roll over). Cancel any time.

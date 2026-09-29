@@ -16,9 +16,12 @@
  *     as its content. Whatever instructions, business rules or hidden data the prompt
  *     holds is readable by anyone who opens the page.
  *
- * What it deliberately does not do: send prompt-injection or jailbreak strings at a chat
- * endpoint. The reply of a language model is not a stable signal, so any finding built
- * on it would be a coin toss, and every request costs the owner money.
+ * What this passive check deliberately does not do: send anything at a chat endpoint.
+ * The reply of a language model is not a stable signal, so a finding that judged one
+ * would be a coin toss, and every request costs the owner money. The one active AI check,
+ * promptInjectionProbe.ts, avoids that: it only runs when this file has already found the
+ * system prompt, sends at most two requests, and reports a long verbatim match against
+ * that known text rather than judging the reply.
  */
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
