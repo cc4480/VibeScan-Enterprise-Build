@@ -7,7 +7,7 @@ Every finding the scanner can emit, read out of `artifacts/api-server/src/lib`. 
 complete list; [SCAN_COVERAGE.md](SCAN_COVERAGE.md) is the readable one, grouped by module with
 the Basic/Deep tier and the methodology behind each group.
 
-**295 findings across 33 modules**, in 38 categories. 88 critical, 75 high, 64 medium, 25 low, 43 info.
+**297 findings across 35 modules**, in 39 categories. 88 critical, 76 high, 65 medium, 25 low, 43 info.
 
 A finding is a distinct name the scanner can put in a report, which is not the same as a check
 type: the data-table modules below define many findings from one piece of detection logic —
@@ -22,7 +22,7 @@ module does. `none` — neither, so no test exercises it at all.
 | Module | Findings | Lines | Tests | Coverage |
 |---|---:|---:|---:|---|
 | `probes-data.ts` | 78 | 838 | 29 | direct |
-| `secret-pattern-data.ts` | 34 | 506 | 17 | direct |
+| `secret-pattern-data.ts` | 34 | 520 | 18 | direct |
 | `probes.ts` | 16 | 980 | 15 | direct |
 | `recon-data.ts` | 14 | 178 | 12 | direct |
 | `dnsChecks.ts` | 9 | 493 | 26 | direct |
@@ -39,7 +39,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `firebase-probes.ts` | 3 | 264 | 5 | direct |
 | `mailTls.ts` | 3 | 337 | 13 | direct |
 | `storageProbe.ts` | 3 | 262 | 8 | direct |
-| `aiFeatureProbe.ts` | 2 | 94 | 10 | direct |
+| `aiFeatureProbe.ts` | 2 | 105 | 10 | direct |
 | `baasProbes.ts` | 2 | 265 | 6 | direct |
 | `graphqlExtra.ts` | 2 | 105 | 8 | direct |
 | `graphqlProbe.ts` | 2 | 298 | 8 | direct |
@@ -51,8 +51,10 @@ module does. `none` — neither, so no test exercises it at all.
 | `deserializationProbe.ts` | 1 | 105 | 9 | direct |
 | `healthEndpointProbe.ts` | 1 | 114 | 10 | direct |
 | `pathTraversal.ts` | 1 | 195 | 4 | direct |
+| `promptInjectionProbe.ts` | 1 | 132 | 5 | direct |
+| `raceConditionProbe.ts` | 1 | 119 | 4 | direct |
 | `ssrfProbe.ts` | 1 | 192 | 6 | direct |
-| `scanner.ts` | 32 | 1417 | — | indirect, via baasDepth.test.ts, challengePage.test.ts, firebase-probes.test.ts, grading.test.ts, scoring.test.ts |
+| `scanner.ts` | 32 | 1553 | — | indirect, via baasDepth.test.ts, challengePage.test.ts, firebase-probes.test.ts, grading.test.ts, scoring.test.ts |
 | `subdomain-service-data.ts` | 19 | 152 | — | indirect, via subdomainTakeover.test.ts |
 
 ## Findings by module
@@ -69,7 +71,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `aiFeatureProbe.ts`
 
-*2 findings · 94 lines · 10 tests.*
+*2 findings · 105 lines · 10 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -390,6 +392,22 @@ module does. `none` — neither, so no test exercises it at all.
 | Ruby Gemfile.lock Exposed | Info | Information Disclosure | — | CWE-200 | — |
 | yarn.lock Dependency Lockfile Exposed | Info | Information Disclosure | — | CWE-200 | — |
 
+### `promptInjectionProbe.ts`
+
+*1 findings · 132 lines · 5 tests.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| LLM Prompt Injection Extracts the System Prompt | Medium | AI Feature Security | 5.3 | CWE-1427 | WSTG-BUSL-01 |
+
+### `raceConditionProbe.ts`
+
+*1 findings · 119 lines · 4 tests.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| Race Condition Allows a One-Time Action to Succeed Multiple Times | High | Business Logic | 6.5 | CWE-362 | WSTG-BUSL-03 |
+
 ### `recon-data.ts`
 
 *14 findings · 178 lines · 12 tests · emitted by `recon.ts`.*
@@ -413,7 +431,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `scanner.ts`
 
-*32 findings · 1417 lines · no test file.*
+*32 findings · 1553 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -452,7 +470,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `secret-pattern-data.ts`
 
-*34 findings · 506 lines · 17 tests · emitted by `jsScanner.ts`.*
+*34 findings · 520 lines · 18 tests · emitted by `jsScanner.ts`.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
