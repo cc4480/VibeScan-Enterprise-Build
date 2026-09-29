@@ -39,7 +39,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `firebase-probes.ts` | 3 | 264 | 5 | direct |
 | `mailTls.ts` | 3 | 337 | 13 | direct |
 | `storageProbe.ts` | 3 | 262 | 8 | direct |
-| `aiFeatureProbe.ts` | 2 | 105 | 10 | direct |
+| `aiFeatureProbe.ts` | 2 | 108 | 10 | direct |
 | `baasProbes.ts` | 2 | 265 | 6 | direct |
 | `graphqlExtra.ts` | 2 | 105 | 8 | direct |
 | `graphqlProbe.ts` | 2 | 298 | 8 | direct |
@@ -54,7 +54,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `promptInjectionProbe.ts` | 1 | 132 | 5 | direct |
 | `raceConditionProbe.ts` | 1 | 119 | 4 | direct |
 | `ssrfProbe.ts` | 1 | 192 | 6 | direct |
-| `scanner.ts` | 32 | 1553 | — | indirect, via baasDepth.test.ts, challengePage.test.ts, firebase-probes.test.ts, grading.test.ts, scoring.test.ts |
+| `scanner.ts` | 32 | 1556 | — | indirect, via baasDepth.test.ts, challengePage.test.ts, firebase-probes.test.ts, grading.test.ts, scoring.test.ts |
 | `subdomain-service-data.ts` | 19 | 152 | — | indirect, via subdomainTakeover.test.ts |
 
 ## Findings by module
@@ -71,7 +71,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `aiFeatureProbe.ts`
 
-*2 findings · 105 lines · 10 tests.*
+*2 findings · 108 lines · 10 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -431,7 +431,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `scanner.ts`
 
-*32 findings · 1553 lines · no test file.*
+*32 findings · 1556 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
