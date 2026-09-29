@@ -48,7 +48,7 @@ export const CATALOG_SURFACE: CatalogTest[] = [
     ["medium", "Supabase Storage Files Listable Without Authentication", "Supabase Storage Files Listable Without Authentication", "baasDepth.ts"],
     ["high", "Firebase Storage Files Listable Without Authentication", "Firebase Storage Files Listable Without Authentication", "baasDepth.ts"],
   ]),
-  test("cross-account access control", "Broken Access Control", "accessControlProbe.ts", [
+  test("cross-account access control", "Broken Access Control", "accessControlFindings.ts", [
     ["critical", "Broken Object-Level Authorisation (IDOR)", "Broken Object-Level Authorisation (IDOR)"],
     ["critical", "Records Enumerable by Editing the Identifier", "Records Enumerable by Editing the Identifier"],
     ["high", "Records Readable Without Signing In", "Records Readable Without Signing In"],

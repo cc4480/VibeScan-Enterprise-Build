@@ -34,7 +34,6 @@ module does. `none` — neither, so no test exercises it at all.
 | `supabase-probes.ts` | 7 | 593 | 7 | direct |
 | `jwtAnalysis.ts` | 6 | 262 | 9 | direct |
 | `cveCheck.ts` | 4 | 594 | 10 | direct |
-| `accessControlProbe.ts` | 3 | 419 | 26 | direct |
 | `baasDepth.ts` | 3 | 148 | 11 | direct |
 | `firebase-probes.ts` | 3 | 264 | 5 | direct |
 | `mailTls.ts` | 3 | 337 | 13 | direct |
@@ -57,13 +56,14 @@ module does. `none` — neither, so no test exercises it at all.
 | `ssrfProbe.ts` | 1 | 192 | 6 | direct |
 | `scanner.ts` | 32 | 1533 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, grading.test.ts, scoring.test.ts |
 | `subdomain-service-data.ts` | 19 | 152 | — | indirect, via subdomainTakeover.test.ts |
+| `accessControlFindings.ts` | 3 | 129 | — | indirect, via accessControlProbe.test.ts |
 | `githubFindings.ts` | 1 | 58 | — | indirect, via githubSourceProbe.test.ts |
 
 ## Findings by module
 
-### `accessControlProbe.ts`
+### `accessControlFindings.ts`
 
-*3 findings · 419 lines · 26 tests.*
+*3 findings · 129 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -617,7 +617,7 @@ module does. `none` — neither, so no test exercises it at all.
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
 | AI analysis could not be completed for this scan | Info | Scan Coverage | — | — | — |
-| _(dynamic name)_ | Info | Scan Coverage | — | — | — |
+| Written analysis is turned off in your settings | Info | Scan Coverage | — | — | — |
 
 ## How this was read
 
@@ -625,8 +625,8 @@ Regex over the source, matching the scanner's own approach to HTML. It holds bec
 finding literals are uniform; the assumptions are:
 
 - A finding is an object literal carrying `severity:` with one of the five levels.
-- Its name comes from `name:` in the same literal — or `header:`, for the header-gap table whose names are composed at the emit site.
+- Its name comes from `name:` in the same literal, or in a constant it spreads (`...NOTE`) — or `header:`, for the header-gap table whose names are composed at the emit site.
 - A ternary severity or name means the check emits two variants (session vs non-session cookies, for example).
 
-**1 findings could not be named** — an assumption above no longer holds, and the parser needs a look.
+Every finding resolved to a name, so none of these currently fails.
 
