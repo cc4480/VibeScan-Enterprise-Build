@@ -117,4 +117,13 @@ export const CATALOG_SURFACE: CatalogTest[] = [
   test("SSL Labs TLS grade", "Transport Security", "worker.ts", [
     ["varies", "Weak TLS Configuration (SSL Labs grade C or below)", "Weak TLS Configuration (SSL Labs Grade"],
   ]),
+  test("GitHub source code secrets", "Credential Exposure", "githubSourceProbe.ts", [
+    ["varies", "Credential found in a public GitHub repository's source (34 secret patterns)", "(in source repository)"],
+  ]),
+  test("LLM prompt injection", "AI Feature Security", "promptInjectionProbe.ts", [
+    ["medium", "LLM Prompt Injection Extracts the System Prompt", "LLM Prompt Injection Extracts the System Prompt"],
+  ]),
+  test("race condition", "Business Logic", "raceConditionProbe.ts", [
+    ["high", "Race Condition Allows a One-Time Action to Succeed Multiple Times", "Race Condition Allows a One-Time Action to Succeed Multiple Times"],
+  ]),
 ];

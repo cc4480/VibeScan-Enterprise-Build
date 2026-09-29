@@ -13,7 +13,9 @@ const src = (file: string) => readFileSync(join(LIB, file), "utf8");
 describe("the catalog matches the scanner's source", () => {
   it("carries the number of checks the site claims, itemised", () => {
     // Deliberate: changing the count is a public-claim change, so it must be edited here too.
-    expect(TOTAL_CHECKS).toBe(140);
+    // 140 → 143: GitHub source-code secret scanning, LLM prompt-injection extraction,
+    // and the active race-condition probe.
+    expect(TOTAL_CHECKS).toBe(143);
     expect(CATALOG.flatMap((t) => t.checks)).toHaveLength(TOTAL_CHECKS);
   });
 
@@ -54,6 +56,8 @@ describe("every test the scanner records is accounted for", () => {
     "cross-account access control (IDOR)",
     "SSL Labs TLS grade",
     "port scan",
+    "LLM prompt injection (system prompt extraction)",
+    "race condition (one-time action)",
   ];
 
   it("finds the ledger names it is checking against", () => {

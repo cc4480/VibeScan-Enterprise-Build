@@ -69,7 +69,21 @@ function isRealSecretValue(match: string): boolean {
   if (/EXAMPLE|PLACEHOLDER|YOUR_|<|>|\*{3,}|\.{3,}/i.test(match)) return false;
   const valMatch = /[:=]\s*["']([^"']+)["']/.exec(match);
   if (!valMatch) return false;
-  return shannonEntropy(valMatch[1]!) >= 3.0;
+  return !looksLikeAName(valMatch[1]!) && shannonEntropy(valMatch[1]!) >= 3.0;
+}
+
+/**
+ * A value that names a variable or is a filler phrase rather than being a credential:
+ * MY_DEEPSEEK_API_KEY, STRIPE_SECRET, your-super-secret-jwt-key. Words joined by _ or -
+ * clear the entropy floor, so they need their own rule. A real key nearly always carries a
+ * digit or is not made of separated words, so a digit-free run of words is only rejected when
+ * it is an ALL-CAPS environment-variable name or contains a filler word.
+ */
+const FILLER_WORD = /^(my|your|the|this|here|change|changeme|replace|dummy|sample|fake|test|todo|value|token|secret|key|api|password|placeholder)$/i;
+function looksLikeAName(value: string): boolean {
+  if (!/^[A-Za-z]+(?:[_-][A-Za-z]+)+$/.test(value)) return false;
+  if (value === value.toUpperCase()) return true;
+  return value.split(/[_-]/).some((w) => FILLER_WORD.test(w));
 }
 
 /**

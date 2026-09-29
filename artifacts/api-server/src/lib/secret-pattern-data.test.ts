@@ -144,3 +144,29 @@ describe("SECRET_PATTERNS — an API key shipped to the browser is not a leaked 
     }
   });
 });
+
+describe("SECRET_PATTERNS — a value that names a variable is not a key", () => {
+  const apiKey = SECRET_PATTERNS.find((p) => p.name === "API Key in Client Code (verify restrictions)")!;
+  const secret = SECRET_PATTERNS.find((p) => p.name === "Hardcoded Secret or Auth Token in Source")!;
+
+  it.each([
+    `DEEPSEEK_API_KEY="MY_DEEPSEEK_API_KEY"`,
+    `API_KEY="STRIPE_LIVE_API_KEY"`,
+    `api_key: 'your-super-secret-key'`,
+  ])("rejects %s", (line) => {
+    expect(apiKey.validate!(apiKey.pattern.exec(line)![0])).toBe(false);
+  });
+
+  it("rejects an environment-variable name given as a secret", () => {
+    const line = `client_secret: 'MY_CLIENT_SECRET_VALUE'`;
+    expect(secret.validate!(secret.pattern.exec(line)![0])).toBe(false);
+  });
+
+  it.each([
+    `apiKey: 'xxf1623479-48a6-4dce-8475-28e0b0720fbc'`,
+    `api_key = "q7Zt-Lm2-pXv9-Rk4w-Hn8B"`,
+    `API_KEY="Vb9xQmLpTzRkWnHcYdSfJgAe"`,
+  ])("still reports %s", (line) => {
+    expect(apiKey.validate!(apiKey.pattern.exec(line)![0])).toBe(true);
+  });
+});

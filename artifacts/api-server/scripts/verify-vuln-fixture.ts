@@ -22,6 +22,7 @@ process.env["DATABASE_URL"] ??= "postgres://localhost/verify-vuln-fixture";
 import { runScan } from "../src/lib/scanner.js";
 import { isOobConfigured } from "../src/lib/oobServer.js";
 import { initBrowser, closeBrowser } from "../src/lib/browser.js";
+import { verifyActingProbes } from "./verify-acting-probes.js";
 
 const TARGET = process.argv.slice(2).find((a) => !a.startsWith("--")) ?? "http://127.0.0.1:4100";
 
@@ -144,6 +145,8 @@ const EXPECTED: Array<{ module: string; label: string; match: RegExp }> = [
   { module: "injectionProbe.ts", label: "Reflected XSS", match: /Reflected Cross-Site Scripting/i },
   { module: "injectionExtra.ts", label: "Server-side template injection", match: /Server-Side Template Injection/i },
   { module: "injectionExtra.ts", label: "HTTP header injection (CRLF)", match: /HTTP Header Injection/i },
+  { module: "promptInjectionProbe.ts", label: "LLM prompt injection extracts the system prompt", match: /LLM Prompt Injection Extracts the System Prompt/i },
+  { module: "raceConditionProbe.ts", label: "Race condition on a one-time action", match: /Race Condition Allows a One-Time Action/i },
   { module: "injectionProbe.ts", label: "SQL injection (error-based)", match: /SQL Injection \(Error-Based\)/i },
 
   // ── pathTraversal.ts (needs --active) ───────────────────────────────────
@@ -186,7 +189,7 @@ async function main(): Promise<void> {
 
   console.log(`[verify] scanning ${TARGET} (active + credentialed, two accounts)`);
   await initBrowser();
-  const result = await runScan(TARGET, "deep", true, { credentials: primary, secondary }, null);
+  const result = await runScan(TARGET, "deep", true, { credentials: primary, secondary }, null, undefined, { raceConditionTesting: true });
 
   await closeBrowser();
 
@@ -228,12 +231,18 @@ async function main(): Promise<void> {
   const runtimeFound = result.vulnerabilities.some((v) => `${v.evidence ?? ""} ${v.description}`.includes("/api/runtime/lookup"));
   console.log(`  [${runtimeFound ? "FOUND " : "MISSED"}] apiRuntime.ts            API discovered only at runtime`);
 
-  const CLEAN_TWINS = ["/api/graphql", "/hello?", "/lang2?", "echoq", "/assets/ai-chat.js"];
+  const CLEAN_TWINS = ["/api/graphql", "/hello?", "/lang2?", "echoq", "/assets/ai-chat.js", "/api/chat", "/api/promo/claim"];
   const falseAlarms = result.vulnerabilities.filter((v) => CLEAN_TWINS.some((t) => `${v.evidence ?? ""} ${v.description}`.includes(t)));
   if (falseAlarms.length) {
     console.log("");
     for (const v of falseAlarms) console.log(`  [FALSE ALARM] ${v.name}: names a clean twin`);
   }
+
+  // Each acting probe against its vulnerable route and its clean twin, one at a time.
+  const acting = await verifyActingProbes(TARGET);
+  console.log("");
+  for (const c of acting) console.log(`  [${c.ok ? "FOUND " : "MISSED"}] ${c.module.padEnd(24)} ${c.label}${c.ok || !c.detail ? "" : ` (${c.detail})`}`);
+  const actingFailed = acting.filter((c) => !c.ok);
 
   if (process.argv.includes("--list")) {
     console.log("\nEvery finding returned:");
@@ -248,6 +257,10 @@ async function main(): Promise<void> {
   }
   if (falseAlarms.length > 0) {
     console.log(`\n${falseAlarms.length} finding(s) named a clean twin: a false positive.`);
+    process.exit(1);
+  }
+  if (actingFailed.length > 0) {
+    console.log(`\n${actingFailed.length} acting-probe check(s) failed.`);
     process.exit(1);
   }
   if (missed.length > 0) {

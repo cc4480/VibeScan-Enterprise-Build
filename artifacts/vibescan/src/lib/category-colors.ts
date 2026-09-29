@@ -58,6 +58,7 @@ export const CATEGORY_FAMILY: Record<string, FamilyKey> = {
   "Broken Access Control": "access",
   "API Security": "access",
   "Server-Side Request Forgery": "access",
+  "Business Logic": "access",
 
   "Injection": "injection",
   "Injection Defense": "injection",

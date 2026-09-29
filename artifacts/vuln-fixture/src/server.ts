@@ -36,6 +36,7 @@ import { mountInjectionExtras, INJECTION_EXTRA_LINKS } from "./injection-extra-r
 import { mountGraphqlExtras } from "./graphql-extra-routes.js";
 import { mountRuntimeApi } from "./runtime-api-routes.js";
 import { AI_WIDGET_JS, AI_CHAT_CLEAN_JS } from "./ai-assets.js";
+import { mountAccountAiRace, SUPPORT_JS } from "./account-ai-race-routes.js";
 import {
   SECRETS_JS,
   NEXT_DATA_PROPS,
@@ -268,6 +269,7 @@ app.get("/", (req, res) => {
 <span data-token="${JWT_SENSITIVE_PAYLOAD}"></span>
 <script src="/assets/app.js"></script>
 <script src="/assets/boot.js"></script>
+<script src="/assets/support.js"></script>
 <script src="/assets/ai-widget.js"></script>
 <script src="/assets/ai-chat.js"></script>
 <script src="https://cdn.example.net/analytics.js"></script>
@@ -346,6 +348,8 @@ function searchHandler(req: Request, res: Response) {
 mountInjectionExtras(app);
 mountRuntimeApi(app);
 mountGraphqlExtras(app);
+mountAccountAiRace(app, SESSIONS);
+app.get("/assets/support.js", (_req, res) => { res.type("application/javascript").send(SUPPORT_JS); });
 app.get("/search", searchHandler);
 app.post("/api/search", searchHandler);
 

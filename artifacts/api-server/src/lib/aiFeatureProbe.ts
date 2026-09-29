@@ -41,6 +41,17 @@ function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
   return { id: randomUUID(), ...partial };
 }
 
+/**
+ * The system prompt text itself, when the passive check above finds one —
+ * exported so an active probe (promptInjectionProbe.ts) can use it as
+ * independent ground truth, without re-parsing it back out of a finding's
+ * evidence string.
+ */
+export function extractSystemPromptText(js: string): string | null {
+  const prompt = SYSTEM_PROMPT.exec(js) ?? SYSTEM_PROMPT_REVERSED.exec(js);
+  return prompt ? prompt[2]! : null;
+}
+
 export function scanAiUsage(js: string): ScanVulnerability[] {
   const out: ScanVulnerability[] = [];
 

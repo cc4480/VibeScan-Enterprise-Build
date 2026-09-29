@@ -86,7 +86,12 @@ import { runAllProbes } from "./probes";
 import { TestLedger, NOT_VERIFIED, type TestRecord } from "./testLedger";
 import { isOobConfigured } from "./oobServer";
 import { checkDnsSecurity } from "./dnsChecks";
-import { scanJavaScriptForSecrets } from "./jsScanner";
+import { scanJavaScriptForSecrets, collectJavaScript } from "./jsScanner";
+import { extractSystemPromptText } from "./aiFeatureProbe";
+import { runPromptInjectionProbe } from "./promptInjectionProbe";
+import { attemptAutoSecondAccount } from "./autoSecondAccount";
+import { parseGithubRepoRef, scanGithubRepo, githubNotScannedReason } from "./githubSourceProbe";
+import { runRaceConditionProbe } from "./raceConditionProbe";
 import { crawlAndCheck } from "./crawler";
 import { checkForKnownVulnerabilities, extractVersionedTechnologies } from "./cveCheck";
 import { analyzeJwts } from "./jwtAnalysis";
@@ -388,6 +393,29 @@ export interface RunScanAuth {
   onSessionLost?: () => Promise<ScanHttpCredentials | null>;
 }
 
+/**
+ * Optional, independent extras that do not belong on `RunScanAuth` — that
+ * object only exists at all when the scan is authenticated against the
+ * target, and both of these are meaningful on an unauthenticated scan too.
+ * A new trailing optional parameter, so every existing call site (which
+ * passes none of this) is entirely unaffected.
+ */
+export interface RunScanExtras {
+  /**
+   * A public GitHub repository ("owner/repo" or a full URL) to additionally
+   * scan for hardcoded secrets in source, alongside the live-URL scan. See
+   * githubSourceProbe.ts. Omitted entirely for most scans; this is opt-in
+   * per scan, supplied by the user.
+   */
+  githubRepoUrl?: string;
+  /**
+   * Explicit, scan-by-scan opt-in for the active race-condition probe (see
+   * raceConditionProbe.ts for why this is not on by default). Defaults to
+   * false/omitted, meaning the probe never runs unless a caller sets this.
+   */
+  raceConditionTesting?: boolean;
+}
+
 export async function runScan(
   targetUrl: string,
   tier: string,
@@ -402,6 +430,7 @@ export async function runScan(
   scanId?: string | null,
   // Hears each test the moment it is recorded, for the live progress page.
   onTest?: (record: TestRecord) => void,
+  extra?: RunScanExtras,
 ): Promise<ScanResult> {
   // Credentials go into the scan context, where lib/http.ts attaches them only
   // to in-scope requests and drops them on any redirect that leaves the target.
@@ -416,7 +445,7 @@ export async function runScan(
           }
         : {}),
     },
-    () => runScanInner(targetUrl, tier, allowActiveProbes, auth, scanId ?? null, onTest),
+    () => runScanInner(targetUrl, tier, allowActiveProbes, auth, scanId ?? null, onTest, extra),
   );
 }
 
@@ -526,6 +555,7 @@ async function runScanInner(
   auth?: RunScanAuth,
   scanId: string | null = null,
   onTest?: (record: TestRecord) => void,
+  extra?: RunScanExtras,
 ): Promise<ScanResult> {
   const startedAt = Date.now();
 
@@ -1157,6 +1187,31 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
 
   namedProbes.push({ family: "JavaScript secret scanning", run: scanJavaScriptForSecrets(html, finalUrl) });
 
+  // Optional source-code scan of a public GitHub repository the user
+  // supplied for this scan — see githubSourceProbe.ts. Independent of
+  // allowActiveProbes: this never sends a request to the scan target at all,
+  // only to GitHub's own public API, so it carries none of the risk that
+  // gate exists to control.
+  if (extra?.githubRepoUrl) {
+    const repoRef = parseGithubRepoRef(extra.githubRepoUrl);
+    if (repoRef) {
+      namedProbes.push({
+        family: "GitHub source code secrets",
+        // A repository that could not be read throws, so the ledger records it as failed and
+        // the coverage note names it, instead of it reading as a clean "nothing found".
+        run: scanGithubRepo(repoRef).then((outcome) => {
+          const why = githubNotScannedReason(outcome.status);
+          if (why) throw new Error(why);
+          return outcome.findings;
+        }),
+      });
+    } else {
+      ledger.skip("passive", "GitHub source code secrets", "the supplied value was not a recognisable GitHub repository");
+    }
+  } else {
+    ledger.skip("passive", "GitHub source code secrets", "no repository was supplied for this scan");
+  }
+
   if (allowActiveProbes) {
     namedProbes.push(
       // Active path traversal probing — multiple HTTP requests
@@ -1214,6 +1269,8 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
     ledger.skip("active", "API surface discovery", NOT_VERIFIED);
     ledger.skip("active", "API endpoint testing (auth, injection, IDOR, mass assignment)", NOT_VERIFIED);
     ledger.skip("active", "SSRF (out-of-band callback)", NOT_VERIFIED);
+    ledger.skip("active", "LLM prompt injection (system prompt extraction)", NOT_VERIFIED);
+    if (extra?.raceConditionTesting) ledger.skip("active", "race condition (one-time action)", NOT_VERIFIED);
   }
   if (allowActiveProbes) {
     const origin = new URL(finalUrl).origin;
@@ -1254,6 +1311,59 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
     });
     vulnerabilities.push(...apiFindings);
 
+    // ── LLM prompt injection (system prompt extraction) ──────────────────────
+    // Only meaningful when the passive AI-feature check already found the
+    // target's system prompt sitting in its own client-side JS — that known
+    // text is what makes this a stable check rather than a judged one. See
+    // promptInjectionProbe.ts.
+    const knownSystemPrompt = extractSystemPromptText(await collectJavaScript(html, finalUrl));
+    if (!knownSystemPrompt) {
+      ledger.skip(
+        "active",
+        "LLM prompt injection (system prompt extraction)",
+        "no system prompt was found in this site's client-side code to check against",
+      );
+    } else {
+      const injectionFindings = await ledger
+        .track(
+          "active",
+          "LLM prompt injection (system prompt extraction)",
+          runPromptInjectionProbe({
+            knownSystemPrompt,
+            endpoints: endpoints.map((e) => e.url),
+            ...(auth?.credentials ? { credentials: auth.credentials } : {}),
+          }),
+        )
+        .catch((err: unknown) => {
+          unrunFamilies.push("LLM prompt injection (system prompt extraction)");
+          console.error("[scan] prompt injection probe failed", err);
+          return [] as ScanVulnerability[];
+        });
+      vulnerabilities.push(...injectionFindings);
+    }
+
+    // ── Race condition (one-time action) ──────────────────────────────────────
+    // Explicit per-scan opt-in only — see raceConditionProbe.ts for why this is
+    // gated separately from every other active check.
+    if (extra?.raceConditionTesting) {
+      if (!auth?.credentials) {
+        ledger.skip("active", "race condition (one-time action)", "needs a signed-in test account to run against");
+      } else {
+        const raceFindings = await ledger
+          .track(
+            "active",
+            "race condition (one-time action)",
+            runRaceConditionProbe({ endpoints: endpoints.map((e) => e.url), credentials: auth.credentials }),
+          )
+          .catch((err: unknown) => {
+            unrunFamilies.push("race condition (one-time action)");
+            console.error("[scan] race condition probe failed", err);
+            return [] as ScanVulnerability[];
+          });
+        vulnerabilities.push(...raceFindings);
+      }
+    }
+
     // ── A10: SSRF via the out-of-band collector ─────────────────────────────
     // Runs only when a public callback host is configured, since the target's
     // server is what has to reach it. Reuses the discovered endpoints.
@@ -1284,17 +1394,43 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
   // account actually reached are the ones worth asking a second account for.
   // Requires both accounts — one identity cannot demonstrate an authorisation
   // boundary between users.
+  //
+  // When a primary account is signed in but no second one was supplied, try
+  // once to create a disposable one through the target's own public signup
+  // form (see autoSecondAccount.ts) before falling back to skipping this
+  // check. This never runs against a target with no logged-in primary
+  // account at all — there would be nothing to compare a second identity to.
+  let effectiveSecondary = auth?.secondary;
+  let autoSecondAccountSkipReason: string | null = null;
+  if (allowActiveProbes && auth?.credentials && !effectiveSecondary) {
+    const attempt = await attemptAutoSecondAccount(finalUrl).catch((err: unknown) => {
+      console.error("[scan] auto second-account creation failed", err);
+      return { secondary: null, skippedReason: "attempting an automatic second account failed" } as const;
+    });
+    if (attempt.secondary) {
+      effectiveSecondary = attempt.secondary;
+    } else {
+      autoSecondAccountSkipReason = attempt.skippedReason ?? "no second account available";
+    }
+  }
+
   if (!allowActiveProbes) {
     ledger.skip("active", "cross-account access control (IDOR)", NOT_VERIFIED);
-  } else if (!auth?.secondary) {
-    ledger.skip("active", "cross-account access control (IDOR)", "needs sign-ins for two test accounts on the scan");
+  } else if (!effectiveSecondary) {
+    ledger.skip(
+      "active",
+      "cross-account access control (IDOR)",
+      autoSecondAccountSkipReason
+        ? `no second test account was supplied, and an automatic attempt to create one did not succeed: ${autoSecondAccountSkipReason}`
+        : "needs sign-ins for two test accounts on the scan",
+    );
   }
-  if (allowActiveProbes && auth?.secondary) {
+  if (allowActiveProbes && auth?.credentials && effectiveSecondary) {
     const candidateUrls = [finalUrl, ...crawlResult.pagesVisited];
     const accessFindings = await ledger.track("active", "cross-account access control (IDOR)", runAccessControlProbes({
       urls: candidateUrls,
       primary: auth.credentials,
-      secondary: auth.secondary,
+      secondary: effectiveSecondary,
     })).catch((err: unknown) => {
       unrunFamilies.push("cross-account access control (IDOR)");
       console.error("[scan] access control probes failed", err);

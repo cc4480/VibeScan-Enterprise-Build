@@ -76,7 +76,7 @@ function extractExternalScriptUrls(html: string, baseUrl: string): string[] {
 // SCAN FOR SECRETS
 // ─────────────────────────────────────────────────────────────────────────────
 
-function redactSecret(match: string): string {
+export function redactSecret(match: string): string {
   if (match.length <= 8) return "***";
   return match.slice(0, 6) + "..." + match.slice(-4);
 }
@@ -104,7 +104,12 @@ export function redactContext(context: string, match: string): string {
   return out.replace(/[A-Za-z0-9+/=_-]{24,}/g, (m) => redactSecret(m));
 }
 
-function scanContent(content: string): Array<{ pattern: SecretPattern; match: string; context: string }> {
+/**
+ * Exported so a source scan of a public GitHub repository (githubSourceProbe.ts)
+ * can reuse the exact same pattern list and matching logic against fetched file
+ * text, rather than duplicating it.
+ */
+export function scanContent(content: string): Array<{ pattern: SecretPattern; match: string; context: string }> {
   const findings: Array<{ pattern: SecretPattern; match: string; context: string }> = [];
 
   for (const p of SECRET_PATTERNS) {

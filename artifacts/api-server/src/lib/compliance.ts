@@ -180,6 +180,13 @@ const CWE_CONTROLS: Record<string, ControlRef[]> = {
     { framework: "asvs", control: "V2.7.1", title: "Credentials transmitted and stored protected" },
     { framework: "soc2", control: "CC6.1", title: "Logical access — credentials protected" },
   ],
+  // ASVS 4.0.3 predates LLM-specific requirements, so no ASVS control names
+  // prompt injection directly — dropped rather than forced onto a control
+  // about something else, the same discipline CWE-290's entry above documents.
+  "CWE-1427": [
+    { framework: "iso27001", control: "A.8.28", title: "Secure coding" },
+    { framework: "soc2", control: "CC6.1", title: "Logical access — credentials and instructions protected" },
+  ],
   "CWE-259": [
     { framework: "asvs", control: "V6.4.1", title: "Secrets not embedded in code or client assets" },
     { framework: "pci", control: "8.3.1", title: "Strong authentication; credentials not hard-coded" },
@@ -253,6 +260,11 @@ const CWE_CONTROLS: Record<string, ControlRef[]> = {
     { framework: "asvs", control: "V4.2.1", title: "Object-level authorisation enforced" },
     { framework: "iso27001", control: "A.5.15", title: "Access control" },
     { framework: "soc2", control: "CC6.1", title: "Logical access restricted to authorised users" },
+  ],
+  "CWE-362": [
+    { framework: "asvs", control: "V11.1.3", title: "Business logic flows resistant to TOCTOU / race conditions" },
+    { framework: "iso27001", control: "A.8.28", title: "Secure coding" },
+    { framework: "soc2", control: "CC6.1", title: "Logical access — session and transaction integrity" },
   ],
   "CWE-290": [
     // No ASVS 4.0.3 control actually covers DNS email authentication (SPF/
