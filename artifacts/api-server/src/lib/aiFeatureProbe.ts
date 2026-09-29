@@ -25,6 +25,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
+import { unescapeJsLiteral } from "./promptOverlap";
 
 const PROVIDER_HOSTS = [
   "api.openai.com", "api.anthropic.com", "generativelanguage.googleapis.com", "api.groq.com",
@@ -36,9 +37,16 @@ const hostAlt = PROVIDER_HOSTS.map((h) => h.replace(/\./g, "\\.")).join("|");
 const DIRECT_CALL = new RegExp(`(?:fetch\\(\\s*|baseURL\\s*:\\s*|baseUrl\\s*:\\s*|url\\s*:\\s*)["'\`]https://(${hostAlt})(?:/[^"'\`\\s]*)?["'\`]`, "i");
 const BROWSER_FLAG = /dangerouslyAllowBrowser\s*:\s*(?:true|!0)/;
 
-/** {role:"system",content:"…80+ chars…"} in either key order, with any of the three quote styles. */
-const SYSTEM_PROMPT = /role\s*:\s*["']system["']\s*,\s*content\s*:\s*(["'`])((?:(?!\1)[^\\\n]|\\.){80,}?)\1/;
-const SYSTEM_PROMPT_REVERSED = /content\s*:\s*(["'`])((?:(?!\1)[^\\\n]|\\.){80,}?)\1\s*,\s*role\s*:\s*["']system["']/;
+/**
+ * {role:"system",content:"…80+ chars…"} in either key order, with JS or JSON-quoted keys and any of
+ * the three quote styles. A quoted string must sit on one line; a backtick template literal, the usual
+ * way to write a long prompt, may span lines (\x60 is the backtick).
+ */
+const ROLE = String.raw`["']?role["']?\s*:\s*["']system["']`;
+const CONTENT = String.raw`["']?content["']?\s*:\s*`;
+const LITERAL = String.raw`(?:(["'])((?:(?!\1)[^\\\n]|\\.){80,}?)\1|\x60((?:[^\x60\\]|\\[\s\S]){80,}?)\x60)`;
+const SYSTEM_PROMPT = new RegExp(`${ROLE}\\s*,\\s*${CONTENT}${LITERAL}`);
+const SYSTEM_PROMPT_REVERSED = new RegExp(`${CONTENT}${LITERAL}\\s*,\\s*${ROLE}`);
 
 function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
   return { id: randomUUID(), ...partial };
@@ -49,10 +57,16 @@ function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
  * exported so an active probe (promptInjectionProbe.ts) can use it as
  * independent ground truth, without re-parsing it back out of a finding's
  * evidence string.
+ *
+ * Returned UNESCAPED, as the model receives it. The raw source literal has \n and \' still
+ * written out, and comparing that against a reply (which has real newlines and apostrophes) made a
+ * fully leaked prompt score 49 of 182 in plain text and a prompt of short lines score zero.
  */
 export function extractSystemPromptText(js: string): string | null {
   const prompt = SYSTEM_PROMPT.exec(js) ?? SYSTEM_PROMPT_REVERSED.exec(js);
-  return prompt ? prompt[2]! : null;
+  if (!prompt) return null;
+  const raw = prompt[2] ?? prompt[3];
+  return raw === undefined ? null : unescapeJsLiteral(raw);
 }
 
 export function scanAiUsage(js: string): ScanVulnerability[] {
@@ -84,9 +98,9 @@ export function scanAiUsage(js: string): ScanVulnerability[] {
     }));
   }
 
-  const prompt = SYSTEM_PROMPT.exec(js) ?? SYSTEM_PROMPT_REVERSED.exec(js);
-  if (prompt) {
-    const text = prompt[2]!;
+  // The same extraction the probe uses, so the passive finding and the probe's input cannot drift apart.
+  const text = extractSystemPromptText(js);
+  if (text !== null) {
     out.push(vuln({
       name: "AI System Prompt Shipped in Client-Side Code",
       severity: "low",

@@ -29,9 +29,22 @@ describe("runRaceConditionProbe", () => {
   });
 
   it("flags a coupon endpoint that lets concurrent requests all succeed", async () => {
-    const port = await serve((req, res) => {
+    // Deliberately unsafe in the way that makes it a RACE: the endpoint does enforce "once" (a
+    // request after the burst is refused) but checks and marks in two steps, so concurrent
+    // requests all pass the check. The first version of this test served a 200 to every request
+    // forever, which is an endpoint with no limit at all (or an idempotent one) and cannot be told
+    // from one; that case is now deliberately not reported, see "accepts every repeat" below.
+    let used = false;
+    const port = await serve(async (req, res) => {
       if (req.url === "/api/coupon/redeem" && req.method === "POST") {
-        // Deliberately unsafe: no locking, every concurrent request "succeeds".
+        await new Promise((r) => { req.on("data", () => {}); req.on("end", r); });
+        if (used) {
+          res.writeHead(409, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "coupon no longer valid" }));
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 30)); // the gap between the check and the write
+        used = true;
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: true, discount: "10%" }));
         return;
@@ -95,12 +108,15 @@ describe("runRaceConditionProbe", () => {
     });
 
     const targetUrl = `http://127.0.0.1:${port}/`;
-    const endpoints = Array.from({ length: 10 }, (_, i) => `http://127.0.0.1:${port}/api/redeem-${i}`);
+    const endpoints = Array.from({ length: 10 }, (_, i) => `http://127.0.0.1:${port}/api/shop${i}/redeem`);
     await runWithScanHttp({ targetUrl }, () =>
       runRaceConditionProbe({ endpoints, credentials: { cookie: "sid=abc" } }),
     );
 
-    // At most 3 candidates × 5 concurrent attempts each.
-    expect(requestCount).toBeLessThanOrEqual(15);
+    // At most 3 candidates x (5 concurrent attempts + 1 control after them). The routes used to be
+    // /api/redeem-N, which the old whole-URL regex matched and a last-segment rule does not, so this
+    // assertion had begun to hold only because nothing was sent at all.
+    expect(requestCount).toBeGreaterThan(0);
+    expect(requestCount).toBeLessThanOrEqual(18);
   });
 });

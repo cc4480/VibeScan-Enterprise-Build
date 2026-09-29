@@ -6,6 +6,25 @@
  * correspond to an account anyone controls. See README.md.
  */
 
+/**
+ * Deterministic key-shaped filler. A planted value padded with a run of "0" or "x" is a TEMPLATE, and the
+ * scanner now rightly ignores those (secretPlaceholders.ts: sk_live_xxxxxxxx in a .env.example is not a
+ * leak), so a fixture that still planted them would stop proving detection. Same seed, same output, so runs
+ * are reproducible; nothing here is a live credential, and no vendor would issue any of it.
+ */
+const ALNUM = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+const HEX = "0123456789abcdef";
+const UPPER_DIGITS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+function tok(n: number, chars: string, seed: number): string {
+  let s = Math.imul(seed, 2654435761) >>> 0;
+  let out = "";
+  for (let i = 0; i < n; i++) {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    out += chars[(s >>> 8) % chars.length];
+  }
+  return out;
+}
+
 function b64url(obj: unknown): string {
   return Buffer.from(JSON.stringify(obj)).toString("base64url");
 }
@@ -41,21 +60,22 @@ export const JWT_HARDCODED_IN_SOURCE = `${b64url({ alg: "HS256", typ: "JWT" })}.
 // Every length below is the regex's own minimum (or exact count, where the
 // regex has no trailing `+`/`,}`), computed here rather than hand-typed so a
 // miscounted word doesn't silently fall one character short of matching.
-const twilioKey = "SK" + "0".repeat(32); // SK[0-9a-fA-F]{32} — exact
-const openaiKey = "sk-proj-" + "a".repeat(56); // {50,}
-const anthropicKey = "sk-ant-api03-" + "c".repeat(95); // {90,}
-const resendKey = "re_" + "d".repeat(32); // {32,}
-const replicateToken = "r8_" + "e".repeat(40); // {40} exact
-const elevenLabsKey = "f".repeat(32); // [a-f0-9]{32} exact
-const sentryModern = `sntrys_eyJ${"i".repeat(25)}.${"g".repeat(24)}.${"h".repeat(12)}`; // eyJ + {20,}.{20,}.{10,}
-const sentryLegacyHex = "a".repeat(64); // [a-f0-9]{64} exact
-const mapboxToken = `pk.ey${"a".repeat(60)}`; // pk.ey + {50,}
-const googleMapsKey = `AIza${"b".repeat(35)}`; // AIza + {35} exact
-const gocspxSecret = `GOCSPX-${"c".repeat(28)}`; // GOCSPX- + {28} exact
-const sendgridKey = `SG.${"d".repeat(22)}.${"e".repeat(43)}`; // SG. + {22} exact . {43} exact
-const githubFineGrained = `github_pat_${"f".repeat(90)}`; // {82,}
-const awsSecretValue = "g".repeat(40); // [A-Za-z0-9/+=]{40} exact, after a key-name match
-const githubPat = `ghp_${"h".repeat(40)}`; // {36,}
+const twilioKey = "SK" + tok(32, HEX, 1); // SK[0-9a-fA-F]{32} — exact
+const openaiKey = "sk-proj-" + tok(56, ALNUM, 2); // {50,}
+const anthropicKey = "sk-ant-api03-" + tok(95, ALNUM, 3); // {90,}
+const resendKey = "re_" + tok(32, ALNUM, 4); // {32,}
+const replicateToken = "r8_" + tok(40, ALNUM, 5); // {40} exact
+const elevenLabsKey = tok(32, HEX, 6); // [a-f0-9]{32} exact
+const sentryModern = `sntrys_eyJ${tok(25, ALNUM, 7)}.${tok(24, ALNUM, 8)}.${tok(12, ALNUM, 9)}`; // eyJ + {20,}.{20,}.{10,}
+const sentryLegacyHex = tok(64, HEX, 10); // [a-f0-9]{64} exact
+const mapboxToken = `pk.ey${tok(60, ALNUM, 11)}`; // pk.ey + {50,}
+const googleMapsKey = `AIza${tok(35, ALNUM, 12)}`; // AIza + {35} exact
+const gocspxSecret = `GOCSPX-${tok(28, ALNUM, 13)}`; // GOCSPX- + {28} exact
+const sendgridKey = `SG.${tok(22, ALNUM, 14)}.${tok(43, ALNUM, 15)}`; // SG. + {22} exact . {43} exact
+const githubFineGrained = `github_pat_${tok(90, ALNUM, 16)}`; // {82,}
+const awsSecretValue = tok(40, ALNUM, 17); // [A-Za-z0-9/+=]{40} exact, after a key-name match
+const githubPat = `ghp_${tok(40, ALNUM, 18)}`; // {36,}
+const slackWebhook = `https://hooks.slack.com/services/T${tok(9, UPPER_DIGITS, 27)}/B${tok(9, UPPER_DIGITS, 28)}/${tok(24, ALNUM, 29)}`;
 // From here down, built from fragments rather than typed as one literal.
 // Nothing here is a live credential — see the file header — but a contiguous
 // literal in this shape is exactly what static secret scanners (including
@@ -65,10 +85,10 @@ const githubPat = `ghp_${"h".repeat(40)}`; // {36,}
 // scanner's regex matches against that served text, only what a scanner
 // looking at the SOURCE FILE sees.
 const awsAccessKeyId = "AKIA" + "QZPXMC4278HDVBNR";
-const stripeLiveKey = "sk_live_51JvFakeKeyDoNotUse" + "0".repeat(13);
-const stripeTestKey = "sk_test_51JvFakeKeyDoNotUse" + "0".repeat(13);
-const stripeWebhookSecret = "whsec_" + "0".repeat(40);
-const stripeFrontendLeak = "sk_live_51FakeFrontendLeak" + "0".repeat(14);
+const stripeLiveKey = "sk_live_51" + tok(30, ALNUM, 19);
+const stripeTestKey = "sk_test_51" + tok(30, ALNUM, 20);
+const stripeWebhookSecret = "whsec_" + tok(40, ALNUM, 21);
+const stripeFrontendLeak = "sk_live_51" + tok(30, ALNUM, 22);
 export const STRIPE_SOURCEMAP_KEY = "sk_live_51SourceMapFakeNotReal" + "0".repeat(15);
 const slackToken = "xoxb-" + "0".repeat(11) + "-" + "1".repeat(11) + "-" + "2".repeat(24);
 const supabaseSecretKey = "sb_secret_" + "0".repeat(24);
@@ -101,7 +121,7 @@ const GITHUB_FINE_GRAINED = "${githubFineGrained}";
 
 // ── Slack ────────────────────────────────────────────────────────────────────
 const SLACK_TOKEN = "${slackToken}";
-const SLACK_WEBHOOK = "https://hooks.slack.com/services/T00000000/B00000000/fakeWebhookNotReal00000000";
+const SLACK_WEBHOOK = "${slackWebhook}";
 
 // ── Twilio ───────────────────────────────────────────────────────────────────
 const TWILIO_KEY = "${twilioKey}";

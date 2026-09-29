@@ -14,6 +14,7 @@
 import { randomUUID } from "node:crypto";
 import { isLikelySessionCookie, requiresHttpOnly } from "./cookieClassification.js";
 import { detectSerializedCookies } from "./deserializationProbe.js";
+import { detectChallengePage } from "./challengePage.js";
 import type { ScanVulnerability } from "./scanner";
 
 const PAGE_TIMEOUT_MS = 8_000;
@@ -640,7 +641,15 @@ export async function crawlAndCheck(
     return { vulnerabilities: [], pagesVisited: [], probedNotFound: [] };
   }
 
-  const rootSnapshot = snapshotHeaders(rootHeaders);
+  // The root's headers are a baseline for "what this site sends" only when the root IS the site.
+  // When an edge answered with its own interstitial (Reddit's proof-of-work page carries a CSP of
+  // its own, verified 2026-09-29) those headers describe the edge, and every inner route that
+  // lacks them would be reported as a regression from a policy the site never set. No baseline,
+  // no comparison: with nothing recorded as present at the root, no gap can be raised.
+  const rootIsChallenge = detectChallengePage(200, rootHtml, rootHeaders).isChallenge;
+  const rootSnapshot = rootIsChallenge
+    ? { hsts: false, csp: false, xfo: false, xcto: false, rp: false }
+    : snapshotHeaders(rootHeaders);
   const isHttps = rootUrl.startsWith("https://");
 
   // Shared dedup set for cookie findings — prevents the same cookie issue
@@ -702,6 +711,13 @@ export async function crawlAndCheck(
       Object.entries(page.headers).find(([k]) => k.toLowerCase() === "content-type")?.[1] ?? ""
     ).toLowerCase();
     if (contentType && !/text\/html|application\/xhtml/.test(contentType)) {
+      return page.status;
+    }
+
+    // An inner route the edge answered with its own challenge or block page is not a page of
+    // the application: its headers and cookies are the edge's, so it can be neither a header gap
+    // nor a cookie finding for the site. It is also not "visited" for the checks that follow.
+    if (detectChallengePage(page.status, page.body, page.headers).isChallenge) {
       return page.status;
     }
 

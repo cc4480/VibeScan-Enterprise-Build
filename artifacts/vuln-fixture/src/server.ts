@@ -37,6 +37,7 @@ import { mountGraphqlExtras } from "./graphql-extra-routes.js";
 import { mountRuntimeApi } from "./runtime-api-routes.js";
 import { AI_WIDGET_JS, AI_CHAT_CLEAN_JS } from "./ai-assets.js";
 import { mountAccountAiRace, SUPPORT_JS } from "./account-ai-race-routes.js";
+import { mountEdgeCases } from "./account-ai-race-edge-routes.js";
 import {
   SECRETS_JS,
   NEXT_DATA_PROPS,
@@ -348,6 +349,8 @@ function searchHandler(req: Request, res: Response) {
 mountInjectionExtras(app);
 mountRuntimeApi(app);
 mountGraphqlExtras(app);
+// Edge-case twins first: they answer only on their own hosts/paths and pass everything else through.
+mountEdgeCases(app, SESSIONS);
 mountAccountAiRace(app, SESSIONS);
 app.get("/assets/support.js", (_req, res) => { res.type("application/javascript").send(SUPPORT_JS); });
 app.get("/search", searchHandler);

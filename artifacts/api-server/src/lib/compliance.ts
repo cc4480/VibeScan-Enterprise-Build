@@ -262,7 +262,7 @@ const CWE_CONTROLS: Record<string, ControlRef[]> = {
     { framework: "soc2", control: "CC6.1", title: "Logical access restricted to authorised users" },
   ],
   "CWE-362": [
-    { framework: "asvs", control: "V11.1.3", title: "Business logic flows resistant to TOCTOU / race conditions" },
+    { framework: "asvs", control: "V11.1.6", title: "No TOCTOU or other race conditions in sensitive operations" },
     { framework: "iso27001", control: "A.8.28", title: "Secure coding" },
     { framework: "soc2", control: "CC6.1", title: "Logical access — session and transaction integrity" },
   ],

@@ -231,7 +231,12 @@ async function main(): Promise<void> {
   const runtimeFound = result.vulnerabilities.some((v) => `${v.evidence ?? ""} ${v.description}`.includes("/api/runtime/lookup"));
   console.log(`  [${runtimeFound ? "FOUND " : "MISSED"}] apiRuntime.ts            API discovered only at runtime`);
 
-  const CLEAN_TWINS = ["/api/graphql", "/hello?", "/lang2?", "echoq", "/assets/ai-chat.js", "/api/chat", "/api/promo/claim"];
+  // The edge cases (account-ai-race-edge-routes.ts) are clean twins too: none of them may be named by a finding.
+  // /api/voucher/redeem is NOT one: it is a real race, checked by verify-acting-probes.ts.
+  const CLEAN_TWINS = [
+    "/api/graphql", "/hello?", "/lang2?", "echoq", "/assets/ai-chat.js", "/api/chat", "/api/promo/claim",
+    "/api/faq/ask", "/api/sales/ask", "/api/kb/ask", "/api/reward/redeem", "/api/gift/claim",
+  ];
   const falseAlarms = result.vulnerabilities.filter((v) => CLEAN_TWINS.some((t) => `${v.evidence ?? ""} ${v.description}`.includes(t)));
   if (falseAlarms.length) {
     console.log("");

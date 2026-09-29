@@ -193,7 +193,7 @@ export function contentSimilarity(a: string, b: string): number {
 }
 
 /** A response that plainly denies access, whatever its status code. */
-function isDenied(status: number, body: string): boolean {
+export function isDenied(status: number, body: string): boolean {
   if (status === 401 || status === 403 || status === 404) return true;
   if (status >= 500) return true;
   // Some apps answer 200 with a sign-in page rather than a proper status.
@@ -214,19 +214,52 @@ export interface AccessControlInput {
   urls: string[];
   primary: ScanCredentials;
   secondary: ScanCredentials;
+  /**
+   * True when the scan made the second account itself (autoSecondAccount.ts) rather than being
+   * handed one. A signup that drops every new user into one shared workspace makes identical
+   * content expected, and an account the user chose as "owns different data" is a statement of
+   * fact where an auto-created one is not: the finding says so and is a shade less certain.
+   */
+  secondaryAutoCreated?: boolean;
 }
 
-export async function runAccessControlProbes(
-  input: AccessControlInput,
-): Promise<ScanVulnerability[]> {
-  const candidates = [...new Set(input.urls)]
+/**
+ * The URLs worth asking two accounts for: the ones that name a record, minus any that would act
+ * rather than show. Exported so the scanner can decide, BEFORE creating an account on the
+ * customer's system, whether this probe would have anything to use it on.
+ */
+export function accessControlCandidates(urls: string[]): string[] {
+  return [...new Set(urls)]
     .filter((u) => namesARecord(u))
     // Requesting a record as two users is safe; requesting /orders/5/delete as
     // two users deletes it twice.
     .filter((u) => !isDestructiveUrl(u))
     .slice(0, MAX_CANDIDATES);
+}
 
-  if (candidates.length === 0) return [];
+export interface AccessControlOutcome {
+  findings: ScanVulnerability[];
+  /**
+   * How many URLs were actually compared: the first account read real content AND the second
+   * account and the anonymous request both got an answer. Zero means the test never compared
+   * anything, which is not the same as comparing and finding nothing.
+   */
+  compared: number;
+}
+
+export async function runAccessControlProbes(
+  input: AccessControlInput,
+): Promise<ScanVulnerability[]> {
+  return (await runAccessControlProbesDetailed(input)).findings;
+}
+
+export async function runAccessControlProbesDetailed(
+  input: AccessControlInput,
+): Promise<AccessControlOutcome> {
+  const candidates = accessControlCandidates(input.urls);
+
+  if (candidates.length === 0) return { findings: [], compared: 0 };
+  let compared = 0;
 
   const idorHits: string[] = [];
   const anonHits: string[] = [];
@@ -252,6 +285,7 @@ export async function runAccessControlProbes(
       scanFetch(url, { as: null, timeoutMs: TIMEOUT_MS }),
     ]);
     if (!asOther || !asNobody) continue;
+    compared++;
 
     const anonSame =
       !isDenied(asNobody.status, asNobody.body) &&
@@ -285,6 +319,12 @@ export async function runAccessControlProbes(
   }
 
   const findings: ScanVulnerability[] = [];
+  const autoAccountNote = input.secondaryAutoCreated
+    ? "\n\nThe second account was created automatically by this scan through your public signup form. " +
+      "Nothing confirms it belongs to a different organisation or tenant than the first: if your signup places " +
+      "every new user in one shared workspace, identical content is expected and this is not a leak. If the " +
+      "two accounts should be isolated from each other, it is one."
+    : "";
 
   if (idorHits.length > 0) {
     findings.push(
@@ -301,7 +341,8 @@ export async function runAccessControlProbes(
         evidence:
           `Requested as two separate accounts and as an anonymous visitor.\n` +
           `Both accounts received matching content; the anonymous request was refused.\n\n` +
-          idorHits.map((u) => `  ${u}`).join("\n"),
+          idorHits.map((u) => `  ${u}`).join("\n") +
+          autoAccountNote,
         solution:
           "Authorise the object, not just the session. On every request that loads a record by id, confirm " +
           "the record belongs to the caller — a WHERE clause scoped to the current user id, or an explicit " +
@@ -310,7 +351,7 @@ export async function runAccessControlProbes(
         cweId: "CWE-639",
         cvssScore: 8.1,
         wstgId: "WSTG-ATHZ-04",
-        confidence: 90,
+        confidence: input.secondaryAutoCreated ? 70 : 90,
       }),
     );
   }
@@ -331,7 +372,8 @@ export async function runAccessControlProbes(
         evidence:
           `Reached by altering the identifier of a record the scan was legitimately shown.\n` +
           `Both accounts received matching content; the anonymous request was refused.\n\n` +
-          enumeratedHits.map((u) => `  ${u}`).join("\n"),
+          enumeratedHits.map((u) => `  ${u}`).join("\n") +
+          autoAccountNote,
         solution:
           "Two fixes, and you want both. First, authorise the object: confirm the record belongs to the " +
           "caller before returning it — a WHERE clause scoped to the current user id. Second, stop using " +
@@ -342,7 +384,7 @@ export async function runAccessControlProbes(
         wstgId: "WSTG-ATHZ-04",
         // A shade below the direct case: two accounts in one organisation may
         // legitimately share a record, which looks identical from outside.
-        confidence: 80,
+        confidence: input.secondaryAutoCreated ? 60 : 80,
       }),
     );
   }
@@ -372,5 +414,5 @@ export async function runAccessControlProbes(
     );
   }
 
-  return findings;
+  return { findings, compared };
 }

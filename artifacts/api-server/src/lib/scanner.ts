@@ -86,12 +86,12 @@ import { runAllProbes } from "./probes";
 import { TestLedger, NOT_VERIFIED, type TestRecord } from "./testLedger";
 import { isOobConfigured } from "./oobServer";
 import { checkDnsSecurity } from "./dnsChecks";
-import { scanJavaScriptForSecrets, collectJavaScript } from "./jsScanner";
+import { scanJavaScriptForSecrets, collectFirstPartyJavaScript } from "./jsScanner";
 import { extractSystemPromptText } from "./aiFeatureProbe";
-import { runPromptInjectionProbe } from "./promptInjectionProbe";
-import { attemptAutoSecondAccount } from "./autoSecondAccount";
+import { runPromptInjectionProbeDetailed } from "./promptInjectionProbe";
+import { runCrossAccountStep } from "./crossAccountStep";
 import { parseGithubRepoRef, scanGithubRepo, githubNotScannedReason } from "./githubSourceProbe";
-import { runRaceConditionProbe } from "./raceConditionProbe";
+import { runRaceConditionProbeDetailed } from "./raceConditionProbe";
 import { crawlAndCheck } from "./crawler";
 import { checkForKnownVulnerabilities, extractVersionedTechnologies } from "./cveCheck";
 import { analyzeJwts } from "./jwtAnalysis";
@@ -108,7 +108,6 @@ import { runApiDocsProbe } from "./apiDocsProbe";
 import { runHealthEndpointProbe } from "./healthEndpointProbe";
 import { runNextjsProbe } from "./nextjsProbe";
 import { runStorageProbe } from "./storageProbe";
-import { runAccessControlProbes } from "./accessControlProbe";
 import { collectApiSurface, runApiProbes } from "./apiProbe";
 import { runSsrfProbes } from "./ssrfProbe";
 import type { ApiEndpoint } from "./apiSurface";
@@ -382,9 +381,11 @@ function analyzeCookies(setCookies: string[], flattenedFallback?: string): ScanV
 export interface RunScanAuth {
   credentials: ScanHttpCredentials;
   /**
-   * A second account. Present only when the user supplied one, and the sole
-   * trigger for access-control testing — the comparison needs two identities
-   * that own different data.
+   * A second account the user supplied. The comparison needs two identities
+   * that own different data, and a user-supplied one is a statement that they do.
+   * When there is none, an active scan of a verified domain may create a
+   * disposable one through the target's own signup form (crossAccountStep.ts),
+   * and reports that it did.
    */
   secondary?: ScanHttpCredentials;
   /** Recognises a signed-out response. */
@@ -1316,7 +1317,9 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
     // target's system prompt sitting in its own client-side JS — that known
     // text is what makes this a stable check rather than a judged one. See
     // promptInjectionProbe.ts.
-    const knownSystemPrompt = extractSystemPromptText(await collectJavaScript(html, finalUrl));
+    // The site's OWN code only (inline plus first-party scripts), like the passive finding: a chat
+    // widget vendor's script that ships a system prompt is not evidence about this site's prompt.
+    const knownSystemPrompt = extractSystemPromptText(await collectFirstPartyJavaScript(html, finalUrl));
     if (!knownSystemPrompt) {
       ledger.skip(
         "active",
@@ -1325,12 +1328,12 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
       );
     } else {
       const injectionFindings = await ledger
-        .track(
+        .trackOutcome(
           "active",
           "LLM prompt injection (system prompt extraction)",
-          runPromptInjectionProbe({
+          runPromptInjectionProbeDetailed({
             knownSystemPrompt,
-            endpoints: endpoints.map((e) => e.url),
+            endpoints,
             ...(auth?.credentials ? { credentials: auth.credentials } : {}),
           }),
         )
@@ -1350,10 +1353,10 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
         ledger.skip("active", "race condition (one-time action)", "needs a signed-in test account to run against");
       } else {
         const raceFindings = await ledger
-          .track(
+          .trackOutcome(
             "active",
             "race condition (one-time action)",
-            runRaceConditionProbe({ endpoints: endpoints.map((e) => e.url), credentials: auth.credentials }),
+            runRaceConditionProbeDetailed({ endpoints, credentials: auth.credentials }),
           )
           .catch((err: unknown) => {
             unrunFamilies.push("race condition (one-time action)");
@@ -1398,49 +1401,23 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
   // Requires both accounts — one identity cannot demonstrate an authorisation
   // boundary between users.
   //
-  // When a primary account is signed in but no second one was supplied, try
-  // once to create a disposable one through the target's own public signup
-  // form (see autoSecondAccount.ts) before falling back to skipping this
-  // check. This never runs against a target with no logged-in primary
-  // account at all — there would be nothing to compare a second identity to.
-  let effectiveSecondary = auth?.secondary;
-  let autoSecondAccountSkipReason: string | null = null;
-  if (allowActiveProbes && auth?.credentials && !effectiveSecondary) {
-    const attempt = await attemptAutoSecondAccount(finalUrl).catch((err: unknown) => {
-      console.error("[scan] auto second-account creation failed", err);
-      return { secondary: null, skippedReason: "attempting an automatic second account failed" } as const;
-    });
-    if (attempt.secondary) {
-      effectiveSecondary = attempt.secondary;
-    } else {
-      autoSecondAccountSkipReason = attempt.skippedReason ?? "no second account available";
-    }
-  }
-
-  if (!allowActiveProbes) {
-    ledger.skip("active", "cross-account access control (IDOR)", NOT_VERIFIED);
-  } else if (!effectiveSecondary) {
-    ledger.skip(
-      "active",
-      "cross-account access control (IDOR)",
-      autoSecondAccountSkipReason
-        ? `no second test account was supplied, and an automatic attempt to create one did not succeed: ${autoSecondAccountSkipReason}`
-        : "needs sign-ins for two test accounts on the scan",
-    );
-  }
-  if (allowActiveProbes && auth?.credentials && effectiveSecondary) {
-    const candidateUrls = [finalUrl, ...crawlResult.pagesVisited];
-    const accessFindings = await ledger.track("active", "cross-account access control (IDOR)", runAccessControlProbes({
-      urls: candidateUrls,
-      primary: auth.credentials,
-      secondary: effectiveSecondary,
-    })).catch((err: unknown) => {
-      unrunFamilies.push("cross-account access control (IDOR)");
-      console.error("[scan] access control probes failed", err);
-      return [] as ScanVulnerability[];
-    });
-    vulnerabilities.push(...accessFindings);
-  }
+  // When a primary account is signed in but no second one was supplied, the
+  // step tries once to create a disposable one through the target's own public
+  // signup form (autoSecondAccount.ts) — but only after checking that the probe
+  // would have a record to use it on, and it says in the report when it created
+  // one. The whole decision sequence lives in crossAccountStep.ts, where it is
+  // tested; a probe that compared nothing is recorded as skipped, not as run.
+  vulnerabilities.push(
+    ...(await runCrossAccountStep({
+      allowActiveProbes,
+      primary: auth?.credentials,
+      secondary: auth?.secondary,
+      finalUrl,
+      pagesVisited: crawlResult.pagesVisited,
+      ledger,
+      unrunFamilies,
+    })),
+  );
 
   if (unrunFamilies.length > 0) {
     vulnerabilities.push(vuln({

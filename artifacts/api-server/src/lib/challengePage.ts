@@ -35,8 +35,13 @@ const NOT_A_CHALLENGE: ChallengeVerdict = { isChallenge: false, vendor: null, si
  * Body fingerprints. Each is a vendor-specific asset path, script token or
  * verbatim interstitial string — never a phrase a normal page might contain.
  */
-const BODY_SIGNALS: { vendor: string; re: RegExp; label: string }[] = [
-  { vendor: "Cloudflare", re: /\/cdn-cgi\/challenge-platform\//i, label: "/cdn-cgi/challenge-platform/ script" },
+const BODY_SIGNALS: { vendor: string; re?: RegExp; all?: RegExp[]; label: string }[] = [
+  // The INTERSTITIAL's script lives under .../orchestrate/ (chl_page, jsch, managed). The bare
+  // /cdn-cgi/challenge-platform/ prefix is not enough: Cloudflare injects
+  // <script>a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js'</script> into ordinary pages
+  // it proxies, for passive bot detection, and matching the prefix read secscan.us's own 23 KB
+  // homepage as a challenge and withheld every header, cookie and CSP finding for it.
+  { vendor: "Cloudflare", re: /\/cdn-cgi\/challenge-platform\/(?:h\/[a-z]\/)?orchestrate\//i, label: "/cdn-cgi/challenge-platform/ orchestrate script" },
   // No word boundary before cf_chl_opt: the markup Cloudflare actually emits is
   // `window._cf_chl_opt={...}`, and "_" is a word character, so a leading 
   // never matched the real-world form. Found while porting this file to
@@ -59,6 +64,13 @@ const BODY_SIGNALS: { vendor: string; re: RegExp; label: string }[] = [
   { vendor: "PerimeterX", re: /_pxhd|px-captcha|perimeterx/i, label: "PerimeterX challenge" },
   { vendor: "DataDome", re: /datadome|geo\.captcha-delivery\.com/i, label: "DataDome challenge" },
   { vendor: "AWS WAF", re: /awswaf\.com|aws-waf-token/i, label: "AWS WAF token" },
+  // Reddit's proof-of-work interstitial (server: snooserv): a ~8 KB page titled just "Reddit"
+  // whose only content is a hidden GET form that a script fills in and submits. Its title and
+  // headers carry no signal, and it ships its own CSP, which the crawler then took for the
+  // site's baseline (2026-09-29: "Content-Security-Policy Missing on 6 Internal Routes"). The
+  // form's two challenge inputs are what identify it, and BOTH are required: either name alone
+  // could be an ordinary form field or a sentence in a developer's write-up.
+  { vendor: "Reddit", all: [/name=["']js_challenge["']/i, /name=["']jsc_token["']/i], label: "Reddit js_challenge form" },
 ];
 
 /**
@@ -68,12 +80,17 @@ const BODY_SIGNALS: { vendor: string; re: RegExp; label: string }[] = [
  * body copy is ordinary English while a document whose entire title is "Just a
  * moment..." is not a page anyone published.
  */
-const TITLE_SIGNALS: { vendor: string; re: RegExp }[] = [
+const TITLE_SIGNALS: { vendor: string; re: RegExp; anySize?: true }[] = [
   { vendor: "Cloudflare", re: /^just a moment\.{0,3}$/i },
   { vendor: "Cloudflare", re: /^attention required!/i },
   { vendor: "Cloudflare", re: /^access denied \| .*cloudflare/i },
   { vendor: "generic WAF", re: /^(checking your browser|please wait\.{0,3}|one more step|security check)$/i },
   { vendor: "generic WAF", re: /^(403 forbidden|access denied|request blocked|blocked)$/i },
+  // Akamai's block page as microsoft.com's edge serves it (2026-09-29): HTTP 200, 201 KB, the
+  // site's full header and footer wrapped around this title, no errors.edgesuite.net and no
+  // AkamaiGHost token anywhere in it. The whole <title> is one fixed sentence no site publishes
+  // as a page title, so it is trusted at any size; a 200 KB block page defeats the ceiling below.
+  { vendor: "Akamai", re: /^your request has been blocked\. this could be due to several reasons\.?$/i, anySize: true },
 ];
 
 /**
@@ -120,8 +137,9 @@ export function detectChallengePage(
   const looksInterstitial = html.length < 60_000;
 
   const title = titleOf(html);
-  if (title && looksInterstitial) {
+  if (title) {
     for (const t of TITLE_SIGNALS) {
+      if (!looksInterstitial && !t.anySize) continue;
       if (t.re.test(title)) {
         return { isChallenge: true, vendor: t.vendor, signal: `interstitial title: "${title.slice(0, 80)}"` };
       }
@@ -130,9 +148,8 @@ export function detectChallengePage(
 
   if (looksInterstitial) {
     for (const b of BODY_SIGNALS) {
-      if (b.re.test(html)) {
-        return { isChallenge: true, vendor: b.vendor, signal: b.label };
-      }
+      const hit = b.all ? b.all.every((re) => re.test(html)) : (b.re?.test(html) ?? false);
+      if (hit) return { isChallenge: true, vendor: b.vendor, signal: b.label };
     }
   }
 

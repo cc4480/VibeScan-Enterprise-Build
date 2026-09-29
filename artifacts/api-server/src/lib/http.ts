@@ -96,6 +96,8 @@ export interface ScanHttpContext {
   reauthInFlight: Promise<ScanCredentials | null> | null;
   /** True once a session was lost, whether or not re-authentication worked. */
   sessionWasLost: boolean;
+  /** Work done once per scan and shared by every probe that asks for it. See oncePerScan. */
+  memo: Map<string, Promise<unknown>>;
 }
 
 const storage = new AsyncLocalStorage<ScanHttpContext>();
@@ -150,8 +152,24 @@ export function runWithScanHttp<T>(init: ScanHttpInit, fn: () => Promise<T>): Pr
     reauthAttempts: 0,
     reauthInFlight: null,
     sessionWasLost: false,
+    memo: new Map(),
   };
   return storage.run(ctx, fn);
+}
+
+/**
+ * Run `fn` once per scan for `key`; every later caller in the same scan shares its result. Outside a
+ * scan context it simply runs. The page's scripts were downloaded three times per scan (secret
+ * scanning, API discovery, the prompt-injection probe), up to eight files of half a megabyte each.
+ */
+export function oncePerScan<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const ctx = storage.getStore();
+  if (!ctx) return fn();
+  const hit = ctx.memo.get(key) as Promise<T> | undefined;
+  if (hit) return hit;
+  const started = fn();
+  ctx.memo.set(key, started);
+  return started;
 }
 
 /**
@@ -272,8 +290,32 @@ function buildHeaders(
   return headers;
 }
 
+/**
+ * The body as text, keeping whatever arrived if the request is aborted (the timeout) or the
+ * connection drops part-way. res.text() throws away everything on failure, which for a stream that
+ * was cut at the deadline is precisely the part worth having.
+ */
+async function readBodyBounded(res: Response): Promise<string> {
+  const reader = res.body?.getReader?.();
+  if (!reader) return res.text().catch(() => "");
+  const decoder = new TextDecoder();
+  let out = "";
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      out += decoder.decode(value, { stream: true });
+    }
+    out += decoder.decode();
+  } catch {
+    // Aborted or reset: what was read so far stands.
+    out += decoder.decode();
+  }
+  return out;
+}
+
 async function readResponse(res: Response, redirected: boolean): Promise<HttpResult> {
-  const body = await res.text().catch(() => "");
+  const body = await readBodyBounded(res);
   const headers: Record<string, string> = {};
   // Defensive: scanFetch's contract is "returns null on failure, never throws",
   // and reading the response happens outside the fetch try/catch. A runtime that
@@ -400,10 +442,13 @@ async function perform(url: string, options: ScanFetchOptions): Promise<Outcome>
           : err instanceof Error
             ? err.message
             : String(err);
-      return { ok: false, error: reason };
-    } finally {
       clearTimeout(timer);
+      return { ok: false, error: reason };
     }
+    // The timer stays armed while the body is read below. It used to be cleared here, as soon as
+    // the headers arrived, and the body was then read with no timer at all: a stalled or
+    // never-ending reply (a streaming chat endpoint) held the caller until the scan-level timeout,
+    // so "timeoutMs" bounded only time-to-headers.
 
     const isRedirect = res.status >= 300 && res.status < 400;
     const location = isRedirect ? (res.headers?.get("location") ?? null) : null;
@@ -412,6 +457,7 @@ async function perform(url: string, options: ScanFetchOptions): Promise<Outcome>
     // when it is one the server left un-followable.
     if (redirect === "manual" || !isRedirect || !location) {
       const result = await readResponse(res, redirected);
+      clearTimeout(timer);
       // res.url is empty on a manual-mode response in some runtimes; fall back
       // to the URL actually requested so callers always get a usable value.
       if (!result.finalUrl) result.finalUrl = current;
@@ -450,15 +496,16 @@ async function perform(url: string, options: ScanFetchOptions): Promise<Outcome>
       return { ok: true, result };
     }
 
+    // Drain the redirect body so the socket can be reused, still under the request timer.
+    await readBodyBounded(res);
+    clearTimeout(timer);
+
     let next: string;
     try {
       next = new URL(location, current).toString();
     } catch {
       return { ok: false, error: `unparseable redirect target: ${location}` };
     }
-
-    // Drain the redirect body so the socket can be reused.
-    await res.text().catch(() => "");
 
     current = next;
     redirected = true;

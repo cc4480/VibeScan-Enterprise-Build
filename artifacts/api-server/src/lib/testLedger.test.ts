@@ -135,3 +135,40 @@ describe("newlyRunTests — when a new finding may be called a regression", () =
     expect(newlyRunTests([rec("port scan", "ran", "recon")], [rec("port scan", "skipped", "recon")])).toEqual([]);
   });
 });
+
+describe("TestLedger.trackOutcome — a test that compared nothing is not a clean test", () => {
+  it("records ran when the probe says what it tested", async () => {
+    const ledger = new TestLedger();
+    const out = await ledger.trackOutcome("active", "idor", Promise.resolve({ findings: [] }));
+    expect(out).toEqual([]);
+    expect(ledger.records[0]).toMatchObject({ status: "ran", findings: 0 });
+  });
+
+  it("records skipped, with the reason, when the probe reports it tested nothing", async () => {
+    const ledger = new TestLedger();
+    const out = await ledger.trackOutcome("active", "idor", Promise.resolve({ findings: [], notTested: "no record could be compared" }));
+    expect(out).toEqual([]);
+    expect(ledger.records[0]).toMatchObject({ status: "skipped", findings: 0, reason: "no record could be compared" });
+    expect(ledger.summary()).toMatchObject({ ran: 0, skipped: 1 });
+  });
+
+  it("still counts a finding as a run, whatever notTested says", async () => {
+    const ledger = new TestLedger();
+    await ledger.trackOutcome("active", "idor", Promise.resolve({ findings: [finding], notTested: "stale" }));
+    expect(ledger.records[0]).toMatchObject({ status: "ran", findings: 1 });
+  });
+
+  it("records failed and re-throws, like track", async () => {
+    const ledger = new TestLedger();
+    await expect(ledger.trackOutcome("active", "x", Promise.reject(new Error("boom")))).rejects.toThrow("boom");
+    expect(ledger.records[0]).toMatchObject({ status: "failed", reason: "boom" });
+  });
+
+  it("makes the coverage line stop saying all tests ran", async () => {
+    const ledger = new TestLedger();
+    await ledger.trackOutcome("active", "cross-account access control (IDOR)", Promise.resolve({ findings: [], notTested: "compared nothing" }));
+    const lines = coverageLines(ledger.records);
+    expect(lines[0]).not.toMatch(/all \d+ tests ran/);
+    expect(lines.join("\n")).toContain("compared nothing");
+  });
+});

@@ -509,3 +509,51 @@ describe("blocked target addresses", () => {
     expect(attempted[0]).toContain("127.0.0.1");
   });
 });
+
+describe("the timeout covers the response body, not only the headers", () => {
+  // The abort timer used to be cleared as soon as fetch() resolved with headers, and the body was
+  // then read with no timer at all. A streaming (SSE) chat endpoint is read until the model
+  // finishes, and a stalled or never-ending stream hung the caller until the scan-level timeout:
+  // "10s" bounded only time-to-headers, so the cost bound the probes advertise held only for the
+  // number of requests, not for time.
+  it("returns within the timeout when the body never ends, keeping what has arrived", async () => {
+    const { port } = await serve((_req, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.write("data: first token\n\n");
+      // Never ended by the server. Torn down late so the test's own cleanup is not left waiting.
+      setTimeout(() => res.destroy(), 5_000).unref();
+    });
+    const started = Date.now();
+    const r = await scanFetch(`http://127.0.0.1:${port}/`, { timeoutMs: 400 });
+    expect(Date.now() - started).toBeLessThan(3_000);
+    expect(r).not.toBeNull();
+    expect(r!.status).toBe(200);
+    expect(r!.body).toContain("first token");
+  });
+
+  it("does not cut off a body that finishes in time", async () => {
+    const { port } = await serve((_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.write("part one, ");
+      setTimeout(() => res.end("part two"), 100);
+    });
+    const r = await scanFetch(`http://127.0.0.1:${port}/`, { timeoutMs: 2_000 });
+    expect(r!.body).toBe("part one, part two");
+  });
+
+  it("still bounds a redirect hop whose body never ends", async () => {
+    const { port } = await serve((req, res) => {
+      if (req.url === "/start") {
+        res.writeHead(302, { location: "/end" });
+        res.write("moved...");
+        setTimeout(() => res.destroy(), 5_000).unref();
+        return;
+      }
+      res.writeHead(200).end("landed");
+    });
+    const started = Date.now();
+    const r = await scanFetch(`http://127.0.0.1:${port}/start`, { timeoutMs: 400 });
+    expect(Date.now() - started).toBeLessThan(3_000);
+    expect(r?.body).toBe("landed");
+  });
+});

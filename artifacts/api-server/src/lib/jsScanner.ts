@@ -24,7 +24,8 @@ function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { type SecretPattern, SECRET_PATTERNS } from "./secret-pattern-data";
-import { scanFetch } from "./http";
+import { isPlaceholderToken } from "./secretPlaceholders";
+import { scanFetch, oncePerScan } from "./http";
 import { scanAiUsage } from "./aiFeatureProbe";
 import { isFirstParty } from "./sriPolicy";
 
@@ -32,7 +33,12 @@ import { isFirstParty } from "./sriPolicy";
 // EXTRACT SCRIPT CONTENT
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function fetchScript(url: string): Promise<string> {
+/** One download per script per scan, shared by every check that reads it. */
+function fetchScript(url: string): Promise<string> {
+  return oncePerScan(`script:${url}`, () => downloadScript(url));
+}
+
+async function downloadScript(url: string): Promise<string> {
   const res = await scanFetch(url, {
     headers: { Expires: "0" },
     timeoutMs: JS_FETCH_TIMEOUT_MS,
@@ -118,6 +124,9 @@ export function scanContent(content: string): Array<{ pattern: SecretPattern; ma
     while ((m = globalPattern.exec(content)) !== null) {
       const match = m[0];
       if (p.validate && !p.validate(match)) continue;
+      // Filler in a vendor token's shape (sk_live_xxxxxxxx, ghp_0000..., Slack's documented webhook)
+      // is a template, not a credential: see secretPlaceholders.ts.
+      if (!p.skipPlaceholderCheck && isPlaceholderToken(match)) continue;
 
       // Get surrounding context (2 lines before/after)
       const start = Math.max(0, m.index - 100);
@@ -151,6 +160,24 @@ export async function collectJavaScript(html: string, baseUrl: string): Promise<
     inline,
     ...external.map((r) => (r.status === "fulfilled" ? r.value : "")),
   ].join("\n");
+}
+
+/**
+ * The site's OWN JavaScript: inline scripts plus external ones on the same registrable domain
+ * (or the operator's own CDN). Third-party scripts are left out, exactly as the passive AI check
+ * leaves them out, because what they contain is a vendor's, not this site's: a chat widget that
+ * ships its own system prompt is not evidence about the site's prompt.
+ */
+export async function collectFirstPartyJavaScript(html: string, baseUrl: string): Promise<string> {
+  const urls = extractExternalScriptUrls(html, baseUrl);
+  const ownHost = (() => { try { return new URL(baseUrl).hostname; } catch { return ""; } })();
+  const own = await Promise.allSettled(
+    urls.map((url) => {
+      const host = (() => { try { return new URL(url).hostname; } catch { return ""; } })();
+      return isFirstParty(ownHost, host) ? fetchScript(url) : Promise.resolve("");
+    }),
+  );
+  return [extractInlineScripts(html), ...own.map((r) => (r.status === "fulfilled" ? r.value : ""))].join("\n");
 }
 
 export async function scanJavaScriptForSecrets(

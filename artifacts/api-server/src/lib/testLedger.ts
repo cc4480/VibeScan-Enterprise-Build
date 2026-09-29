@@ -15,6 +15,13 @@ import type { ScanVulnerability } from "./scanner";
 
 export type TestStatus = "ran" | "skipped" | "failed";
 
+/** What a probe hands back when it can tell "found nothing" from "had nothing to test". */
+export interface ProbeOutcome {
+  findings: ScanVulnerability[];
+  /** Set when nothing was actually tested: why. Ignored when there are findings. */
+  notTested?: string;
+}
+
 export interface TestRecord {
   /** The group the test belongs to, e.g. "HTTP probes" or "active". */
   group: string;
@@ -77,6 +84,37 @@ export class TestLedger {
           status: "failed",
           findings: 0,
           durationMs: Date.now() - started,
+          reason: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200),
+        });
+        throw err;
+      },
+    );
+  }
+
+  /**
+   * Like track(), for a probe that can say it tested nothing. A probe that returns [] when it had
+   * no endpoint to try, no record to compare or no reply it could read looks exactly like one that
+   * tried and found nothing, and this ledger would record both as "ran, 0 findings". Such a probe
+   * returns notTested with its reason and is recorded as skipped instead. Findings always win: a
+   * probe that found something obviously tested something.
+   */
+  trackOutcome(group: string, name: string, run: Promise<ProbeOutcome>): Promise<ScanVulnerability[]> {
+    const started = Date.now();
+    return run.then(
+      ({ findings, notTested }) => {
+        if (notTested && findings.length === 0) {
+          this.records.push({ group, name, status: "skipped", findings: 0, durationMs: Date.now() - started, reason: notTested });
+          return findings;
+        }
+        this.records.push({
+          group, name, status: "ran", findings: findings.length, durationMs: Date.now() - started,
+          ...(findings.length > 0 ? { found: findings.slice(0, 40).map((v) => v.name) } : {}),
+        });
+        return findings;
+      },
+      (err: unknown) => {
+        this.records.push({
+          group, name, status: "failed", findings: 0, durationMs: Date.now() - started,
           reason: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200),
         });
         throw err;

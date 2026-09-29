@@ -589,3 +589,47 @@ describe("rate-limit finding", () => {
     expect(findings.some((f) => /Without Rate Limiting/i.test(f.name))).toBe(true);
   });
 });
+
+// ─── A spec's servers[0].url is the target's own claim, not a licence to test a third party ───
+
+import { collectApiSurface } from "./apiProbe.js";
+
+describe("collectApiSurface: endpoints from the target's own OpenAPI document", () => {
+  it("drops an endpoint whose server is a third party, so no probe is ever pointed at it", async () => {
+    // The target's /openapi.json declares servers[0].url as another host. endpointsFromSpec uses it
+    // verbatim (bundle endpoints were origin-filtered, spec endpoints were not), so an active probe
+    // could POST to https://api.openai.com/v1/chat/completions on the strength of the target's say-so.
+    const spec = (base: string) => JSON.stringify({
+      openapi: "3.0.0",
+      servers: [{ url: base }],
+      paths: { "/chat/completions": { post: {} }, "/records": { get: {} } },
+    });
+    const port = await serve((req, res) => {
+      if (req.url === "/openapi.json") {
+        res.writeHead(200, { "content-type": "application/json" }).end(spec("http://127.0.0.2:9/v1"));
+        return;
+      }
+      res.writeHead(404).end();
+    });
+    const origin = `http://127.0.0.1:${port}`;
+    const endpoints = await runWithScanHttp({ targetUrl: origin }, () => collectApiSurface(origin, "<html></html>"));
+    expect(endpoints.map((e) => e.url)).toEqual([]);
+  });
+
+  it("keeps a spec whose server is the target itself", async () => {
+    const port = await serve((req, res) => {
+      if (req.url === "/openapi.json") {
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({
+          openapi: "3.0.0",
+          servers: [{ url: `http://127.0.0.1:${(servers[0]!.address() as AddressInfo).port}/v1` }],
+          paths: { "/records": { get: {} } },
+        }));
+        return;
+      }
+      res.writeHead(404).end();
+    });
+    const origin = `http://127.0.0.1:${port}`;
+    const endpoints = await runWithScanHttp({ targetUrl: origin }, () => collectApiSurface(origin, "<html></html>"));
+    expect(endpoints.map((e) => e.url)).toEqual([`${origin}/v1/records`]);
+  });
+});

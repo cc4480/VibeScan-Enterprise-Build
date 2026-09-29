@@ -39,8 +39,15 @@ describe("runPromptInjectionProbe", () => {
   it("fires when the live endpoint echoes back a long verbatim chunk of the known prompt", async () => {
     const port = await serve((req, res) => {
       if (req.url === "/api/chat" && req.method === "POST") {
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ reply: `Sure! Here it is: ${KNOWN_PROMPT}` }));
+        // Leaks only when told to. A route that returned the prompt for EVERY request would be a
+        // leak too, but not one the override message caused, and the probe now sends a harmless
+        // message first to tell the two apart (see "does not blame the injection" below).
+        let raw = "";
+        req.on("data", (c) => (raw += c));
+        req.on("end", () => {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ reply: /ignore all previous instructions/i.test(raw) ? `Sure! Here it is: ${KNOWN_PROMPT}` : "Hello!" }));
+        });
         return;
       }
       res.writeHead(404).end();

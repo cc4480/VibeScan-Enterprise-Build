@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title>SecScan.us — Black-Box Security Scanning for Vibe Coders</title>
+    <meta name="description" content="Paste a URL and get a plain-English security report, usually in under a minute. OWASP Top 10-aligned checks, AI-powered analysis, per-agent fix prompts. 3 free scans every month." />
+    <meta name="keywords" content="website vulnerability scanner, web application security scanner, black-box security scan, DAST scanner, OWASP Top 10 scanner, security scan for vibe coded apps, AI generated app security, Lovable security scan, Bolt.new security scan, Cursor app security check, Replit app security, Supabase RLS checker, Firebase security rules test, exposed API keys scanner, security headers checker, CSP checker, HSTS check, CORS misconfiguration test, IDOR test, broken access control scanner, SQL injection scanner, XSS scanner, API security testing, GraphQL introspection check, subdomain takeover check, TLS SSL grade, CVE monitoring, continuous security monitoring, MCP security scanner, security scan from Claude Code, penetration testing for developers, SecScan" />
+    <!-- max-image-preview:large opts into full-size thumbnails in Google
+         Discover and rich results; the snippet limits remove the default
+         truncation that would otherwise clip an answer mid-sentence. -->
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="author" content="SecScan.us" />
+
+    <!-- Canonical -->
+    <link rel="canonical" href="https://secscan.us/" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://secscan.us/" />
+    <meta property="og:site_name" content="SecScan.us" />
+    <meta property="og:title" content="SecScan.us — Black-Box Security Scanning for Vibe Coders" />
+    <meta property="og:description" content="Paste a URL and get a plain-English security report, usually in under a minute. OWASP Top 10-aligned checks, AI-powered analysis, per-agent fix prompts." />
+    <meta property="og:image" content="https://secscan.us/opengraph.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="SecScan security scan dashboard showing grade and vulnerability findings" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://secscan.us/" />
+    <meta name="twitter:title" content="SecScan.us — Security Scans for Vibe Coders" />
+    <meta name="twitter:description" content="Paste a URL and get a plain-English security report, usually in under a minute. No installs." />
+    <meta name="twitter:image" content="https://secscan.us/opengraph.jpg" />
+    <meta name="twitter:image:alt" content="SecScan security scan report" />
+
+    <!-- Theme color -->
+    <meta name="theme-color" content="#14b87a" />
+
+    <!-- The shield mark. Replaces favicon.svg, which was a plain #FF3C00 square
+         with no logo on it — and which the JSON-LD below still cited as the
+         organisation logo, so that orange square was what search engines had. -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://secscan.us/#organization",
+          "name": "SecScan.us",
+          "url": "https://secscan.us",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://secscan.us/favicon.png",
+            "width": 512,
+            "height": 512
+          },
+          "description": "Automated black-box security scanning SaaS for vibe coders — scans web applications for exposed secrets, misconfigurations, and data exposure.",
+          "contactPoint": {
+            "@type": "ContactPoint",
+            "email": "reports@secscan.us",
+            "contactType": "customer support"
+          },
+          "founder": { "@id": "https://secscan.us/#founder" },
+          "sameAs": ["https://secscan.info"]
+        },
+        {
+          "@type": "Person",
+          "@id": "https://secscan.us/#founder",
+          "name": "Carlos Cuellar",
+          "jobTitle": "Founder",
+          "description": "Self-taught builder and former computer technician (networking and Windows repair) who builds with AI models.",
+          "url": "https://secscan.us/about",
+          "worksFor": { "@id": "https://secscan.us/#organization" }
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://secscan.us/#website",
+          "url": "https://secscan.us",
+          "name": "SecScan.us",
+          "description": "Automated black-box security scanning for vibe coders",
+          "publisher": { "@id": "https://secscan.us/#organization" }
+        },
+        {
+          "@type": "WebPage",
+          "@id": "https://secscan.us/#webpage",
+          "url": "https://secscan.us/",
+          "name": "SecScan.us — Black-Box Security Scanning for Vibe Coders",
+          "description": "Paste a URL and get a plain-English security report, usually in under a minute. OWASP Top 10-aligned checks, AI-powered analysis, per-agent fix prompts.",
+          "isPartOf": { "@id": "https://secscan.us/#website" },
+          "about": { "@id": "https://secscan.us/#organization" },
+          "breadcrumb": {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "Home",
+                "item": "https://secscan.us/"
+              }
+            ]
+          }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://secscan.us/#app",
+          "name": "SecScan.us",
+          "alternateName": ["SecScan", "SecScan Web Security Scanner", "SecScan black-box scanner"],
+          "disambiguatingDescription": "SecScan at secscan.us is a black-box web application security scanner for developers and AI-built apps. It is not the SecScan.io IT baseline product and not an open-source source-code secret scanner.",
+          "keywords": "web application security scanner, vulnerability scanner, DAST, OWASP Top 10, vibe coding security, Supabase, Firebase, API security, MCP",
+          "url": "https://secscan.us",
+          "applicationCategory": "SecurityApplication",
+          "applicationSubCategory": "Security Scanning",
+          "operatingSystem": "Any (web-based)",
+          "description": "Automated black-box security scanning for web applications. Checks OWASP Top 10-aligned risks that are observable from outside the app: security headers, TLS configuration, cookie flags, CORS misconfigurations, exposed secrets and files, and BaaS (Supabase/Firebase) data exposure. Powered by AI analysis.",
+          "featureList": [
+            "OWASP Top 10-aligned checks",
+            "Security headers analysis (CSP, HSTS, X-Frame-Options)",
+            "SSL/TLS grading",
+            "Cookie flags (HttpOnly, Secure, SameSite)",
+            "CORS misconfiguration detection",
+            "Supabase RLS exposure check",
+            "Technology fingerprinting",
+            "AI plain-English reports",
+            "Per-agent fix prompts (Cursor, Claude Code, Lovable, Bolt, Replit AI)",
+            "Letter-grade security score (A–F)",
+            "Continuous monitoring with CVE feed",
+            "Firebase and Supabase security rule and storage exposure checks",
+            "Exposed API keys and secrets in JavaScript (OpenAI, Anthropic, Stripe, AWS and more)",
+            "SQL injection, reflected XSS, template injection and path traversal probing",
+            "Broken access control and IDOR testing with two accounts",
+            "GraphQL introspection, batching and exposed IDE detection",
+            "Subdomain takeover and DNS, SPF, DKIM and DMARC checks",
+            "Compliance evidence mapping to SOC 2, PCI DSS, ISO 27001, OWASP ASVS, NIST 800-53 and HIPAA controls",
+            "Verify a fix and see what changed since the last scan",
+            "REST API, CLI, GitHub Action and MCP server for Claude Code and Cursor"
+          ],
+          "screenshot": "https://secscan.us/opengraph.jpg",
+          "offers": [
+            {
+              "@type": "Offer",
+              "name": "Free trial",
+              "price": "0.00",
+              "priceCurrency": "USD",
+              "description": "3 free scans every month, every check included"
+            },
+            {
+              "@type": "Offer",
+              "name": "SecScan Starter",
+              "price": "19.00",
+              "priceCurrency": "USD",
+              "priceSpecification": {
+                "@type": "UnitPriceSpecification",
+                "price": "19.00",
+                "priceCurrency": "USD",
+                "billingDuration": "P1M"
+              },
+              "description": "Up to 3 sites watched around the clock, plus 20 on-demand full scans every month"
+            },
+            {
+              "@type": "Offer",
+              "name": "SecScan Pro",
+              "price": "49.00",
+              "priceCurrency": "USD",
+              "priceSpecification": {
+                "@type": "UnitPriceSpecification",
+                "price": "49.00",
+                "priceCurrency": "USD",
+                "billingDuration": "P1M"
+              },
+              "description": "Up to 5 sites watched around the clock, plus 100 on-demand full scans every month"
+            },
+            {
+              "@type": "Offer",
+              "name": "10 scan credits",
+              "price": "12.00",
+              "priceCurrency": "USD",
+              "description": "Ten full scans; also sold as 50 for $49. Credits never expire."
+            }
+          ],
+          "publisher": { "@id": "https://secscan.us/#organization" }
+        },
+        {
+          "@type": "HowTo",
+          "name": "How to scan your web app with SecScan",
+          "description": "Run an automated black-box security scan on a web application you own, usually in under a minute.",
+          "totalTime": "PT10M",
+          "step": [
+            {
+              "@type": "HowToStep",
+              "position": 1,
+              "name": "Paste your URL",
+              "text": "Open the SecScan scan form and paste the URL of an application you own or are authorised to test."
+            },
+            {
+              "@type": "HowToStep",
+              "position": 2,
+              "name": "Add credentials to test behind the login",
+              "text": "Optionally supply a session cookie, a bearer token or a login form so the scan can reach pages behind a login, and a second account so it can compare what each user is allowed to see."
+            },
+            {
+              "@type": "HowToStep",
+              "position": 3,
+              "name": "Get your report",
+              "text": "Usually within a minute, receive a plain-English security report with a letter grade (A–F), risk score, vulnerability list, and actionable fix steps tailored to your AI coding tool."
+            }
+          ]
+        },
+        {
+          "@type": "FAQPage",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "What is SecScan?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "SecScan is an automated black-box security scanner for web applications. You paste a URL for an app you own or are authorised to test and receive a plain-English security report, usually in under a minute. No installs, agents or code changes required. It is an automated scanner rather than a manual penetration test. Every account gets 3 free scans every month."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What security checks does SecScan perform?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "SecScan checks security headers (CSP, HSTS, X-Frame-Options, Referrer-Policy, Permissions-Policy), SSL/TLS configuration and grade, cookie flags (HttpOnly, Secure, SameSite), CORS misconfigurations, server version disclosure, technology fingerprinting, exposed secrets and sensitive files, known-CVE component versions, and Supabase/Firebase data exposure. On a domain whose ownership you have verified (a DNS record or a file), it also runs active tests: injection, cross-site scripting, path traversal, server-side request forgery (proved by an out-of-band callback) and API probing. Given a login — a session cookie, a bearer token or a sign-in form — it scans the pages behind it, and with a second account it checks whether one user can reach another's data. Findings are mapped to the OWASP Top 10 and to SOC 2, PCI DSS, ISO 27001 and OWASP ASVS controls. What no outside scan can see — insecure design (A04) and logging and monitoring (A09) — is out of scope."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How long does a SecScan scan take?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Most scans finish in under a minute, AI analysis included. Across production scans in September 2026, the median was 23 seconds and 9 in 10 finished within 36 seconds. Very large or slow sites can take longer."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Is SecScan safe? Will it harm my app?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "SecScan sends real probe traffic, so scan only applications you own or are authorised to test. A scan includes a TCP connect scan of common ports, subdomain enumeration, and active probing with injection, cross-site scripting and path traversal payloads against parameters it discovers. When an exposed Supabase or Firebase backend is found it sends a single bounded write probe using a synthetic field name that cannot exist in a real schema, and immediately deletes any row it creates. It never sends destructive requests against your data (no PATCH or DELETE of existing records), never brute-forces credentials, never attempts to gain persistence, and refuses targets that resolve to private or internal addresses."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What does a scan include?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Every scan is a full scan and there are no tiers. It covers security headers, TLS, cookies and CORS, technology fingerprinting and known-CVE matching, JavaScript secret scanning, injection and path traversal probing, API surface discovery and testing, access control comparison between two accounts, Supabase and Firebase rules, reconnaissance including open ports and subdomains, AI analysis, and per-agent fix prompts for Cursor, Claude Code, Lovable, Bolt and Replit AI."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What does the per-agent fix prompt do?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "After every scan, SecScan generates a ready-to-paste prompt for your specific AI coding tool. Each prompt is pre-formatted with the vulnerability context and the exact fix instructions so you can paste it directly into Cursor, Claude Code, Lovable, Bolt, or Replit AI and get working code."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Does SecScan work on sites not built by AI?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. SecScan scans any publicly accessible web application — whether it was built by AI tools, hand-coded, or made with no-code platforms. The scan targets the live HTTP responses, not the source code."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What do SecScan Starter and Pro include?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "SecScan Starter is $19 a month for up to 3 sites watched around the clock plus 20 on-demand full scans every month; SecScan Pro is $49 a month for up to 5 sites plus 100 scans. Monitoring checks each site hourly for downtime and weakened security headers, runs automated deep rescans on a schedule that follows your grade — every 14 days for an A down to every 3 days for a D or F — and matches newly published CVEs (Common Vulnerabilities and Exposures) against your detected tech stack every hour. Cancel any time."
+              }
+            }
+          ]
+        }
+      ]
+    }
+    </script>
+    <script type="module" crossorigin src="/assets/index-BKD4LVZk.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CWFPX7y6.css">
+  </head>
+  <body>
+    <!--
+      A crawler is handed this HTML before any JavaScript runs. Without these
+      links the only route to /learn, /privacy and /terms is the sitemap, which
+      makes them look like orphan pages — discovered but linked from nowhere —
+      and a new domain does not get much rendering budget to find the real nav.
+      Inside <noscript> because that is honest: it is genuinely what someone
+      with JavaScript disabled gets, and the same links exist in the rendered
+      page, so nothing is being shown to crawlers that users do not see.
+    -->
+    <noscript>
+      <h1>SecScan — black-box security scanning for vibe coders</h1>
+      <p>Paste a URL for a web application you own or are authorised to test and get a plain-English security report, usually in under a minute — no installs, agents or code changes required. Every scan is a full scan; there are no tiers.</p>
+      <p>Checks are aligned with the OWASP Top 10: security headers, TLS/HSTS, cookie flags, CORS misconfiguration, exposed secrets and config files, known-CVE component versions, Supabase/Firebase rules exposure, injection (reflected XSS, SQL injection, path traversal), and API surface discovery with missing-authentication, IDOR, BFLA and mass-assignment testing.</p>
+      <p>Reports are generated by AI with a letter grade (A–F), a numeric risk score, and per-agent fix prompts tailored to Cursor, Claude Code, Lovable, Bolt and Replit AI. Every account gets 3 free scans every month. SecScan Starter ($19/month) watches up to 3 sites around the clock — hourly checks, grade-based rescans and hourly CVE matching — plus 20 on-demand full scans a month; SecScan Pro ($49/month) covers up to 5 sites and 100 scans. Scan credits are 10 for $12 or 50 for $49.</p>
+      <p>SecScan needs JavaScript to run a scan interactively. These pages read fine without it:</p>
+      <nav>
+        <ul>
+          <li><a href="/">Home</a></li>
+          <li><a href="/learn">Security documentation — the key checks explained</a></li>
+          <li><a href="/bot">The SecScan bot — why it visited your site</a></li>
+          <li><a href="/privacy">Privacy policy</a></li>
+          <li><a href="/terms">Terms of service</a></li>
+          <li><a href="/about">About SecScan — who builds it</a></li>
+        </ul>
+      </nav>
+      <!--
+        secscan.info linked here fourteen times and got nothing back, so the
+        pair read as one site citing another rather than as one product on two
+        domains. "SecScan" is a name several unrelated tools share; saying
+        which one this is, in both directions, is the only signal that
+        separates them.
+      -->
+      <p>
+        Reference documentation for every check and finding lives on
+        <a href="https://secscan.info">secscan.info</a> — including
+        <a href="https://secscan.info/coverage">full check coverage</a>,
+        <a href="https://secscan.info/how-it-works">how scanning works</a> and
+        <a href="https://secscan.info/guides">remediation guides</a>.
+      </p>
+      <h2>What SecScan checks</h2>
+      <ul>
+        <li>Security headers and TLS: Content-Security-Policy, HSTS, X-Frame-Options, SSL/TLS grade, cookie flags, CORS.</li>
+        <li>Exposed secrets: API keys for OpenAI, Anthropic, Stripe, AWS, GitHub and others found in your JavaScript, plus exposed .env, .git and backup files.</li>
+        <li>AI-built app backends: Supabase row level security, Supabase and Firebase storage exposure, Firestore and Realtime Database rules.</li>
+        <li>Injection and access control: SQL injection, cross-site scripting, template injection, path traversal, IDOR and broken object-level authorisation.</li>
+        <li>APIs: OpenAPI and GraphQL exposure, GraphQL introspection, batching and IDEs, missing authentication, mass assignment.</li>
+        <li>DNS and email: SPF, DKIM, DMARC, DNSSEC, subdomain takeover.</li>
+        <li>Known vulnerabilities: outdated components matched to CVEs, with continuous monitoring and alerts.</li>
+      </ul>
+      <h2>Made for apps built with AI tools</h2>
+      <p>SecScan scans sites made with Lovable, Bolt.new, Cursor, Claude Code, Replit, v0, Next.js, Supabase and Firebase, and writes fix prompts you can paste back into the tool you built with. It also runs as an MCP server for Claude Code and Cursor, and as a REST API, CLI and GitHub Action.</p>
+    </noscript>
+    <div id="root"></div>
+  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a42d8d209f706bcc',t:'MTc5MDcxMTc4Nw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>

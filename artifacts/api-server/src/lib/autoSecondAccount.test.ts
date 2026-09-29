@@ -51,6 +51,17 @@ describe("attemptAutoSecondAccount", () => {
         res.end();
         return;
       }
+      // The session has to DO something: the dashboard is a page only a signed-in visitor gets. The
+      // first version of this test served a 404 here and passed on the cookie alone, which is the
+      // very defect the hardening below removes.
+      if (req.url === "/dashboard") {
+        if ((req.headers.cookie ?? "").includes("sid=freshsession")) {
+          res.writeHead(200, { "content-type": "text/html" }).end("<h1>Your dashboard</h1><p>Orders, invoices and team members.</p>");
+        } else {
+          res.writeHead(302, { Location: "/signup" }).end();
+        }
+        return;
+      }
       res.writeHead(404).end();
     });
 

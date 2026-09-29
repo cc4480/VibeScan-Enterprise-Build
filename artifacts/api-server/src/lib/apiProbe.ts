@@ -31,7 +31,7 @@
 
 import { randomUUID, randomBytes } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
-import { scanFetch, type ScanCredentials } from "./http";
+import { scanFetch, getScanHttpContext, ScanScope, type ScanCredentials } from "./http";
 import { isDestructiveUrl } from "./destructive";
 import { SQL_ERROR_SIGNATURES } from "./injectionProbe";
 import {
@@ -629,7 +629,11 @@ export async function collectApiSurface(
         // Cheap structural check before parsing — a SPA catch-all returns 200
         // with HTML for any path, and parsing that wastes the budget.
         if (!/"(openapi|swagger)"\s*:|^\s*(openapi|swagger):/m.test(res.body)) continue;
-        const found = endpointsFromSpec(res.body, origin);
+        // A spec's servers[0].url is used verbatim, so a target's own /openapi.json can name any host. Bundle
+        // endpoints were already limited to the target (endpointsFromBundle); spec endpoints get the same rule,
+        // the scan's own scope, or a probe would send real requests to a third party on the target's say-so.
+        const scope = getScanHttpContext()?.scope ?? new ScanScope(origin);
+        const found = endpointsFromSpec(res.body, origin).filter((e) => scope.includes(e.url));
         if (found.length > 0) return found;
       }
       return [] as ApiEndpoint[];

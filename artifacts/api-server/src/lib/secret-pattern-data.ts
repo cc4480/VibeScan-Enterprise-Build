@@ -4,6 +4,9 @@
  */
 
 import type { ScanVulnerability } from "./scanner";
+import {
+  shannonEntropy, looksLikeAName, looksLikeReference, isTrivialPassword, isLocalHost, isPlaceholderToken,
+} from "./secretPlaceholders";
 
 export interface SecretPattern {
   name: string;
@@ -15,6 +18,13 @@ export interface SecretPattern {
   cweId: string;
   // Return false to suppress a match (false positive filter)
   validate?: (match: string) => boolean;
+  /**
+   * Set for patterns whose match is not a vendor token and has its own way of telling real from
+   * template (JWTs are judged by their payload, PEM keys by their body). Every other pattern also
+   * has its match checked by isPlaceholderToken in scanContent, so xxxxxxxx and 00000000 filler
+   * is never reported as a live credential.
+   */
+  skipPlaceholderCheck?: boolean;
 }
 
 /** Three dot-separated base64url segments, the shape of a JWT. */
@@ -62,44 +72,17 @@ function jwtClass(match: string): "credential" | "publishable" | "not-a-jwt" {
 /**
  * Shared placeholder and entropy filter for the two generic key patterns, so
  * they cannot drift apart: a value is worth reporting only when it is neither
- * an obvious template nor low-entropy filler.
+ * an obvious template, nor a reference to where the value comes from, nor the
+ * name of a variable, nor low-entropy filler. The name and placeholder tests
+ * live in secretPlaceholders.ts.
  */
 function isRealSecretValue(match: string): boolean {
   if (/your[_-]?(api[_-]?)?key|insert[_-]?key|replace[_-]?me|XXXXXXXX/i.test(match)) return false;
   if (/EXAMPLE|PLACEHOLDER|YOUR_|<|>|\*{3,}|\.{3,}/i.test(match)) return false;
   const valMatch = /[:=]\s*["']([^"']+)["']/.exec(match);
   if (!valMatch) return false;
-  return !looksLikeAName(valMatch[1]!) && shannonEntropy(valMatch[1]!) >= 3.0;
-}
-
-/**
- * A value that names a variable or is a filler phrase rather than being a credential:
- * MY_DEEPSEEK_API_KEY, STRIPE_SECRET, your-super-secret-jwt-key. Words joined by _ or -
- * clear the entropy floor, so they need their own rule. A real key nearly always carries a
- * digit or is not made of separated words, so a digit-free run of words is only rejected when
- * it is an ALL-CAPS environment-variable name or contains a filler word.
- */
-const FILLER_WORD = /^(my|your|the|this|here|change|changeme|replace|dummy|sample|fake|test|todo|value|token|secret|key|api|password|placeholder)$/i;
-function looksLikeAName(value: string): boolean {
-  if (!/^[A-Za-z]+(?:[_-][A-Za-z]+)+$/.test(value)) return false;
-  if (value === value.toUpperCase()) return true;
-  return value.split(/[_-]/).some((w) => FILLER_WORD.test(w));
-}
-
-/**
- * Shannon entropy of a string — bits per character.
- * Real secret keys score > 3.5; placeholders / repeating patterns score < 3.0.
- * Used to filter low-entropy false positives in generic secret patterns.
- */
-function shannonEntropy(s: string): number {
-  if (s.length === 0) return 0;
-  const freq: Record<string, number> = {};
-  for (const c of s) freq[c] = (freq[c] ?? 0) + 1;
-  const len = s.length;
-  return -Object.values(freq).reduce((sum, f) => {
-    const p = f / len;
-    return sum + p * Math.log2(p);
-  }, 0);
+  const value = valMatch[1]!;
+  return !looksLikeReference(value) && !looksLikeAName(value) && shannonEntropy(value) >= 3.0;
 }
 
 export const SECRET_PATTERNS: SecretPattern[] = [
@@ -298,6 +281,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
   // ── Cryptographic Keys ────────────────────────────────────────────────────
   {
     name: "Private Key Exposed in JavaScript",
+    skipPlaceholderCheck: true,
     // The PEM header alone proves nothing. Crypto libraries embed it as a
     // formatting template: JSEncrypt — common on bank login forms — ships
     // `getPrivateKey = function () { var t = "-----BEGIN RSA PRIVATE KEY-----" ... }`
@@ -315,6 +299,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
   // ── Firebase ─────────────────────────────────────────────────────────────
   {
     name: "Firebase API Key with Open Security Rules",
+    skipPlaceholderCheck: true,
     pattern: /firebaseConfig\s*=\s*\{[^}]*apiKey:\s*["'][^"']+["'][^}]*\}/,
     severity: "info", cvssScore: 3.1, cweId: "CWE-798",
     description: "A Firebase configuration block was found in client-side JavaScript. Firebase API keys are semi-public (they identify your project), but if your Firestore/Realtime Database security rules are too permissive, attackers can read or write data using these credentials.",
@@ -338,6 +323,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
   // been a false accusation about a named third party.
   {
     name: "Hardcoded JWT Token in Source",
+    skipPlaceholderCheck: true,
     pattern: JWT_PATTERN,
     severity: "high", cvssScore: 8.1, cweId: "CWE-798",
     description: "A JWT (JSON Web Token) carrying an identity or authorization claim was found hardcoded in JavaScript source code. If this is a long-lived or non-expiring token, anyone who views this code is authenticated as the associated user or service account.",
@@ -346,6 +332,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
   },
   {
     name: "JWT-Shaped Publishable Key in Client Code (verify it is not a credential)",
+    skipPlaceholderCheck: true,
     pattern: JWT_PATTERN,
     severity: "info", cvssScore: 0, cweId: "CWE-798",
     description: "A JWT-shaped value was found in client-side code, but its payload carries no identity or authorization claim — no subject, user, email, role or scope, only account-level identifiers. Vendor SDKs ship exactly this kind of token publicly to identify which account a widget belongs to, so on its own it is not a credential leak. It is reported so you can confirm that is what it is.",
@@ -483,7 +470,10 @@ export const SECRET_PATTERNS: SecretPattern[] = [
       const valMatch = /:\s*["'`]([^"'`\s]+)["'`]/.exec(m);
       if (!valMatch) return false;
       const val = valMatch[1] ?? "";
-      if (/PLACEHOLDER|YOUR_|EXAMPLE|xxx|yyy|zzz|<|>|\*{3}/i.test(val)) return false;
+      if (/PLACEHOLDER|YOUR[_-]|EXAMPLE|xxx|yyy|zzz|<|>|\*{3}/i.test(val)) return false;
+      // The value must be key material, not the NAME of the variable it stands in for
+      // ("VITE_DEEPSEEK_API_KEY": "MY_DEEPSEEK_API_KEY"), nor a reference to one (process.env.X, ${X}, %X%).
+      if (looksLikeAName(val) || looksLikeReference(val)) return false;
       return shannonEntropy(val) >= 3.0;
     },
   },
@@ -496,12 +486,16 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     description: "A database connection URL containing credentials was found in client-side JavaScript. This gives anyone who views your page direct read/write access to your database. In AI-generated apps, database URLs are frequently leaked by accidentally using VITE_DATABASE_URL or similar env var names.",
     solution: "EMERGENCY: Immediately rotate your database credentials. Remove the connection URL from all frontend code. Database connections must only be made from server-side code. If using Supabase/Neon/PlanetScale, use their client libraries on the frontend with proper Row Level Security — never pass the full connection URL to the browser.",
     validate: (m) => {
-      if (/example|sample|localhost:5432\/test|127\.0\.0\.1/i.test(m)) return false;
-      // Require an actual password (non-empty, non-placeholder after the colon)
-      const passMatch = /:\/\/[^:]+:([^@]+)@/.exec(m);
-      if (!passMatch) return false;
-      const pass = passMatch[1] ?? "";
+      if (/example|sample/i.test(m)) return false;
+      const parts = /:\/\/([^:/@\s"'`]+):([^@/\s"'`]+)@([^:/?\s"'`]+)/.exec(m);
+      if (!parts) return false;
+      const [, user = "", pass = "", host = ""] = parts;
+      // A URL that reaches only the developer's own machine leaks nothing, whatever its password.
+      if (isLocalHost(host)) return false;
+      // Require an actual password: non-empty, not a tutorial default (postgres:postgres,
+      // root:toor1234, user == password), not a template or a reference.
       if (pass === "" || /password|passwd|pass|secret|changeme|yourpass/i.test(pass)) return false;
+      if (isTrivialPassword(pass, user) || looksLikeReference(pass) || isPlaceholderToken(pass)) return false;
       return pass.length >= 8;
     },
   },
