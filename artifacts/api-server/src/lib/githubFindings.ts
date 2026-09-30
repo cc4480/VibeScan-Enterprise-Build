@@ -19,6 +19,8 @@ export function configFinding(ref: GithubRepoRef, path: string, hit: { key: stri
     category: "Exposed Secrets / Credentials",
     description:
       `A value that looks like a real secret is committed in ${path} of ${ref.owner}/${ref.repo}, under the key ${hit.key}. ` +
+      // The report merges findings of one name into one entry, so a second hit's file and key are in the evidence.
+      `If more than one file or key is affected, each is listed in the evidence. ` +
       `Anyone who can read the repository can read it, and it stays in the history after it is deleted from the file. ` +
       `This is a source-code finding, not something read from the live site.`,
     evidence: `Repository: ${ref.owner}/${ref.repo}\nFile: ${path} (line ${hit.line})\nKey: ${hit.key}\nValue (redacted): ${hit.redacted}`,

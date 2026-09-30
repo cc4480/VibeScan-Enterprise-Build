@@ -24,7 +24,12 @@ export function GithubRepoField({ value, onChange }: { value: string; onChange: 
         onChange={(e) => onChange(e.target.value)}
         aria-invalid={invalid}
         aria-describedby="github-repo-help"
-        className="w-full bg-background border-2 border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-muted-foreground/50"
+        className={
+          "w-full bg-background border-2 rounded-xl py-3 px-4 focus:outline-none focus:ring-4 transition-all placeholder:text-muted-foreground/50 " +
+          (invalid
+            ? "border-red-500/60 focus:border-red-500 focus:ring-red-500/10"
+            : "border-white/10 focus:border-primary focus:ring-primary/10")
+        }
       />
       <p id="github-repo-help" className={invalid ? "text-xs text-red-400 ml-1" : "text-xs text-muted-foreground ml-1"}>
         {invalid

@@ -247,12 +247,15 @@ export async function scanGithubRepo(ref: GithubRepoRef, opts: { timeoutMs?: num
           name: `${f.pattern.name} (in source repository)`,
           severity: f.pattern.severity,
           category: "Exposed Secrets / Credentials",
+          // Not f.pattern.description: those are written for a secret shipped to a browser ("anyone who
+          // views your page"), which is the wrong story for a file in a repository.
           description:
-            `${f.pattern.description} Found in the repository ${ref.owner}/${ref.repo}, at ${entry.path} — ` +
-            `this is a source-code finding, not something read from the live site, so it applies whether or ` +
+            `A credential matching "${f.pattern.name}" is committed in ${entry.path} of ${ref.owner}/${ref.repo}. ` +
+            `Anyone who can read the repository can read it, and it stays in the Git history after it is deleted from the file. ` +
+            `This is a source-code finding, not something read from the live site, so it applies whether or ` +
             `not the current deployment happens to carry the same secret.`,
           evidence: `Repository: ${ref.owner}/${ref.repo}\nFile: ${entry.path}\nMatch (redacted): ${redactSecret(f.match)}\nContext: ...${redactContext(f.context, f.match).slice(0, 200)}...`,
-          solution: f.pattern.solution,
+          solution: `Rotate the credential now: removing it from the file does not remove it from Git history. ${f.pattern.solution}`,
           cweId: f.pattern.cweId,
           cvssScore: f.pattern.cvssScore,
           wstgId: "WSTG-CONF-04",

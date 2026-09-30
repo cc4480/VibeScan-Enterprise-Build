@@ -57,7 +57,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `scanner.ts` | 32 | 1533 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, grading.test.ts, scoring.test.ts |
 | `subdomain-service-data.ts` | 19 | 152 | — | indirect, via subdomainTakeover.test.ts |
 | `accessControlFindings.ts` | 3 | 129 | — | indirect, via accessControlProbe.test.ts |
-| `githubFindings.ts` | 1 | 58 | — | indirect, via githubSourceProbe.test.ts |
+| `githubFindings.ts` | 1 | 60 | — | indirect, via githubSourceProbe.test.ts |
 
 ## Findings by module
 
@@ -205,7 +205,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `githubFindings.ts`
 
-*1 findings · 58 lines · no test file.*
+*1 findings · 60 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|

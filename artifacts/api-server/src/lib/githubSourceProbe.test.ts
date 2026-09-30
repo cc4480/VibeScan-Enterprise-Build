@@ -69,6 +69,21 @@ describe("scanGithubRepoForSecrets", () => {
     expect(findings[0]!.evidence).not.toContain("sk_live_4eC39HqLyjWDarjtT1zdp7dc");
   });
 
+  it("describes a repository finding as a repository finding, not a script shipped to a browser", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonRes({ private: false, default_branch: "main" }))
+      .mockResolvedValueOnce(jsonRes({ tree: [{ path: ".env", type: "blob", size: 200 }] }))
+      .mockResolvedValueOnce(textRes("DATABASE_URL=postgres://appuser:Zx7Qm2vLp9Rt4Wk8@db.fixture.invalid:5432/orders"));
+
+    const [f] = await scanGithubRepoForSecrets({ owner: "acme", repo: "widgets" });
+    expect(f!.description).toContain("acme/widgets");
+    expect(f!.description).toContain(".env");
+    // The pattern's own text is about a secret in client-side JavaScript that "anyone who views your page" can read.
+    expect(f!.description).not.toMatch(/client-side|views your page|JavaScript/i);
+    expect(f!.solution).toMatch(/^Rotate the credential now/);
+    expect(f!.evidence).not.toContain("Zx7Qm2vLp9Rt4Wk8");
+  });
+
   it("never sends an Authorization header (public repos only, no token)", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonRes({ private: false, default_branch: "main" }));
     vi.mocked(fetch).mockResolvedValueOnce(jsonRes({ tree: [] }));
