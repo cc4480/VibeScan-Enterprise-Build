@@ -99,6 +99,13 @@ Checked and correct, not false positives:
 - **Checked and correct:** nginx.org `Server: nginx/1.31.3`; jquery.com `X-Powered-By: PHP/8.4.26`; python.org jQuery 1.8.2 with CVE-2012-6708 and CVE-2019-11358 (the page loads `/static/js/libs/jquery-1.8.2.min.js` and the googleapis copy).
 - Not testable: apnews.com and npmjs.com were challenged again (Cloudflare), drupal.org redirected to new.drupal.org with nothing to report.
 
+### Guard-list swap, same day (`scan-results/2026-09-30-swap-4.json`)
+
+- `live-scan.ts` default targets: npmjs.com and stackoverflow.com (both answer this scanner with a Cloudflare challenge, so a scan of them tests nothing) were replaced by pypi.org and rubygems.org. The challenge-withholding rule keeps its unit tests (`challengePage.test.ts`). apnews.com is dropped from ad-hoc sweeps for the same reason; aljazeera.com and pbs.org stand in.
+- All four new targets verified against live responses (headers, cookies, and the non-header checks): no disagreements.
+- Checked and correct, do not "fix": pypi.org source map (`warehouse.a67d9eb4.js.map`, 101 sources of which 49 are the site's own, full `sourcesContent`) is correctly High; pypi `Disallow: /admin/` is really in robots.txt; rubygems `/admin` returns 200 and a static HTML login/422 page with no X-Content-Type-Options or Referrer-Policy, while `/` has both, so the two "Internal Route" findings are true (same shape as google.com's /terms).
+- Baselines for the new targets: pypi 10 findings / 2 actionable, rubygems 12 / 4, aljazeera 10 / 4, pbs 15 / 8.
+
 Guard baselines after this round: google 15/6, github 11/5 (unchanged); cloudflare 7/2 (was 8/4) and mozilla 6/2 (was 7/3), both from the SRI fix above.
 
 ## 2026-09-30 — code review of every probe family, and the fixes

@@ -46,10 +46,12 @@ const DEFAULT_TARGETS = [
   // A long CSP allowlist full of *.subdomain entries — the wildcard rule must
   // not read those as "script-src *".
   "https://www.cloudflare.com",
-  // Both have answered 403 "Just a moment..." to this scanner. Tests that a
-  // challenge page is withheld rather than attributed to them.
-  "https://stackoverflow.com",
-  "https://www.npmjs.com",
+  // Package registries: any path segment can be a package or user name, so a catch-all
+  // page must not be read as exposed files. (These replaced stackoverflow.com and
+  // npmjs.com, which answer this scanner with a Cloudflare challenge and so exercise
+  // nothing; the challenge-withholding rule has its own unit tests, challengePage.test.ts.)
+  "https://pypi.org",
+  "https://rubygems.org",
   // Served its real homepage under an edge that also fronts challenges; twelve
   // of eighteen findings once came from an interstitial it never served.
   "https://www.etsy.com",
