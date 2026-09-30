@@ -2,6 +2,15 @@ import { hasNosniff } from "./headerAnalysis.js";
 import { checkIsolationHeaders } from "./isolationHeaders";
 import { headerVal, vuln, type ScanVulnerability, type PageContext } from "./scannerTypes";
 
+/**
+ * Does a Server header name a software version ("nginx/1.31.3", "Apache/2.4.41", "Microsoft-IIS/10.0")?
+ * A digit alone is not enough: www.php.net answers "BunnyCDN-HOU1-893", a CDN edge-node id that says nothing
+ * about the software and gives an attacker no CVE to look up.
+ */
+export function carriesSoftwareVersion(server: string): boolean {
+  return /\/\s*v?\d/i.test(server) || /\b\d+\.\d+/.test(server);
+}
+
 /** Framing, sniffing, referrer, permissions, cross-origin isolation, CORS and technology-disclosure headers. */
 export function headerFindings({ finalUrl, rawHeaders }: PageContext): ScanVulnerability[] {
   const vulnerabilities: ScanVulnerability[] = [];
@@ -101,7 +110,7 @@ export function headerFindings({ finalUrl, rawHeaders }: PageContext): ScanVulne
   }
 
   // ── Server / Technology Disclosure ────────────────────────────────────
-  if (server && /\d/.test(server)) {
+  if (server && carriesSoftwareVersion(server)) {
     vulnerabilities.push(vuln({
       name: "Server Version Disclosure",
       severity: "info",

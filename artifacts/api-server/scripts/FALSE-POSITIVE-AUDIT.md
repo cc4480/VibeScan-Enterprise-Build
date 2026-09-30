@@ -92,6 +92,13 @@ Checked and correct, not false positives:
 - `assets.guim.co.uk` is the Guardian's own CDN (`OWNED_CDNS`), so it is no longer flagged.
 - Nothing else from the sweep is open.
 
+### Technology / CVE / SRI sweep, same day (14 targets, `scan-results/2026-09-30-sweep-tech-14.json`)
+
+- SRI wording checked live: gitlab (bizible, marketo), nasa (dap, parsely) and slack (clearbit) carry `[vendor-updated tag]` and the self-host/CSP advice; slack's ordinary CloudFront snippet in the same finding stays unmarked.
+- **Fixed:** `Server Version Disclosure` fired on any digit, so php.net's `Server: BunnyCDN-HOU1-893` (a CDN edge-node id) was reported as a software version. It now needs `name/1.2`-style or dotted version text (`carriesSoftwareVersion`).
+- **Checked and correct:** nginx.org `Server: nginx/1.31.3`; jquery.com `X-Powered-By: PHP/8.4.26`; python.org jQuery 1.8.2 with CVE-2012-6708 and CVE-2019-11358 (the page loads `/static/js/libs/jquery-1.8.2.min.js` and the googleapis copy).
+- Not testable: apnews.com and npmjs.com were challenged again (Cloudflare), drupal.org redirected to new.drupal.org with nothing to report.
+
 Guard baselines after this round: google 15/6, github 11/5 (unchanged); cloudflare 7/2 (was 8/4) and mozilla 6/2 (was 7/3), both from the SRI fix above.
 
 ## 2026-09-30 — code review of every probe family, and the fixes

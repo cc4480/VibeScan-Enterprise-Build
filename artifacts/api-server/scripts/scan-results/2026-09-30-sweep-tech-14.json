@@ -1,0 +1,2102 @@
+{
+ "scannedAt": "2026-09-30T19:41:49.772Z",
+ "results": [
+  {
+   "url": "https://about.gitlab.com",
+   "finalUrl": "https://about.gitlab.com/",
+   "statusCode": 200,
+   "server": "cloudflare",
+   "tlsGrade": null,
+   "technologies": [
+    "Cloudflare",
+    "Nuxt.js",
+    "Vue.js",
+    "Bootstrap",
+    "Google Analytics"
+   ],
+   "pagesScanned": 1,
+   "renderedWithBrowser": false,
+   "elapsedMs": 4433,
+   "findings": [
+    {
+     "name": "Weak Content-Security-Policy (unsafe-inline / unsafe-eval in script-src)",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 5.4,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 86,
+     "evidence": "GET https://about.gitlab.com/\n<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self' https: http:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https: http: *.googletagmanager.com *.mutinycdn.com; style-src 'self' 'unsafe-inline' https: http:; object-src https: http:; base-uri 'self'; connect-src 'self' https: http: wss: ws: *.google-analytics.com *.analytics.google.com *.googletagmanager.com *.mutinyhq.com *.mutinyhq.io *.mutinycdn.com; frame-src 'self' https: http:; img-src 'self' https: http: data: *.google-analytics.com *.googletagmanager.com *.mutinycdn.com; manifest-sr"
+    },
+    {
+     "name": "CSP Missing object-src 'none' Directive",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 89,
+     "evidence": "GET https://about.gitlab.com/\n<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self' https: http:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https: http: *.googletagmanager.com *.mutinycdn.com; style-src 'self' 'unsafe-inline' https: http:; object-src https: http:; base-uri 'self'; connect-src 'self' https: http: wss: ws: *.google-analytics.com *.analytics.google.com *.googletagmanager.com *.mutinyhq.com *.mutinyhq.io *.mutinycdn.com; frame-src 'self' https: http:; img-src 'self' https: http: data: *.google-analytics.com *.googletagmanager.com *.mutinycdn.com; manifest-sr"
+    },
+    {
+     "name": "Missing Clickjacking Protection (X-Frame-Options)",
+     "severity": "medium",
+     "category": "UI Security",
+     "cweId": "CWE-1021",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CLNT-09",
+     "confidence": 77,
+     "evidence": "GET https://about.gitlab.com/\nX-Frame-Options: (header absent)\nCSP frame-ancestors: (not present in Content-Security-Policy)"
+    },
+    {
+     "name": "Missing X-Content-Type-Options: nosniff",
+     "severity": "medium",
+     "category": "Content Sniffing",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://about.gitlab.com/\nX-Content-Type-Options: (header absent from response)"
+    },
+    {
+     "name": "Missing Referrer-Policy Header",
+     "severity": "low",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 82,
+     "evidence": "GET https://about.gitlab.com/\nReferrer-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 82,
+     "evidence": "GET https://about.gitlab.com/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://about.gitlab.com/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://about.gitlab.com/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://about.gitlab.com/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "External Resources Missing Subresource Integrity (SRI)",
+     "severity": "medium",
+     "category": "Supply Chain Security",
+     "cweId": "CWE-353",
+     "cvssScore": 6.1,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 77,
+     "evidence": "<script/link src=\"https://cdn.bizible.com/scripts/bizible.js\" (no integrity= attribute)> [vendor-updated tag]\n<script/link src=\"https://munchkin.marketo.net/munchkin.js\" (no integrity= attribute)> [vendor-updated tag]"
+    },
+    {
+     "name": "Missing security.txt (RFC 9116)",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-205",
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 75,
+     "evidence": "GET https://about.gitlab.com/.well-known/security.txt → HTTP 404\nGET https://about.gitlab.com/security.txt → HTTP 404"
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-345",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for about.gitlab.com or gitlab.com (NOERROR (name exists))."
+    },
+    {
+     "name": "JavaScript Source Map Exposed — Full Source Code Accessible",
+     "severity": "high",
+     "category": "Source Code Exposure",
+     "cweId": "CWE-540",
+     "cvssScore": 7.5,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 97,
+     "evidence": "Source map URL: https://about.gitlab.com/_nuxt/BkazhpNf.js.map\nSource files mapped: 301\nFull sourcesContent included."
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://www.nasa.gov",
+   "finalUrl": "https://www.nasa.gov/",
+   "statusCode": 200,
+   "server": "nginx",
+   "tlsGrade": null,
+   "technologies": [
+    "Nginx",
+    "WordPress 7.0.6",
+    "Google Tag Manager"
+   ],
+   "pagesScanned": 3,
+   "renderedWithBrowser": false,
+   "elapsedMs": 13188,
+   "findings": [
+    {
+     "name": "Missing Content-Security-Policy (CSP)",
+     "severity": "high",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 7.2,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 77,
+     "evidence": "GET https://www.nasa.gov/\nContent-Security-Policy: (header absent from response, and no <meta http-equiv> policy in the page)"
+    },
+    {
+     "name": "Missing X-Content-Type-Options: nosniff",
+     "severity": "medium",
+     "category": "Content Sniffing",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.nasa.gov/\nX-Content-Type-Options: (header absent from response)"
+    },
+    {
+     "name": "Missing Referrer-Policy Header",
+     "severity": "low",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.nasa.gov/\nReferrer-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.nasa.gov/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.nasa.gov/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.nasa.gov/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.nasa.gov/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "External Resources Missing Subresource Integrity (SRI)",
+     "severity": "medium",
+     "category": "Supply Chain Security",
+     "cweId": "CWE-353",
+     "cvssScore": 6.1,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 77,
+     "evidence": "<script/link src=\"https://dap.digitalgov.gov/Universal-Federated-Analytics-Min.js?agency=NASA&#038;pga4=G-82GWVTTXCZ\" (no integrity= attribute)> [vendor-updated tag]\n<script/link src=\"https://cdn.parsely.com/keys/nasa.gov/p.js?ver=3.23.6\" (no integrity= attribute)> [vendor-updated tag]"
+    },
+    {
+     "name": "Rate Limiting Not Advertised in Response Headers",
+     "severity": "info",
+     "category": "Brute Force Protection",
+     "cweId": "CWE-307",
+     "cvssScore": 0,
+     "wstgId": "WSTG-ATHN-03",
+     "confidence": 87,
+     "evidence": "GET https://www.nasa.gov/\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled."
+    },
+    {
+     "name": "Missing security.txt (RFC 9116)",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-205",
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 75,
+     "evidence": "GET https://www.nasa.gov/.well-known/security.txt → HTTP 404\nGET https://www.nasa.gov/security.txt → HTTP 404"
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://slack.com",
+   "finalUrl": "https://slack.com/",
+   "statusCode": 200,
+   "server": "Apache",
+   "tlsGrade": null,
+   "technologies": [
+    "Apache",
+    "Google Analytics",
+    "Google Tag Manager"
+   ],
+   "pagesScanned": 16,
+   "renderedWithBrowser": false,
+   "elapsedMs": 10151,
+   "findings": [
+    {
+     "name": "Missing Content-Security-Policy (CSP)",
+     "severity": "high",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 7.2,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 77,
+     "evidence": "GET https://slack.com/\nContent-Security-Policy: (header absent from response, and no <meta http-equiv> policy in the page)"
+    },
+    {
+     "name": "Missing X-Content-Type-Options: nosniff",
+     "severity": "medium",
+     "category": "Content Sniffing",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://slack.com/\nX-Content-Type-Options: (header absent from response)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://slack.com/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://slack.com/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://slack.com/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "Non-Session Cookie Readable by JavaScript",
+     "severity": "info",
+     "category": "Session Management",
+     "cweId": "CWE-1004",
+     "cvssScore": 2.6,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 60,
+     "evidence": "Affected cookies: utm, b, x"
+    },
+    {
+     "name": "Missing Cache-Control Headers",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-524",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://slack.com/\nCache-Control: (header absent)\nPragma: (header absent)"
+    },
+    {
+     "name": "External Resources Missing Subresource Integrity (SRI)",
+     "severity": "medium",
+     "category": "Supply Chain Security",
+     "cweId": "CWE-353",
+     "cvssScore": 6.1,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 77,
+     "evidence": "<script/link src=\"https://d34u8crftukxnk.cloudfront.net/snippets/11179690159.js\" (no integrity= attribute)>\n<script/link src=\"https://reveal.clearbit.com/v1/companies/reveal?variable=reveal&amp;authorization=pk_7144fadb90a8fdd9c89e1395ff4171a3\" (no integrity= attribute)> [vendor-updated tag]"
+    },
+    {
+     "name": "Rate Limiting Not Advertised in Response Headers",
+     "severity": "info",
+     "category": "Brute Force Protection",
+     "cweId": "CWE-307",
+     "cvssScore": 0,
+     "wstgId": "WSTG-ATHN-03",
+     "confidence": 87,
+     "evidence": "GET https://slack.com/\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled."
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://apnews.com",
+   "finalUrl": "https://apnews.com/",
+   "statusCode": 403,
+   "server": "cloudflare",
+   "tlsGrade": null,
+   "technologies": [
+    "Cloudflare"
+   ],
+   "pagesScanned": 0,
+   "renderedWithBrowser": false,
+   "elapsedMs": 4510,
+   "findings": [
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    },
+    {
+     "name": "Scan was intercepted by a bot-protection challenge",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "cf-mitigated response header: challenge"
+    }
+   ]
+  },
+  {
+   "url": "https://www.npmjs.com",
+   "finalUrl": "https://www.npmjs.com/",
+   "statusCode": 403,
+   "server": "cloudflare",
+   "tlsGrade": null,
+   "technologies": [
+    "Cloudflare"
+   ],
+   "pagesScanned": 0,
+   "renderedWithBrowser": false,
+   "elapsedMs": 4194,
+   "findings": [
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    },
+    {
+     "name": "Scan was intercepted by a bot-protection challenge",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "cf-mitigated response header: challenge"
+    }
+   ]
+  },
+  {
+   "url": "https://nginx.org",
+   "finalUrl": "https://nginx.org/",
+   "statusCode": 200,
+   "server": "nginx/1.31.3",
+   "tlsGrade": null,
+   "technologies": [
+    "Nginx 1.31.3"
+   ],
+   "pagesScanned": 18,
+   "renderedWithBrowser": false,
+   "elapsedMs": 12298,
+   "findings": [
+    {
+     "name": "Missing Content-Security-Policy (CSP)",
+     "severity": "high",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 7.2,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 77,
+     "evidence": "GET https://nginx.org/\nContent-Security-Policy: (header absent from response, and no <meta http-equiv> policy in the page)"
+    },
+    {
+     "name": "Missing Clickjacking Protection (X-Frame-Options)",
+     "severity": "medium",
+     "category": "UI Security",
+     "cweId": "CWE-1021",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CLNT-09",
+     "confidence": 77,
+     "evidence": "GET https://nginx.org/\nX-Frame-Options: (header absent)\nCSP frame-ancestors: (not present in Content-Security-Policy)"
+    },
+    {
+     "name": "Missing X-Content-Type-Options: nosniff",
+     "severity": "medium",
+     "category": "Content Sniffing",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://nginx.org/\nX-Content-Type-Options: (header absent from response)"
+    },
+    {
+     "name": "Missing Referrer-Policy Header",
+     "severity": "low",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://nginx.org/\nReferrer-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://nginx.org/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://nginx.org/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://nginx.org/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://nginx.org/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "Server Version Disclosure",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": null,
+     "wstgId": "WSTG-INFO-02",
+     "confidence": 51,
+     "evidence": "GET https://nginx.org/\nServer: nginx/1.31.3"
+    },
+    {
+     "name": "Missing Cache-Control Headers",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-524",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://nginx.org/\nCache-Control: (header absent)\nPragma: (header absent)"
+    },
+    {
+     "name": "HTTP Traffic Not Redirected to HTTPS",
+     "severity": "medium",
+     "category": "Transport Security",
+     "cweId": "CWE-319",
+     "cvssScore": 5.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 81,
+     "evidence": "GET http://nginx.org/ (followed up to 5 redirect hops)\nResult: request chain never reached https://nginx.org/\nHSTS preload list: not preloaded"
+    },
+    {
+     "name": "Rate Limiting Not Advertised in Response Headers",
+     "severity": "info",
+     "category": "Brute Force Protection",
+     "cweId": "CWE-307",
+     "cvssScore": 0,
+     "wstgId": "WSTG-ATHN-03",
+     "confidence": 87,
+     "evidence": "GET https://nginx.org/\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled."
+    },
+    {
+     "name": "Missing security.txt (RFC 9116)",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-205",
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 75,
+     "evidence": "GET https://nginx.org/.well-known/security.txt → HTTP 404\nGET https://nginx.org/security.txt → HTTP 404"
+    },
+    {
+     "name": "Missing SPF Record — Email Spoofing Possible",
+     "severity": "medium",
+     "category": "Email Security",
+     "cweId": "CWE-290",
+     "cvssScore": 5.3,
+     "wstgId": null,
+     "confidence": 87,
+     "evidence": "DNS TXT queries: nginx.org\nStatus: NOERROR (name exists)\nNo v=spf1 record found at the host or any parent domain"
+    },
+    {
+     "name": "Missing DMARC Record — No Email Authentication Enforcement",
+     "severity": "high",
+     "category": "Email Security",
+     "cweId": "CWE-290",
+     "cvssScore": 7.5,
+     "wstgId": null,
+     "confidence": 87,
+     "evidence": "DNS TXT queries: _dmarc.nginx.org\nStatus: NXDOMAIN (name does not exist)\nNo v=DMARC1 record found at the host or any parent domain"
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-345",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for nginx.org (NOERROR (name exists))."
+    },
+    {
+     "name": "No Structured Data Found",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "No <script type=\"application/ld+json\"> blocks in https://nginx.org/"
+    },
+    {
+     "name": "Incomplete Open Graph Metadata",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "og:title: (absent)\nog:description: (absent)\nog:image: (absent)"
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://httpd.apache.org",
+   "finalUrl": "https://httpd.apache.org/",
+   "statusCode": 200,
+   "server": "Apache",
+   "tlsGrade": null,
+   "technologies": [
+    "Apache",
+    "Fastly",
+    "Varnish Cache"
+   ],
+   "pagesScanned": 19,
+   "renderedWithBrowser": false,
+   "elapsedMs": 10835,
+   "findings": [
+    {
+     "name": "Weak Content-Security-Policy (unsafe-inline / unsafe-eval in script-src)",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 5.4,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 74,
+     "evidence": "GET https://httpd.apache.org/\nContent-Security-Policy: default-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval' https://www.apachecon.com/ https://www.communityovercode.org/ https://*.apache.org/ https://apache.org/ https://*.scarf.sh/  ; script-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval' https://www.apachecon.com/ https://www.communityovercode.org/ https://*.apache.org/ https://apache.org/ https://*.scarf.sh/  ; style-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval' https://www.apachecon.com/ https://www.communityovercode.org/ https://*.apache.org/ https://apache.org/ https:/"
+    },
+    {
+     "name": "CSP Missing object-src 'none' Directive",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 77,
+     "evidence": "GET https://httpd.apache.org/\nContent-Security-Policy: default-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval' https://www.apachecon.com/ https://www.communityovercode.org/ https://*.apache.org/ https://apache.org/ https://*.scarf.sh/  ; script-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval' https://www.apachecon.com/ https://www.communityovercode.org/ https://*.apache.org/ https://apache.org/ https://*.scarf.sh/  ; style-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval' https://www.apachecon.com/ https://www.communityovercode.org/ https://*.apache.org/ https://apache.org/ https:/"
+    },
+    {
+     "name": "CSP Missing base-uri Directive",
+     "severity": "low",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 3.5,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 77,
+     "evidence": "GET https://httpd.apache.org/\nContent-Security-Policy: default-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval' https://www.apachecon.com/ https://www.communityovercode.org/ https://*.apache.org/ https://apache.org/ https://*.scarf.sh/  ; script-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval' https://www.apachecon.com/ https://www.communityovercode.org/ https://*.apache.org/ https://apache.org/ https://*.scarf.sh/  ; style-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval' https://www.apachecon.com/ https://www.communityovercode.org/ https://*.apache.org/ https://apache.org/ https:/"
+    },
+    {
+     "name": "Missing X-Content-Type-Options: nosniff",
+     "severity": "medium",
+     "category": "Content Sniffing",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://httpd.apache.org/\nX-Content-Type-Options: (header absent from response)"
+    },
+    {
+     "name": "Missing Referrer-Policy Header",
+     "severity": "low",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://httpd.apache.org/\nReferrer-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://httpd.apache.org/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://httpd.apache.org/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://httpd.apache.org/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://httpd.apache.org/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "Permissive CORS Policy (Wildcard Origin)",
+     "severity": "info",
+     "category": "CORS Misconfiguration",
+     "cweId": "CWE-942",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 87,
+     "evidence": "GET https://httpd.apache.org/\nAccess-Control-Allow-Origin: *"
+    },
+    {
+     "name": "Missing Cache-Control Headers",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-524",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://httpd.apache.org/\nCache-Control: (header absent)\nPragma: (header absent)"
+    },
+    {
+     "name": "External Resources Missing Subresource Integrity (SRI)",
+     "severity": "medium",
+     "category": "Supply Chain Security",
+     "cweId": "CWE-353",
+     "cvssScore": 6.1,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 73,
+     "evidence": "<script/link src=\"https://www.apachecon.com/event-images/snippet.js\" (no integrity= attribute)>"
+    },
+    {
+     "name": "Rate Limiting Not Advertised in Response Headers",
+     "severity": "info",
+     "category": "Brute Force Protection",
+     "cweId": "CWE-307",
+     "cvssScore": 0,
+     "wstgId": "WSTG-ATHN-03",
+     "confidence": 87,
+     "evidence": "GET https://httpd.apache.org/\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled."
+    },
+    {
+     "name": "Directory Listing Enabled",
+     "severity": "medium",
+     "category": "Information Disclosure",
+     "cweId": "CWE-548",
+     "cvssScore": 5.3,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 87,
+     "evidence": "GET https://httpd.apache.org/images/ → HTTP 200\nDirectory index page returned (autoindex enabled)"
+    },
+    {
+     "name": "Missing security.txt (RFC 9116)",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-205",
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 75,
+     "evidence": "GET https://httpd.apache.org/.well-known/security.txt → HTTP 404\nGET https://httpd.apache.org/security.txt → HTTP 404"
+    },
+    {
+     "name": "DMARC Policy Set to None (Monitoring Only — No Enforcement)",
+     "severity": "medium",
+     "category": "Email Security",
+     "cweId": "CWE-290",
+     "cvssScore": 5.3,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "TXT record: v=DMARC1; p=none;"
+    },
+    {
+     "name": "DMARC Record Missing Aggregate Report Address (rua=)",
+     "severity": "info",
+     "category": "Email Security",
+     "cweId": "CWE-778",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "TXT record: v=DMARC1; p=none;"
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-345",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for httpd.apache.org or apache.org (NOERROR (name exists))."
+    },
+    {
+     "name": "No Structured Data Found",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "No <script type=\"application/ld+json\"> blocks in https://httpd.apache.org/"
+    },
+    {
+     "name": "Incomplete Open Graph Metadata",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "og:title: (absent)\nog:description: (absent)\nog:image: (absent)"
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://www.php.net",
+   "finalUrl": "https://www.php.net/",
+   "statusCode": 200,
+   "server": "BunnyCDN-HOU1-893",
+   "tlsGrade": null,
+   "technologies": [
+    "jQuery 3.6.0"
+   ],
+   "pagesScanned": 13,
+   "renderedWithBrowser": false,
+   "elapsedMs": 19509,
+   "findings": [
+    {
+     "name": "Missing Content-Security-Policy (CSP)",
+     "severity": "high",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 7.2,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 77,
+     "evidence": "GET https://www.php.net/\nContent-Security-Policy: (header absent from response, and no <meta http-equiv> policy in the page)"
+    },
+    {
+     "name": "Missing X-Content-Type-Options: nosniff",
+     "severity": "medium",
+     "category": "Content Sniffing",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.php.net/\nX-Content-Type-Options: (header absent from response)"
+    },
+    {
+     "name": "Missing Referrer-Policy Header",
+     "severity": "low",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.php.net/\nReferrer-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.php.net/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.php.net/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.php.net/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "Server Version Disclosure",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": null,
+     "wstgId": "WSTG-INFO-02",
+     "confidence": 51,
+     "evidence": "GET https://www.php.net/\nServer: BunnyCDN-HOU1-893"
+    },
+    {
+     "name": "Non-Session Cookie Missing Secure Flag",
+     "severity": "low",
+     "category": "Session Management",
+     "cweId": "CWE-614",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 70,
+     "evidence": "Affected cookie: LAST_NEWS"
+    },
+    {
+     "name": "Non-Session Cookie Readable by JavaScript",
+     "severity": "info",
+     "category": "Session Management",
+     "cweId": "CWE-1004",
+     "cvssScore": 2.6,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 60,
+     "evidence": "Affected cookie: LAST_NEWS"
+    },
+    {
+     "name": "Non-Session Cookie Missing SameSite Attribute",
+     "severity": "info",
+     "category": "CSRF Protection",
+     "cweId": "CWE-352",
+     "cvssScore": 2.1,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 60,
+     "evidence": "Affected cookie: LAST_NEWS"
+    },
+    {
+     "name": "Rate Limiting Not Advertised in Response Headers",
+     "severity": "info",
+     "category": "Brute Force Protection",
+     "cweId": "CWE-307",
+     "cvssScore": 0,
+     "wstgId": "WSTG-ATHN-03",
+     "confidence": 87,
+     "evidence": "GET https://www.php.net/\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled."
+    },
+    {
+     "name": "DMARC Policy Set to None (Monitoring Only — No Enforcement)",
+     "severity": "medium",
+     "category": "Email Security",
+     "cweId": "CWE-290",
+     "cvssScore": 5.3,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "TXT record: v=DMARC1; p=none; rua=mailto:dmarc@php.net;"
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-345",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for www.php.net or php.net (NOERROR (name exists))."
+    },
+    {
+     "name": "No Structured Data Found",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "No <script type=\"application/ld+json\"> blocks in https://www.php.net/"
+    },
+    {
+     "name": "Incomplete Open Graph Metadata",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "og:title: (absent)\nog:description: PHP is a popular general-purpose scripting language that powers everything from your blog to the most popular websites in the world.\nog:image: https://www.php.net/images/meta-image.png"
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://wordpress.org",
+   "finalUrl": "https://wordpress.org/",
+   "statusCode": 200,
+   "server": "nginx",
+   "tlsGrade": null,
+   "technologies": [
+    "Nginx",
+    "WordPress 7.2",
+    "Google Tag Manager"
+   ],
+   "pagesScanned": 11,
+   "renderedWithBrowser": false,
+   "elapsedMs": 22128,
+   "findings": [
+    {
+     "name": "HSTS max-age Too Short",
+     "severity": "low",
+     "category": "Transport Security",
+     "cweId": "CWE-523",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 81,
+     "evidence": "GET https://wordpress.org/\nStrict-Transport-Security: max-age=3600\n(max-age=3600 — minimum recommended: 15552000)"
+    },
+    {
+     "name": "Missing Content-Security-Policy (CSP)",
+     "severity": "high",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 7.2,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 77,
+     "evidence": "GET https://wordpress.org/\nContent-Security-Policy: (header absent from response, and no <meta http-equiv> policy in the page)"
+    },
+    {
+     "name": "Missing X-Content-Type-Options: nosniff",
+     "severity": "medium",
+     "category": "Content Sniffing",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://wordpress.org/\nX-Content-Type-Options: (header absent from response)"
+    },
+    {
+     "name": "Missing Referrer-Policy Header",
+     "severity": "low",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://wordpress.org/\nReferrer-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://wordpress.org/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://wordpress.org/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://wordpress.org/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://wordpress.org/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cache-Control Headers",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-524",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://wordpress.org/\nCache-Control: (header absent)\nPragma: (header absent)"
+    },
+    {
+     "name": "X-Frame-Options / frame-ancestors Missing on 1 Internal Route",
+     "severity": "medium",
+     "category": "Security Header Inconsistency",
+     "cweId": "CWE-1021",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CLNT-09",
+     "confidence": 77,
+     "evidence": "Routes missing X-Frame-Options / frame-ancestors:\n  • /themes/ (crawled)"
+    },
+    {
+     "name": "Non-Session Cookie Missing Secure Flag on Inner Page",
+     "severity": "low",
+     "category": "Session Management",
+     "cweId": "CWE-614",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 70,
+     "evidence": "GET https://wordpress.org/support/forums/\nSet-Cookie: old-theme=<redacted>; expires=Wed, 30 Sep 2026 20:40:55 GMT; Max-Age=3600; path=/; domain=wordpress.org"
+    },
+    {
+     "name": "Non-Session Cookie Readable by JavaScript on Inner Page",
+     "severity": "info",
+     "category": "Session Management",
+     "cweId": "CWE-1004",
+     "cvssScore": 2.6,
+     "wstgId": "WSTG-SESS-02",
+     "confidence": 60,
+     "evidence": "GET https://wordpress.org/support/forums/\nSet-Cookie: old-theme=<redacted>; expires=Wed, 30 Sep 2026 20:40:55 GMT; Max-Age=3600; path=/; domain=wordpress.org"
+    },
+    {
+     "name": "PHP composer.lock Exposed",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 51,
+     "evidence": "GET https://wordpress.org/composer.lock → HTTP 200 (139,717 bytes)\nContent-Type: application/octet-stream"
+    },
+    {
+     "name": "robots.txt Discloses Sensitive Application Paths",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": null,
+     "wstgId": "WSTG-INFO-01",
+     "confidence": 51,
+     "evidence": "GET https://wordpress.org/robots.txt → HTTP 200\nDisallow: /wp-admin/"
+    },
+    {
+     "name": "External Resources Missing Subresource Integrity (SRI)",
+     "severity": "medium",
+     "category": "Supply Chain Security",
+     "cweId": "CWE-353",
+     "cvssScore": 6.1,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 73,
+     "evidence": "<script/link src=\"https://stats.wp.com/e-202640.js\" (no integrity= attribute)>"
+    },
+    {
+     "name": "Rate Limiting Not Advertised in Response Headers",
+     "severity": "info",
+     "category": "Brute Force Protection",
+     "cweId": "CWE-307",
+     "cvssScore": 0,
+     "wstgId": "WSTG-ATHN-03",
+     "confidence": 87,
+     "evidence": "GET https://wordpress.org/\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled."
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-345",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for wordpress.org (NOERROR (name exists))."
+    },
+    {
+     "name": "JavaScript Source Map Exposed — Full Source Code Accessible",
+     "severity": "high",
+     "category": "Source Code Exposure",
+     "cweId": "CWE-540",
+     "cvssScore": 7.5,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 100,
+     "evidence": "Linked from: /wp-content/plugins/gutenberg/build/modules/block-library/navigation/view.min.js\nSource map URL: https://wordpress.org/wp-content/plugins/gutenberg/build/modules/block-library/navigation/view.min.js.map\nSource files mapped: 1\nFull sourcesContent included."
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://www.drupal.org",
+   "finalUrl": "https://new.drupal.org/",
+   "statusCode": 200,
+   "server": "Apache",
+   "tlsGrade": null,
+   "technologies": [
+    "Apache",
+    "Fastly",
+    "Varnish Cache",
+    "Drupal"
+   ],
+   "pagesScanned": 12,
+   "renderedWithBrowser": false,
+   "elapsedMs": 19559,
+   "findings": [
+    {
+     "name": "CSP Missing object-src 'none' Directive",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 77,
+     "evidence": "GET https://new.drupal.org/\nContent-Security-Policy: frame-ancestors 'self'\n(object-src directive absent — plugin content unrestricted)"
+    },
+    {
+     "name": "CSP Missing base-uri Directive",
+     "severity": "low",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 3.5,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 77,
+     "evidence": "GET https://new.drupal.org/\nContent-Security-Policy: frame-ancestors 'self'\n(base-uri directive absent)"
+    },
+    {
+     "name": "Missing Referrer-Policy Header",
+     "severity": "low",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://new.drupal.org/\nReferrer-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://new.drupal.org/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://new.drupal.org/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://new.drupal.org/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "robots.txt Discloses Sensitive Application Paths",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": null,
+     "wstgId": "WSTG-INFO-01",
+     "confidence": 51,
+     "evidence": "GET https://new.drupal.org/robots.txt → HTTP 200\nDisallow: /admin/\nDisallow: /index.php/admin/"
+    },
+    {
+     "name": "Rate Limiting Not Advertised in Response Headers",
+     "severity": "info",
+     "category": "Brute Force Protection",
+     "cweId": "CWE-307",
+     "cvssScore": 0,
+     "wstgId": "WSTG-ATHN-03",
+     "confidence": 87,
+     "evidence": "GET https://new.drupal.org/\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled."
+    },
+    {
+     "name": "Missing security.txt (RFC 9116)",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-205",
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 75,
+     "evidence": "GET https://new.drupal.org/.well-known/security.txt → HTTP 404\nGET https://new.drupal.org/security.txt → HTTP 404"
+    },
+    {
+     "name": "DMARC Policy Set to None (Monitoring Only — No Enforcement)",
+     "severity": "medium",
+     "category": "Email Security",
+     "cweId": "CWE-290",
+     "cvssScore": 5.3,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "TXT record: v=DMARC1; p=none; pct=100; rua=mailto:re+myecnlkddmo@dmarc.postmarkapp.com; sp=none; aspf=r;"
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-345",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for new.drupal.org or drupal.org (NOERROR (name exists))."
+    },
+    {
+     "name": "No Structured Data Found",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "No <script type=\"application/ld+json\"> blocks in https://new.drupal.org/"
+    },
+    {
+     "name": "Twitter Card Metadata Absent",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 90,
+     "evidence": "twitter:card: (absent)"
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://jquery.com",
+   "finalUrl": "https://jquery.com/",
+   "statusCode": 200,
+   "server": "cloudflare",
+   "tlsGrade": null,
+   "technologies": [
+    "Cloudflare",
+    "PHP 8.4.26",
+    "WordPress 7.1",
+    "jQuery 4.0.0"
+   ],
+   "pagesScanned": 0,
+   "renderedWithBrowser": false,
+   "elapsedMs": 6084,
+   "findings": [
+    {
+     "name": "Missing X-Content-Type-Options: nosniff",
+     "severity": "medium",
+     "category": "Content Sniffing",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://jquery.com/\nX-Content-Type-Options: (header absent from response)"
+    },
+    {
+     "name": "Missing Referrer-Policy Header",
+     "severity": "low",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://jquery.com/\nReferrer-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://jquery.com/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://jquery.com/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://jquery.com/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://jquery.com/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "X-Powered-By Header Discloses Technology Stack",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": null,
+     "wstgId": "WSTG-INFO-09",
+     "confidence": 51,
+     "evidence": "GET https://jquery.com/\nX-Powered-By: PHP/8.4.26"
+    },
+    {
+     "name": "robots.txt Discloses Sensitive Application Paths",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": null,
+     "wstgId": "WSTG-INFO-01",
+     "confidence": 51,
+     "evidence": "GET https://jquery.com/robots.txt → HTTP 200\nDisallow: /wp-admin/"
+    },
+    {
+     "name": "DMARC Record Missing Aggregate Report Address (rua=)",
+     "severity": "info",
+     "category": "Email Security",
+     "cweId": "CWE-778",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "TXT record: v=DMARC1; p=reject"
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-345",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for jquery.com (NOERROR (name exists))."
+    },
+    {
+     "name": "No Structured Data Found",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "No <script type=\"application/ld+json\"> blocks in https://jquery.com/"
+    },
+    {
+     "name": "Incomplete Open Graph Metadata",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "og:title: (absent)\nog:description: (absent)\nog:image: (absent)"
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://www.python.org",
+   "finalUrl": "https://www.python.org/",
+   "statusCode": 200,
+   "server": "nginx",
+   "tlsGrade": null,
+   "technologies": [
+    "Nginx",
+    "Fastly",
+    "Varnish Cache",
+    "jQuery 1.8.2"
+   ],
+   "pagesScanned": 10,
+   "renderedWithBrowser": false,
+   "elapsedMs": 7105,
+   "findings": [
+    {
+     "name": "Content-Security-Policy is report-only (not enforced)",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 5.3,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 81,
+     "evidence": "GET https://www.python.org/\nContent-Security-Policy: (absent)\nContent-Security-Policy-Report-Only: object-src 'none'; form-action 'self'; style-src 'self' 'unsafe-inline' https://ajax.googleapis.com; base-uri 'self'; default-src 'self'; script-src 'self' 'nonce-7uPPpDXfY9GxTu4tEc51Ww==' https://ana"
+    },
+    {
+     "name": "Missing X-Content-Type-Options: nosniff",
+     "severity": "medium",
+     "category": "Content Sniffing",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.python.org/\nX-Content-Type-Options: (header absent from response)"
+    },
+    {
+     "name": "Missing Referrer-Policy Header",
+     "severity": "low",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.python.org/\nReferrer-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.python.org/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.python.org/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.python.org/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.python.org/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cache-Control Headers",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-524",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.python.org/\nCache-Control: (header absent)\nPragma: (header absent)"
+    },
+    {
+     "name": "External Resources Missing Subresource Integrity (SRI)",
+     "severity": "medium",
+     "category": "Supply Chain Security",
+     "cweId": "CWE-353",
+     "cvssScore": 6.1,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 77,
+     "evidence": "<script/link src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js\" (no integrity= attribute)>\n<script/link src=\"https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js\" (no integrity= attribute)>"
+    },
+    {
+     "name": "Rate Limiting Not Advertised in Response Headers",
+     "severity": "info",
+     "category": "Brute Force Protection",
+     "cweId": "CWE-307",
+     "cvssScore": 0,
+     "wstgId": "WSTG-ATHN-03",
+     "confidence": 87,
+     "evidence": "GET https://www.python.org/\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled."
+    },
+    {
+     "name": "Missing security.txt (RFC 9116)",
+     "severity": "info",
+     "category": "Information Disclosure",
+     "cweId": "CWE-205",
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 75,
+     "evidence": "GET https://www.python.org/.well-known/security.txt → HTTP 404\nGET https://www.python.org/security.txt → HTTP 200, but no RFC 9116 fields (Contact:/Expires:/Policy:) in the body"
+    },
+    {
+     "name": "DMARC Policy Set to None (Monitoring Only — No Enforcement)",
+     "severity": "medium",
+     "category": "Email Security",
+     "cweId": "CWE-290",
+     "cvssScore": 5.3,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "TXT record: v=DMARC1; p=none; pct=100; rua=mailto:re+shb8ybr70a3@dmarc.postmarkapp.com; sp=none; aspf=r;"
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-345",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for www.python.org or python.org (NOERROR (name exists))."
+    },
+    {
+     "name": "Twitter Card Metadata Absent",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 90,
+     "evidence": "twitter:card: (absent)"
+    },
+    {
+     "name": "jQuery 1.8.2 — Known Vulnerability (CVE-2012-6708)",
+     "severity": "medium",
+     "category": "Outdated Software / Known CVE",
+     "cweId": "CWE-1104",
+     "cvssScore": 5.5,
+     "wstgId": "WSTG-INFO-09",
+     "confidence": 60,
+     "evidence": "Detected: jQuery 1.8.2\nCVE(s): CVE-2012-6708\nFixed in: 1.9.0\nDetails: Affected versions of `jquery` are vulnerable to cross-site scripting. This occurs because the main `jquery` function uses a regular expression to differentiate between HTML and selectors, but does not properly anchor the regular expression. The result is that `jquery` may interpret HTML as selectors"
+    },
+    {
+     "name": "jQuery 1.8.2 — Known Vulnerability (CVE-2019-11358)",
+     "severity": "medium",
+     "category": "Outdated Software / Known CVE",
+     "cweId": "CWE-1104",
+     "cvssScore": 5.5,
+     "wstgId": "WSTG-INFO-09",
+     "confidence": 60,
+     "evidence": "Detected: jQuery 1.8.2\nCVE(s): CVE-2019-11358\nFixed in: 3.4.0\nDetails: jQuery from 1.1.4 until 3.4.0, as used in Drupal, Backdrop CMS, and other products, mishandles `jQuery.extend(true, {}, ...)` because of `Object.prototype` pollution. If an unsanitized source object contained an enumerable `__proto__` property, it could extend the native `Object.prototype`."
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://www.openssl.org",
+   "finalUrl": "https://www.openssl.org/",
+   "statusCode": 200,
+   "server": "UploadServer",
+   "tlsGrade": null,
+   "technologies": [
+    "Tailwind CSS",
+    "Hugo"
+   ],
+   "pagesScanned": 2,
+   "renderedWithBrowser": false,
+   "elapsedMs": 4019,
+   "findings": [
+    {
+     "name": "Missing Content-Security-Policy (CSP)",
+     "severity": "high",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 7.2,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 77,
+     "evidence": "GET https://www.openssl.org/\nContent-Security-Policy: (header absent from response, and no <meta http-equiv> policy in the page)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.openssl.org/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.openssl.org/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.openssl.org/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.openssl.org/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "External Resources Missing Subresource Integrity (SRI)",
+     "severity": "medium",
+     "category": "Supply Chain Security",
+     "cweId": "CWE-353",
+     "cvssScore": 6.1,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 73,
+     "evidence": "<script/link src=\"https://api.transpond.io/tracker?am=MzgyOTE%253D\" (no integrity= attribute)>"
+    },
+    {
+     "name": "No Structured Data Found",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "No <script type=\"application/ld+json\"> blocks in https://www.openssl.org/"
+    },
+    {
+     "name": "Incomplete Open Graph Metadata",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "og:title: (absent)\nog:description: (absent)\nog:image: (absent)"
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  },
+  {
+   "url": "https://www.apache.org",
+   "finalUrl": "https://www.apache.org/",
+   "statusCode": 200,
+   "server": "Apache",
+   "tlsGrade": null,
+   "technologies": [
+    "Apache",
+    "Fastly",
+    "Varnish Cache",
+    "Tailwind CSS",
+    "Bootstrap",
+    "jQuery"
+   ],
+   "pagesScanned": 0,
+   "renderedWithBrowser": false,
+   "elapsedMs": 6035,
+   "findings": [
+    {
+     "name": "Weak Content-Security-Policy (unsafe-inline / unsafe-eval in script-src)",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 5.4,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 74,
+     "evidence": "GET https://www.apache.org/\nContent-Security-Policy: default-src 'self' data: 'unsafe-inline' https://www.apachecon.com/ https://analytics.apache.org/ http://analytics.apache.org/ https://www.youtube-nocookie.com https://www.youtube.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.apachecon.com/ https://analytics.apache.org/ http://analytics.apache.org/ https://www.youtube-nocookie.com https://www.youtube.com; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; img-src 'self' data: https://www.apache.org/ https://www.apachecon.com/;\n(unsafe-inline (no nonce/hash/strict-dy"
+    },
+    {
+     "name": "CSP Missing object-src 'none' Directive",
+     "severity": "medium",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 77,
+     "evidence": "GET https://www.apache.org/\nContent-Security-Policy: default-src 'self' data: 'unsafe-inline' https://www.apachecon.com/ https://analytics.apache.org/ http://analytics.apache.org/ https://www.youtube-nocookie.com https://www.youtube.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.apachecon.com/ https://analytics.apache.org/ http://analytics.apache.org/ https://www.youtube-nocookie.com https://www.youtube.com; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; img-src 'self' data: https://www.apache.org/ https://www.apachecon.com/;\n(object-src directive absent — plugin c"
+    },
+    {
+     "name": "CSP Missing base-uri Directive",
+     "severity": "low",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 3.5,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 77,
+     "evidence": "GET https://www.apache.org/\nContent-Security-Policy: default-src 'self' data: 'unsafe-inline' https://www.apachecon.com/ https://analytics.apache.org/ http://analytics.apache.org/ https://www.youtube-nocookie.com https://www.youtube.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.apachecon.com/ https://analytics.apache.org/ http://analytics.apache.org/ https://www.youtube-nocookie.com https://www.youtube.com; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; img-src 'self' data: https://www.apache.org/ https://www.apachecon.com/;\n(base-uri directive absent)"
+    },
+    {
+     "name": "Missing X-Content-Type-Options: nosniff",
+     "severity": "medium",
+     "category": "Content Sniffing",
+     "cweId": "CWE-16",
+     "cvssScore": 4.3,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.apache.org/\nX-Content-Type-Options: (header absent from response)"
+    },
+    {
+     "name": "Missing Referrer-Policy Header",
+     "severity": "low",
+     "category": "Information Disclosure",
+     "cweId": "CWE-200",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.apache.org/\nReferrer-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Permissions-Policy Header",
+     "severity": "low",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": 2.4,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.apache.org/\nPermissions-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Opener-Policy (COOP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.apache.org/\nCross-Origin-Opener-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.apache.org/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "Missing Cross-Origin-Resource-Policy (CORP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-16",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://www.apache.org/\nCross-Origin-Resource-Policy: (header absent from response)"
+    },
+    {
+     "name": "Permissive CORS Policy (Wildcard Origin)",
+     "severity": "info",
+     "category": "CORS Misconfiguration",
+     "cweId": "CWE-942",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 87,
+     "evidence": "GET https://www.apache.org/\nAccess-Control-Allow-Origin: *"
+    },
+    {
+     "name": "External Resources Missing Subresource Integrity (SRI)",
+     "severity": "medium",
+     "category": "Supply Chain Security",
+     "cweId": "CWE-353",
+     "cvssScore": 6.1,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 73,
+     "evidence": "<script/link src=\"https://www.apachecon.com/event-images/snippet.js\" (no integrity= attribute)>"
+    },
+    {
+     "name": "Rate Limiting Not Advertised in Response Headers",
+     "severity": "info",
+     "category": "Brute Force Protection",
+     "cweId": "CWE-307",
+     "cvssScore": 0,
+     "wstgId": "WSTG-ATHN-03",
+     "confidence": 87,
+     "evidence": "GET https://www.apache.org/\nNo rate-limit headers on this response (checked: X-RateLimit-Limit, RateLimit-Limit, Retry-After, and common CDN/WAF infrastructure signals)\nThis observes the homepage response only, and cannot show whether login or API routes are throttled."
+    },
+    {
+     "name": "Directory Listing Enabled",
+     "severity": "medium",
+     "category": "Information Disclosure",
+     "cweId": "CWE-548",
+     "cvssScore": 5.3,
+     "wstgId": "WSTG-CONF-04",
+     "confidence": 87,
+     "evidence": "GET https://www.apache.org/images/ → HTTP 200\nDirectory index page returned (autoindex enabled)"
+    },
+    {
+     "name": "DMARC Policy Set to None (Monitoring Only — No Enforcement)",
+     "severity": "medium",
+     "category": "Email Security",
+     "cweId": "CWE-290",
+     "cvssScore": 5.3,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "TXT record: v=DMARC1; p=none;"
+    },
+    {
+     "name": "DMARC Record Missing Aggregate Report Address (rua=)",
+     "severity": "info",
+     "category": "Email Security",
+     "cweId": "CWE-778",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "TXT record: v=DMARC1; p=none;"
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-345",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for www.apache.org or apache.org (NOERROR (name exists))."
+    },
+    {
+     "name": "No Structured Data Found",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "No <script type=\"application/ld+json\"> blocks in https://www.apache.org/"
+    },
+    {
+     "name": "Incomplete Open Graph Metadata",
+     "severity": "info",
+     "category": "Structured Data",
+     "cweId": null,
+     "cvssScore": 0,
+     "wstgId": null,
+     "confidence": 95,
+     "evidence": "og:title: (absent)\nog:description: (absent)\nog:image: (absent)"
+    },
+    {
+     "name": "Active security testing was skipped for this scan",
+     "severity": "info",
+     "category": "Scan Coverage",
+     "cweId": null,
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 100,
+     "evidence": "No verified ownership on record for this domain at scan time."
+    }
+   ]
+  }
+ ]
+}

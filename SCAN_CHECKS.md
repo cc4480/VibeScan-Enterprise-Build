@@ -26,6 +26,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `structuredData.ts` | 9 | 285 | 36 | direct |
 | `crawler-data.ts` | 8 | 181 | 35 | direct |
 | `scannerCspChecks.ts` | 7 | 155 | 10 | direct |
+| `scannerHeaderChecks.ts` | 7 | 142 | 3 | direct |
 | `jwtAnalysis.ts` | 6 | 262 | 9 | direct |
 | `storageProbe.ts` | 5 | 251 | 11 | direct |
 | `firebase-probes.ts` | 4 | 301 | 8 | direct |
@@ -58,7 +59,6 @@ module does. `none` — neither, so no test exercises it at all.
 | `dnsChecksMail.ts` | 8 | 205 | — | indirect, via dnsChecks.test.ts (split from dnsChecks) |
 | `apiProbeFindings.ts` | 7 | 215 | — | indirect, via apiProbe.test.ts (split from apiProbe) |
 | `probesHttp.ts` | 7 | 218 | — | indirect, via probes.test.ts (split from probes) |
-| `scannerHeaderChecks.ts` | 7 | 133 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts (split from scanner) |
 | `secret-pattern-generic.ts` | 7 | 144 | — | indirect, via secret-pattern-data.test.ts (split from secret-pattern-data) |
 | `supabase-probes-report.ts` | 7 | 234 | — | indirect, via supabase-probes.test.ts (split from supabase-probes) |
 | `scannerCookies.ts` | 6 | 202 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts (split from scanner) |
@@ -609,7 +609,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `scannerHeaderChecks.ts`
 
-*7 findings · 133 lines · no test file.*
+*7 findings · 142 lines · 3 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
