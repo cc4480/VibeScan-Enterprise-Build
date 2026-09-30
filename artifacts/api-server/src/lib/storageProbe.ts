@@ -13,9 +13,12 @@
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 import { scanFetch } from "./http";
+import { bucketLooksOwned, judgeBucket, listedKeys } from "./storageOwnership";
 
 const TIMEOUT_MS = 8_000;
 const MAX_BUCKETS_PER_PROVIDER = 5;
+/** Enough keys to tell an asset bucket from one with a dump in it. */
+const SAMPLE_KEYS = 100;
 
 function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
   return { id: randomUUID(), ...partial };
@@ -121,11 +124,78 @@ function countItems(body: string): number {
   return 0;
 }
 
-async function checkS3Bucket(bucket: string): Promise<ScanVulnerability | null> {
+/**
+ * One finding builder for all three providers. A referenced bucket is only
+ * filed against the customer at HIGH when its name ties it to the site; a
+ * bucket holding only static assets is INFO whoever owns it, and a public
+ * bucket with no tie to the site is a hedged LOW.
+ */
+function bucketFinding(
+  provider: string,
+  ownedName: string,
+  label: string,
+  ownerKey: string,
+  targetHost: string,
+  body: string,
+  base: { evidence: string; solution: string },
+): ScanVulnerability {
+  const keys = listedKeys(body);
+  const count = keys.length || countItems(body);
+  const verdict = judgeBucket(keys, bucketLooksOwned(ownerKey, targetHost));
+  const sample = `${count} object(s) in the first listing page`;
+  const common = {
+    category: "Cloud Storage Misconfiguration",
+    cweId: "CWE-552",
+    evidence: `${base.evidence}\n${sample}`,
+    solution: base.solution,
+  };
+  if (verdict === "static-assets") {
+    return vuln({
+      ...common,
+      name: `Public ${provider} Listing of Static Assets — '${label}'`,
+      severity: "info",
+      cweId: null,
+      description:
+        `The ${provider} bucket '${label}' referenced by this page is publicly listable, but the ` +
+        `listed objects (${sample}) are all static web assets (images, stylesheets, scripts, fonts, media), ` +
+        `which is the normal shape of a public asset bucket. Listing still reveals file names; ` +
+        `check that nothing else is stored here and that listing is not needed.`,
+      cvssScore: 0,
+      confidence: 60,
+    });
+  }
+  if (verdict === "unowned") {
+    return vuln({
+      ...common,
+      name: `Public ${provider} Bucket Referenced by This Page — '${label}'`,
+      severity: "low",
+      description:
+        `A publicly listable ${provider} bucket '${label}' is referenced by this page (${sample}). Its name ` +
+        `does not tie it to this site, so it may belong to a third party (a vendor, a public dataset) rather ` +
+        `than to you. Verify who owns it; if it is yours, treat it as an exposed bucket and lock down listing.`,
+      cvssScore: 3.7,
+      confidence: 50,
+    });
+  }
+  return vuln({
+    ...common,
+    name: ownedName,
+    severity: "high",
+    description:
+      `The ${provider} bucket/container '${label}', whose name matches this site, is publicly listable — anyone can enumerate its ` +
+      `contents without authentication (${sample}). Listing reveals every file name and exposes ` +
+      `the data inventory even where individual objects need auth.`,
+    cvssScore: 7.5,
+    // Listing observed; ownership inferred from the name.
+    confidence: 90,
+  });
+}
+
+async function checkS3Bucket(bucket: string, host: string): Promise<ScanVulnerability | null> {
   // Try virtual-hosted style (current AWS recommendation)
   const urls = [
-    `https://${bucket}.s3.amazonaws.com/?list-type=2&max-keys=5`,
-    `https://s3.amazonaws.com/${bucket}/?list-type=2&max-keys=5`,
+    `https://${bucket}.s3.amazonaws.com/?list-type=2&max-keys=${SAMPLE_KEYS}`,
+    `https://s3.amazonaws.com/${bucket}/?list-type=2&max-keys=${SAMPLE_KEYS}`,
   ];
 
   for (const url of urls) {
@@ -133,37 +203,22 @@ async function checkS3Bucket(bucket: string): Promise<ScanVulnerability | null> 
     if (!r || r.status !== 200) continue;
     if (!isS3ListingResponse(r.body)) continue;
 
-    const count = countItems(r.body);
-    return vuln({
-      name: `Public S3 Bucket Listing — '${bucket}'`,
-      severity: "high",
-      category: "Cloud Storage Misconfiguration",
-      description:
-        `The Amazon S3 bucket '${bucket}' is publicly listable — anyone can enumerate its ` +
-        `full contents without authentication. ` +
-        (count > 0
-          ? `${count} object(s) were listed in this probe.`
-          : "The bucket directory listing was confirmed.") +
-        " Even if objects have individual auth, listing reveals all filenames and exposes " +
-        "the full data inventory to attackers.",
-      evidence: `GET ${url}\nHTTP 200 — S3 ListBucketResult returned${count > 0 ? ` (${count} items)` : ""}`,
+    return bucketFinding("S3", `Public S3 Bucket Listing — '${bucket}'`, bucket, bucket, host, r.body, {
+      evidence: `GET ${url}\nHTTP 200 — S3 ListBucketResult returned`,
       solution:
         "In the AWS S3 Console: select the bucket → Permissions → Block Public Access → " +
         "enable all four 'Block public access' settings. Also review the Bucket Policy and " +
         "ACL to remove any `Principal: \"*\"` with `s3:ListBucket` or `s3:GetObject` actions. " +
         "Use pre-signed URLs or CloudFront with OAC for serving public assets.",
-      cweId: "CWE-552",
-      cvssScore: 7.5,
-      confidence: 95,
     });
   }
   return null;
 }
 
-async function checkGcsBucket(bucket: string): Promise<ScanVulnerability | null> {
+async function checkGcsBucket(bucket: string, host: string): Promise<ScanVulnerability | null> {
   const urls = [
-    `https://storage.googleapis.com/${bucket}?maxResults=5`,
-    `https://storage.googleapis.com/storage/v1/b/${bucket}/o?maxResults=5`,
+    `https://storage.googleapis.com/${bucket}?maxResults=${SAMPLE_KEYS}`,
+    `https://storage.googleapis.com/storage/v1/b/${bucket}/o?maxResults=${SAMPLE_KEYS}`,
   ];
 
   for (const url of urls) {
@@ -171,55 +226,41 @@ async function checkGcsBucket(bucket: string): Promise<ScanVulnerability | null>
     if (!r || r.status !== 200) continue;
     if (!isGcsListingResponse(r.body, r.ct)) continue;
 
-    const count = countItems(r.body);
-    return vuln({
-      name: `Public GCS Bucket Listing — '${bucket}'`,
-      severity: "high",
-      category: "Cloud Storage Misconfiguration",
-      description:
-        `The Google Cloud Storage bucket '${bucket}' is publicly listable. Anyone can ` +
-        `enumerate all objects in the bucket without credentials. ` +
-        (count > 0 ? `${count} object(s) were listed.` : ""),
-      evidence: `GET ${url}\nHTTP 200 — GCS listing confirmed${count > 0 ? ` (${count} items)` : ""}`,
+    return bucketFinding("GCS", `Public GCS Bucket Listing — '${bucket}'`, bucket, bucket, host, r.body, {
+      evidence: `GET ${url}\nHTTP 200 — GCS listing confirmed`,
       solution:
         "In the GCS Console: select the bucket → Permissions → remove the 'allUsers' and " +
         "'allAuthenticatedUsers' principal entries. Enable 'Uniform bucket-level access' and " +
         "use IAM policies instead of per-object ACLs. For public assets, use a CDN or Cloud " +
         "Storage with signed URLs.",
-      cweId: "CWE-552",
-      cvssScore: 7.5,
-      confidence: 95,
     });
   }
   return null;
 }
 
-async function checkAzureBlob(blob: AzureBlob): Promise<ScanVulnerability | null> {
+async function checkAzureBlob(blob: AzureBlob, host: string): Promise<ScanVulnerability | null> {
   // Azure requires ?restype=container&comp=list for listing
-  const url = `https://${blob.account}.blob.core.windows.net/${blob.container}?restype=container&comp=list&maxresults=5`;
+  const url = `https://${blob.account}.blob.core.windows.net/${blob.container}?restype=container&comp=list&maxresults=${SAMPLE_KEYS}`;
   const r = await safeGet(url);
   if (!r || r.status !== 200) return null;
   if (!isAzureListingResponse(r.body)) return null;
 
-  const count = countItems(r.body);
-  return vuln({
-    name: `Public Azure Blob Container Listing — '${blob.account}/${blob.container}'`,
-    severity: "high",
-    category: "Cloud Storage Misconfiguration",
-    description:
-      `The Azure Blob Storage container '${blob.container}' in account '${blob.account}' ` +
-      `is publicly listable. Unauthenticated list requests reveal all blob names. ` +
-      (count > 0 ? `${count} blob(s) were listed.` : ""),
-    evidence: `GET ${url}\nHTTP 200 — Azure EnumerationResults confirmed${count > 0 ? ` (${count} blobs)` : ""}`,
-    solution:
-      "In the Azure Portal: Storage Account → Containers → select the container → Change " +
-      "access level from 'Container (anonymous read access for containers and blobs)' to " +
-      "'Private (no anonymous access)'. Also review the storage account's 'Allow Blob public " +
-      "access' setting and disable it at the account level.",
-    cweId: "CWE-552",
-    cvssScore: 7.5,
-    confidence: 95,
-  });
+  return bucketFinding(
+    "Azure Blob",
+    `Public Azure Blob Container Listing — '${blob.account}/${blob.container}'`,
+    `${blob.account}/${blob.container}`,
+    blob.account,
+    host,
+    r.body,
+    {
+      evidence: `GET ${url}\nHTTP 200 — Azure EnumerationResults confirmed`,
+      solution:
+        "In the Azure Portal: Storage Account → Containers → select the container → Change " +
+        "access level from 'Container (anonymous read access for containers and blobs)' to " +
+        "'Private (no anonymous access)'. Also review the storage account's 'Allow Blob public " +
+        "access' setting and disable it at the account level.",
+    },
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -227,9 +268,11 @@ async function checkAzureBlob(blob: AzureBlob): Promise<ScanVulnerability | null
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function runStorageProbe(
-  _targetUrl: string,
+  targetUrl: string,
   html: string,
 ): Promise<ScanVulnerability[]> {
+  let host: string;
+  try { host = new URL(targetUrl).hostname; } catch { return []; }
   // Build search corpus: HTML + inline scripts
   const inlineRx = /<script(?:[^>]*)>([\s\S]*?)<\/script>/gi;
   const parts: string[] = [html];
@@ -248,9 +291,9 @@ export async function runStorageProbe(
   }
 
   const tasks: Promise<ScanVulnerability | null>[] = [
-    ...s3Buckets.map((b) => checkS3Bucket(b).catch(() => null)),
-    ...gcsBuckets.map((b) => checkGcsBucket(b).catch(() => null)),
-    ...azureBlobs.map((b) => checkAzureBlob(b).catch(() => null)),
+    ...s3Buckets.map((b) => checkS3Bucket(b, host).catch(() => null)),
+    ...gcsBuckets.map((b) => checkGcsBucket(b, host).catch(() => null)),
+    ...azureBlobs.map((b) => checkAzureBlob(b, host).catch(() => null)),
   ];
 
   const settled = await Promise.allSettled(tasks);

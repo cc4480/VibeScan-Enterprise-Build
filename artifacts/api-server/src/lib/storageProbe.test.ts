@@ -24,7 +24,7 @@ function answerWith(body: string, ct = "application/xml", status = 200) {
 
 const S3_LISTING = `<?xml version="1.0" encoding="UTF-8"?>
 <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
-  <Name>assets-bucket</Name>
+  <Name>example-backups</Name>
   <Contents><Key>logo.png</Key></Contents>
   <Contents><Key>backup/db-dump.sql</Key></Contents>
 </ListBucketResult>`;
@@ -32,7 +32,7 @@ const S3_LISTING = `<?xml version="1.0" encoding="UTF-8"?>
 const S3_ACCESS_DENIED = `<?xml version="1.0" encoding="UTF-8"?>
 <Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>`;
 
-const pageWithS3 = '<html><body><img src="https://assets-bucket.s3.amazonaws.com/logo.png"></body></html>';
+const pageWithS3 = '<html><body><img src="https://example-backups.s3.amazonaws.com/logo.png"></body></html>';
 
 describe("runStorageProbe — a bucket that really lists", () => {
   it("reports a public S3 listing and counts the objects", async () => {
@@ -42,16 +42,16 @@ describe("runStorageProbe — a bucket that really lists", () => {
     expect(vulns).toHaveLength(1);
     expect(vulns[0]!.severity).toBe("high");
     expect(vulns[0]!.cweId).toBe("CWE-552");
-    expect(vulns[0]!.name).toMatch(/assets-bucket/);
-    expect(vulns[0]!.evidence).toMatch(/2 items/);
+    expect(vulns[0]!.name).toMatch(/example-backups/);
+    expect(vulns[0]!.evidence).toMatch(/2 object/);
   });
 
   it("reports an Azure container that enumerates", async () => {
     answerWith("<?xml version=\"1.0\"?><EnumerationResults><Blobs><Blob><Name>a.txt</Name></Blob></Blobs></EnumerationResults>");
 
-    const page = '<html><body><a href="https://acct.blob.core.windows.net/media/a.txt">x</a></body></html>';
+    const page = '<html><body><a href="https://exampleacct.blob.core.windows.net/media/a.txt">x</a></body></html>';
     const vulns = await runStorageProbe("https://example.com/", page);
-    expect(vulns.some((v) => /Azure/i.test(v.name))).toBe(true);
+    expect(vulns.some((v) => /Azure/i.test(v.name) && v.severity === "high")).toBe(true);
   });
 });
 
@@ -80,6 +80,37 @@ describe("runStorageProbe — a bucket that refuses is not a finding", () => {
     answerWith("<html><body>Sign in to continue</body></html>", "text/html", 200);
 
     expect(await runStorageProbe("https://example.com/", pageWithS3)).toEqual([]);
+  });
+});
+
+describe("runStorageProbe — a listable bucket that is not shown to be the site's", () => {
+  const listing = (...keys: string[]) =>
+    `<ListBucketResult>${keys.map((k) => `<Contents><Key>${k}</Key></Contents>`).join("")}</ListBucketResult>`;
+  const otherPage = '<html><body><a href="https://open-census-data.s3.amazonaws.com/2020.csv">data</a></body></html>';
+
+  it("a third-party public dataset bucket is a hedged LOW, not a HIGH against the customer", async () => {
+    answerWith(listing("2020.csv", "2021.csv"));
+    const vulns = await runStorageProbe("https://example.com/", otherPage);
+    expect(vulns).toHaveLength(1);
+    expect(vulns[0]!.severity).toBe("low");
+    expect(vulns[0]!.confidence).toBeLessThan(85);
+    expect(vulns[0]!.description).toMatch(/third party|Verify/i);
+  });
+
+  it("a bucket listing only images/css/js/fonts is INFO even when the name matches the site", async () => {
+    answerWith(listing("img/logo.png", "app.js", "site.css", "fonts/a.woff2"));
+    const page = '<html><img src="https://example-assets.s3.amazonaws.com/img/logo.png"></html>';
+    const vulns = await runStorageProbe("https://www.example.com/", page);
+    expect(vulns).toHaveLength(1);
+    expect(vulns[0]!.severity).toBe("info");
+  });
+
+  it("the site's own bucket holding a non-asset file is still HIGH", async () => {
+    answerWith(listing("img/logo.png", "backup/db-dump.sql"));
+    const page = '<html><img src="https://example-assets.s3.amazonaws.com/img/logo.png"></html>';
+    const vulns = await runStorageProbe("https://www.example.com/", page);
+    expect(vulns[0]!.severity).toBe("high");
+    expect(vulns[0]!.confidence).toBeGreaterThanOrEqual(85);
   });
 });
 
