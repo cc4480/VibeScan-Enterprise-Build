@@ -16,37 +16,15 @@
  * `type: "credits"`, `user_id` and a `tier` present in CREDITS_MAP, or the
  * webhook will verify the payment and credit nobody.
  */
+
 import { Router, type IRouter } from "express";
-import { db, billingSubscriptionsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
 import { stripe, PRICE_MAP, CREDITS_MAP, getOrigin } from "../lib/stripe";
 import { DEFAULT_PLAN, SOLD_PLANS, planByKey } from "../lib/plans";
 import { creditBalance } from "../lib/credits";
 import { trialScansUsedBy, FREE_TRIAL_SCAN_LIMIT, freeScansResetAt } from "../lib/freeTrial";
+import { refuseUnregistered, BUYABLE, currentPlan } from "./checkoutShared";
 
 const router: IRouter = Router();
-
-/**
- * Refuse checkout to an identity that has no email — the browser-only accounts
- * the site still creates for first-time visitors.
- *
- * Anything bought on one lives only as long as that browser's storage: clear
- * it, switch device, and the paid credits or subscription are unreachable, with
- * no address to recover them or to cancel a subscription that keeps charging.
- * Registering converts the same row in place (routes/account.ts), so asking
- * first loses the visitor nothing — their free scans come with them.
- */
-function refuseUnregistered(req: { user: { email?: string | null } }, res: { status: (n: number) => { json: (b: unknown) => void } }): boolean {
-  if (req.user.email) return false;
-  res.status(403).json({
-    error: "Create an account before buying, so your purchase isn't tied to this browser.",
-    code: "account_required",
-  });
-  return true;
-}
-
-/** The packs that may be bought. Anything outside CREDITS_MAP grants nothing. */
-const BUYABLE = Object.keys(CREDITS_MAP);
 
 router.get("/checkout/packs", (_req, res): void => {
   // Priced in one place, so the page cannot advertise a number the session
@@ -143,16 +121,6 @@ router.post("/checkout/credits", async (req, res): Promise<void> => {
     res.status(502).json({ error: "Could not start checkout. Please try again." });
   }
 });
-
-/** The user's plan row, or null. */
-async function currentPlan(userId: string) {
-  const [row] = await db
-    .select()
-    .from(billingSubscriptionsTable)
-    .where(eq(billingSubscriptionsTable.userId, userId))
-    .limit(1);
-  return row ?? null;
-}
 
 /**
  * Start a monthly subscription: body { plan: "starter" | "pro" }.
