@@ -172,7 +172,7 @@ export function classifyAiStatus(status: number): AiFailureKind {
 /** Failures worth a second try: busy, down, slow or a garbled answer. A wrong key or model will not fix itself. */
 const RETRYABLE: ReadonlySet<AiFailureKind> = new Set(["rate_limit", "provider_error", "timeout", "network", "empty"]);
 
-const AI_ATTEMPT_TIMEOUT_MS = 30_000;
+const AI_ATTEMPT_TIMEOUT_MS = 90_000;
 const AI_MAX_ATTEMPTS = 2;
 const AI_RETRY_PAUSE_MS = 1_500;
 const AI_RETRY_AFTER_CAP_MS = 5_000;
@@ -294,7 +294,8 @@ export async function callDeepSeekDetailed(
     // Low: this is transcription and explanation of fixed facts, not creative
     // writing, and every point of temperature is room to embellish.
     temperature: 0.1,
-    max_tokens: 3000,
+    // Room for the model's own reasoning plus the full analysis and fix prompt; a tight cap left the visible reply empty.
+    max_tokens: 16000,
     response_format: { type: "json_object" },
   };
 
