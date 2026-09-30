@@ -117,19 +117,28 @@ for (const f of files) {
  * The module a part was split from (cveCheckLocal -> cveCheck, probes-data-vcs -> probes-data), if any.
  * A part is exercised through its parent's tests, so it is not reported as untested.
  */
+const PART_ALIASES = {
+  "secret-pattern-vendors": "secret-pattern-data",
+  "secret-pattern-generic": "secret-pattern-data",
+  "secret-pattern-filters": "secret-pattern-data",
+};
 function parentOf(mod) {
+  if (PART_ALIASES[mod]) return PART_ALIASES[mod];
   const parents = sourceFiles
     .map(modOf)
     .filter((k) => k !== mod && mod.startsWith(k) && /^[A-Z-]/.test(mod.slice(k.length)))
     .sort((a, b) => b.length - a.length);
   return parents[0] ?? null;
 }
-const hasTests = (mod) => testsFor[mod] || (parentOf(mod) && testsFor[parentOf(mod)]);
+const hasTests = (mod) => testsFor[mod] || (parentOf(mod) && hasTests(parentOf(mod)));
 
 function coverage(mod) {
   if (testsFor[mod]) return { level: "direct", via: `${mod}.test.ts` };
   const parent = parentOf(mod);
-  if (parent && testsFor[parent]) return { level: "indirect", via: `${parent}.test.ts (split from ${parent})` };
+  if (parent) {
+    const inherited = coverage(parent);
+    if (inherited.level !== "none") return { level: "indirect", via: `${inherited.via} (split from ${parent})` };
+  }
   const byTest = testFiles.filter((t) => importsOf[t].has(mod));
   if (byTest.length) return { level: "indirect", via: byTest.join(", ") };
   const byTested = sourceFiles.filter((f) => importsOf[f].has(mod) && hasTests(modOf(f)));

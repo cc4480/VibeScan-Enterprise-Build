@@ -50,37 +50,35 @@ module does. `none` — neither, so no test exercises it at all.
 | `ssrfProbe.ts` | 1 | 200 | 7 | direct |
 | `probes-data-vcs.ts` | 24 | 244 | — | indirect, via probes-data.test.ts (split from probes-data) |
 | `probes-data-config.ts` | 23 | 273 | — | indirect, via probes-data.test.ts (split from probes-data) |
-| `secret-pattern-vendors.ts` | 21 | 247 | — | indirect, via secret-pattern-data.test.ts |
+| `secret-pattern-vendors.ts` | 21 | 247 | — | indirect, via secret-pattern-data.test.ts (split from secret-pattern-data) |
 | `subdomain-service-data.ts` | 19 | 165 | — | indirect, via subdomainTakeover.test.ts |
 | `probes-data-server.ts` | 17 | 177 | — | indirect, via probes-data.test.ts (split from probes-data) |
 | `probes-data-infra.ts` | 14 | 148 | — | indirect, via probes-data.test.ts (split from probes-data) |
 | `dnsChecksMail.ts` | 8 | 205 | — | indirect, via dnsChecks.test.ts (split from dnsChecks) |
 | `apiProbeFindings.ts` | 7 | 215 | — | indirect, via apiProbe.test.ts (split from apiProbe) |
 | `probesHttp.ts` | 7 | 218 | — | indirect, via probes.test.ts (split from probes) |
-| `secret-pattern-generic.ts` | 7 | 144 | — | indirect, via secret-pattern-data.test.ts |
+| `scannerCspChecks.ts` | 7 | 149 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts (split from scanner) |
+| `scannerHeaderChecks.ts` | 7 | 133 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts (split from scanner) |
+| `secret-pattern-generic.ts` | 7 | 144 | — | indirect, via secret-pattern-data.test.ts (split from secret-pattern-data) |
 | `supabase-probes-report.ts` | 7 | 234 | — | indirect, via supabase-probes.test.ts (split from supabase-probes) |
+| `scannerCookies.ts` | 6 | 202 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts (split from scanner) |
 | `crawlerHeaders.ts` | 5 | 202 | — | indirect, via crawler.test.ts (split from crawler) |
 | `cveCheckLocal.ts` | 5 | 225 | — | indirect, via cveCheck.test.ts (split from cveCheck) |
+| `secret-pattern-ai.ts` | 5 | 61 | — | indirect, via secret-pattern-generic.test.ts |
 | `probesPage.ts` | 4 | 299 | — | indirect, via probes.test.ts (split from probes) |
 | `accessControlFindings.ts` | 3 | 129 | — | indirect, via accessControlProbe.test.ts |
 | `probesFiles.ts` | 3 | 247 | — | indirect, via probes.test.ts (split from probes) |
 | `probesSupabase.ts` | 3 | 154 | — | indirect, via probes.test.ts (split from probes) |
+| `scannerCoverage.ts` | 3 | 103 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts (split from scanner) |
+| `scannerTransportChecks.ts` | 3 | 70 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts (split from scanner) |
 | `baasProbesPocketbase.ts` | 2 | 133 | — | indirect, via baasProbes.test.ts (split from baasProbes) |
 | `crawlerCookies.ts` | 2 | 178 | — | indirect, via crawler.test.ts (split from crawler) |
+| `scannerPageChecks.ts` | 2 | 56 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts (split from scanner) |
+| `secret-pattern-jwt.ts` | 2 | 81 | — | indirect, via secret-pattern-generic.test.ts |
 | `workerAi.ts` | 2 | 100 | — | indirect, via worker.test.ts (split from worker) |
 | `bannerRules.ts` | 1 | 112 | — | indirect, via cveCheckLocal.test.ts, cveCheckVersions.test.ts |
 | `githubFindings.ts` | 1 | 60 | — | indirect, via githubSourceProbe.test.ts |
 | `scanner.ts` | 1 | 297 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts |
-| `scannerCspChecks.ts` | 7 | 149 | — | **none** |
-| `scannerHeaderChecks.ts` | 7 | 133 | — | **none** |
-| `scannerCookies.ts` | 6 | 202 | — | **none** |
-| `secret-pattern-ai.ts` | 5 | 61 | — | **none** |
-| `scannerCoverage.ts` | 3 | 103 | — | **none** |
-| `scannerTransportChecks.ts` | 3 | 70 | — | **none** |
-| `scannerPageChecks.ts` | 2 | 56 | — | **none** |
-| `secret-pattern-jwt.ts` | 2 | 81 | — | **none** |
-
-> **8 modules carrying 35 findings have no test reaching them:** `scannerCookies`, `scannerCoverage`, `scannerCspChecks`, `scannerHeaderChecks`, `scannerPageChecks`, `scannerTransportChecks`, `secret-pattern-ai`, `secret-pattern-jwt`.
 
 ## Findings by module
 
