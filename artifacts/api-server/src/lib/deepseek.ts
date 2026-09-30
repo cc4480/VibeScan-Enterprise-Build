@@ -220,13 +220,19 @@ async function attemptOnce(body: unknown, apiKey: string, timeoutMs: number, vul
     }
 
     let content: string | undefined;
+    let shape = "";
     try {
-      const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+      const json = (await res.json()) as {
+        choices?: Array<{ finish_reason?: string; message?: { content?: string; reasoning_content?: string } }>;
+        usage?: { completion_tokens?: number };
+      };
       content = json.choices?.[0]?.message?.content;
+      // Operator log only: why a 200 carried no analysis (token budget spent on reasoning, a filter, a bad shape).
+      shape = ` (finish_reason=${json.choices?.[0]?.finish_reason ?? "none"}, choices=${json.choices?.length ?? 0}, reasoning=${json.choices?.[0]?.message?.reasoning_content ? "yes" : "no"}, completion_tokens=${json.usage?.completion_tokens ?? "?"}, model=${DEEPSEEK_MODEL})`;
     } catch {
       throw new AiAttemptError("empty", res.status, undefined, "DeepSeek answered with a body that is not JSON");
     }
-    if (!content) throw new AiAttemptError("empty", res.status, undefined, "Empty response from DeepSeek");
+    if (!content) throw new AiAttemptError("empty", res.status, undefined, `Empty response from DeepSeek${shape}`);
 
     let parsed: Partial<AiAnalysisResult>;
     try {
