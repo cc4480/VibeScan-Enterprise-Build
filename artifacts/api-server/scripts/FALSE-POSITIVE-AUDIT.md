@@ -68,6 +68,24 @@ Scanning nasa.gov ten times gave "Missing SPF Record" (Medium) on one run in fiv
 
 `scan-results/2026-09-30-sweep-30-after-fixes.json`. The differences from the run above are the fixes: gitlab, archive.org, fastly and zoom as described. apnews.com happened to be served its real page this time instead of a challenge, which added seven findings that an independent fetch agreed with. The fixture gate stayed at 82/82.
 
+### Verification pass, same day, after the fixes
+
+The whole result set (30 sites and 20 guard targets) was re-checked independently rather than trusted. An independent fetch with the scanner's User-Agent recomputed every header finding (CSP present or weak, `base-uri`, `object-src`, `nosniff`, clickjacking, Referrer-Policy, Permissions-Policy) on 38 targets, the cookie-attribute findings on 39, the small header findings (Server, X-Powered-By, Cache-Control, COOP/COEP/CORP, CORS, HSTS), DNSSEC on every apex that was flagged (36), DMARC `rua`, Open Graph, Twitter cards, structured data, security.txt, robots.txt, OpenAPI and rate-limit headers on 39. The intercepted targets are withheld by design and were not checked; apnews.com answered the verifier with a challenge and was skipped.
+
+Two more false positives, both Info, both fixed with tests that fail on the old code:
+
+- **`Missing security.txt` on npmjs.com.** Cloudflare answered the scanner HTTP 403 on both paths while `/.well-known/security.txt` is a valid file. A refusal, timeout, 429 or 5xx on either path now means "could not tell", and no finding is raised. Only definitive answers (404, or a page without RFC 9116 fields) still report it.
+- **`robots.txt Discloses Sensitive Application Paths` on wikipedia.org.** `/admin/i` matched inside `Administratoren`, `Adminkandidaturen` and `Requests_for_adminship`, which are discussion pages about the role. The keywords now match as whole path tokens. Every path the finding named on the other sites (`/admin/`, `/wp-admin/post.php`, `*/store/admin`, `/fizzy/admin`, `/web.config`, `/config/newrelic/prod`) still matches.
+
+Checked and correct, not false positives:
+- google.com's CSP is `Content-Security-Policy-Report-Only` only, and is reported as report-only, not missing.
+- dropbox.com's `object-src` is limited to itself and its own static hosts; the scanner not flagging it is defensible.
+- google.com "No Structured Data Found" says "No `<script type="application/ld+json">` blocks", which is exact. The page's schema.org microdata is not JSON-LD.
+- microsoft.com `CAS_PROGRAM` is a real `Set-Cookie: …; secure; SameSite=None` without `HttpOnly`, sent when the request carries `Accept-Language`.
+- linkedin.com `fid` and microsoft.com `bStore` (inner pages) reproduce: no `Secure`. LinkedIn's `JSESSIONID` missing `HttpOnly` is real (recorded as such in an earlier round).
+- Info findings for DNSSEC (36 of 36), Open Graph, Twitter cards and structured data all matched the live pages.
+- The `Missing SPF Record` on nasa.gov in the after-fixes JSON predates the SPF fix and is that flake; ten later scans were clean.
+
 ### Still open
 
 - SRI on provider-updated marketing scripts (gitlab: bizible, marketo; nasa: dap.digitalgov.gov, parsely; slack: clearbit) and on a site's own asset domain the scanner cannot know (theguardian: `assets.guim.co.uk`). Accurate, but not something the owner can fix by adding `integrity`. A policy question, not a bug.

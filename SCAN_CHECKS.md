@@ -67,7 +67,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `secret-pattern-ai.ts` | 5 | 61 | — | indirect, via secret-pattern-generic.test.ts |
 | `probesPage.ts` | 4 | 304 | — | indirect, via probes.test.ts (split from probes) |
 | `accessControlFindings.ts` | 3 | 129 | — | indirect, via accessControlProbe.test.ts |
-| `probesFiles.ts` | 3 | 247 | — | indirect, via probes.test.ts (split from probes) |
+| `probesFiles.ts` | 3 | 261 | — | indirect, via probes.test.ts (split from probes) |
 | `probesSupabase.ts` | 3 | 154 | — | indirect, via probes.test.ts (split from probes) |
 | `scannerCoverage.ts` | 3 | 103 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts (split from scanner) |
 | `scannerTransportChecks.ts` | 3 | 70 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts (split from scanner) |
@@ -474,7 +474,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `probesFiles.ts`
 
-*3 findings · 247 lines · no test file.*
+*3 findings · 261 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
