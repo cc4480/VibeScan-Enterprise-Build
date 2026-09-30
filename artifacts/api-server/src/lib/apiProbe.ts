@@ -42,6 +42,7 @@ import {
 } from "./apiSurface";
 import { endpointsFromRuntime, type ObservedRequest } from "./apiRuntime";
 import { collectJavaScript } from "./jsScanner";
+import { sameIdentity } from "./accessControlCompare";
 
 const TIMEOUT_MS = 8_000;
 const MAX_ENDPOINTS_TESTED = 25;
@@ -67,6 +68,25 @@ const RATE_LIMIT_BURST = 12;
  */
 const RATE_LIMIT_EXEMPT_PATTERN =
   /\/(healthz?|health[-_]?check|status|ready(iness)?|live(ness)?|ping|version|manifest\.json|\.well-known\/[^/]+|providers?|config(uration)?|robots\.txt|sitemap\.xml|favicon\.ico)(\/|$)/i;
+
+/**
+ * The only endpoints where "no throttling seen in a short burst" says anything worth a report:
+ * ones an attacker would hammer (guessing passwords, codes or reset tokens). Almost any read API
+ * tolerates twelve requests, so a burst against /api/orders proves nothing.
+ */
+const RATE_LIMIT_SENSITIVE_PATTERN =
+  /\/(log-?in|sign-?in|auth(enticate)?|password|passwd|forgot|reset|otp|2fa|mfa|verify|verification|token|pin|code|magic)(\/|[-_.]|$)/i;
+
+/**
+ * Collections that are public by design. The same data for a signed-in caller and an anonymous
+ * one is what a product catalogue IS, so it is only worth reporting when the data itself is
+ * personal (see PERSONAL_DATA_RE).
+ */
+const PUBLIC_COLLECTION_PATTERN =
+  /\/(products?|catalog(ue)?|categories|category|posts?|articles?|blogs?|news|pages?|plans?|pricing|faqs?|countries|currencies|languages|locations|stores|shops?|events|courses|recipes|listings|menu|features|tags|testimonials|reviews|changelog|releases|docs|jobs|careers)(\/|$)/i;
+
+/** Values that mark a payload as somebody's data rather than catalogue content. */
+const PERSONAL_DATA_RE = /[\w.+-]+@[\w-]+\.[\w.-]+|\b\d{3}-\d{2}-\d{4}\b/;
 
 /** Paths whose POST is a query rather than a write. */
 const READ_SHAPED = /\b(search|query|filter|lookup|find|list|report|graphql|validate|preview|check)\b/i;
@@ -105,12 +125,31 @@ function looksLikeData(status: number, body: string): boolean {
   return true;
 }
 
-/** A refusal, whatever status code it arrives with. */
-function isRefusal(status: number, body: string): boolean {
+/**
+ * A refusal, whatever status code it arrives with. A redirect to a sign-in page (which the client
+ * followed, so the status is the login page's 200) and an HTML sign-in page are refusals too.
+ */
+function isRefusal(status: number, body: string, res?: { redirected: boolean; finalUrl: string }): boolean {
   if (status === 401 || status === 403) return true;
-  return /\b(unauthori[sz]ed|forbidden|access denied|not authenticated|login required|permission denied|invalid token|missing token)\b/i.test(
-    body.slice(0, 1_000),
+  if (res?.redirected) {
+    try {
+      if (/\/(log-?in|sign-?in|sign_in|auth|sso|session|account\/login)(\/|$|\?)/i.test(new URL(res.finalUrl).pathname)) return true;
+    } catch { /* an unparseable final URL says nothing */ }
+  }
+  const head = body.slice(0, 2_000);
+  if (/^\s*<(!doctype|html)/i.test(head) && (/<input[^>]+type=["']password["']/i.test(head) || /\b(sign in|log in|login)\b/i.test(head))) {
+    return true;
+  }
+  return /\b(unauthori[sz]ed|forbidden|access denied|not authenticated|not logged in|authentication required|login required|please (log|sign) ?in|(log|sign) ?in to continue|permission denied|invalid token|missing token)\b/i.test(
+    head,
   );
+}
+
+/** Same JSON shape (field names), or byte-identical: "the anonymous caller got what the signed-in one did". */
+function sameShape(a: string, b: string): boolean {
+  if (a === b) return true;
+  const fa = jsonFieldNames(a).sort().join(",");
+  return fa !== "" && fa === jsonFieldNames(b).sort().join(",");
 }
 
 /**
@@ -139,6 +178,22 @@ const SENSITIVE_FIELD_RE =
 /** Fields that let a caller grant themselves something by including them. */
 const PRIVILEGE_FIELD_RE =
   /^(role|roles|is_?admin|admin|is_?staff|permissions?|scopes?|plan|tier|credits?|balance|verified|is_?verified|email_?verified|owner_?id|user_?id|account_?id)$/i;
+
+/**
+ * Did an unauthenticated write to a nonexistent id reach a handler that processed it? A refusal
+ * (401/403), "not found" (404, 410), "method not allowed" (405/501) and a router's default
+ * "Cannot DELETE /path" are all inconclusive or fine.
+ */
+export function isHandlerReached(status: number, body: string): boolean {
+  if (/\bCannot (DELETE|PATCH|PUT|POST|GET)\b/i.test(body.slice(0, 500))) return false;
+  if (status >= 200 && status < 300) return true;
+  if (status === 400 || status === 422) {
+    // A malformed-JSON 400 comes from the body parser, before any handler.
+    return /\b(validation|required|must be|is invalid|invalid (field|value|input|body|payload)|missing (field|param))/i.test(body.slice(0, 1_000)) &&
+      !/\b(unexpected token|malformed|JSON)\b/i.test(body.slice(0, 300));
+  }
+  return false;
+}
 
 export interface ApiProbeInput {
   endpoints: ApiEndpoint[];
@@ -208,8 +263,16 @@ export async function runApiProbes(input: ApiProbeInput): Promise<ScanVulnerabil
   const massAssignable: Array<{ endpoint: string; fields: string[] }> = [];
   const unauthorizedWrites: string[] = [];
 
+  // One account presented twice is not two accounts: every "shared" record would be the same
+  // user's own. Cross-account comparison is skipped; the single-session checks still run.
+  const secondary =
+    input.secondary && input.credentials && sameIdentity(input.credentials, input.secondary)
+      ? undefined
+      : input.secondary;
+
   for (const endpoint of testable) {
     const url = concreteUrl(endpoint);
+    let anonymousBody: string | null = null;
 
     // ── 1. Missing authentication ───────────────────────────────────────────
     // Only meaningful with a session to contrast against: without one there is
@@ -225,9 +288,17 @@ export async function runApiProbes(input: ApiProbeInput): Promise<ScanVulnerabil
         anon &&
         looksLikeData(authed.status, authed.body) &&
         looksLikeData(anon.status, anon.body) &&
-        !isRefusal(anon.status, anon.body)
+        !isRefusal(anon.status, anon.body, anon) &&
+        sameShape(authed.body, anon.body)
       ) {
-        unauthenticated.push(`${endpoint.method} ${new URL(url).pathname}`);
+        anonymousBody = anon.body;
+        // A catalogue answers everyone the same; that is not an exposure unless the payload is
+        // personal. Anything else, matching the signed-in answer, is what this finding reports.
+        const publicByDesign =
+          PUBLIC_COLLECTION_PATTERN.test(new URL(url).pathname) &&
+          !PERSONAL_DATA_RE.test(anon.body) &&
+          exposedSensitiveFields(anon.body).length === 0;
+        if (!publicByDesign) unauthenticated.push(`${endpoint.method} ${new URL(url).pathname}`);
       }
     }
 
@@ -250,8 +321,10 @@ export async function runApiProbes(input: ApiProbeInput): Promise<ScanVulnerabil
         // The phase-04 comparison applied per endpoint: if a second account is
         // served byte-comparable data from a URL naming a record, one of them
         // is reading data that is not theirs.
-        if (input.secondary && /\/\d+(?:\/|$)/.test(new URL(url).pathname)) {
-          const asOther = await scanFetch(url, { as: input.secondary, timeoutMs: TIMEOUT_MS });
+        // Skipped when an anonymous caller got the same data: then it is public, and "the
+        // second account can read it" says nothing about ownership.
+        if (secondary && anonymousBody === null && /\/\d+(?:\/|$)/.test(new URL(url).pathname)) {
+          const asOther = await scanFetch(url, { as: secondary, timeoutMs: TIMEOUT_MS });
           if (
             asOther &&
             !isRefusal(asOther.status, asOther.body) &&
@@ -270,6 +343,7 @@ export async function runApiProbes(input: ApiProbeInput): Promise<ScanVulnerabil
     if (
       endpoint.method === "GET" &&
       unratelimited.length < 3 &&
+      RATE_LIMIT_SENSITIVE_PATTERN.test(new URL(url).pathname) &&
       !RATE_LIMIT_EXEMPT_PATTERN.test(new URL(url).pathname)
     ) {
       const burst = await Promise.all(
@@ -300,10 +374,12 @@ export async function runApiProbes(input: ApiProbeInput): Promise<ScanVulnerabil
       if (!isDestructiveUrl(target)) {
         for (const verb of ["DELETE", "PATCH"] as const) {
           const res = await scanFetch(target, { method: verb, as: null, timeoutMs: TIMEOUT_MS });
-          // 404 means the handler looked for the record before checking who was
-          // asking. 405 means the verb is not routed at all, which is fine.
-          if (res && res.status === 404) {
-            unauthorizedWrites.push(`${verb} ${new URL(target).pathname}`);
+          // Only evidence that a handler RAN counts: a 2xx (it accepted the request without
+          // asking who sent it), or a validation-level 400/422 (it got as far as reading the
+          // input). A 404 or 405 proves nothing: Express answers 404 "Cannot DELETE /x" for any
+          // verb nobody routed, so an API with no such handler at all looks identical.
+          if (res && isHandlerReached(res.status, res.body)) {
+            unauthorizedWrites.push(`${verb} ${new URL(target).pathname} -> ${res.status}`);
             break;
           }
         }
@@ -419,11 +495,10 @@ If these two accounts share an organisation, sharing the record may be intended.
         severity: "critical",
         category: "Broken Access Control",
         description:
-          `${unauthorizedWrites.length} write endpoint${unauthorizedWrites.length > 1 ? "s" : ""} answered an ` +
-          `unauthenticated request with "not found" rather than "not allowed". The handler looked the record ` +
-          `up before checking who was asking, which means authorisation runs after the database does — or ` +
-          `not at all. Aimed at a real identifier instead of a nonexistent one, the same request would have ` +
-          `modified or deleted the record.`,
+          `${unauthorizedWrites.length} write endpoint${unauthorizedWrites.length > 1 ? "s" : ""} processed an ` +
+          `unauthenticated request instead of refusing it: the handler ran (it accepted the request, or ` +
+          `got as far as validating it) with no session at all. Aimed at a real identifier instead of a ` +
+          `nonexistent one, the same request may have modified or deleted the record.`,
         evidence:
           `Sent with no session, against an identifier chosen so nothing could exist at it, so nothing was ` +
           `modified:
@@ -432,11 +507,11 @@ If these two accounts share an organisation, sharing the record may be intended.
           unauthorizedWrites.map((e) => `  ${e}`).join("\n") +
           `
 
-A protected endpoint answers 401 or 403 here; these answered 404.`,
+A protected endpoint answers 401 or 403 here. A 404 or 405 would have proved nothing and was not counted.`,
         solution:
-          "Check authentication and authorisation before touching the database, in middleware rather than " +
-          "inside each handler. Returning 404 to an unauthenticated caller is only correct if the check ran " +
-          "first and 404 was chosen deliberately to avoid confirming the record exists.",
+          "Check authentication and authorisation before the handler does any work, in middleware rather than " +
+          "inside each handler, so an unauthenticated write is refused with 401 or 403 whether or not the " +
+          "record exists.",
         cweId: "CWE-862",
         cvssScore: 9.1,
         wstgId: "WSTG-ATHZ-02",
@@ -503,13 +578,15 @@ Verify by hand whether each field is actually bound to the model.`,
   if (unratelimited.length > 0) {
     findings.push(
       vuln({
-        name: "API Endpoints Without Rate Limiting",
-        severity: "medium",
+        name: "No Rate Limiting Observed on Sensitive API Endpoints",
+        severity: "info",
         category: "Security Misconfiguration",
         description:
-          `${unratelimited.length} endpoint${unratelimited.length > 1 ? "s" : ""} answered a rapid burst of ` +
-          `requests without once throttling. Unlimited requests make credential stuffing, identifier ` +
-          `enumeration and scraping cheap, and turn any expensive endpoint into a way to exhaust the server.`,
+          `${unratelimited.length} sign-in, password-reset or code-verification endpoint${unratelimited.length > 1 ? "s" : ""} ` +
+          `answered a burst of ${RATE_LIMIT_BURST} rapid requests without once answering 429. That is a ` +
+          `short burst: a limiter with a higher threshold, one keyed on the account name rather than the ` +
+          `address, or one at an edge that does not announce itself would not have engaged, so this is a ` +
+          `prompt to check, not proof that no limit exists. Without one, credential and code guessing is cheap.`,
         evidence:
           `${RATE_LIMIT_BURST} requests in immediate succession, none answered with 429:
 
@@ -520,9 +597,9 @@ Verify by hand whether each field is actually bound to the model.`,
           "default. Apply a tighter limit to authentication and anything that reads by identifier, which are " +
           "the endpoints worth attacking in bulk.",
         cweId: "CWE-770",
-        cvssScore: 5.3,
+        cvssScore: 0,
         wstgId: "WSTG-ATHN-04",
-        confidence: 70,
+        confidence: 50,
       }),
     );
   }

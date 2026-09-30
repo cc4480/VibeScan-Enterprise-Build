@@ -59,7 +59,7 @@ export const CATALOG_SURFACE: CatalogTest[] = [
     ["critical", "Write Endpoints Reachable Without Authentication", "Write Endpoints Reachable Without Authentication"],
     ["high", "Sensitive Fields Returned by the API", "Sensitive Fields Returned by the API"],
     ["medium", "Privilege Fields Accepted in Request Bodies", "Privilege Fields Accepted in Request Bodies"],
-    ["medium", "API Endpoints Without Rate Limiting", "API Endpoints Without Rate Limiting"],
+    ["info", "No Rate Limiting Observed on Sensitive API Endpoints", "No Rate Limiting Observed on Sensitive API Endpoints"],
     ["critical", "SQL Injection in API Parameters", "SQL Injection in API Parameters"],
   ]),
   test("public cloud storage buckets", "Cloud Storage Misconfiguration", "storageProbe.ts", [

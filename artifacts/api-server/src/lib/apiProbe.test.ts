@@ -93,6 +93,66 @@ describe("missing authentication", () => {
     expect(f!.evidence).toContain("/api/orders");
   });
 
+  it("stays quiet for a public catalogue that answers signed-in and anonymous callers alike", async () => {
+    // Clean twin. A product list is public by design: the same data for everyone is what it is.
+    const port = await serve((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ items: [{ id: 1, name: "Widget", price: 9 }, { id: 2, name: "Gadget", price: 12 }] }));
+    });
+    const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+      runApiProbes({ endpoints: [ep({ url: `http://localhost:${port}/api/products` })], credentials: SESSION }),
+    );
+    expect(findings.some((x) => /Without Authentication/i.test(x.name))).toBe(false);
+  });
+
+  it("still reports a collection with a public-sounding name when it holds personal data", async () => {
+    const port = await serve((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(DATA);
+    });
+    const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+      runApiProbes({ endpoints: [ep({ url: `http://localhost:${port}/api/reviews` })], credentials: SESSION }),
+    );
+    expect(findings.some((x) => /Without Authentication/i.test(x.name))).toBe(true);
+  });
+
+  it.each([
+    ["a redirect to the sign-in page", "redirect"],
+    ["an HTML sign-in page served with 200", "html"],
+    ["a JSON message asking for a login", "json"],
+  ])("treats %s as a refusal", async (_l, kind) => {
+    const port = await serve((req, res) => {
+      if (!signedIn(req)) {
+        if (kind === "redirect" && req.url !== "/login") { res.writeHead(302, { location: "/login" }); res.end(); return; }
+        if (kind === "redirect" || kind === "html") {
+          res.writeHead(200, { "content-type": "text/html" });
+          res.end("<html><body><h1>Welcome back</h1><form><input type='password' name='p'></form></body></html>");
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end('{"message":"Please log in to continue","code":"E_AUTH"}');
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(DATA);
+    });
+    const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+      runApiProbes({ endpoints: [ep({ url: `http://localhost:${port}/api/orders` })], credentials: SESSION }),
+    );
+    expect(findings.some((x) => /Without Authentication/i.test(x.name))).toBe(false);
+  });
+
+  it("stays quiet when the anonymous caller gets a different, generic payload", async () => {
+    const port = await serve((req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(signedIn(req) ? DATA : '{"notice":"Sign up to see your orders, guests see nothing here"}');
+    });
+    const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+      runApiProbes({ endpoints: [ep({ url: `http://localhost:${port}/api/orders` })], credentials: SESSION }),
+    );
+    expect(findings.some((x) => /Without Authentication/i.test(x.name))).toBe(false);
+  });
+
   it("stays quiet when the endpoint refuses an anonymous caller", async () => {
     const port = await serve((req, res) => {
       if (!signedIn(req)) {
@@ -396,9 +456,10 @@ describe("write-verb authorisation", () => {
     const seen: string[] = [];
     const port = await serve((req, res) => {
       seen.push(`${req.method} ${req.url}`);
-      // The bug: no auth check, so a missing record answers 404 rather than 401.
-      res.writeHead(404, { "content-type": "application/json" });
-      res.end('{"error":"not found"}');
+      // The bug: no auth check, and the delete is idempotent, so a missing record is accepted
+      // rather than refused with 401.
+      res.writeHead(req.method === "DELETE" ? 204 : 404, { "content-type": "application/json" });
+      res.end();
     });
 
     const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
@@ -414,6 +475,55 @@ describe("write-verb authorisation", () => {
       "DELETE /api/orders/999999997",
     ]);
     expect(seen.some((s) => s.startsWith("PUT"))).toBe(false);
+  });
+
+  it.each([
+    ["Express's default answer for a verb nobody routed", 404, "text/html", "<pre>Cannot DELETE /api/orders/999999997</pre>"],
+    ["a JSON not-found from a router with no such handler", 404, "application/json", '{"error":"not found"}'],
+    ["a 405", 405, "application/json", '{"error":"method not allowed"}'],
+    ["a body-parser 400 before any handler", 400, "application/json", '{"error":"Unexpected token } in JSON"}'],
+  ])("stays quiet for %s", async (_l, status, type, body) => {
+    // Clean twin. Any unrouted verb answers like this, so it cannot show that a handler ran
+    // without asking who was calling; it used to be reported as a CRITICAL.
+    const port = await serve((req, res) => {
+      if (req.method === "DELETE" || req.method === "PATCH") {
+        res.writeHead(status, { "content-type": type });
+        res.end(body);
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(DATA);
+    });
+
+    const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+      runApiProbes({
+        endpoints: [ep({ url: `http://localhost:${port}/api/orders/{id}` })],
+        credentials: SESSION,
+      }),
+    );
+    expect(findings.some((f) => /Write Endpoints Reachable/i.test(f.name))).toBe(false);
+  });
+
+  it("reports a handler that got as far as validating an unauthenticated PATCH", async () => {
+    const port = await serve((req, res) => {
+      if (req.method === "PATCH") {
+        res.writeHead(422, { "content-type": "application/json" });
+        res.end('{"error":"Validation failed: name is required"}');
+        return;
+      }
+      res.writeHead(req.method === "DELETE" ? 404 : 200, { "content-type": "application/json" });
+      res.end(req.method === "DELETE" ? '{"error":"not found"}' : DATA);
+    });
+
+    const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+      runApiProbes({
+        endpoints: [ep({ url: `http://localhost:${port}/api/orders/{id}` })],
+        credentials: SESSION,
+      }),
+    );
+    const f = findings.find((x) => /Write Endpoints Reachable/i.test(x.name));
+    expect(f).toBeDefined();
+    expect(f!.evidence).toContain("PATCH /api/orders/999999997 -> 422");
   });
 
   it("stays quiet when the write verb is properly refused", async () => {
@@ -438,16 +548,33 @@ describe("write-verb authorisation", () => {
 });
 
 describe("rate limiting", () => {
-  it("reports an endpoint that never throttles a burst", async () => {
+  it("notes a sensitive endpoint that never throttles a burst, as an observation", async () => {
     const port = await serve((_req, res) => {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(DATA);
     });
 
     const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
-      runApiProbes({ endpoints: [ep({ url: `http://localhost:${port}/api/orders` })] }),
+      runApiProbes({ endpoints: [ep({ url: `http://localhost:${port}/api/auth/verify-code` })] }),
     );
-    expect(findings.some((f) => /Rate Limiting/i.test(f.name))).toBe(true);
+    const f = findings.find((x) => /Rate Limiting/i.test(x.name));
+    expect(f).toBeDefined();
+    expect(f!.severity).toBe("info");
+    expect(f!.name).toMatch(/Observed/);
+    expect(f!.confidence).toBeLessThan(85);
+  });
+
+  it("says nothing about an ordinary data endpoint that answers twelve requests", async () => {
+    // Clean twin: almost any API tolerates twelve requests, so this proves nothing.
+    const port = await serve((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(DATA);
+    });
+
+    const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+      runApiProbes({ endpoints: [ep({ url: `http://localhost:${port}/api/orders` }), ep({ url: `http://localhost:${port}/api/products` })] }),
+    );
+    expect(findings.some((f) => /Rate Limiting/i.test(f.name))).toBe(false);
   });
 
   it("stays quiet when the endpoint answers 429", async () => {
@@ -464,7 +591,7 @@ describe("rate limiting", () => {
     });
 
     const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
-      runApiProbes({ endpoints: [ep({ url: `http://localhost:${port}/api/orders` })] }),
+      runApiProbes({ endpoints: [ep({ url: `http://localhost:${port}/api/auth/otp` })] }),
     );
     expect(findings.some((f) => /Rate Limiting/i.test(f.name))).toBe(false);
   });
@@ -494,6 +621,38 @@ describe("API-level IDOR", () => {
     expect(findings.some((f) => /Readable by Another Account/i.test(f.name))).toBe(true);
   });
 
+  it("stays quiet when the same account is supplied as both", async () => {
+    const port = await serve((req, res) => {
+      const c = req.headers.cookie ?? "";
+      if (!c.includes("sid=")) { res.writeHead(401); res.end('{"error":"unauthorized"}'); return; }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(DATA);
+    });
+    const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+      runApiProbes({
+        endpoints: [ep({ url: `http://localhost:${port}/api/orders/{id}` })],
+        credentials: SESSION,
+        secondary: { cookie: " sid=valid " },
+      }),
+    );
+    expect(findings.some((f) => /Readable by Another Account/i.test(f.name))).toBe(false);
+  });
+
+  it("stays quiet when the record is public, so anonymous callers read it too", async () => {
+    const port = await serve((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ id: 1, title: "Launch notes", body: "Public release notes for everyone" }));
+    });
+    const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
+      runApiProbes({
+        endpoints: [ep({ url: `http://localhost:${port}/api/notes/{id}` })],
+        credentials: SESSION,
+        secondary: { cookie: "sid=other" },
+      }),
+    );
+    expect(findings.some((f) => /Readable by Another Account/i.test(f.name))).toBe(false);
+  });
+
   it("stays quiet when each account sees its own record", async () => {
     const port = await serve((req, res) => {
       const c = req.headers.cookie ?? "";
@@ -519,7 +678,7 @@ describe("API-level IDOR", () => {
 
 describe("rate-limit finding", () => {
   it("flags a genuinely unlimited sensitive endpoint", async () => {
-    // A customer-data endpoint with no throttling — the case this finding
+    // A credential endpoint with no throttling — the case this finding
     // exists to catch.
     const port = await serve((_req, res) => {
       res.writeHead(200, { "content-type": "application/json" });
@@ -528,13 +687,13 @@ describe("rate-limit finding", () => {
 
     const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
       runApiProbes({
-        endpoints: [ep({ url: `http://localhost:${port}/api/orders` })],
+        endpoints: [ep({ url: `http://localhost:${port}/api/auth/login-code` })],
       }),
     );
 
-    const f = findings.find((x) => /Without Rate Limiting/i.test(x.name));
+    const f = findings.find((x) => /Rate Limiting Observed/i.test(x.name));
     expect(f).toBeDefined();
-    expect(f!.evidence).toContain("/api/orders");
+    expect(f!.evidence).toContain("/api/auth/login-code");
   });
 
   it("does not flag a liveness or discovery endpoint for answering an unlimited burst", async () => {
@@ -566,7 +725,7 @@ describe("rate-limit finding", () => {
       );
 
       expect(
-        findings.some((f) => /Without Rate Limiting/i.test(f.name)),
+        findings.some((f) => /Rate Limiting Observed/i.test(f.name)),
         `expected no rate-limit finding for ${path}`,
       ).toBe(false);
     }
@@ -582,11 +741,11 @@ describe("rate-limit finding", () => {
 
     const findings = await runWithScanHttp({ targetUrl: `http://localhost:${port}/` }, () =>
       runApiProbes({
-        endpoints: [ep({ url: `http://localhost:${port}/api/health-records` })],
+        endpoints: [ep({ url: `http://localhost:${port}/api/password/status-check` })],
       }),
     );
 
-    expect(findings.some((f) => /Without Rate Limiting/i.test(f.name))).toBe(true);
+    expect(findings.some((f) => /Rate Limiting Observed/i.test(f.name))).toBe(true);
   });
 });
 

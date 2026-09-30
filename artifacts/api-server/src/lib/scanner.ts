@@ -1469,7 +1469,7 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
   // demonstrated it — the header check itself says infrastructure often
   // throttles without advertising it. Keep the evidence, drop the inference.
   const hasBehaviouralRateLimitFinding = vulnerabilities.some(
-    (v) => v.name === "API Endpoints Without Rate Limiting",
+    (v) => v.name === "No Rate Limiting Observed on Sensitive API Endpoints",
   );
   const rateLimitDeduped = hasBehaviouralRateLimitFinding
     ? vulnerabilities.filter((v) => v.name !== "Rate Limiting Not Advertised in Response Headers")
