@@ -10,6 +10,7 @@
  * no Chromium and stays cheap to scale horizontally.
  */
 
+import { checkProductionConfig } from "./bootChecks";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { getBoss } from "./lib/queue";
@@ -74,6 +75,7 @@ async function start(): Promise<void> {
   // secscan runs this too. They share one database and start together, which is
   // exactly why migrateToLatest takes an advisory lock; whoever loses the race
   // waits and then finds nothing to apply.
+  checkProductionConfig(logger);
   const databaseUrl = process.env["DATABASE_URL"];
   if (!databaseUrl) throw new Error("DATABASE_URL environment variable is required but was not provided.");
   await migrateToLatest(databaseUrl, (msg) => logger.info(msg));

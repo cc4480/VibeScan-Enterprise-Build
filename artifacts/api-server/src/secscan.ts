@@ -12,6 +12,8 @@
  * both of which live on this side of the split.
  */
 
+import { checkProductionConfig } from "./bootChecks";
+import { closeBrowser } from "./lib/browser";
 import { logger } from "./lib/logger";
 import { getBoss } from "./lib/queue";
 import { startHeartbeat, stopHeartbeat } from "./lib/heartbeat";
@@ -30,6 +32,7 @@ async function main(): Promise<void> {
   // on "relation already exists". Whoever waits finds nothing left to apply.
   //
   // Before pg-boss, so the queue is not creating its schema at the same time.
+  checkProductionConfig(logger);
   const databaseUrl = process.env["DATABASE_URL"];
   if (!databaseUrl) throw new Error("DATABASE_URL environment variable is required but was not provided.");
   await migrateToLatest(databaseUrl, (msg) => logger.info(msg));
@@ -61,8 +64,11 @@ main().catch((err: unknown) => {
 // Drain in-flight scan jobs before exiting. A scan killed mid-run leaves its row
 // stuck in "scanning" forever, so the 90 s grace period matters more here than
 // it does for the web tier.
-process.on("SIGTERM", () => {
-  logger.info("SIGTERM received — draining in-flight scan jobs before exit");
+let draining = false;
+function drainAndExit(signal: string): void {
+  if (draining) return;
+  draining = true;
+  logger.info(`${signal} received — draining in-flight scan jobs before exit`);
   // Stop claiming to be healthy the moment we begin shutting down, so an
   // orchestrator stops routing work here while the drain finishes.
   stopHeartbeat();
@@ -74,7 +80,11 @@ process.on("SIGTERM", () => {
     .catch((err: unknown) => {
       logger.error({ err }, "Error draining pg-boss on shutdown");
     })
-    .finally(() => {
+    .finally(async () => {
+      // Only after the drain: closing the browser first would fail every scan still rendering a page.
+      await closeBrowser().catch(() => undefined);
       process.exit(0);
     });
-});
+}
+process.on("SIGTERM", () => drainAndExit("SIGTERM"));
+process.on("SIGINT", () => drainAndExit("SIGINT"));

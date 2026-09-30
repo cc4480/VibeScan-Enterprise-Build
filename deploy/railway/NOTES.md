@@ -53,6 +53,14 @@ produced another SUCCESS that was still running the old entrypoint.
 A *new* deployment is required: `railway up`, or `railway redeploy --from-source`
 where the source is reachable.
 
+## Give the scan worker time to finish running scans before a deploy stops it
+
+On SIGTERM the `secscan` worker stops taking jobs and waits up to 90 seconds for running scans to finish, then
+closes the browser and exits (`secscan.ts`). Railway sends SIGKILL after its own stop grace period, which is
+short by default, so set `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=120` on the **secscan** service (not web).
+Without it a redeploy can still cut scans off; they then sit in `scanning` until pg-boss expires the job
+(2 hours) and the stuck-scan reaper fails and refunds them (8 hours).
+
 ## Run migrations before the services first boot, not after
 
 Both services started against an empty database and logged

@@ -45,7 +45,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `injectionExtra.ts` | 2 | 140 | 9 | direct |
 | `injectionProbe.ts` | 2 | 250 | 10 | direct |
 | `sourceMaps.ts` | 2 | 172 | 11 | direct |
-| `worker.ts` | 2 | 1084 | 3 | direct |
+| `worker.ts` | 2 | 1082 | 3 | direct |
 | `apiDocsProbe.ts` | 1 | 300 | 9 | direct |
 | `crossAccountStep.ts` | 1 | 172 | 16 | direct |
 | `deserializationProbe.ts` | 1 | 105 | 9 | direct |
@@ -612,7 +612,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `worker.ts`
 
-*2 findings · 1084 lines · 3 tests.*
+*2 findings · 1082 lines · 3 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|

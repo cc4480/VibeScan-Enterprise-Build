@@ -291,5 +291,5 @@ instead of at the repo (Railway → New → Docker Image), which restores the 35
 web image and skips building on Railway entirely. The packages must be public,
 or Railway needs a registry token.
 
-That workflow is not in the branch yet: pushing it needs `workflow` scope on the
-GitHub token. Until then, build from the repo as described above.
+That workflow is in the repo (`.github/workflows/ci.yml`): on every push to master it builds the web and
+secscan images and pushes them to ghcr with `latest` and the commit SHA as tags.

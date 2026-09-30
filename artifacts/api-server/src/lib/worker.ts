@@ -37,7 +37,7 @@ import { callDeepSeek } from "./deepseek";
 import { checkSslLabs } from "./ssllabs";
 import { sendReportReadyEmail } from "./mailer";
 import { summariseCompliance, COMPLIANCE_DISCLAIMER } from "./compliance";
-import { initBrowser, closeBrowser } from "./browser";
+import { initBrowser } from "./browser";
 import { logger } from "./logger";
 import { isAiAnalysisOptedOut, AI_OPT_OUT_NOTE } from "./aiOptOut";
 import { randomUUID } from "node:crypto";
@@ -989,10 +989,8 @@ export async function startWorker(): Promise<void> {
   // Non-fatal — scanner falls back to raw fetch if Chromium is unavailable.
   await initBrowser();
 
-  // Close the browser cleanly on worker shutdown so Chromium doesn't linger.
-  const shutdown = async () => { await closeBrowser(); process.exit(0); };
-  process.once("SIGTERM", () => { void shutdown(); });
-  process.once("SIGINT",  () => { void shutdown(); });
+  // Shutdown is handled in secscan.ts, which drains running scans first and then closes the browser.
+  // A handler here that exited at once used to win that race and kill every scan in flight.
 
   // Hydrate EOL cache from the last DB-persisted fetch BEFORE the staleness check
   // so that warnIfLocalDataStale() uses the live fetchedAt timestamp, not the
