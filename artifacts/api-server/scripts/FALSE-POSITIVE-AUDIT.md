@@ -86,9 +86,11 @@ Checked and correct, not false positives:
 - Info findings for DNSSEC (36 of 36), Open Graph, Twitter cards and structured data all matched the live pages.
 - The `Missing SPF Record` on nasa.gov in the after-fixes JSON predates the SPF fix and is that flake; ten later scans were clean.
 
-### Still open
+### Resolved afterwards: SRI on vendor-updated tags
 
-- SRI on provider-updated marketing scripts (gitlab: bizible, marketo; nasa: dap.digitalgov.gov, parsely; slack: clearbit) and on a site's own asset domain the scanner cannot know (theguardian: `assets.guim.co.uk`). Accurate, but not something the owner can fix by adding `integrity`. A policy question, not a bug.
+- The finding stays for provider-updated marketing tags (gitlab: bizible, marketo; nasa: dap.digitalgov.gov, parsely; slack: clearbit): a compromised vendor does run code on the page. Only the advice changed. Those tags are marked `[vendor-updated tag]` in the evidence and the solution says to self-host a pinned copy or limit the tag with CSP and page scope, not to add `integrity`, which would break it at the next vendor update. Domain list: `VENDOR_UPDATED_DOMAINS` in `src/lib/sriPolicy.ts`. Do not suppress the finding for these hosts.
+- `assets.guim.co.uk` is the Guardian's own CDN (`OWNED_CDNS`), so it is no longer flagged.
+- Nothing else from the sweep is open.
 
 Guard baselines after this round: google 15/6, github 11/5 (unchanged); cloudflare 7/2 (was 8/4) and mozilla 6/2 (was 7/3), both from the SRI fix above.
 
