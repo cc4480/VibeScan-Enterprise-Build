@@ -97,3 +97,42 @@ describe("scanConfigSecrets: things that are not secrets", () => {
     expect(keys(".env", `API_KEY=${REAL}\nAPI_KEY=${REAL}`)).toEqual(["API_KEY"]);
   });
 });
+
+// ─── Public-by-design keys and development-default passwords ─────────────────
+
+const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url");
+const jwt = (payload: object) => `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${b64(payload)}.Xk3l9sQ2vB7nRt0yUe1WmA5cHzPq8dJf4oLg6iYh2Zs`;
+const ANON = jwt({ iss: "supabase", ref: "abcdefghijklmnopqrst", role: "anon", iat: 1700000000, exp: 2000000000 });
+const SERVICE = jwt({ iss: "supabase", ref: "abcdefghijklmnopqrst", role: "service_role", iat: 1700000000, exp: 2000000000 });
+const MAPBOX = "pk.eyJ1IjoiYWNtZSIsImEiOiJjbGFiY2RlZmcwMDAwM3BwbnZ4In0.abcDEF123ghiJKL456mnoPQR";
+
+describe("scanConfigSecrets: public-by-design keys and dev passwords", () => {
+  it.each([
+    "NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyD4x9Kq2LmN8pRt3VwYz1AbCdEfGhIjKlM",
+    "NEXT_PUBLIC_MAPBOX_TOKEN=pk.eyJ1IjoiYWNtZSIsImEiOiJjbGx4OXl6eDkwMDFhM3FwZjFyaG5ld3ByIn0.aBcDeFgHiJkLmNoPqRsTuV",
+    "ALGOLIA_SEARCH_API_KEY=8f3a1c7b9d2e4f60a5b7c8d9e0f1a2b3",
+    "GOOGLE_MAPS_API_KEY=AIzaSyB1c2D3e4F5g6H7i8J9k0LmNoPqRsTuVwX",
+    "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_51Hq3kLJx8vN2mYtRzWc9aBdE0fGhIjKlMnOpQrStUv",
+    `NEXT_PUBLIC_SUPABASE_ANON_KEY=${ANON}`,
+    "NEXT_PUBLIC_POSTHOG_KEY=phc_Zq3XkL8vN2mYtRzWc9aBdE0fGhIjKlMnOpQrSt",
+  ])("%s", (line) => {
+    expect(keys(".env", line)).toEqual([]);
+  });
+
+  it("does not report dev-default passwords in docker-compose", () => {
+    const compose = "services:\n  db:\n    environment:\n      POSTGRES_PASSWORD: devpassword\n      MYSQL_ROOT_PASSWORD: rootpassword\n";
+    expect(keys("docker-compose.yml", compose)).toEqual([]);
+    for (const pw of ["password123", "changeme", "example", "test", "secret", "admin", "adminpassword", "testpass1"]) {
+      expect(keys(".env", `DB_PASSWORD=${pw}`)).toEqual([]);
+    }
+  });
+
+  it("does not read a SQL comment as a config pair", () => {
+    expect(keys("supabase/migrations/1.sql", `-- api_key: "test_key_value_1234"\n`)).toEqual([]);
+  });
+
+  it("still reports real secrets beside public ones", () => {
+    const env = `NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyD4x9Kq2LmN8pRt3VwYz1AbCdEfGhIjKlM\nSTRIPE_SECRET_KEY=sk_live_51Hq3kLJx8vN2mYtRzWc9aBdE0fGhIj\nDB_PASSWORD=Summer2024Acme\nSUPABASE_SERVICE_ROLE_KEY=${SERVICE}\nALGOLIA_ADMIN_API_KEY=8f3a1c7b9d2e4f60a5b7c8d9e0f1a2b3\n`;
+    expect(keys(".env", env)).toEqual(["STRIPE_SECRET_KEY", "DB_PASSWORD", "SUPABASE_SERVICE_ROLE_KEY", "ALGOLIA_ADMIN_API_KEY"]);
+  });
+});

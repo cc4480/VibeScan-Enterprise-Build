@@ -117,9 +117,13 @@ export function isPlaceholderToken(match: string): boolean {
   return false;
 }
 
-/** Defaults every tutorial uses. A database password from this list is a development instance, not a leak. */
+/**
+ * Defaults every tutorial uses. A database password from this list is a development instance, not a
+ * leak. Up to six trailing characters (admin123, root!) or a second obvious word (devpassword,
+ * rootpassword, adminpass, password123) still count: the docker-compose examples people copy.
+ */
 const TRIVIAL_PASSWORD =
-  /^(?:pass(?:word)?|admin|root|toor|postgres|mysql|mongo(?:db)?|secret|changeme|example|test|demo|user|dev|letmein|welcome|qwerty|abc|guest|default)[\w!@#]{0,6}$/i;
+  /^(?:pass(?:word)?|admin|root|toor|postgres|mysql|mongo(?:db)?|secret|changeme|example|test|demo|user|dev|letmein|welcome|qwerty|abc|guest|default)(?:[\w!@#]{0,6}|[_-]?(?:pass(?:word)?|pwd|secret|admin|root|user|db|dev|local|test|demo)\d{0,4}[!@#]?)$/i;
 
 export function isTrivialPassword(password: string, user = ""): boolean {
   return password === user || TRIVIAL_PASSWORD.test(password) || /^\d{4,10}$/.test(password) || distinct(password) <= 2;

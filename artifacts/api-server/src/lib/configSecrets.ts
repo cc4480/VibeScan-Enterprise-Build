@@ -17,6 +17,7 @@
  */
 import { shannonEntropy, looksLikeAName, looksLikeReference, isPlaceholderToken, isTrivialPassword } from "./secretPlaceholders";
 import { redactSecret } from "./jsScanner";
+import { isPublicByDesignValue, isPublicByDesignName } from "./publicKeys";
 
 export interface ConfigSecretHit {
   key: string;
@@ -31,7 +32,7 @@ export interface ConfigSecretHit {
 const MAX_HITS_PER_FILE = 10;
 
 /** Key names, normalised (lower case, no _ - .), that hold something secret. */
-const SECRETISH = /secret|passw(?:or)?d|passwd|pwd|token|apikey|privatekey|accesskey|authkey|signingkey|encryptionkey|credential|masterkey/;
+const SECRETISH = /secret|passw(?:or)?d|passwd|pwd|token|apikey|privatekey|accesskey|authkey|signingkey|encryptionkey|credential|masterkey|servicerole/;
 /** ...unless the key describes the secret rather than holding it: TOKEN_EXPIRY, JWT_SECRET_NAME, PASSWORD_MIN_LENGTH. */
 const ABOUT_A_SECRET =
   /(?:expiry|expires|expiration|ttl|url|uri|name|id|length|min|max|file|path|field|header|type|algorithm|version|arn|regex|pattern|policy|required|enabled|disabled|rounds|cost|timeout|minutes|seconds|hours|days|count|limit|prefix|suffix|endpoint|host|port|label|description|message|hint|placeholder|ref)$/;
@@ -39,7 +40,8 @@ const ABOUT_A_SECRET =
 const normaliseKey = (key: string): string => key.toLowerCase().replace(/[_.\-\s]/g, "");
 const holdsSecret = (key: string): boolean => {
   const k = normaliseKey(key);
-  return SECRETISH.test(k) && !ABOUT_A_SECRET.test(k);
+  // ALGOLIA_SEARCH_API_KEY, STRIPE_PUBLISHABLE_KEY: named for a key the vendor publishes to browsers.
+  return SECRETISH.test(k) && !ABOUT_A_SECRET.test(k) && !isPublicByDesignName(k);
 };
 
 /** Words, digits and punctuation that mean "no value" or a setting rather than a secret. */
@@ -54,6 +56,7 @@ function isSecretValue(raw: string, example: boolean): boolean {
   if (/^https?:\/\//i.test(value) && !/@/.test(value)) return false;
   if (/^django-insecure-/i.test(value)) return false; // startproject's generated development key
   if (value.includes("://")) return false; // a database URL: the URL pattern owns that one
+  if (isPublicByDesignValue(value)) return false; // AIza, pk.ey, pk_live_, anon JWT: shipped to browsers on purpose
   if (looksLikeReference(value) || looksLikeAName(value) || isPlaceholderToken(value) || isTrivialPassword(value)) return false;
   const entropy = shannonEntropy(value);
   return example ? value.length >= 16 && entropy >= 3.5 : entropy >= 2.5;
@@ -77,7 +80,7 @@ function pairsOn(text: string, line: number): Pair[] {
   const npm = /^\/\/[^\s=]+_(?:authToken|password|auth)\s*=\s*(\S+)/.exec(trimmed);
   if (npm) return [{ key: trimmed.slice(0, trimmed.indexOf("=")).trim(), value: unquote(npm[1]!), line }];
 
-  if (trimmed.startsWith("#") || trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*")) return pairs;
+  if (trimmed.startsWith("#") || trimmed.startsWith("--") || trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*")) return pairs;
 
   // PHP: define('DB_PASSWORD', 'value');
   for (const m of text.matchAll(/define\(\s*["']([A-Za-z_]\w*)["']\s*,\s*["']([^"']*)["']/g)) {
