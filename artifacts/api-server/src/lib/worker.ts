@@ -277,12 +277,12 @@ export async function processScanJob(job: ScanJob): Promise<void> {
         // Per-scan opt-ins the requester made: a public repository to read for committed secrets, and
         // permission to create a second account through the target's signup form. Absent for scans that
         // asked for neither, including every monitor rescan.
-        scanRow?.githubRepoUrl || scanRow?.autoSecondAccount
-          ? {
-              ...(scanRow.githubRepoUrl ? { githubRepoUrl: scanRow.githubRepoUrl } : {}),
-              ...(scanRow.autoSecondAccount ? { autoSecondAccount: true } : {}),
-            }
-          : undefined,
+        {
+          ...(scanRow?.githubRepoUrl ? { githubRepoUrl: scanRow.githubRepoUrl } : {}),
+          ...(scanRow?.autoSecondAccount ? { autoSecondAccount: true } : {}),
+          // If the target redirects elsewhere, active probing continues only on a host this user verified.
+          verifyHost: (url: string) => activeProbesUnlocked(userId, url),
+        },
       ),
       scanTimeout,
     ]);

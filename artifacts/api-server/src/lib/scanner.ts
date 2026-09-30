@@ -11,6 +11,7 @@
  * via jsScanner.ts — all run concurrently with stage 2.
  */
 
+import { activeProbesStillAllowed, type VerifyHost } from "./activeScopeGuard";
 import { randomUUID } from "node:crypto";
 import { detectChallengePage } from "./challengePage.js";
 import { isLikelySessionCookie, requiresHttpOnly } from "./cookieClassification.js";
@@ -421,6 +422,12 @@ export interface RunScanExtras {
    * caller sets it, because it submits a form on the customer's system (see autoSecondAccount.ts).
    */
   autoSecondAccount?: boolean;
+  /**
+   * Says whether the requester has verified the host of a URL. Used when the target redirects to a
+   * different host: active probing goes on only if that host is one they verified (see
+   * activeScopeGuard.ts). Without it, any redirect to another host makes the scan passive.
+   */
+  verifyHost?: VerifyHost;
 }
 
 export async function runScan(
@@ -541,14 +548,16 @@ export function withholdInterceptedFindings(
   return findings.filter((v) => SOURCES_NOT_READING_THE_RESPONSE.has(v.category));
 }
 
-function activeProbesSkippedFinding(): ScanVulnerability {
+function activeProbesSkippedFinding(redirectedTo?: string): ScanVulnerability {
   return vuln({
     name: "Active security testing was skipped for this scan",
     severity: "info",
     category: "Scan Coverage",
     description:
       "This scan checked only what an ordinary visitor can observe: response headers, TLS, cookies, DNS, exposed files and known-vulnerable versions. The checks that actively test for flaws — SQL injection, cross-site scripting, path traversal, broken access control, SSRF, and exposed Supabase/Firebase data — were not run, because they send real attack traffic and we only do that against a domain whose owner has asked us to. A clean result here does not mean those flaws are absent; it means they were not looked for.",
-    evidence: "No verified ownership on record for this domain at scan time.",
+    evidence: redirectedTo
+      ? `The address you submitted redirected to ${redirectedTo}, which you have not verified, so active testing was withdrawn rather than sent to a site you may not own.`
+      : "No verified ownership on record for this domain at scan time.",
     solution:
       "Verify that you control this domain — add the DNS TXT record or publish the verification file shown on your dashboard — then run the scan again to include active testing.",
     confidence: 100,
@@ -603,6 +612,17 @@ async function runScanInner(
       finalUrl = rendered.finalUrl || finalUrl;
       renderedWithBrowser = true;
       observedRequests = rendered.observed;
+    }
+  }
+
+  // The ownership check was made on the host the requester typed. If the site sent us somewhere else,
+  // the probes below would hit that other host, so active testing stops unless it is theirs too.
+  let redirectedOffScope: string | undefined;
+  if (allowActiveProbes) {
+    const scope = await activeProbesStillAllowed(targetUrl, finalUrl, extra?.verifyHost);
+    if (!scope.allowed) {
+      allowActiveProbes = false;
+      redirectedOffScope = scope.redirectedTo;
     }
   }
 
@@ -1482,7 +1502,7 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
       [
         ...deduped,
         ...(sessionWasLost() ? [sessionLostFinding()] : []),
-        ...(allowActiveProbes ? [] : [activeProbesSkippedFinding()]),
+        ...(allowActiveProbes ? [] : [activeProbesSkippedFinding(redirectedOffScope)]),
         ...(challengeVerdict.isChallenge
           ? [interceptedFinding(challengeVerdict.vendor, challengeVerdict.signal ?? "")]
           : []),
