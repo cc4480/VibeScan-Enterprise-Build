@@ -99,3 +99,40 @@ describe("runFirebaseProbes — Firestore (sanity: already correct before this p
     expect(findings.some((f) => /Firestore.*Unauthenticated Read/i.test(f.name))).toBe(true);
   });
 });
+
+describe("runFirebaseProbes — public-by-design Firestore collections", () => {
+  const serveDocs = (byCollection: Record<string, unknown[]>) =>
+    mockFetch((url) => {
+      const m = /documents\/([a-z]+)\?/.exec(url);
+      if (m) return jsonResponse({ documents: byCollection[m[1]!] ?? [] });
+      return jsonResponse(null);
+    });
+  const flagged = (fs: ScanVulnerability[]) => fs.find((f) => /Rules Allow Unauthenticated Read/i.test(f.name));
+
+  it("a posts collection of public content is INFO, not CRITICAL (clean twin)", async () => {
+    serveDocs({ posts: [{ name: "projects/demo/databases/(default)/documents/posts/p1", fields: { title: { stringValue: "Hello" }, body: { stringValue: "World" } } }] });
+    const findings: ScanVulnerability[] = [];
+    await runFirebaseProbes(CONFIG_HTML, findings);
+    expect(flagged(findings)).toBeUndefined();
+    const info = findings.find((f) => /Public Content Collection/.test(f.name));
+    expect(info?.severity).toBe("info");
+  });
+
+  it("a readable users collection is still CRITICAL even when posts is also readable", async () => {
+    serveDocs({
+      posts: [{ fields: { title: { stringValue: "Hello" } } }],
+      users: [{ name: "projects/demo/databases/(default)/documents/users/u1" }],
+    });
+    const findings: ScanVulnerability[] = [];
+    await runFirebaseProbes(CONFIG_HTML, findings);
+    expect(flagged(findings)?.severity).toBe("critical");
+    expect(flagged(findings)?.evidence).toContain("Open collection: users");
+  });
+
+  it("a config collection holding a secret is still CRITICAL", async () => {
+    serveDocs({ config: [{ fields: { stripeSecret: { stringValue: "sk_live_abcdefghijklmnop" } } }] });
+    const findings: ScanVulnerability[] = [];
+    await runFirebaseProbes(CONFIG_HTML, findings);
+    expect(flagged(findings)?.severity).toBe("critical");
+  });
+});

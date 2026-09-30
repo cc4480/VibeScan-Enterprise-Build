@@ -11,6 +11,7 @@
  * - Fail-soft. Any probe error returns [] without sinking the scan.
  */
 
+import { classifyExposure } from "./baasExposure";
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 
@@ -94,16 +95,17 @@ function isPocketBaseHealth(body: string): boolean {
  * Requiring it means a catch-all serving HTML — or any other 200 — cannot be
  * read as an open collection.
  */
-function isPocketBaseListResponse(body: string): { ok: boolean; hasRecords: boolean; total: number } {
+function isPocketBaseListResponse(body: string): { ok: boolean; hasRecords: boolean; total: number; items: unknown[] } {
   try {
     const data = JSON.parse(body) as { items?: unknown[]; totalItems?: number; page?: number; perPage?: number };
     const shaped =
       Array.isArray(data.items) &&
       (typeof data.totalItems === "number" || typeof data.page === "number" || typeof data.perPage === "number");
-    if (!shaped) return { ok: false, hasRecords: false, total: 0 };
-    return { ok: true, hasRecords: (data.items as unknown[]).length > 0, total: data.totalItems ?? 0 };
+    if (!shaped) return { ok: false, hasRecords: false, total: 0, items: [] };
+    const items = data.items as unknown[];
+    return { ok: true, hasRecords: items.length > 0, total: data.totalItems ?? 0, items };
   } catch {
-    return { ok: false, hasRecords: false, total: 0 };
+    return { ok: false, hasRecords: false, total: 0, items: [] };
   }
 }
 
@@ -114,6 +116,7 @@ async function probePocketBase(baseUrl: string): Promise<ScanVulnerability[]> {
   if (!isPocketBaseHealth(health.body)) return [];
 
   const found: ScanVulnerability[] = [];
+  const emptyCols: string[] = [];
 
   for (const col of POCKETBASE_COLLECTIONS) {
     if (found.length >= 3) break;
@@ -122,28 +125,55 @@ async function probePocketBase(baseUrl: string): Promise<ScanVulnerability[]> {
 
     const shape = isPocketBaseListResponse(r.body);
     if (!shape.ok) continue;
-    const hasRecords = shape.hasRecords;
     const total = shape.total;
 
+    // An empty list is what a list rule that filters to nothing returns, as well
+    // as an open rule on an empty collection: nothing was readable, so it is
+    // aggregated into one INFO note rather than reported per collection.
+    if (!shape.hasRecords) {
+      emptyCols.push(col);
+      continue;
+    }
+    const isPublic = classifyExposure(col, shape.items) === "public";
+
     found.push(vuln({
-      name: `PocketBase — Unauthenticated Access to '${col}' Collection`,
-      severity: hasRecords ? "critical" : "high",
+      name: isPublic
+        ? `PocketBase — Public Content in '${col}' Collection Readable Without Authentication`
+        : `PocketBase — Unauthenticated Access to '${col}' Collection`,
+      severity: isPublic ? "info" : "critical",
       category: "BaaS Misconfiguration",
       description:
-        `The PocketBase collection '${col}' is accessible without authentication. ` +
-        (hasRecords
-          ? `Records were returned (totalItems: ${total}).`
-          : "HTTP 200 was returned; the collection allows unauthenticated list access.") +
-        " PocketBase defaults to requiring auth; this collection's API rules permit public access.",
-      evidence: `GET ${baseUrl}/api/collections/${col}/records?perPage=1\nHTTP 200` +
-        (hasRecords ? `\ntotalItems: ${total}` : ""),
+        `The PocketBase collection '${col}' returned records without authentication ` +
+        `(totalItems: ${total}). ` +
+        (isPublic
+          ? "The name and fields look like public catalogue content with no personal or secret-looking values in the sampled record, which is normal for content the site shows every visitor; confirm it is meant to be public."
+          : "PocketBase defaults to requiring auth; this collection's API rules permit public access."),
+      evidence: `GET ${baseUrl}/api/collections/${col}/records?perPage=1\nHTTP 200\ntotalItems: ${total}`,
       solution:
         "In the PocketBase Admin UI → Collections → " + col + " → API Rules: set the 'List' and " +
         "'View' rules to require authentication: `@request.auth.id != ''`. An empty rule means " +
         "'allow all'. Also review the 'Create', 'Update', and 'Delete' rules.",
-      cweId: "CWE-284",
-      cvssScore: hasRecords ? 9.1 : 7.5,
-      confidence: hasRecords ? 95 : 80,
+      cweId: isPublic ? null : "CWE-284",
+      cvssScore: isPublic ? 0 : 9.1,
+      confidence: isPublic ? 60 : 95,
+    }));
+  }
+
+  if (emptyCols.length > 0) {
+    found.push(vuln({
+      name: "PocketBase — Collections Returned Empty Lists (Inconclusive)",
+      severity: "info",
+      category: "BaaS Misconfiguration",
+      description:
+        `${emptyCols.length} collection(s) answered an anonymous list request with HTTP 200 and no ` +
+        "records. No data was readable. PocketBase returns this both for an open list rule on an " +
+        "empty collection and for a list rule that filters every record out for anonymous users, " +
+        "so it does not show a misconfiguration. Verify the List/View rules on these collections.",
+      evidence: `Collections: ${emptyCols.join(", ")}\nGET ${baseUrl}/api/collections/${emptyCols[0]}/records?perPage=1 → HTTP 200, items: []`,
+      solution: "Review each collection's List/View API rules in the PocketBase Admin UI.",
+      cweId: null,
+      cvssScore: 0,
+      confidence: 40,
     }));
   }
 
@@ -183,6 +213,7 @@ async function probeAppwrite(cfg: AppwriteConfig): Promise<ScanVulnerability[]> 
   // Try listing documents from common collections without auth
   const COLLECTIONS = ["users", "posts", "products", "orders", "messages"];
   const found: ScanVulnerability[] = [];
+  const emptyColls: string[] = [];
 
   for (const coll of COLLECTIONS) {
     if (found.length >= 2) break;
@@ -192,30 +223,60 @@ async function probeAppwrite(cfg: AppwriteConfig): Promise<ScanVulnerability[]> 
     );
     if (!r || r.status !== 200) continue;
 
-    let hasDocuments = false;
+    // Require the Appwrite list shape, so any other 200 JSON is not read as an open collection.
+    let docs: unknown[] = [];
     try {
       const data = JSON.parse(r.body) as { documents?: unknown[]; total?: number };
-      hasDocuments = Array.isArray(data.documents) && data.documents.length > 0;
-    } catch { /* skip */ }
+      if (!Array.isArray(data.documents) || typeof data.total !== "number") continue;
+      docs = data.documents;
+    } catch { continue; }
+
+    // Empty documents: an open rule on an empty collection and a permission
+    // filter look the same. Nothing was readable, so no vulnerability finding.
+    if (docs.length === 0) {
+      emptyColls.push(coll);
+      continue;
+    }
+    const isPublic = classifyExposure(coll, docs) === "public";
 
     found.push(vuln({
-      name: `Appwrite — Unauthenticated Document Read on '${coll}'`,
-      severity: hasDocuments ? "critical" : "high",
+      name: isPublic
+        ? `Appwrite — Public Content Readable Without Authentication on '${coll}'`
+        : `Appwrite — Unauthenticated Document Read on '${coll}'`,
+      severity: isPublic ? "info" : "critical",
       category: "BaaS Misconfiguration",
       description:
-        `The Appwrite collection '${coll}' is readable without authentication using only the ` +
+        `The Appwrite collection '${coll}' returned documents without authentication using only the ` +
         `project ID found in your JavaScript. ` +
-        (hasDocuments ? "Documents were returned." : "HTTP 200 was returned.") +
-        " Appwrite permissions should require 'role:member' or 'user:<id>' for sensitive collections.",
-      evidence: `GET ${cfg.endpoint}/databases/default/collections/${coll}/documents\nX-Appwrite-Project: ${cfg.projectId}\nHTTP 200`,
+        (isPublic
+          ? "The name and fields look like public catalogue content with no personal or secret-looking values in the sampled documents; confirm it is meant to be public."
+          : "Appwrite permissions should require 'role:member' or 'user:<id>' for sensitive collections."),
+      evidence: `GET ${cfg.endpoint}/databases/default/collections/${coll}/documents\nX-Appwrite-Project: ${cfg.projectId}\nHTTP 200 with documents`,
       solution:
         "In the Appwrite Console → Databases → your database → your collection → Settings → " +
         "Permissions: remove the 'Any' role from 'Read' permission. Set permissions to " +
         "'Users' or specific roles only. Never grant 'Any' read access to collections " +
         "containing user data.",
-      cweId: "CWE-284",
-      cvssScore: hasDocuments ? 9.1 : 7.5,
-      confidence: hasDocuments ? 90 : 65,
+      cweId: isPublic ? null : "CWE-284",
+      cvssScore: isPublic ? 0 : 9.1,
+      confidence: isPublic ? 60 : 90,
+    }));
+  }
+
+  if (emptyColls.length > 0) {
+    found.push(vuln({
+      name: "Appwrite — Collections Returned Empty Document Lists (Inconclusive)",
+      severity: "info",
+      category: "BaaS Misconfiguration",
+      description:
+        `${emptyColls.length} collection(s) answered an anonymous list request with HTTP 200 and no ` +
+        "documents. No data was readable; Appwrite returns this for an empty collection and for one " +
+        "whose permissions filter everything out, so it does not show a misconfiguration.",
+      evidence: `Collections: ${emptyColls.join(", ")}\nGET ${cfg.endpoint}/databases/default/collections/${emptyColls[0]}/documents → HTTP 200, documents: []`,
+      solution: "Verify the collection's Read permissions in the Appwrite Console.",
+      cweId: null,
+      cvssScore: 0,
+      confidence: 40,
     }));
   }
 

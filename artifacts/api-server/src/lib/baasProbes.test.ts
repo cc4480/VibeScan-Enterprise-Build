@@ -102,3 +102,57 @@ describe("runBaasProbes — does not invent one", () => {
     expect(await runBaasProbes("not a url", PB_PAGE)).toEqual([]);
   });
 });
+
+describe("runBaasProbes — public-by-design and empty lists", () => {
+  const list = (items: unknown[], total = items.length) =>
+    JSON.stringify({ page: 1, perPage: 1, totalItems: total, items });
+  const HIGH_OR_WORSE = ["critical", "high"];
+
+  it("PocketBase 200 with empty items is not HIGH (list rule filtering to nothing) — clean twin", async () => {
+    serve({ "/api/health": { body: PB_HEALTH }, "/api/collections/users/records": { body: list([]) } });
+    const vulns = await runBaasProbes("https://example.com/", PB_PAGE);
+    expect(vulns.filter((v) => HIGH_OR_WORSE.includes(v.severity))).toEqual([]);
+    expect(vulns).toHaveLength(1);
+    expect(vulns[0]!.severity).toBe("info");
+  });
+
+  it("PocketBase public catalogue records are INFO", async () => {
+    serve({
+      "/api/health": { body: PB_HEALTH },
+      "/api/collections/products/records": { body: list([{ id: "p1", name: "Mug", price: 3 }]) },
+    });
+    const vulns = await runBaasProbes("https://example.com/", PB_PAGE);
+    expect(vulns).toHaveLength(1);
+    expect(vulns[0]!.severity).toBe("info");
+  });
+
+  it("PocketBase records from a public-sounding collection with an email column stay CRITICAL", async () => {
+    serve({
+      "/api/health": { body: PB_HEALTH },
+      "/api/collections/posts/records": { body: list([{ id: "p1", title: "x", author_email: "a@b.co" }]) },
+    });
+    const vulns = await runBaasProbes("https://example.com/", PB_PAGE);
+    expect(vulns[0]!.severity).toBe("critical");
+  });
+
+  const AW_PAGE =
+    '<script>import { Client } from "appwrite"; new Client().setEndpoint("https://aw.example.com/v1").setProject("abcdef0123456789abcd")</script>';
+  const awServe = (docs: unknown[], collection: string) =>
+    serve({
+      "/v1/health": { body: "{}" },
+      [`/v1/databases/default/collections/${collection}/documents`]: { body: JSON.stringify({ total: docs.length, documents: docs }) },
+    });
+
+  it("Appwrite empty documents is not HIGH — clean twin", async () => {
+    awServe([], "users");
+    const vulns = await runBaasProbes("https://example.com/", AW_PAGE);
+    expect(vulns.filter((v) => HIGH_OR_WORSE.includes(v.severity))).toEqual([]);
+  });
+
+  it("Appwrite documents from users are still CRITICAL; from posts are INFO", async () => {
+    awServe([{ $id: "1", email: "a@b.co" }], "users");
+    expect((await runBaasProbes("https://example.com/", AW_PAGE))[0]!.severity).toBe("critical");
+    awServe([{ $id: "1", title: "Hello" }], "posts");
+    expect((await runBaasProbes("https://example.com/", AW_PAGE))[0]!.severity).toBe("info");
+  });
+});
