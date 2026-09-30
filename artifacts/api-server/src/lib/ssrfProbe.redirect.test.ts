@@ -37,8 +37,8 @@ beforeEach(async () => {
   collectorBase = `http://127.0.0.1:${port}`;
   // Shrink only the probe's post-injection callback wait; keep real request timers.
   const realSetTimeout = globalThis.setTimeout;
-  vi.spyOn(globalThis, "setTimeout").mockImplementation(((fn: () => void, ms?: number, ...a: unknown[]) =>
-    realSetTimeout(fn, ms === 6_000 ? 300 : ms, ...a)) as typeof setTimeout);
+  vi.spyOn(globalThis, "setTimeout").mockImplementation(((fn: () => void, ms?: number) =>
+    realSetTimeout(fn, ms === 6_000 ? 300 : ms)) as unknown as typeof setTimeout);
 });
 
 afterEach(async () => {

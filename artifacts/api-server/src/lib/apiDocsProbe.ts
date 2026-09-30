@@ -51,6 +51,26 @@ function isOpenApiJson(body: string, ct: string): boolean {
   return hasVersion && hasPaths && hasInfo;
 }
 
+/**
+ * Structural check for a JSON OpenAPI/Swagger document: it must parse, carry a
+ * `swagger`/`openapi` version string and a `paths` object. Unlike the substring
+ * checks above it is content-type independent and cannot be satisfied by an HTML
+ * shell or an error body that merely mentions the word. Shared with the path
+ * probes in probes-data.ts and the crawler's inner-route probes.
+ */
+export function isOpenApiSpec(body: string): boolean {
+  if (body.length < 50 || body.trimStart()[0] !== "{") return false;
+  try {
+    const doc = JSON.parse(body) as Record<string, unknown>;
+    const version = doc["openapi"] ?? doc["swagger"];
+    const paths = doc["paths"];
+    return typeof version === "string" && /^[23]/.test(version) &&
+      typeof paths === "object" && paths !== null && !Array.isArray(paths);
+  } catch {
+    return false;
+  }
+}
+
 /** Confirms an OpenAPI/Swagger YAML spec */
 function isOpenApiYaml(body: string): boolean {
   if (body.length < MIN_BODY_BYTES) return false;

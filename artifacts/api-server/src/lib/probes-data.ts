@@ -4,6 +4,7 @@
  */
 
 import type { ScanVulnerability } from "./scanner";
+import { isOpenApiSpec } from "./apiDocsProbe";
 
 export interface SensitivePath {
   path: string;
@@ -23,6 +24,20 @@ export interface SensitivePath {
    * suppression would also hide a real phpinfo page. See probes.ts.
    */
   servesHtml?: boolean;
+}
+
+/**
+ * A JSON config file counts as an exposure only when it carries a
+ * credential-shaped key with a non-trivial value; public runtime config (API
+ * URLs, flags, publishable SDK keys) does not. Shared with the crawler's
+ * inner-route `config.json` probe so both apply the same rule.
+ */
+export function isSecretBearingConfigJson(body: string, ct: string): boolean {
+  if (ct.includes("text/html")) return false;
+  if (!(ct.includes("json") || body.trim().startsWith("{"))) return false;
+  return /"[^"]*(?:password|passwd|secret|private_?key|connection_?string|db_pass|aws_secret|client_secret|api_secret)[^"]*"\s*:\s*"[^"]{8,}"/i.test(
+    body,
+  );
 }
 
 export const SENSITIVE_PATHS: SensitivePath[] = [
@@ -281,13 +296,7 @@ export const SENSITIVE_PATHS: SensitivePath[] = [
     //
     // Require a credential-shaped KEY carrying a non-trivial value — the thing
     // that would actually make the file an exposure.
-    validate: (body, ct) => {
-      if (ct.includes("text/html")) return false;
-      if (!(ct.includes("json") || body.trim().startsWith("{"))) return false;
-      return /"[^"]*(?:password|passwd|secret|private_?key|connection_?string|db_pass|aws_secret|client_secret|api_secret)[^"]*"\s*:\s*"[^"]{8,}"/i.test(
-        body,
-      );
-    },
+    validate: (body, ct) => isSecretBearingConfigJson(body, ct),
   },
   {
     path: "/Dockerfile",
@@ -806,32 +815,33 @@ export const SENSITIVE_PATHS: SensitivePath[] = [
     validate: (body) => /runtime:|handlers:|env_variables:|service:|instance_class:/i.test(body),
   },
 
+  // Severity matches apiDocsProbe: a published spec is a map of the API, not a vulnerability.
   // ── Additional API doc variants ────────────────────────────────────────────
   {
     path: "/api/swagger.json",
     name: "API Documentation Exposed (/api/swagger.json)",
-    severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
+    severity: "info", cweId: "CWE-200", cvssScore: 0,
     category: "Information Disclosure",
     description: "Swagger API documentation is exposed at /api/swagger.json, providing a full blueprint of API endpoints, parameters, authentication schemes, and data models.",
     solution: "Require authentication to access API documentation in production.",
-    validate: (body) => /"swagger"|"openapi"/.test(body.slice(0, 500)),
+    validate: (body) => isOpenApiSpec(body),
   },
   {
     path: "/api/v1/swagger.json",
     name: "API v1 Documentation Exposed",
-    severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
+    severity: "info", cweId: "CWE-200", cvssScore: 0,
     category: "Information Disclosure",
     description: "API v1 Swagger documentation is publicly accessible, exposing the complete API surface for version 1.",
     solution: "Require authentication for API docs in production.",
-    validate: (body) => /"swagger"|"openapi"/.test(body.slice(0, 500)),
+    validate: (body) => isOpenApiSpec(body),
   },
   {
     path: "/api/v2/swagger.json",
     name: "API v2 Documentation Exposed",
-    severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
+    severity: "info", cweId: "CWE-200", cvssScore: 0,
     category: "Information Disclosure",
     description: "API v2 Swagger documentation is publicly accessible.",
     solution: "Require authentication for API docs in production.",
-    validate: (body) => /"swagger"|"openapi"/.test(body.slice(0, 500)),
+    validate: (body) => isOpenApiSpec(body),
   },
 ];
