@@ -316,6 +316,8 @@ suite("billing (real Postgres)", () => {
       .values({
         userId, userEmail: "", targetUrl: "https://example.com", tier: "deep",
         status: status as never, paidWith, createdAt: new Date(Date.now() - hoursAgo * 3600_000),
+        // A stored login, as an authenticated scan would hold while it runs.
+        credentialsEncrypted: "enc-primary", secondaryCredentialsEncrypted: "enc-secondary",
       })
       .returning();
     return scan!.id;
@@ -340,6 +342,17 @@ suite("billing (real Postgres)", () => {
     expect(await statusOf(recent)).toBe("scanning"); // slow, not dead
     expect(await statusOf(done)).toBe("complete");
     expect(await balance("u13")).toBe(1);
+
+    // A dead scan has ended, so its stored logins are gone; a live one still needs them.
+    const creds = async (id: string) => {
+      const { db, scansTable } = m.db;
+      const { eq } = await import("drizzle-orm");
+      const [row] = await db.select({ a: scansTable.credentialsEncrypted, b: scansTable.secondaryCredentialsEncrypted }).from(scansTable).where(eq(scansTable.id, id));
+      return row;
+    };
+    expect(await creds(stuckPaid)).toEqual({ a: null, b: null });
+    expect(await creds(stuckFree)).toEqual({ a: null, b: null });
+    expect(await creds(recent)).toEqual({ a: "enc-primary", b: "enc-secondary" });
 
     // Running it again refunds nothing twice.
     expect(await m.billing.reapStuckScans()).toEqual({ failed: 0, refunded: 0 });

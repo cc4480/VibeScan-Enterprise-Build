@@ -12,8 +12,8 @@ import { useSeo } from "@/lib/seo";
 
 // Per document: a change to one must not re-date the other.
 const LAST_UPDATED: Record<"privacy" | "terms", string> = {
-  privacy: "September 25, 2026", // DeepSeek named; sign-up network hash disclosed
-  terms: "September 24, 2026", // Starter and Pro plans; free scans renew monthly
+  privacy: "September 30, 2026", // AI opt-out described; GitHub option, created test account, credential deletion, Google named
+  terms: "September 30, 2026", // Paid plans and credits stated as not yet on sale
 };
 const CONTACT = "hello@secscan.us";
 
@@ -54,7 +54,17 @@ function Privacy() {
         <p>
           <strong className="text-foreground">Credentials you choose to supply.</strong> If
           you give the scanner a login so it can test signed-in pages, those credentials are
-          encrypted at rest with AES-256-GCM and used only for that scan.
+          encrypted at rest with AES-256-GCM, used only for that scan, and deleted as soon as
+          the scan finishes or fails.
+        </p>
+        <p>
+          <strong className="text-foreground">Optional scan features.</strong> If you enter a
+          public GitHub repository, we read some of its public configuration files through
+          GitHub's API; no token is sent and only GitHub is contacted for it, never your site.
+          If you choose "Create one for me" on a scan with a login, the scan submits your
+          site's public signup form once, with a made-up address at example.com, to get a
+          second test account for the access-control test; the report names any account it
+          created so you can delete it. Both are off unless you choose them for that scan.
         </p>
         <p>
           <strong className="text-foreground">Payments.</strong> Stripe processes payments.
@@ -99,12 +109,17 @@ function Privacy() {
         </p>
         <p>
           <strong className="text-foreground">DeepSeek</strong> — our AI analysis provider;
-          it generates the written analysis in every report. Every scan sends its findings
-          (with evidence fragments), the target URL and the technologies detected on it to
-          DeepSeek for that purpose. Your
-          account details (name, email, password) are not sent. DeepSeek is based in China, so this is a transfer outside the UK and EEA. There is currently
-          no way to run a scan without it, so if you would rather not have findings leave our
-          infrastructure, do not run scans.
+          it writes the analysis in each report. Unless you turn it off, a scan sends its findings
+          (names, descriptions and evidence fragments, with anything that looks like a credential
+          removed on a best-effort basis), the target URL and the technologies detected on it to
+          DeepSeek for that purpose. The logins you supply for a scan, and your account details
+          (name, email, password), are never sent. DeepSeek is based in China, so this is a
+          transfer outside the UK and EEA. You can turn this off in Settings, under Privacy: no
+          findings are sent, and the scan and every finding stay the same.
+        </p>
+        <p>
+          <strong className="text-foreground">Google</strong> — if you choose to sign in with
+          Google, Google handles that sign-in and tells us your verified email address and name.
         </p>
       </Section>
 
@@ -217,6 +232,10 @@ function Terms() {
 
       <Section title="Credits and payment">
         <p>
+          Paid plans and scan credits are not on sale yet. This section describes how they will
+          work when they open; until then, the free scans above are the only way to run a scan.
+        </p>
+        <p>
           Every account gets 3 free scans each calendar month (UTC); unused free scans do not
           carry over. Beyond those, scans are paid for with a subscription or with scan credits. Prices are shown before you pay, and payment is
           taken by Stripe.
@@ -230,6 +249,9 @@ function Terms() {
       </Section>
 
       <Section title="Subscriptions">
+        <p>
+          Subscriptions are not on sale yet; this describes how they will work when they open.
+        </p>
         <p>
           SecScan Starter and SecScan Pro are billed monthly in advance and renew automatically
           each month until you cancel. Starter includes continuous monitoring for up to 3 sites and 20

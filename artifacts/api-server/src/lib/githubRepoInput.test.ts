@@ -28,6 +28,8 @@ describe("normaliseGithubRepoInput", () => {
       "http://127.0.0.1/acme/shop",
       "not a repo",
       "acme/shop/extra",
+      "../..",
+      ".git/.git",
       "a/".repeat(200),
     ]) {
       expect(normaliseGithubRepoInput(v).ok, v).toBe(false);

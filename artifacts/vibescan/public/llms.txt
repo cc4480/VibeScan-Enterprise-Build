@@ -53,7 +53,7 @@ Every account gets 3 free scans every month (renewing on the 1st, UTC), every ch
   scans every month (unused scans do not roll over). Cancel any time.
 - Scan credits — 10 for $12, 50 for $49. Credits never expire.
 
-Payments are handled by Stripe.
+Paid plans and credits are not yet available for purchase; they will be handled by Stripe when they open.
 
 ## Security checks performed
 
@@ -131,7 +131,7 @@ revoked any time.
 - Built on: Node.js / Express, React / Vite, PostgreSQL, pg-boss queue
 - Deployed as two services: a web tier and a separate scanner tier that consumes a job queue
 - AI: LLM-generated report analysis
-- Auth: email and password with verified email; anonymous scanning is also supported
+- Auth: email and password with verified email; a free account with a verified email is required to scan
 - No agents, browser extensions or code changes required
 
 ## Reference documentation

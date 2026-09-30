@@ -367,7 +367,11 @@ export async function createScanHandler(req: Request, res: Response): Promise<vo
     // The row exists and is paid for but will never run. Fail it and refund
     // through the same exactly-once path the worker uses.
     req.log.error({ err, scanId: scan.id }, "Could not queue the scan");
-    await db.update(scansTable).set({ status: "failed", error: "Could not be queued" }).where(eq(scansTable.id, scan.id));
+    // It will never run, so the stored logins are discarded now rather than kept for nothing.
+    await db
+      .update(scansTable)
+      .set({ status: "failed", error: "Could not be queued", credentialsEncrypted: null, secondaryCredentialsEncrypted: null })
+      .where(eq(scansTable.id, scan.id));
     await refundFailedScan(scan.id).catch((e) => req.log.error({ err: e, scanId: scan.id }, "Refund after queue failure failed"));
     res.status(503).json({ error: "Could not start the scan. You were not charged — please try again." });
     return;

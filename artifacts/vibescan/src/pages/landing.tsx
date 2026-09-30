@@ -124,7 +124,7 @@ export default function LandingPage() {
 
             {[
               { step: 1, icon: Code2, title: "Paste Any URL", desc: "Drop in any publicly accessible URL — your own app, a client's site, or any live website." },
-              { step: 2, icon: Zap, title: "We Scan", desc: "Our engine crawls your pages, probes for exposed files and secrets, checks SSL, DNS, headers, and runs 20+ active security tests — no agent needed." },
+              { step: 2, icon: Zap, title: "We Scan", desc: "Our engine crawls your pages, probes for exposed files and secrets, checks SSL, DNS, headers, and, on a domain you have verified, runs active security tests — no agent needed." },
               { step: 3, icon: CheckCircle2, title: "Get Report", desc: "Our AI translates the raw findings into a plain-English, actionable report." }
             ].map((item, i) => (
               <div key={i} className="relative flex flex-col items-center text-center">
@@ -373,7 +373,7 @@ export default function LandingPage() {
             <Zap className="w-3.5 h-3.5" /> Free Trial
           </div>
           <h2 className="text-3xl md:text-4xl font-bold mb-4">3 free scans every month, everything included</h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto">Every account gets 3 free scans a month, renewing on the 1st — every check, no tier to pick. Need more? Subscribe for monitoring plus monthly scans, or buy credits that never expire.</p>
+          <p className="text-muted-foreground max-w-2xl mx-auto">Every account gets 3 free scans a month, renewing on the 1st — every check, no tier to pick. Paid plans and scan credits are coming soon; we'll email you when they open.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
@@ -408,7 +408,7 @@ export default function LandingPage() {
                 "Rescans that follow your grade (A: 14d → F: 3d)",
                 "Regression alerts and Slack webhooks",
               ],
-              cta: "See plans",
+              cta: "See pricing",
               href: "#buy",
               color: "text-indigo-400",
               bg: "bg-indigo-400/10",
@@ -464,7 +464,7 @@ export default function LandingPage() {
               <Package className="w-3.5 h-3.5" /> Plans & Credits
             </div>
             <h3 className="text-2xl md:text-3xl font-bold mb-3">Keep going once your free scans are gone</h3>
-            <p className="text-muted-foreground max-w-xl mx-auto text-sm">Subscribe for monitoring plus monthly scans, or buy credits for one-off scans — same checks, same AI report, same fix guides.</p>
+            <p className="text-muted-foreground max-w-xl mx-auto text-sm">Paid plans and scan credits are coming soon, with the same checks, AI report and fix guides. We'll email you when they open.</p>
           </div>
 
           {/* Live Buy / Subscribe buttons once Stripe is configured; until then,

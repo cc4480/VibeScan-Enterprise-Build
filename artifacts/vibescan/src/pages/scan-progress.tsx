@@ -10,7 +10,7 @@ import { useLiveTests, useRevealed } from "@/lib/use-live-tests";
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Waiting…",
-  paid: "Payment confirmed — queuing…",
+  paid: "Scan accepted — queuing…",
   queued: "In queue — waiting for a worker slot",
   scanning: "Scanning your site…",
   analyzing: "Generating your security report…",

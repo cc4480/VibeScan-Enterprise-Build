@@ -28,6 +28,11 @@ describe("parseGithubRepoRef", () => {
   it("rejects a non-GitHub URL", () => {
     expect(parseGithubRepoRef("https://gitlab.com/acme/widgets")).toBeNull();
   });
+  it("rejects dot names in the bare form as it does in the URL form", () => {
+    for (const v of ["../..", "./.", "acme/..", "../shop", ".git/.git", "acme/.git", "https://github.com/acme/.git"]) {
+      expect(parseGithubRepoRef(v), v).toBeNull();
+    }
+  });
   it("rejects nonsense input", () => {
     expect(parseGithubRepoRef("not a repo at all")).toBeNull();
   });
@@ -82,6 +87,16 @@ describe("scanGithubRepoForSecrets", () => {
     expect(f!.description).not.toMatch(/client-side|views your page|JavaScript/i);
     expect(f!.solution).toMatch(/^Rotate the credential now/);
     expect(f!.evidence).not.toContain("Zx7Qm2vLp9Rt4Wk8");
+  });
+
+  it("encodes each path segment, so a file in a directory named with # or ? is still fetched", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonRes({ private: false, default_branch: "main" }))
+      .mockResolvedValueOnce(jsonRes({ tree: [{ path: "a#b/.env", type: "blob", size: 50 }] }))
+      .mockResolvedValueOnce(textRes("X=1"));
+    await scanGithubRepoForSecrets({ owner: "acme", repo: "widgets" });
+    const urls = vi.mocked(fetch).mock.calls.map((c) => String(c[0]));
+    expect(urls[2]).toBe("https://raw.githubusercontent.com/acme/widgets/main/a%23b/.env");
   });
 
   it("never sends an Authorization header (public repos only, no token)", async () => {

@@ -243,7 +243,7 @@ const COVERAGE: { title: string; items: string[] }[] = [
   },
   {
     title: "Access control",
-    items: ["Broken access control and IDOR", "Out-of-band SSRF", "Backend storage rules"],
+    items: ["Broken access control and IDOR", "Server-side request forgery (SSRF)", "Backend storage rules"],
   },
   {
     title: "Reporting",
@@ -323,7 +323,7 @@ export default function ScanFormPage() {
           Launch Security Scan
         </h1>
         <p className="text-muted-foreground text-lg">
-          Paste any publicly accessible URL — your app, a client's site, or any live website.
+          Paste the URL of an app you own or are authorised to test.
         </p>
       </div>
 

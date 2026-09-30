@@ -57,11 +57,21 @@ export interface GithubRepoRef {
 
 const NAME = /^[\w.-]+$/;
 
+/** A name that is really a name: plain characters, and not empty, "." or ".." (which would be a path of its own). */
+function isPlainName(s: string): boolean {
+  return NAME.test(s) && s !== "." && s !== "..";
+}
+
 /** Accepts a bare "owner/repo" or a full https://github.com/owner/repo(.git)(/tree/<branch>) URL. */
 export function parseGithubRepoRef(input: string): GithubRepoRef | null {
   const trimmed = input.trim();
   const bare = /^([\w.-]+)\/([\w.-]+)$/.exec(trimmed);
-  if (bare) return { owner: bare[1]!, repo: bare[2]!.replace(/\.git$/, "") };
+  if (bare) {
+    // The same checks as the URL form: "../.." and ".git/.git" are not repositories, and both end up in fetched URLs.
+    const owner = bare[1]!;
+    const repo = bare[2]!.replace(/\.git$/, "");
+    return isPlainName(owner) && isPlainName(repo) ? { owner, repo } : null;
+  }
 
   try {
     const url = new URL(trimmed);
@@ -71,7 +81,7 @@ export function parseGithubRepoRef(input: string): GithubRepoRef | null {
     const owner = parts[0]!;
     const repo = parts[1]!.replace(/\.git$/, "");
     // Both end up in URLs that are fetched: a name that is not plain would be a path of its own.
-    if (!NAME.test(owner) || !NAME.test(repo) || repo === "." || repo === "..") return null;
+    if (!isPlainName(owner) || !isPlainName(repo)) return null;
     if (parts[2] === "tree" && parts.length > 3) {
       try {
         return { owner, repo, branch: decodeURIComponent(parts.slice(3).join("/")) };
@@ -229,7 +239,7 @@ export async function scanGithubRepo(ref: GithubRepoRef, opts: { timeoutMs?: num
 
   for (const entry of candidates) {
     const rawRes = await githubGet(
-      `https://raw.githubusercontent.com/${ref.owner}/${ref.repo}/${encodeURIComponent(branch)}/${entry.path}`,
+      `https://raw.githubusercontent.com/${ref.owner}/${ref.repo}/${encodeURIComponent(branch)}/${entry.path.split("/").map(encodeURIComponent).join("/")}`,
       "text",
       timeoutMs,
     );

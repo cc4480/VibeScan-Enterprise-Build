@@ -131,7 +131,7 @@ function ScanRow({ initialScan, highlight }: { initialScan: Scan; highlight?: bo
 
       <td className="p-4 hidden sm:table-cell">
         <span className="px-2.5 py-1 rounded-md text-xs font-medium bg-secondary border border-white/5 uppercase tracking-wider">
-          {scan.tier.replace('_', ' ')}
+          {scan.tier === 'deep' ? 'Full scan' : scan.tier.replace('_', ' ')}
         </span>
       </td>
 
@@ -333,7 +333,7 @@ export default function DashboardPage() {
               <thead>
                 <tr className="border-b border-white/10 bg-secondary/50">
                   <th className="p-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Target</th>
-                  <th className="p-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Tier</th>
+                  <th className="p-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Type</th>
                   <th className="p-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
                   <th className="p-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Security</th>
                   <th className="p-4 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>

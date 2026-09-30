@@ -174,7 +174,14 @@ export async function reapStuckScans(now = new Date()): Promise<{ failed: number
   const cutoff = new Date(now.getTime() - STUCK_SCAN_AFTER_MS);
   const stuck = await db
     .update(scansTable)
-    .set({ status: "failed", error: "The scan did not finish. Anything it cost has been returned.", completedAt: now })
+    .set({
+      status: "failed",
+      error: "The scan did not finish. Anything it cost has been returned.",
+      completedAt: now,
+      // The promise is that stored logins are discarded when a scan ends, and a dead scan has ended.
+      credentialsEncrypted: null,
+      secondaryCredentialsEncrypted: null,
+    })
     .where(
       and(
         inArray(scansTable.status, ["paid", "queued", "scanning", "analyzing"]),

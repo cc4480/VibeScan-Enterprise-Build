@@ -922,6 +922,8 @@ export async function processScanJob(job: ScanJob): Promise<void> {
         status: "failed",
         error: "Failed to save report — please contact support",
         completedAt,
+        credentialsEncrypted: null,
+        secondaryCredentialsEncrypted: null,
       })
       .where(eq(scansTable.id, scanId));
     await failVerificationForScan(scanId).catch(() => {});
