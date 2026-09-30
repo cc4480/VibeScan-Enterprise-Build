@@ -1,0 +1,290 @@
+import type { ScanResult } from "./scanner";
+import { loadScanAuth } from "./workerCredentials";
+import { mergeSslLabs, mergeRecon, recordSideTests } from "./workerSideChecks";
+import { refineFindings } from "./workerFilters";
+import { runAiStage } from "./workerAi";
+import { buildReport } from "./workerReport";
+import { recordMonitorScan } from "./workerMonitor";
+import { sendReportReadyNotification } from "./workerEmail";
+import { db, scansTable, reportsTable } from "@workspace/db";
+import { eq, and, ne } from "drizzle-orm";
+import { type ScanJobData } from "./queue";
+import { runScan } from "./scanner";
+import { looksSignedOut } from "./scanCredentials";
+import { runRecon } from "./recon";
+import { activeProbesUnlocked } from "./activeProbeGate";
+import { createLiveProgress } from "./liveProgress";
+import { completeVerification, failVerificationForScan } from "./verifyFix";
+import { checkSslLabs } from "./ssllabs";
+import { logger } from "./logger";
+import type { Job } from "pg-boss";
+import { refundFailedScan, reapStuckScans } from "./billing";
+
+/**
+ * pg-boss worker — processes scan jobs from the queue.
+ * Registered at startup by index.ts.
+ *
+ * Job lifecycle per scan:
+ *   queued → scanning → analyzing → complete
+ *              ↓ (on error)
+ *            failed
+ */
+
+type ScanJob = Job<ScanJobData>;
+
+/**
+ * Exported for tests. The guards below decide whether a scan runs at all and
+ * whether a billed AI call is made, and reaching them through `startWorker`
+ * would mean standing up pg-boss to assert on a branch that is pure logic.
+ */
+export async function processScanJob(job: ScanJob): Promise<void> {
+  const { scanId, userId, targetUrl, tier, monitorSubscriptionId, verificationId } = job.data;
+  const log = logger.child({ scanId, targetUrl, tier, monitorSubscriptionId, verificationId });
+
+  log.info("Scan job started");
+
+  // ── 1. Mark as scanning ───────────────────────────────────────────────
+  //
+  // The returned rows are an existence check that costs nothing: deleting an
+  // account removes its scans (routes/account.ts) before the user row, so a
+  // scan id that no longer resolves means the owner deleted the account while
+  // this job sat in the queue. Without this the job ran the full scan and then
+  // paid for an AI call, only to fail at the report insert on reports.scan_id's
+  // foreign key — work and money spent on a report that cannot be stored and
+  // nobody can ever read. Found by a concurrency test that deleted its accounts
+  // seconds after queueing: 18 of 20 jobs reached DeepSeek before dying here.
+  //
+  // Safe as a guard because the scan row is committed before the job is
+  // enqueued (routes/scans.ts), so a missing row is always a deletion and never
+  // a job that overtook its own insert.
+  // Also refuses a scan already marked failed: the stuck-scan cleanup
+  // (billing.ts reapStuckScans) fails and REFUNDS scans that never finished,
+  // and a late retry must not then run one for free.
+  const scanning = await db
+    .update(scansTable)
+    .set({ status: "scanning", startedAt: new Date() })
+    .where(and(eq(scansTable.id, scanId), ne(scansTable.status, "failed")))
+    .returning({ id: scansTable.id });
+
+  if (scanning.length === 0) {
+    log.info("Scan row is gone (account deleted) or already failed and refunded; abandoning job before any work");
+    return;
+  }
+
+  // ── 2. Run header scan + SSL Labs check in parallel ───────────────────
+  log.info("Starting HTTP scan, SSL Labs check, and reconnaissance in parallel");
+
+  // SSL Labs is best-effort and can take up to 120 seconds — start it early
+  const parallelStartedAt = Date.now();
+  const sslLabsPromise = checkSslLabs(targetUrl).catch((err) => {
+    log.warn({ err }, "SSL Labs check failed (non-fatal)");
+    return null;
+  });
+
+  // One decision, consulted by both the HTTP scan and recon, so a target can
+  // never be port-scanned by a path that skipped the check the probes made.
+  const allowActiveProbes = await activeProbesUnlocked(userId, targetUrl);
+  if (!allowActiveProbes) {
+    log.info("Domain not verified for this user — running passive checks only");
+  }
+
+  // Recon runs concurrently: DNS enumeration, subdomain brute-force, port scan
+  const reconPromise = runRecon(targetUrl, allowActiveProbes).catch((err) => {
+    log.warn({ err }, "Recon failed (non-fatal)");
+    return null;
+  });
+
+  // Hard deadline for the entire HTTP scan phase.
+  // Individual probes have per-request timeouts (5–10 s each) but the aggregate
+  // across all deep-scan probes can still hang indefinitely on complex targets.
+  // 3 minutes is generous for any legitimate target; it prevents zombie jobs.
+  const SCAN_HTTP_TIMEOUT_MS = 3 * 60 * 1_000;
+
+  let scanResult: ScanResult;
+  let auth: Awaited<ReturnType<typeof loadScanAuth>>;
+  // Finished tests, saved as they happen so the progress page shows real ones.
+  const live = createLiveProgress(scanId);
+  try {
+    const scanTimeout = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`HTTP scan timed out after ${SCAN_HTTP_TIMEOUT_MS / 1000}s`)),
+        SCAN_HTTP_TIMEOUT_MS,
+      ),
+    );
+    auth = await loadScanAuth(scanId, log);
+    const { scanRow, httpCredentials, reauthenticate, secondaryCredentials } = auth;
+
+    scanResult = await Promise.race([
+      runScan(
+        targetUrl,
+        tier,
+        allowActiveProbes,
+        httpCredentials
+          ? {
+              credentials: httpCredentials,
+              ...(secondaryCredentials ? { secondary: secondaryCredentials } : {}),
+              detectSignedOut: looksSignedOut,
+              ...(reauthenticate ? { onSessionLost: reauthenticate } : {}),
+            }
+          : undefined,
+        // Threads the scan id through to the SSRF probe so its out-of-band
+        // callbacks correlate back to this scan.
+        scanId,
+        live.add,
+        // Per-scan opt-ins the requester made: a public repository to read for committed secrets, and
+        // permission to create a second account through the target's signup form. Absent for scans that
+        // asked for neither, including every monitor rescan.
+        {
+          ...(scanRow?.githubRepoUrl ? { githubRepoUrl: scanRow.githubRepoUrl } : {}),
+          ...(scanRow?.autoSecondAccount ? { autoSecondAccount: true } : {}),
+          // If the target redirects elsewhere, active probing continues only on a host this user verified.
+          verifyHost: (url: string) => activeProbesUnlocked(userId, url),
+        },
+      ),
+      scanTimeout,
+    ]);
+    // pageLoadMs is the first fetch of the target only; scanMs is the whole
+    // HTTP scan (crawl, probes, active tests). Logging the former as
+    // "durationMs" made a full scan look like it took 1.6 seconds.
+    log.info(
+      {
+        vulnCount: scanResult.vulnerabilities.length,
+        pageLoadMs: scanResult.requestDurationMs,
+        scanMs: Date.now() - parallelStartedAt,
+      },
+      "HTTP scan complete",
+    );
+  } catch (scanErr) {
+    await live.finish();
+    const errMsg = scanErr instanceof Error ? scanErr.message : String(scanErr);
+    log.error({ err: scanErr }, "Scan failed during HTTP fetch");
+    await db
+      .update(scansTable)
+      // Discard credentials on the failure path too — a scan that died holding
+      // a customer's password is exactly the row that should not keep it.
+      .set({ status: "failed", error: errMsg, completedAt: new Date(), credentialsEncrypted: null, secondaryCredentialsEncrypted: null })
+      .where(eq(scansTable.id, scanId));
+    await failVerificationForScan(scanId).catch(() => {});
+    await refundIfPaid(scanId, log);
+    return;
+  }
+
+  // Wait for SSL Labs (it was started in parallel with the header scan)
+  log.info("Waiting for SSL Labs assessment to complete");
+  const sslLabsResult = await sslLabsPromise;
+  mergeSslLabs(scanResult, sslLabsResult, log);
+
+  // ── 2b. Merge reconnaissance results ─────────────────────────────────
+  log.info("Waiting for reconnaissance to complete");
+  const reconRunResult = await reconPromise;
+  mergeRecon(scanResult, reconRunResult, log);
+
+  const tests = await recordSideTests({ scanResult, sslLabsResult, reconRunResult, allowActiveProbes, parallelStartedAt, live, log });
+
+  // ── 2c–2e. Merge duplicates, re-verify borderline findings, drop dismissed ones ──
+  const autoSuppressedCount = await refineFindings({ scanResult, targetUrl, userId, httpCredentials: auth.httpCredentials, log });
+
+  // ── 3. Mark as analyzing (AI phase) ──────────────────────────────────
+  //
+  // Checked again for the same reason as step 1, because this is the last
+  // moment before the only step that costs real money. A scan running when its
+  // owner deletes the account gets this far with the deletion already done, and
+  // the AI call would be billed for a report the insert below cannot store.
+  // The window between here and that insert is still open — an account deleted
+  // during the AI call itself lands in the catch at step 6, which fails the
+  // scan cleanly rather than crashing — but that window is seconds wide instead
+  // of the whole scan.
+  const analyzing = await db
+    .update(scansTable)
+    .set({ status: "analyzing" })
+    .where(eq(scansTable.id, scanId))
+    .returning({ id: scansTable.id });
+
+  if (analyzing.length === 0) {
+    log.info("Scan row no longer exists — owner deleted their account; abandoning job before the AI call");
+    return;
+  }
+
+  // ── 4. AI analysis ───────────────────────────────────────────────────
+  const aiAnalysis = await runAiStage({ scanResult, targetUrl, tier, tests, userId, verificationId, log });
+
+  // ── 5. Build report data ──────────────────────────────────────────────
+  const { reportData, riskScore, grade, intercepted, severityCounts, executiveSummary } = await buildReport({
+    scanResult, targetUrl, tests, reconRunResult, aiAnalysis, autoSuppressedCount,
+  });
+
+  // ── 6. Persist report ─────────────────────────────────────────────────
+  const completedAt = new Date();
+
+  try {
+    const [report] = await db
+      .insert(reportsTable)
+      .values({
+        scanId,
+        userId,
+        targetUrl: scanResult.finalUrl || targetUrl,
+        tier: tier as "basic" | "deep" | "pack_5" | "pack_20",
+        duration: scanResult.requestDurationMs,
+        data: reportData,
+      })
+      .returning();
+
+    log.info({ reportId: report.id }, "Report saved to database");
+
+    // ── 7. Mark scan complete ─────────────────────────────────────────
+    await db
+      .update(scansTable)
+      // Credentials live exactly as long as the scan that needed them.
+      .set({ status: "complete", completedAt, credentialsEncrypted: null, secondaryCredentialsEncrypted: null })
+      .where(eq(scansTable.id, scanId));
+
+    log.info({ reportId: report.id, grade, riskScore }, "Scan complete");
+
+    // A re-check of one finding (lib/verifyFix.ts): judge it against the report that held it.
+    if (verificationId) {
+      const verdict = await completeVerification(verificationId, reportData).catch((err) => {
+        log.error({ err }, "Could not record the verification verdict");
+        return null;
+      });
+      log.info({ verificationId, verdict }, "Verification complete");
+    }
+    await recordMonitorScan({
+      monitorSubscriptionId, userId, scanId, reportId: report.id, targetUrl, grade, riskScore,
+      completedAt, intercepted, severityCounts, tests, vulnerabilities: scanResult.vulnerabilities, log,
+    });
+
+    await sendReportReadyNotification({
+      scanId, userId, verificationId, tier, targetUrl, report, scanResult, grade, riskScore, tests, executiveSummary, severityCounts,
+    });
+  } catch (dbErr) {
+    log.error({ err: dbErr }, "Failed to save report to database");
+    await db
+      .update(scansTable)
+      .set({
+        status: "failed",
+        error: "Failed to save report — please contact support",
+        completedAt,
+        credentialsEncrypted: null,
+        secondaryCredentialsEncrypted: null,
+      })
+      .where(eq(scansTable.id, scanId));
+    await failVerificationForScan(scanId).catch(() => {});
+    await refundIfPaid(scanId, log);
+  }
+}
+
+/**
+ * A scan that failed gives back what paid for it — a bought credit, or one of
+ * the subscription's included scans. Customers were previously charged for
+ * scans the system never delivered. Idempotent (see refundFailedScan), and
+ * never throws: the scan has already failed for its own reason, and a refund
+ * error must not bury that.
+ */
+async function refundIfPaid(scanId: string, log: { info: (o: object, m: string) => void; error: (o: object, m: string) => void }): Promise<void> {
+  try {
+    const refunded = await refundFailedScan(scanId);
+    if (refunded) log.info({ scanId, refunded }, "Refunded the payment for a failed scan");
+  } catch (err) {
+    log.error({ err, scanId }, "Could not refund a failed scan — needs manual credit");
+  }
+}
