@@ -239,7 +239,10 @@ describe("visible breadcrumbs match the structured data", () => {
   it("names every subpage the same in the layout as in the JSON-LD", async () => {
     const { readFileSync } = await import("node:fs");
     const { resolve } = await import("node:path");
-    const layout = readFileSync(resolve(__dirname, "../../../vibescan/src/components/layout.tsx"), "utf8");
+    // The breadcrumb table lives in layout-account-nav.tsx, split out of layout.tsx for size.
+    const layout = ["layout.tsx", "layout-account-nav.tsx"]
+      .map((f) => readFileSync(resolve(__dirname, "../../../vibescan/src/components", f), "utf8"))
+      .join("\n");
     for (const path of ["/learn", "/privacy", "/terms", "/bot", "/about"]) {
       const crumb = metaForPath(path)?.breadcrumb?.at(-1);
       expect(crumb, `${path} has no breadcrumb in pageMeta`).toBeDefined();
