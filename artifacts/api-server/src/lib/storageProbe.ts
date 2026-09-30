@@ -132,7 +132,6 @@ function countItems(body: string): number {
  */
 function bucketFinding(
   provider: string,
-  ownedName: string,
   label: string,
   ownerKey: string,
   targetHost: string,
@@ -177,18 +176,19 @@ function bucketFinding(
       confidence: 50,
     });
   }
-  return vuln({
-    ...common,
-    name: ownedName,
-    severity: "high",
-    description:
-      `The ${provider} bucket/container '${label}', whose name matches this site, is publicly listable — anyone can enumerate its ` +
-      `contents without authentication (${sample}). Listing reveals every file name and exposes ` +
-      `the data inventory even where individual objects need auth.`,
-    cvssScore: 7.5,
-    // Listing observed; ownership inferred from the name.
-    confidence: 90,
-  });
+  const ownedDescription =
+    `The ${provider} bucket/container '${label}', whose name matches this site, is publicly listable — anyone can enumerate its ` +
+    `contents without authentication (${sample}). Listing reveals every file name and exposes ` +
+    `the data inventory even where individual objects need auth.`;
+  // Three literal names, one per provider: the check index and the catalog read the names from source.
+  // Listing observed; ownership inferred from the name.
+  if (provider === "S3") {
+    return vuln({ ...common, name: `Public S3 Bucket Listing — '${label}'`, severity: "high", description: ownedDescription, cvssScore: 7.5, confidence: 90 });
+  }
+  if (provider === "GCS") {
+    return vuln({ ...common, name: `Public GCS Bucket Listing — '${label}'`, severity: "high", description: ownedDescription, cvssScore: 7.5, confidence: 90 });
+  }
+  return vuln({ ...common, name: `Public Azure Blob Container Listing — '${label}'`, severity: "high", description: ownedDescription, cvssScore: 7.5, confidence: 90 });
 }
 
 async function checkS3Bucket(bucket: string, host: string): Promise<ScanVulnerability | null> {
@@ -203,7 +203,7 @@ async function checkS3Bucket(bucket: string, host: string): Promise<ScanVulnerab
     if (!r || r.status !== 200) continue;
     if (!isS3ListingResponse(r.body)) continue;
 
-    return bucketFinding("S3", `Public S3 Bucket Listing — '${bucket}'`, bucket, bucket, host, r.body, {
+    return bucketFinding("S3", bucket, bucket, host, r.body, {
       evidence: `GET ${url}\nHTTP 200 — S3 ListBucketResult returned`,
       solution:
         "In the AWS S3 Console: select the bucket → Permissions → Block Public Access → " +
@@ -226,7 +226,7 @@ async function checkGcsBucket(bucket: string, host: string): Promise<ScanVulnera
     if (!r || r.status !== 200) continue;
     if (!isGcsListingResponse(r.body, r.ct)) continue;
 
-    return bucketFinding("GCS", `Public GCS Bucket Listing — '${bucket}'`, bucket, bucket, host, r.body, {
+    return bucketFinding("GCS", bucket, bucket, host, r.body, {
       evidence: `GET ${url}\nHTTP 200 — GCS listing confirmed`,
       solution:
         "In the GCS Console: select the bucket → Permissions → remove the 'allUsers' and " +
@@ -247,7 +247,6 @@ async function checkAzureBlob(blob: AzureBlob, host: string): Promise<ScanVulner
 
   return bucketFinding(
     "Azure Blob",
-    `Public Azure Blob Container Listing — '${blob.account}/${blob.container}'`,
     `${blob.account}/${blob.container}`,
     blob.account,
     host,
