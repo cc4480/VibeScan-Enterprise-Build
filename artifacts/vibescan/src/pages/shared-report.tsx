@@ -1,27 +1,18 @@
-import { useState, useEffect, useRef } from "react";
+import { SharedReportLoading, SharedReportError } from "./shared-report-states";
+import { useSharedReportData, useSharedReportPdf } from "./shared-report-hooks";
 import { useRoute, Link } from "wouter";
 import { useSeo } from "@/lib/seo";
-import {
-  Shield, Globe, Lock, Loader2, AlertCircle, Clock,
-  Download, Share2,
-} from "lucide-react";
+import { Shield, Globe, Lock, Loader2, Download, Share2 } from "lucide-react";
 import { cn, getGradeColor } from "@/lib/utils";
 import { APP_ORIGIN } from "@/lib/origin";
 import { PdfReport } from "@/components/pdf-report";
-import { exportElementToPdf } from "@/lib/pdfExport";
-import {
-  GradeRing, VulnRow, ComplianceCard, CoverageCard, SeverityLegend,
-  SEV_ORDER, VERIFICATION_THRESHOLD,
-  type SharedReportData,
-} from "./shared-report-components";
+import { GradeRing, VulnRow, ComplianceCard, CoverageCard, SeverityLegend, SEV_ORDER, VERIFICATION_THRESHOLD } from "./shared-report-components";
 
 export default function SharedReport() {
   const [, params] = useRoute("/share/:token");
   const token = params?.token ?? "";
 
-  const [report, setReport] = useState<SharedReportData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<{ status: number; message: string } | null>(null);
+  const { report, loading, error } = useSharedReportData(token);
 
   const seoTitle = report
     ? `Grade ${report.data.summary.grade} — ${(() => { try { return new URL(report.targetUrl).hostname; } catch { return report.targetUrl; } })()} | SecScan.us Security Report`
@@ -31,64 +22,10 @@ export default function SharedReport() {
     : "View this security scan report powered by SecScan — automated black-box security scanning for web applications.";
   useSeo({ title: seoTitle, description: seoDescription, canonical: `${APP_ORIGIN}/share/${token}` });
 
-  // PDF generation state — must be declared before any conditional returns (Rules of Hooks)
-  const pdfContainerRef = useRef<HTMLDivElement>(null);
-  const [generatingPdf, setGeneratingPdf] = useState(false);
-  const [showPdfContainer, setShowPdfContainer] = useState(false);
+  const { pdfContainerRef, generatingPdf, showPdfContainer, handleDownloadPDF } = useSharedReportPdf(report);
 
-  useEffect(() => {
-    if (!token) return;
-    fetch(`/api/share/${token}`)
-      .then(async (r) => {
-        if (!r.ok) {
-          const body = await r.json().catch(() => ({ error: "Unknown error" }));
-          setError({ status: r.status, message: body.error ?? "Failed to load report" });
-          return;
-        }
-        const data = await r.json();
-        setReport(data as SharedReportData);
-      })
-      .catch(() => setError({ status: 500, message: "Network error" }))
-      .finally(() => setLoading(false));
-  }, [token]);
-
-  if (loading) {
-    return (
-      <div className="min-h-[80vh] flex flex-col items-center justify-center gap-4">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Loading shared report…</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    const isExpired = error.status === 410;
-    return (
-      <div className="min-h-[80vh] flex flex-col items-center justify-center gap-4 max-w-md mx-auto px-4 text-center">
-        <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center">
-          {isExpired ? (
-            <Clock className="w-8 h-8 text-muted-foreground" />
-          ) : (
-            <AlertCircle className="w-8 h-8 text-muted-foreground" />
-          )}
-        </div>
-        <h1 className="text-2xl font-bold">
-          {isExpired ? "Link Expired" : "Report Not Found"}
-        </h1>
-        <p className="text-muted-foreground leading-relaxed">
-          {isExpired
-            ? "This share link has expired. Ask the report owner to generate a new link."
-            : "This share link is invalid or has been revoked. It may have been deleted by the report owner."}
-        </p>
-        <Link
-          href="/"
-          className="mt-2 inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg font-semibold hover:opacity-90 transition-opacity"
-        >
-          <Shield className="w-4 h-4" /> Run your own scan
-        </Link>
-      </div>
-    );
-  }
+  if (loading) return <SharedReportLoading />;
+  if (error) return <SharedReportError error={error} />;
 
   if (!report) return null;
 
@@ -104,29 +41,6 @@ export default function SharedReport() {
   const dateStr = new Date(report.scannedAt).toLocaleDateString("en-US", {
     year: "numeric", month: "long", day: "numeric",
   });
-
-  const handleDownloadPDF = async () => {
-    if (generatingPdf) return;
-    setGeneratingPdf(true);
-    setShowPdfContainer(true);
-    await new Promise<void>((r) => setTimeout(r, 300));
-    try {
-      const container = pdfContainerRef.current;
-      if (!container) return;
-
-      let filename = "secscan-report.pdf";
-      try {
-        const host = new URL(report.targetUrl).hostname.replace(/^www\./, "");
-        filename = `secscan-${host}.pdf`;
-      } catch {
-        // keep default
-      }
-      await exportElementToPdf(container, { filename, footer: `Generated by SecScan · ${APP_ORIGIN} · scanned ${dateStr}` });
-    } finally {
-      setShowPdfContainer(false);
-      setGeneratingPdf(false);
-    }
-  };
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24">
