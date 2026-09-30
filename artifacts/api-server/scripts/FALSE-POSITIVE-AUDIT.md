@@ -18,6 +18,49 @@ DATABASE_URL=postgres://localhost/anything \
 `DATABASE_URL` only has to be *set* — the scanner module imports the db layer at
 load time. It is never read by a passive scan.
 
+## 2026-09-30 (evening) — full passive sweep after the probe-review fixes
+
+Live sweep, passive only: the 30-site list from 2026-09-24 plus the 20 guard targets built into
+`live-scan.ts`. Raw output: `scan-results/2026-09-30-sweep-30.json` and `2026-09-30-guards-20.json`.
+Actionable findings on the 30 sites went from 98 to 92. Every difference from 2026-09-24 was checked
+against the live response with the scanner's own User-Agent, and the remaining header-based findings
+were re-derived independently (CSP, nosniff, clickjacking, base-uri, cookies, HTTP redirect). The
+findings not header-based (source maps, DMARC, the internal-route findings) were checked by hand.
+Not re-checked: technology fingerprints, the CVE and end-of-life matches, and the JSON-LD notes.
+
+### Fixed since the last sweep, and confirmed correct now
+
+| Was reported | Target | Why it was wrong |
+|---|---|---|
+| Weak CSP (Medium) | archive.org | `script-src` holds only origins and `'wasm-unsafe-eval'`. |
+| Weak CSP (Medium) | bbc.co.uk | `'unsafe-inline'` sits beside `'strict-dynamic'` and a nonce, so browsers ignore it. |
+| Missing `nosniff` (Medium) | figma.com | The header is sent twice; the old exact match read it as invalid. |
+| Missing SRI (Medium) | cloudflare, dropbox, europa.eu, stripe | The scripts are the site's own subdomain or CDN. Dropbox's one real third-party script carries `integrity`. |
+| SPF over the lookup limit | nasa.gov, etsy.com | 9 and 10 lookups; IPv6 ranges were being counted. |
+| Non-session cookie without `Secure` | theguardian.com | The named cookies were `max-age=0` deletions; the live ones have `Secure`. |
+| Permissive CORS (Medium) | zoom.us | `ACAO: *` with no credentials is Info now. |
+
+### New and real
+
+npmjs.com now returns its real page to the scanner instead of a Cloudflare challenge, so four findings appeared: `script-src` has `'unsafe-inline'` with no nonce or hash, no `base-uri`, no Referrer-Policy, no Permissions-Policy. All four confirmed by hand. Cloudflare decides per client whether to challenge: `npmjs.com` answered 200 while `www.npmjs.com` in the guard run was still intercepted (and withheld correctly). Seven targets were intercepted and withheld in the 30-site run: amazon.co.uk, apnews, ebay, etsy, nytimes, reuters, stackoverflow.
+
+### Checked and correct — do not "fix"
+
+- Missing CSP (High) on european-union.europa.eu, fastly, nasa.gov, shopify, slack, wikipedia, zoom: no CSP header and no CSP meta tag on the final response.
+- CSP missing on internal routes (bbc, vercel, cloudflare, github): reproduced on the live routes. github's is `/healthz`, which answers `text/html`.
+- Missing `nosniff` (8 sites), missing clickjacking protection (5 sites), Weak CSP (10 sites), missing `base-uri` and `object-src`: an independent re-derivation agreed with the scanner on every one.
+- `http://archive.org` answers 200 with no redirect. `_dmarc.european-union.europa.eu` and `_dmarc.europa.eu` are both NXDOMAIN.
+- The three source maps exist, return 200 and embed source text (see the severity question below).
+
+### Open — found this round
+
+1. **gitlab.com "Missing Content-Security-Policy" (High) is wrong as worded.** `gitlab.com` redirects to `about.gitlab.com`, whose response has no CSP header but whose HTML carries `<meta http-equiv="Content-Security-Policy">`. Browsers enforce that. The policy is very weak (`'unsafe-inline' 'unsafe-eval' https: http:` in `script-src`), so there is a real finding, but not the one reported. The scanner reads only the header. The 2026-09-24 round checked headers only and called this finding true.
+2. **zoom.us SRI lists Zoom's own `st1.zoom.us`.** `zoom.us` redirects to `www.zoom.com`; its assets stay on `zoom.us`. First-party is judged against the final host only, so the address the user typed is not counted.
+3. **Source map severity ignores what is in the map.** fastly.com's map has 126 sources, 125 of them `node_modules` libraries and one Sentry config file; archive.org's is a vendored `lit` polyfill. Both are High "Full Source Code Accessible". gitlab's has 20 first-party files among 301. Severity depends only on whether `sourcesContent` is present.
+4. **SRI on provider-updated marketing scripts** (gitlab: bizible, marketo; nasa: dap.digitalgov.gov, parsely; slack: clearbit) and on a site's own asset domain the scanner cannot know (theguardian: `assets.guim.co.uk`). Accurate, but not something the owner can fix by adding `integrity`. A policy question, not a bug.
+
+Guard baselines after this round: google 15/6, github 11/5 (unchanged); cloudflare 7/2 (was 8/4) and mozilla 6/2 (was 7/3), both from the SRI fix above.
+
 ## 2026-09-30 — code review of every probe family, and the fixes
 
 Not a live sweep. Six reviewers each took a family of checks (new acting probes, passive
