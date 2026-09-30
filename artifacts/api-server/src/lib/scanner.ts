@@ -185,6 +185,7 @@ async function runScanInner(
     finalUrl, html, rawHeaders, tier, allowActiveProbes, ledger,
     setCookies: initial.setCookies ?? [],
     status: initial.status,
+    requestedUrl: targetUrl,
     crawlPageBudget: CRAWL_PAGE_BUDGET,
     ...(extra?.githubRepoUrl ? { githubRepoUrl: extra.githubRepoUrl } : {}),
   });

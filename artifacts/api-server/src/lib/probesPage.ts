@@ -7,13 +7,18 @@ import { vuln, safeGet } from "./probesCore";
 // 6. SUBRESOURCE INTEGRITY (SRI) CHECK
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function checkSRI(html: string, baseUrl: string): Promise<ScanVulnerability[]> {
+export async function checkSRI(html: string, baseUrl: string, requestedUrl?: string): Promise<ScanVulnerability[]> {
   let baseHost: string;
   try {
     baseHost = new URL(baseUrl).hostname;
   } catch {
     return [];
   }
+  // The address the user asked for is the site's too, even if it redirected to another domain.
+  let requestedHost: string | null = null;
+  try {
+    if (requestedUrl) requestedHost = new URL(requestedUrl).hostname;
+  } catch { /* ignore an unparseable request address */ }
 
   const scriptRegex = /<script[^>]+src=["']([^"']+)["'][^>]*>/gi;
   const linkRegex = /<link[^>]+href=["']([^"']+)["'][^>]*rel=["']stylesheet["'][^>]*>/gi;
@@ -24,7 +29,7 @@ export async function checkSRI(html: string, baseUrl: string): Promise<ScanVulne
       const u = new URL(src, baseUrl);
       // Third-party only, and not a provider that updates the script in place (lib/sriPolicy.ts):
       // the site's own CDN needs no SRI, and SRI on Stripe.js or Tag Manager breaks them.
-      if (expectsIntegrity(baseHost, u) && !tag.includes("integrity=")) {
+      if (expectsIntegrity(baseHost, u, requestedHost ? [requestedHost] : []) && !tag.includes("integrity=")) {
         // Skip resources whose URL pathname contains a long hex content hash.
         // Content-addressed URLs (e.g. webpack chunks: "/chunk.a1b2c3d4e5f6a7b8.js")
         // are effectively pinned by the hash in the filename — SRI is redundant

@@ -106,3 +106,32 @@ describe("checkSRI, end to end on real-world page shapes", () => {
     expect(await checkSRI(`<script src="https://cdn.other.net/chunk.a1b2c3d4e5f6a7b8c9.js"></script>`, page)).toEqual([]);
   });
 });
+
+/**
+ * Found by the 2026-09-30 sweep: zoom.us redirects to www.zoom.com but keeps its assets on
+ * st1.zoom.us. Judged against the final host alone, Zoom's own CDN was reported as a third party.
+ */
+describe("the address the user asked for counts as first-party after a redirect", () => {
+  const finalPage = "https://www.zoom.com/";
+  const html = `<script src="https://st1.zoom.us/homepage/main.js"></script>
+    <script src="https://cdn.bc0a.com/autopilot/sdk.js"></script>`;
+
+  it("does not report the requested domain's own CDN, and still reports a real third party", async () => {
+    const [v] = await checkSRI(html, finalPage, "https://zoom.us");
+    const lines = (v?.evidence ?? "").split("\n");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("cdn.bc0a.com");
+    expect(v!.evidence).not.toContain("st1.zoom.us");
+  });
+
+  it("without the requested address the old behaviour is unchanged (both are strangers)", async () => {
+    const [v] = await checkSRI(html, finalPage);
+    expect(v!.evidence).toContain("st1.zoom.us");
+  });
+
+  it("expectsIntegrity honours the extra first-party host but not a lookalike", () => {
+    expect(expectsIntegrity("www.zoom.com", url("https://st1.zoom.us/a.js"), ["zoom.us"])).toBe(false);
+    expect(expectsIntegrity("www.zoom.com", url("https://zoom.us.evil.example/a.js"), ["zoom.us"])).toBe(true);
+    expect(expectsIntegrity("www.zoom.com", url("https://cdn.bc0a.com/a.js"), ["zoom.us"])).toBe(true);
+  });
+});

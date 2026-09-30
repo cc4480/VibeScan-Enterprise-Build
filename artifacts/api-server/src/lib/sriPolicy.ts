@@ -98,7 +98,14 @@ export function isDynamicByDesign(resource: URL): boolean {
   return DYNAMIC_PATHS.some((p) => p.host === host && resource.pathname.startsWith(p.prefix));
 }
 
-/** Should a resource without an integrity attribute be reported? */
-export function expectsIntegrity(pageHost: string, resource: URL): boolean {
-  return !isFirstParty(pageHost, resource.hostname) && !isDynamicByDesign(resource);
+/**
+ * Should a resource without an integrity attribute be reported?
+ *
+ * `alsoFirstParty` lists other hosts the site answers to: the address the user asked to scan, when it
+ * redirected somewhere else. zoom.us redirects to www.zoom.com but keeps its assets on st1.zoom.us;
+ * judged against the final host alone, Zoom's own CDN read as a stranger.
+ */
+export function expectsIntegrity(pageHost: string, resource: URL, alsoFirstParty: string[] = []): boolean {
+  const own = [pageHost, ...alsoFirstParty].some((h) => isFirstParty(h, resource.hostname));
+  return !own && !isDynamicByDesign(resource);
 }

@@ -48,11 +48,13 @@ export async function runAllProbes(
   onFailure?: (checkName: string, reason: unknown) => void,
   /** Records each check's outcome for the per-test log (see testLedger.ts). */
   ledger?: TestLedger,
+  /** The address the user asked to scan, when it differs from targetUrl because of a redirect. */
+  requestedUrl?: string,
 ): Promise<ScanVulnerability[]> {
   const passive: Array<[string, Promise<ScanVulnerability[]>]> = [
     ["sensitive file exposure", checkSensitiveFiles(targetUrl)],
     ["robots.txt disclosure", checkRobotsTxt(targetUrl)],
-    ["subresource integrity", checkSRI(html, targetUrl)],
+    ["subresource integrity", checkSRI(html, targetUrl, requestedUrl)],
     ["verbose error pages", checkErrorDisclosure(targetUrl)],
     ["HTTP to HTTPS redirect", checkHttpsRedirect(targetUrl)],
     // Header heuristic only — the behavioural burst lives in apiProbe.ts and

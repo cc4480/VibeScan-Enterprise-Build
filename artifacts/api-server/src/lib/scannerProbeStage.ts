@@ -31,6 +31,8 @@ export interface ProbeStageInput {
   githubRepoUrl?: string;
   ledger: TestLedger;
   crawlPageBudget: number;
+  /** What the user asked to scan, before any redirect. */
+  requestedUrl?: string;
 }
 
 /**
@@ -38,7 +40,7 @@ export interface ProbeStageInput {
  * which of them could not complete (see the notes on unrunFamilies below).
  */
 export async function runProbeStage({
-  finalUrl, html, rawHeaders, setCookies, status, tier, allowActiveProbes, githubRepoUrl, ledger, crawlPageBudget,
+  finalUrl, html, rawHeaders, setCookies, status, tier, allowActiveProbes, githubRepoUrl, ledger, crawlPageBudget, requestedUrl,
 }: ProbeStageInput) {
   const vulnerabilities: ScanVulnerability[] = [];
   const crawlStarted = Date.now();
@@ -90,7 +92,7 @@ export async function runProbeStage({
       run: runAllProbes(finalUrl, html, allowActiveProbes, (checkName, reason) => {
         innerProbeFailures.push(checkName);
         console.error(`[scan] check failed: ${checkName}`, reason);
-      }, ledger),
+      }, ledger, requestedUrl),
     },
     { family: "DNS and email authentication", run: checkDnsSecurity(finalUrl) },
     // Mail transport security: does the domain's MX actually offer STARTTLS,
