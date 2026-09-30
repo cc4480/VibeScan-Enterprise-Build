@@ -541,7 +541,17 @@ app.get("/app/swagger.json", (_req, res) => res.json({ swagger: "2.0", info: { t
 app.get("/app/openapi.json", (_req, res) => res.json({ openapi: "3.0.0", info: { title: "App API" }, paths: {} }));
 app.get("/app/api-docs", (_req, res) => res.json({ openapi: "3.0.0", paths: { "/x": {} } }));
 app.get("/app/.git/HEAD", (_req, res) => res.type("text/plain").send("ref: refs/heads/main\n"));
-app.get("/app/config.json", (_req, res) => res.json({ apiUrl: "https://api.internal.example", featureFlags: { newUi: true } }));
+// crawler-data.ts inner-route config probe: this one carries a credential-shaped key, so it IS a
+// sensitive exposure. A config that only holds public runtime settings must not be reported
+// (see the clean twin at /uploads/config.json below).
+app.get("/app/config.json", (_req, res) =>
+  res.json({ apiUrl: "https://api.internal.example", featureFlags: { newUi: true }, dbPassword: "fixture-db-passw0rd-1234" }),
+);
+// Clean twin: public runtime configuration (an API URL and a feature flag). Nothing here is secret,
+// so no finding may name this path.
+app.get("/uploads/config.json", (_req, res) =>
+  res.json({ apiUrl: "https://api.public.example", featureFlags: { newUi: true } }),
+);
 app.get("/app/debug.log", (_req, res) => {
   res.type("text/plain").send("[DEBUG] request received\n[ERROR] unhandled exception in handler\n[WARN] retrying\n".repeat(3));
 });

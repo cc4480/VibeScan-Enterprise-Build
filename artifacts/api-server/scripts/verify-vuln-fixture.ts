@@ -236,6 +236,7 @@ async function main(): Promise<void> {
   const CLEAN_TWINS = [
     "/api/graphql", "/hello?", "/lang2?", "echoq", "/assets/ai-chat.js", "/api/chat", "/api/promo/claim",
     "/api/faq/ask", "/api/sales/ask", "/api/kb/ask", "/api/reward/redeem", "/api/gift/claim",
+    "/uploads/config.json",
   ];
   const falseAlarms = result.vulnerabilities.filter((v) => CLEAN_TWINS.some((t) => `${v.evidence ?? ""} ${v.description}`.includes(t)));
   if (falseAlarms.length) {
