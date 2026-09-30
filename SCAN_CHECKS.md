@@ -7,11 +7,11 @@ Every finding the scanner can emit, read out of `artifacts/api-server/src/lib`. 
 complete list; [SCAN_COVERAGE.md](SCAN_COVERAGE.md) is the readable one, grouped by module with
 the Basic/Deep tier and the methodology behind each group.
 
-**309 findings across 47 modules**, in 38 categories. 85 critical, 73 high, 56 medium, 30 low, 65 info.
+**309 findings across 50 modules**, in 38 categories. 85 critical, 73 high, 56 medium, 30 low, 65 info.
 
 A finding is a distinct name the scanner can put in a report, which is not the same as a check
 type: the data-table modules below define many findings from one piece of detection logic —
-`probes-data` is one path probe applied to 78 paths. Where a check emits two severities depending on context (a session cookie versus an
+`probes-data` is one path probe applied to 0 paths. Where a check emits two severities depending on context (a session cookie versus an
 ordinary one), both are shown and it is counted at the higher.
 
 ## Coverage
@@ -21,7 +21,6 @@ module does. `none` — neither, so no test exercises it at all.
 
 | Module | Findings | Lines | Tests | Coverage |
 |---|---:|---:|---:|---|
-| `probes-data.ts` | 78 | 848 | 30 | direct |
 | `secret-pattern-data.ts` | 28 | 441 | 18 | direct |
 | `probes.ts` | 17 | 1018 | 17 | direct |
 | `recon-data.ts` | 14 | 178 | 12 | direct |
@@ -55,13 +54,17 @@ module does. `none` — neither, so no test exercises it at all.
 | `raceConditionProbe.ts` | 1 | 181 | 21 | direct |
 | `sourceMaps.ts` | 1 | 180 | 14 | direct |
 | `ssrfProbe.ts` | 1 | 200 | 7 | direct |
+| `probes-data-vcs.ts` | 24 | 244 | — | indirect, via probes-data.test.ts |
+| `probes-data-config.ts` | 23 | 273 | — | indirect, via probes-data.test.ts |
 | `subdomain-service-data.ts` | 19 | 165 | — | indirect, via subdomainTakeover.test.ts |
+| `probes-data-server.ts` | 17 | 177 | — | indirect, via probes-data.test.ts |
+| `probes-data-infra.ts` | 14 | 148 | — | indirect, via probes-data.test.ts |
 | `secret-pattern-ai.ts` | 5 | 61 | — | indirect, via secret-pattern-data.test.ts |
 | `accessControlFindings.ts` | 3 | 129 | — | indirect, via accessControlProbe.test.ts |
 | `secret-pattern-jwt.ts` | 2 | 81 | — | indirect, via secret-pattern-data.test.ts |
 | `bannerRules.ts` | 1 | 112 | — | indirect, via cveCheck.test.ts |
 | `githubFindings.ts` | 1 | 60 | — | indirect, via githubSourceProbe.test.ts |
-| `scanner.ts` | 1 | 304 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts |
+| `scanner.ts` | 1 | 297 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts |
 | `scannerCspChecks.ts` | 7 | 149 | — | **none** |
 | `scannerHeaderChecks.ts` | 7 | 133 | — | **none** |
 | `scannerCookies.ts` | 6 | 202 | — | **none** |
@@ -360,14 +363,87 @@ module does. `none` — neither, so no test exercises it at all.
 | Supabase Detected — Verify Row Level Security (RLS) | Info | Database Security | 0 | — | WSTG-ATHZ-01 |
 | Supabase Public Content Tables Readable Without Authentication | Info | Database Security | 0 | — | WSTG-ATHZ-01 |
 
-### `probes-data.ts`
+### `probes-data-config.ts`
 
-*78 findings · 848 lines · 30 tests.*
+*23 findings · 273 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| Django Local Settings Exposed | Critical | Credential Exposure | 9.1 | CWE-312 | — |
+| Rails Database Config Exposed | Critical | Credential Exposure | 9.8 | CWE-312 | — |
+| Rails Secrets File Exposed | Critical | Credential Exposure | 9.8 | CWE-312 | — |
+| Configuration File Exposed (config.json) | High | Information Disclosure | 7.5 | CWE-200 | — |
+| Dev Environment File Exposed (.env.dev) | High | Credential Exposure | 7.5 | CWE-312 | — |
+| Development Environment File Exposed (.env.development) | High | Credential Exposure | 7.5 | CWE-312 | — |
+| Docker Compose Config Exposed | High | Information Disclosure | 7.5 | CWE-200 | — |
+| IIS Web Configuration Exposed | High | Information Disclosure | 7.5 | CWE-200 | — |
+| Laravel Log File Exposed | High | Information Disclosure | 7.5 | CWE-532 | — |
+| Local Development Overrides Exposed (.env.development.local) | High | Credential Exposure | 7.5 | CWE-312 | — |
+| Apache Server Status Page Exposed | Medium | Information Disclosure | 5.3 | CWE-200 | — |
+| CircleCI Configuration Exposed | Medium | Information Disclosure | 5.3 | CWE-200 | — |
+| Debug Log File Exposed | Medium | Information Disclosure | 6.5 | CWE-532 | — |
+| Dockerfile Exposed | Medium | Information Disclosure | 5.3 | CWE-200 | — |
+| Drone CI Configuration Exposed | Medium | Information Disclosure | 5.3 | CWE-200 | — |
+| GitLab CI/CD Configuration Exposed | Medium | Information Disclosure | 5.3 | CWE-200 | — |
+| Jenkinsfile CI/CD Configuration Exposed | Medium | Information Disclosure | 5.3 | CWE-200 | — |
+| Permissive crossdomain.xml Policy | Medium | CORS Misconfiguration | 6.5 | CWE-942 | — |
+| Test Environment File Exposed (.env.test) | Medium | Credential Exposure | 5.3 | CWE-312 | — |
+| Travis CI Configuration Exposed | Medium | Information Disclosure | 5.3 | CWE-200 | — |
+| macOS .DS_Store File Exposed | Low | Information Disclosure | — | CWE-200 | — |
+| .gitignore Exposes Sensitive Path Names | Info | Information Disclosure | — | CWE-200 | — |
+| Package Manifest Exposed (package.json) | Info | Information Disclosure | — | CWE-200 | — |
+
+### `probes-data-infra.ts`
+
+*14 findings · 148 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| AWS Credentials File Exposed | Critical | Credential Exposure | 9.8 | CWE-312 | — |
+| Kubernetes Config File Exposed — Cluster Credentials | Critical | Credential Exposure | 9.8 | CWE-312 | — |
+| SSH Private Key Exposed (.ssh/id_rsa) | Critical | Credential Exposure | 10 | CWE-312 | — |
+| SSH Private Key Exposed (id_rsa) | Critical | Credential Exposure | 10 | CWE-312 | — |
+| Terraform State File Exposed — Infrastructure Secrets | Critical | Credential Exposure | 9.8 | CWE-312 | — |
+| Adminer Database Admin Tool Exposed | High | Information Disclosure | 8.1 | CWE-200 | — |
+| Bash History File Exposed | High | Information Disclosure | 7.5 | CWE-200 | — |
+| phpMyAdmin Database Admin Exposed | High | Information Disclosure | 8.1 | CWE-200 | — |
+| npm package-lock.json Exposed | Info | Information Disclosure | — | CWE-200 | — |
+| PHP composer.lock Exposed | Info | Information Disclosure | — | CWE-200 | — |
+| Python Pipfile.lock Exposed | Info | Information Disclosure | — | CWE-200 | — |
+| Python requirements.txt Exposed | Info | Information Disclosure | — | CWE-200 | — |
+| Ruby Gemfile.lock Exposed | Info | Information Disclosure | — | CWE-200 | — |
+| yarn.lock Dependency Lockfile Exposed | Info | Information Disclosure | — | CWE-200 | — |
+
+### `probes-data-server.ts`
+
+*17 findings · 177 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
 | Apache .htpasswd Password File Exposed | Critical | Credential Exposure | 9.1 | CWE-312 | — |
-| AWS Credentials File Exposed | Critical | Credential Exposure | 9.8 | CWE-312 | — |
+| Spring Application Properties Exposed (WEB-INF/classes/application.properties) | Critical | Credential Exposure | 9.8 | CWE-312 | — |
+| Spring Boot Heap Dump Endpoint Exposed — Full Memory Snapshot | Critical | Credential Exposure | 9.8 | CWE-200 | — |
+| Java Web Application Config (WEB-INF/web.xml) Exposed | High | Information Disclosure | 7.5 | CWE-200 | — |
+| YAML Configuration File Exposed (config.yaml) | High | Information Disclosure | 7.5 | CWE-200 | — |
+| YAML Configuration File Exposed (config.yml) | High | Information Disclosure | 7.5 | CWE-200 | — |
+| Apache Server Info Page Exposed | Medium | Information Disclosure | 5.3 | CWE-200 | — |
+| Google App Engine Configuration Exposed (app.yaml) | Medium | Information Disclosure | 5.3 | CWE-200 | — |
+| Spring Boot Loggers Endpoint Exposed | Medium | Information Disclosure | 5.3 | CWE-200 | — |
+| WordPress XML-RPC Enabled — Brute Force Amplification Vector | Medium | Brute Force Protection | 7.5 | CWE-307 | — |
+| JetBrains IDE Workspace Config Exposed | Low | Information Disclosure | — | CWE-200 | — |
+| Nginx Status Page Exposed | Low | Information Disclosure | — | CWE-200 | — |
+| Spring Boot Metrics Endpoint Exposed | Low | Information Disclosure | — | CWE-200 | — |
+| VS Code Workspace Settings Exposed | Low | Information Disclosure | — | CWE-200 | — |
+| API Documentation Exposed (/api/swagger.json) | Info | Information Disclosure | 0 | CWE-200 | — |
+| API v1 Documentation Exposed | Info | Information Disclosure | 0 | CWE-200 | — |
+| API v2 Documentation Exposed | Info | Information Disclosure | 0 | CWE-200 | — |
+
+### `probes-data-vcs.ts`
+
+*24 findings · 244 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
 | Backup Archive Exposed | Critical | Source Code Exposure | 9.1 | CWE-552 | — |
 | Backup Archive Exposed (.tar.gz) | Critical | Source Code Exposure | 9.1 | CWE-552 | — |
 | Backup Environment File Exposed | Critical | Credential Exposure | 9.1 | CWE-312 | — |
@@ -375,75 +451,23 @@ module does. `none` — neither, so no test exercises it at all.
 | Database Dump Exposed | Critical | Data Exposure | 9.8 | CWE-552 | — |
 | Database Export Exposed | Critical | Data Exposure | 9.8 | CWE-552 | — |
 | Database File Exposed | Critical | Data Exposure | 9.8 | CWE-552 | — |
-| Django Local Settings Exposed | Critical | Credential Exposure | 9.1 | CWE-312 | — |
 | Drupal Settings File Exposed | Critical | Credential Exposure | 9.8 | CWE-312 | — |
 | Environment File Exposed (.env.local) | Critical | Credential Exposure | 9.8 | CWE-312 | — |
 | Environment File Exposed (.env) | Critical | Credential Exposure | 9.8 | CWE-312 | — |
 | Git Repository Exposed | Critical | Source Code Exposure | 9.8 | CWE-538 | — |
 | Joomla Configuration Exposed | Critical | Credential Exposure | 9.8 | CWE-312 | — |
-| Kubernetes Config File Exposed — Cluster Credentials | Critical | Credential Exposure | 9.8 | CWE-312 | — |
 | PHP Config File Exposed | Critical | Credential Exposure | 9.1 | CWE-312 | — |
 | Production Environment File Exposed (.env.production) | Critical | Credential Exposure | 9.8 | CWE-312 | — |
-| Rails Database Config Exposed | Critical | Credential Exposure | 9.8 | CWE-312 | — |
-| Rails Secrets File Exposed | Critical | Credential Exposure | 9.8 | CWE-312 | — |
-| Spring Application Properties Exposed (WEB-INF/classes/application.properties) | Critical | Credential Exposure | 9.8 | CWE-312 | — |
 | Spring Boot Actuator /env Exposed | Critical | Credential Exposure | 9.8 | CWE-200 | — |
 | Spring Boot Config Properties Exposed | Critical | Credential Exposure | 9.1 | CWE-200 | — |
-| Spring Boot Heap Dump Endpoint Exposed — Full Memory Snapshot | Critical | Credential Exposure | 9.8 | CWE-200 | — |
-| SSH Private Key Exposed (.ssh/id_rsa) | Critical | Credential Exposure | 10 | CWE-312 | — |
-| SSH Private Key Exposed (id_rsa) | Critical | Credential Exposure | 10 | CWE-312 | — |
-| Terraform State File Exposed — Infrastructure Secrets | Critical | Credential Exposure | 9.8 | CWE-312 | — |
 | WordPress Config File Exposed (wp-config.php) | Critical | Credential Exposure | 9.8 | CWE-312 | — |
-| Adminer Database Admin Tool Exposed | High | Information Disclosure | 8.1 | CWE-200 | — |
-| Bash History File Exposed | High | Information Disclosure | 7.5 | CWE-200 | — |
-| Configuration File Exposed (config.json) | High | Information Disclosure | 7.5 | CWE-200 | — |
-| Dev Environment File Exposed (.env.dev) | High | Credential Exposure | 7.5 | CWE-312 | — |
-| Development Environment File Exposed (.env.development) | High | Credential Exposure | 7.5 | CWE-312 | — |
-| Docker Compose Config Exposed | High | Information Disclosure | 7.5 | CWE-200 | — |
 | Git Config Exposed | High | Source Code Exposure | 7.5 | CWE-538 | — |
-| IIS Web Configuration Exposed | High | Information Disclosure | 7.5 | CWE-200 | — |
-| Java Web Application Config (WEB-INF/web.xml) Exposed | High | Information Disclosure | 7.5 | CWE-200 | — |
-| Laravel Log File Exposed | High | Information Disclosure | 7.5 | CWE-532 | — |
-| Local Development Overrides Exposed (.env.development.local) | High | Credential Exposure | 7.5 | CWE-312 | — |
 | Mercurial Repository Exposed | High | Source Code Exposure | 7.5 | CWE-538 | — |
 | PHP Info Page Exposed | High | Information Disclosure | 7.5 | CWE-200 | — |
 | PHP Info Page Exposed (info.php) | High | Information Disclosure | 7.5 | CWE-200 | — |
-| phpMyAdmin Database Admin Exposed | High | Information Disclosure | 8.1 | CWE-200 | — |
 | Staging Environment File Exposed | High | Credential Exposure | 8.2 | CWE-312 | — |
 | SVN Repository Exposed | High | Source Code Exposure | 7.5 | CWE-538 | — |
-| YAML Configuration File Exposed (config.yaml) | High | Information Disclosure | 7.5 | CWE-200 | — |
-| YAML Configuration File Exposed (config.yml) | High | Information Disclosure | 7.5 | CWE-200 | — |
-| Apache Server Info Page Exposed | Medium | Information Disclosure | 5.3 | CWE-200 | — |
-| Apache Server Status Page Exposed | Medium | Information Disclosure | 5.3 | CWE-200 | — |
-| CircleCI Configuration Exposed | Medium | Information Disclosure | 5.3 | CWE-200 | — |
-| Debug Log File Exposed | Medium | Information Disclosure | 6.5 | CWE-532 | — |
-| Dockerfile Exposed | Medium | Information Disclosure | 5.3 | CWE-200 | — |
-| Drone CI Configuration Exposed | Medium | Information Disclosure | 5.3 | CWE-200 | — |
-| GitLab CI/CD Configuration Exposed | Medium | Information Disclosure | 5.3 | CWE-200 | — |
-| Google App Engine Configuration Exposed (app.yaml) | Medium | Information Disclosure | 5.3 | CWE-200 | — |
-| Jenkinsfile CI/CD Configuration Exposed | Medium | Information Disclosure | 5.3 | CWE-200 | — |
-| Permissive crossdomain.xml Policy | Medium | CORS Misconfiguration | 6.5 | CWE-942 | — |
 | Spring Boot Beans Exposed | Medium | Information Disclosure | 5.3 | CWE-200 | — |
-| Spring Boot Loggers Endpoint Exposed | Medium | Information Disclosure | 5.3 | CWE-200 | — |
-| Test Environment File Exposed (.env.test) | Medium | Credential Exposure | 5.3 | CWE-312 | — |
-| Travis CI Configuration Exposed | Medium | Information Disclosure | 5.3 | CWE-200 | — |
-| WordPress XML-RPC Enabled — Brute Force Amplification Vector | Medium | Brute Force Protection | 7.5 | CWE-307 | — |
-| JetBrains IDE Workspace Config Exposed | Low | Information Disclosure | — | CWE-200 | — |
-| macOS .DS_Store File Exposed | Low | Information Disclosure | — | CWE-200 | — |
-| Nginx Status Page Exposed | Low | Information Disclosure | — | CWE-200 | — |
-| Spring Boot Metrics Endpoint Exposed | Low | Information Disclosure | — | CWE-200 | — |
-| VS Code Workspace Settings Exposed | Low | Information Disclosure | — | CWE-200 | — |
-| .gitignore Exposes Sensitive Path Names | Info | Information Disclosure | — | CWE-200 | — |
-| API Documentation Exposed (/api/swagger.json) | Info | Information Disclosure | 0 | CWE-200 | — |
-| API v1 Documentation Exposed | Info | Information Disclosure | 0 | CWE-200 | — |
-| API v2 Documentation Exposed | Info | Information Disclosure | 0 | CWE-200 | — |
-| npm package-lock.json Exposed | Info | Information Disclosure | — | CWE-200 | — |
-| Package Manifest Exposed (package.json) | Info | Information Disclosure | — | CWE-200 | — |
-| PHP composer.lock Exposed | Info | Information Disclosure | — | CWE-200 | — |
-| Python Pipfile.lock Exposed | Info | Information Disclosure | — | CWE-200 | — |
-| Python requirements.txt Exposed | Info | Information Disclosure | — | CWE-200 | — |
-| Ruby Gemfile.lock Exposed | Info | Information Disclosure | — | CWE-200 | — |
-| yarn.lock Dependency Lockfile Exposed | Info | Information Disclosure | — | CWE-200 | — |
 
 ### `promptInjectionProbe.ts`
 
@@ -484,7 +508,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `scanner.ts`
 
-*1 findings · 304 lines · no test file.*
+*1 findings · 297 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|

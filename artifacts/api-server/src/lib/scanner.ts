@@ -1,14 +1,9 @@
 /**
  * Black-box HTTP security scanner.
  *
- * Stage 1 (this file): Fetches the target URL, analyses response headers,
- * cookies, TLS, CORS, and page content — produces an initial vulnerability list.
- *
- * Stage 2 (parallel, via worker.ts): SSL Labs TLS assessment.
- *
- * Stage 3 (parallel probes): Active HTTP probes via probes.ts,
- * DNS security checks via dnsChecks.ts, and JavaScript secret scanning
- * via jsScanner.ts — all run concurrently with stage 2.
+ * Stage 1 (this file): fetches the target, checks headers, cookies, CORS and the
+ * page, then runs the probe stage and the active API stage (scanner<Part>.ts).
+ * Stage 2 (worker.ts): SSL Labs TLS assessment, in parallel.
  */
 
 import { vuln, headerVal, type PageContext, type ScanVulnerability, type ScanResult, type RunScanAuth, type RunScanExtras } from "./scannerTypes";
@@ -43,7 +38,6 @@ const FETCH_TIMEOUT_MS = 20_000;
  *
  * Split from the body only to avoid indenting the whole function.
  */
-
 export async function runScan(
   targetUrl: string,
   tier: string,
@@ -140,9 +134,8 @@ async function runScanInner(
   }
 
   const isHttps = finalUrl.startsWith("https://");
-  // No grade is assigned here: nothing in this scan measures TLS quality, and a
-  // hard-coded "A" would be shown as fact if SSL Labs times out. worker.ts sets
-  // it only from a completed SSL Labs assessment; null means "not assessed".
+  // No grade here: nothing in this scan measures TLS quality. worker.ts sets it
+  // only from a completed SSL Labs assessment; null means "not assessed".
   const tlsGrade: string | null = null;
   const server = headerVal(rawHeaders, "server") ?? null;
 
