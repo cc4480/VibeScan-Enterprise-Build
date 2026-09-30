@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyReply, type ReplyKind } from "./oneTimeReply";
+import { classifyReply, isSpentReply, type ReplyKind } from "./oneTimeReply";
 import type { HttpResult } from "./http";
 
 const reply = (status: number, body: string, type = "application/json"): HttpResult => ({
@@ -54,5 +54,41 @@ describe("classifyReply: statuses", () => {
   });
   it("treats a failed request as inconclusive", () => {
     expect(classifyReply(null)).toBe("inconclusive");
+  });
+});
+
+describe("classifyReply: a truncated body", () => {
+  it("is inconclusive, never accepted, when the read was cut off", () => {
+    expect(classifyReply({ ...reply(200, `{"data":{"credits":`), truncated: true })).toBe("inconclusive");
+  });
+  it("is inconclusive for a fragment of JSON even without the marker", () => {
+    expect(classifyReply(reply(200, `{"data":{"credits":`))).toBe("inconclusive");
+  });
+});
+
+describe("isSpentReply: only 'already used' proves a one-time rule", () => {
+  it.each<[string, number, string]>([
+    ["a 409 saying already redeemed", 409, `{"error":"Code already redeemed"}`],
+    ["a 200 saying already been claimed", 200, `{"message":"Reward has already been claimed"}`],
+    ["alreadyClaimed:true", 200, `{"alreadyClaimed":true}`],
+    ["plain text", 400, "This coupon was already used"],
+  ])("accepts %s", (_l, status, body) => {
+    expect(isSpentReply(reply(status, body))).toBe(true);
+  });
+
+  it.each<[string, number, string]>([
+    ["a WAF JSON 403", 403, `{"error":"Forbidden"}`],
+    ["a rate limit 429", 429, `{"error":"Too many requests"}`],
+    ["a rate limit message under 403", 403, `{"message":"Rate limit exceeded"}`],
+    ["an invalid code", 400, `{"error":"Invalid code"}`],
+    ["an outage", 503, `{"error":"already used"}`],
+    ["a login wall", 401, `{"error":"Sign in required"}`],
+  ])("rejects %s", (_l, status, body) => {
+    expect(isSpentReply(reply(status, body))).toBe(false);
+  });
+
+  it("rejects a truncated reply and a missing one", () => {
+    expect(isSpentReply({ ...reply(409, `{"error":"already redeemed`), truncated: true })).toBe(false);
+    expect(isSpentReply(null)).toBe(false);
   });
 });

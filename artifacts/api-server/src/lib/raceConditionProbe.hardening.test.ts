@@ -17,7 +17,7 @@ const inScan = <T>(port: number, fn: () => Promise<T>) => runWithScanHttp({ targ
 const drain = (req: Req) => new Promise<void>((r) => { req.on("data", () => {}); req.on("end", () => r()); });
 
 /** A real one-time claim with the classic bug: check, wait, then mark. */
-function racyClaim(refusal: (res: Res) => void = (res) => res.writeHead(409, { "content-type": "application/json" }).end(`{"error":"no longer valid"}`)) {
+function racyClaim(refusal: (res: Res) => void = (res) => res.writeHead(409, { "content-type": "application/json" }).end(`{"error":"Code already redeemed"}`)) {
   let used = false;
   return async (req: Req, res: Res) => {
     await drain(req);
@@ -127,6 +127,43 @@ describe("runRaceConditionProbe: findings", () => {
     const port = await serve(racyClaim((res) => res.writeHead(200, { "content-type": "application/json" }).end(`{"error":"Code has already been used"}`)));
     const out = await inScan(port, () => runRaceConditionProbeDetailed({ endpoints: [`http://127.0.0.1:${port}/api/coupon/redeem`], credentials: CREDS }));
     expect(out.findings).toHaveLength(1);
+  });
+});
+
+describe("runRaceConditionProbe: a generic refusal after the burst is not a one-time rule", () => {
+  // Five 200s and then a rate limiter's or WAF's JSON 403/429 on the sixth: the sixth says nothing
+  // about the action having been used, so this used to be reported as a HIGH race at confidence 90.
+  it.each([
+    ["a JSON 403 from a WAF", 403, `{"error":"Forbidden"}`],
+    ["a JSON 429 rate limit", 429, `{"error":"Too many requests"}`],
+    ["a JSON 403 rate limit message", 403, `{"message":"Rate limit exceeded"}`],
+    ["a JSON 400 invalid code", 400, `{"error":"Invalid code"}`],
+  ])("does not fire when the sixth reply is %s", async (_n, status, body) => {
+    let n = 0;
+    const port = await serve(async (req, res) => {
+      await drain(req);
+      n++;
+      if (n <= 5) return void res.writeHead(200, { "content-type": "application/json" }).end(`{"data":{"credits":10}}`);
+      res.writeHead(status, { "content-type": "application/json" }).end(body);
+    });
+    const out = await inScan(port, () => runRaceConditionProbeDetailed({ endpoints: [`http://127.0.0.1:${port}/api/rewards/claim`], credentials: CREDS }));
+    expect(out.findings).toEqual([]);
+  });
+
+  it("never counts a body cut off by the deadline as an accepted reply", async () => {
+    // Headers and the start of a JSON document, then silence: the reader times out with a fragment.
+    // The sixth request is a clean 409 "already used", so only the fragments stand between this
+    // and a finding built from five "accepted" replies that were never read in full.
+    let n = 0;
+    const port = await serve(async (req, res) => {
+      await drain(req);
+      n++;
+      if (n > 5) return void res.writeHead(409, { "content-type": "application/json" }).end(`{"error":"Code already redeemed"}`);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.write(`{"data":{"credits":`);
+    });
+    const out = await inScan(port, () => runRaceConditionProbeDetailed({ endpoints: [`http://127.0.0.1:${port}/api/rewards/claim`], credentials: CREDS, timeoutMs: 300 }));
+    expect(out.findings).toEqual([]);
   });
 });
 

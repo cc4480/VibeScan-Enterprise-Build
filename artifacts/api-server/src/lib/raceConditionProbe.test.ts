@@ -40,7 +40,7 @@ describe("runRaceConditionProbe", () => {
         await new Promise((r) => { req.on("data", () => {}); req.on("end", r); });
         if (used) {
           res.writeHead(409, { "content-type": "application/json" });
-          res.end(JSON.stringify({ error: "coupon no longer valid" }));
+          res.end(JSON.stringify({ error: "coupon already redeemed" }));
           return;
         }
         await new Promise((r) => setTimeout(r, 30)); // the gap between the check and the write

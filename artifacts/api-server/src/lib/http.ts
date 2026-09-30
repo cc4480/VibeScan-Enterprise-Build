@@ -56,6 +56,8 @@ export interface HttpResult {
   finalUrl: string;
   /** True when at least one redirect was followed to reach finalUrl. */
   redirected: boolean;
+  /** Set when the body read was cut short (timeout or reset): `body` is only what arrived. */
+  truncated?: boolean;
 }
 
 export interface ScanHttpInit {
@@ -296,8 +298,17 @@ function buildHeaders(
  * was cut at the deadline is precisely the part worth having.
  */
 async function readBodyBounded(res: Response): Promise<string> {
+  return (await readBodyMarked(res)).body;
+}
+
+/** As readBodyBounded, and says whether the read was cut short (deadline or reset) so the body is partial. */
+async function readBodyMarked(res: Response): Promise<{ body: string; truncated: boolean }> {
   const reader = res.body?.getReader?.();
-  if (!reader) return res.text().catch(() => "");
+  if (!reader) {
+    let failed = false;
+    const body = await res.text().catch(() => { failed = true; return ""; });
+    return { body, truncated: failed };
+  }
   const decoder = new TextDecoder();
   let out = "";
   try {
@@ -310,12 +321,13 @@ async function readBodyBounded(res: Response): Promise<string> {
   } catch {
     // Aborted or reset: what was read so far stands.
     out += decoder.decode();
+    return { body: out, truncated: true };
   }
-  return out;
+  return { body: out, truncated: false };
 }
 
 async function readResponse(res: Response, redirected: boolean): Promise<HttpResult> {
-  const body = await readBodyBounded(res);
+  const { body, truncated } = await readBodyMarked(res);
   const headers: Record<string, string> = {};
   // Defensive: scanFetch's contract is "returns null on failure, never throws",
   // and reading the response happens outside the fetch try/catch. A runtime that
@@ -328,7 +340,7 @@ async function readResponse(res: Response, redirected: boolean): Promise<HttpRes
   const getSetCookie = (res.headers as { getSetCookie?: () => string[] } | undefined)?.getSetCookie;
   const setCookies = typeof getSetCookie === "function" ? getSetCookie.call(res.headers) : [];
 
-  return { status: res.status, body, headers, setCookies, finalUrl: res.url, redirected };
+  return { status: res.status, body, headers, setCookies, finalUrl: res.url, redirected, ...(truncated ? { truncated } : {}) };
 }
 
 /**

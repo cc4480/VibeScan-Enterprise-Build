@@ -28,13 +28,13 @@
  * only concrete non-destructive URLs, never a redirect followed.
  *
  * What counts as a race. Five concurrent requests are accepted (at least two of
- * them) AND a sixth, sent after they have all finished, is cleanly refused. That
- * is the shape of check-then-act: the endpoint does enforce "once", but the
+ * them) AND a sixth, sent after they have all finished, is refused with a reply that says the
+ * action was already used (oneTimeReply.isSpentReply). That is the shape of check-then-act: the endpoint does enforce "once", but the
  * check and the write are two steps and concurrent requests slip between them.
  * An endpoint that also accepts the sixth has no limit at all or is idempotent
  * ("apply this code to my cart"), which this probe cannot tell apart and does not
- * call a race; one whose sixth reply is a rate limit or an outage proves nothing
- * either way. What each reply MEANS is read by oneTimeReply.ts, since a 200 is
+ * call a race; one whose sixth reply is a rate limit, a WAF's 403, an outage or any refusal that does not say
+ * "already used" proves nothing either way. What each reply MEANS is read by oneTimeReply.ts, since a 200 is
  * often a refusal in the body.
  *
  * And it says when it tested nothing: the body is always `{}`, so a real redeem
@@ -46,7 +46,7 @@ import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 import { scanFetch, type ScanCredentials } from "./http";
 import { actableEndpoints, pathLeaf, type EndpointInput } from "./actingEndpoints";
-import { classifyReply } from "./oneTimeReply";
+import { classifyReply, isSpentReply } from "./oneTimeReply";
 import type { ProbeOutcome } from "./testLedger";
 
 const MAX_CANDIDATES = 3;
@@ -132,8 +132,11 @@ export async function runRaceConditionProbeDetailed(input: RaceConditionInput): 
     if (accepted < 2) continue; // exactly one got through: the endpoint held
 
     // After the burst: a real one-time action is spent by now. If this is accepted too, the
-    // endpoint has no limit (or is idempotent), which is not a race.
-    if (classifyReply(await post(url)) !== "rejected") continue;
+    // endpoint has no limit (or is idempotent), which is not a race. A refusal only counts when it
+    // says the action was already used: a rate limiter's or WAF's 403/429, or "invalid code", is a
+    // refusal for another reason and proves no one-time rule exists.
+    const sixth = await post(url);
+    if (!isSpentReply(sixth)) continue;
 
     findings.push(
       vuln({
@@ -151,7 +154,8 @@ export async function runRaceConditionProbeDetailed(input: RaceConditionInput): 
         evidence:
           `POST ${url}, ${CONCURRENT_ATTEMPTS} concurrent requests, same account, empty JSON body.\n` +
           `${accepted} of ${CONCURRENT_ATTEMPTS} were accepted (a 2xx whose body does not refuse them).\n` +
-          `A sixth request, sent after the others had finished, was refused.`,
+          `A sixth request, sent after the others had finished, was refused as already used (${sixth?.status}): ` +
+          `${sixth?.body.trim().replace(/\s+/g, " ").slice(0, 120)}`,
         solution:
           "Make the check-and-use step atomic at the database: a single UPDATE ... WHERE used = false (or an " +
           "equivalent conditional write / unique constraint) so only one concurrent request can win, rather than a " +

@@ -60,6 +60,8 @@ const isHtml = (res: HttpResult): boolean =>
 export function classifyReply(res: HttpResult | null): ReplyKind {
   if (!res) return "inconclusive";
   const { status } = res;
+  // A body cut off by the deadline or a reset is a fragment: it cannot be read as "the action was taken".
+  if (res.truncated) return "inconclusive";
   if (status === 408 || status === 429 || status >= 500) return "inconclusive";
   if (status >= 400) return "rejected";
   if (status >= 300 || status < 200) return "inconclusive";
@@ -71,7 +73,40 @@ export function classifyReply(res: HttpResult | null): ReplyKind {
   try {
     parsed = JSON.parse(body);
   } catch {
-    return REFUSAL_RE.test(body.slice(0, 2_000)) ? "rejected" : "accepted";
+    if (REFUSAL_RE.test(body.slice(0, 2_000))) return "rejected";
+    // Something that opens like JSON but does not parse is a cut-off document, not a success.
+    return /^[{[]/.test(body) ? "inconclusive" : "accepted";
   }
   return jsonRefusal(parsed) ? "rejected" : "accepted";
+}
+
+/** Wording that says THIS action was already taken, as opposed to any refusal at all. */
+const SPENT_RE =
+  /\b(?:already (?:been )?(?:used|redeemed|claimed|applied|taken|consumed|activated)|(?:has|have) been (?:used|redeemed|claimed|consumed)|previously (?:used|redeemed|claimed)|fully (?:redeemed|used)|only (?:be )?(?:used|redeemed|claimed) once|one[- ]time use|maximum (?:number of )?(?:uses|redemptions)|redemption limit)\b/i;
+const SPENT_KEYS = new Set(["alreadyclaimed", "alreadyredeemed", "alreadyused", "alreadyapplied"]);
+
+function spentJson(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.entries(value as Record<string, unknown>).some(([k, v]) => {
+    if (SPENT_KEYS.has(k.toLowerCase().replace(/[-_]/g, "")) && v === true) return true;
+    return typeof v === "string" && SPENT_RE.test(v);
+  });
+}
+
+/**
+ * Does this reply say the action was ALREADY USED? The only refusal that proves a one-time rule
+ * exists. A generic 403, a 429, a rate limiter's or WAF's JSON error, "invalid code" or "login
+ * required" is a refusal for some other reason and says nothing about whether the action was spent,
+ * so a race finding may not lean on it.
+ */
+export function isSpentReply(res: HttpResult | null): boolean {
+  if (!res || res.truncated || isHtml(res)) return false;
+  if (res.status === 408 || res.status === 429 || res.status >= 500 || (res.status >= 300 && res.status < 400)) return false;
+  if (classifyReply(res) !== "rejected") return false;
+  const body = res.body.trim();
+  try {
+    return spentJson(JSON.parse(body));
+  } catch {
+    return SPENT_RE.test(body.slice(0, 2_000));
+  }
 }
