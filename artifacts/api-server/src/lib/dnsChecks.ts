@@ -8,6 +8,8 @@
 
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
+import { countSpfLookups, effectiveDmarcPolicy } from "./emailAuthParse.js";
+import { registrableDomain } from "./registrableDomain.js";
 
 const DOH_ENDPOINT = "https://cloudflare-dns.com/dns-query";
 const DNS_TIMEOUT_MS = 8_000;
@@ -201,16 +203,17 @@ export async function checkSpf(hostname: string): Promise<ScanVulnerability[]> {
     }));
   }
 
-  // Check for too many DNS lookups (SPF 10-lookup limit)
-  const lookupKeywords = ["include:", "a:", "mx:", "redirect=", "exists:"];
-  const lookupCount = lookupKeywords.reduce((n, kw) => n + (spfRecord.split(kw).length - 1), 0);
-  if (lookupCount > 8) {
+  // RFC 7208 §4.6.4: PermError only when MORE than 10 lookups happen. Only the
+  // lookup mechanisms count (include, a, mx, ptr, exists, redirect); ip4/ip6 do not,
+  // and their hex or dots must never be mistaken for one.
+  const lookupCount = countSpfLookups(spfRecord);
+  if (lookupCount > 10) {
     vulns.push(vuln({
       name: "SPF Record Exceeds DNS Lookup Limit",
       severity: "low",
       category: "Email Security",
-      description: `The SPF record requires approximately ${lookupCount} DNS lookups, approaching or exceeding the RFC 7208 limit of 10. Records that exceed this limit result in a PermError, causing SPF to fail for all senders — meaning legitimate emails may be rejected or SPF protection silently disabled.`,
-      evidence: `TXT record: ${spfRecord}\nEstimated DNS lookups: ~${lookupCount}`,
+      description: `The SPF record contains at least ${lookupCount} DNS-lookup terms, more than the RFC 7208 limit of 10 (nested includes are not expanded, so the true count may be higher). Records that exceed this limit result in a PermError, causing SPF to fail for all senders — meaning legitimate emails may be rejected or SPF protection silently disabled.`,
+      evidence: `TXT record: ${spfRecord}\nDNS-lookup terms (include, a, mx, ptr, exists, redirect): ${lookupCount}`,
       solution: "Flatten your SPF record using a tool like dmarcian's SPF Surveyor. Replace nested includes with direct IP ranges using 'ip4:' and 'ip6:' mechanisms to reduce DNS lookups below 10.",
       cweId: "CWE-290",
     }));
@@ -252,8 +255,8 @@ export async function checkDmarc(hostname: string): Promise<ScanVulnerability[]>
   const vulns: ScanVulnerability[] = [];
 
   // Check policy strength
-  const policyMatch = /\bp=(\w+)/i.exec(dmarcRecord);
-  const policy = policyMatch?.[1]?.toLowerCase() ?? "none";
+  // A record read from a parent domain reaches this host through sp= when it has one.
+  const policy = effectiveDmarcPolicy(dmarcRecord, dmarc.at !== `_dmarc.${hostname}`);
 
   if (policy === "none") {
     vulns.push(vuln({
@@ -329,13 +332,15 @@ export async function checkDkim(hostname: string): Promise<ScanVulnerability[]> 
 
   if (!foundAny && anyQuerySucceeded) {
     return [vuln({
-      name: "No DKIM Records Found",
+      name: "No DKIM Records Found Under Common Selectors",
       severity: "low",
       category: "Email Security",
-      description: `No DKIM (DomainKeys Identified Mail) TXT records were found for ${hostname} under ${COMMON_DKIM_SELECTORS.length} commonly used selectors. DKIM adds a cryptographic signature to outgoing emails, allowing recipients to verify they weren't tampered with in transit. Without DKIM, your emails are more likely to be marked as spam and DMARC enforcement is weakened.`,
+      description: `No DKIM (DomainKeys Identified Mail) TXT records were found for ${hostname} under ${COMMON_DKIM_SELECTORS.length} commonly used selectors. DKIM selectors are arbitrary names chosen by the mail provider and cannot be listed from DNS, so this does not prove DKIM is absent: the domain may sign mail under a custom selector. If you do not sign outgoing mail with DKIM, it is more likely to be marked as spam and DMARC enforcement is weakened.`,
       evidence: `Checked selectors: ${COMMON_DKIM_SELECTORS.slice(0, 8).join(", ")}, and ${COMMON_DKIM_SELECTORS.length - 8} more — none returned a valid DKIM record.`,
       solution: "Enable DKIM signing in your email service provider (Google Workspace, Microsoft 365, SendGrid, Mailgun, etc.) and publish the provided TXT record under [selector]._domainkey.yourdomain.com. The exact steps depend on your mail provider.",
       cweId: "CWE-345",
+      // Selectors are guessed, so absence is weak evidence.
+      confidence: 40,
     })];
   }
 
@@ -452,8 +457,9 @@ export async function checkDnsSecurity(targetUrl: string): Promise<ScanVulnerabi
   //
   // DKIM cannot walk: a selector probe is a specific name, so it uses the most
   // general ancestor, which is the apex for every host this scanner sees.
-  const ancestors = ancestorDomains(hostname);
-  const emailDomain = ancestors[ancestors.length - 1] ?? hostname;
+  // ancestorDomains() ends at "co.uk" for www.example.co.uk, so use the
+  // registrable domain instead of the last ancestor.
+  const emailDomain = registrableDomain(hostname);
 
   // Run SPF and DMARC first so we can decide whether to suppress DKIM brute-force.
   const [spf, dmarc] = await Promise.allSettled([

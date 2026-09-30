@@ -90,7 +90,7 @@ export const CATALOG_HTTP: CatalogTest[] = [
     ["high", "Missing DMARC Record — No Email Authentication Enforcement", "Missing DMARC Record — No Email Authentication Enforcement"],
     ["medium", "DMARC Policy Set to None (Monitoring Only — No Enforcement)", "DMARC Policy Set to None (Monitoring Only — No Enforcement)"],
     ["info", "DMARC Record Missing Aggregate Report Address (rua=)", "DMARC Record Missing Aggregate Report Address (rua=)"],
-    ["low", "No DKIM Records Found", "No DKIM Records Found"],
+    ["low", "No DKIM Records Found Under Common Selectors", "No DKIM Records Found Under Common Selectors"],
     ["info", "DNSSEC Not Enabled", "DNSSEC Not Enabled", undefined, "DNS Security"],
   ]),
   test("mail transport security", "Mail Transport Security", "mailTls.ts", [

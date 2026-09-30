@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { checkSpf, checkDmarc, checkDkim, checkDnssec, COMMON_DKIM_SELECTORS } from "./dnsChecks.js";
+import { checkSpf, checkDmarc, checkDkim, checkDnssec, checkDnsSecurity, COMMON_DKIM_SELECTORS } from "./dnsChecks.js";
+import { registrableDomain } from "./registrableDomain.js";
+import { countSpfLookups } from "./emailAuthParse.js";
 
 /**
  * DNS check tests — stubs globalThis.fetch to simulate Cloudflare DoH responses.
@@ -93,14 +95,32 @@ describe("checkSpf — dangerous configurations", () => {
     expect(vulns.some((v) => v.severity === "medium" && v.name.includes("?all"))).toBe(true);
   });
 
-  it("flags SPF that exceeds 8 DNS lookups as low", async () => {
+  it("flags SPF that exceeds 10 DNS lookups as low", async () => {
     const manyIncludes =
       "v=spf1 " +
-      "include:a.com include:b.com include:c.com include:d.com include:e.com " +
-      "include:f.com include:g.com include:h.com include:i.com -all";
+      Array.from({ length: 11 }, (_, i) => `include:s${i}.example.net`).join(" ") +
+      " -all";
     vi.mocked(fetch).mockResolvedValueOnce(dohResponse([{ data: manyIncludes }]));
     const vulns = await checkSpf("example.com");
-    expect(vulns.some((v) => /lookup limit/i.test(v.name))).toBe(true);
+    const v = vulns.find((x) => /lookup limit/i.test(x.name));
+    expect(v).toBeDefined();
+    expect(v!.evidence).toMatch(/: 11/);
+  });
+
+  it("does not say the limit is exceeded at 9 lookups", async () => {
+    const nine = "v=spf1 " + Array.from({ length: 9 }, (_, i) => `include:s${i}.example.net`).join(" ") + " -all";
+    vi.mocked(fetch).mockResolvedValueOnce(dohResponse([{ data: nine }]));
+    expect((await checkSpf("example.com")).some((v) => /lookup limit/i.test(v.name))).toBe(false);
+  });
+
+  it("does not count 'a:' inside ip6 ranges (a flattened record with 1 include)", async () => {
+    const flattened =
+      "v=spf1 include:_spf.example.net " +
+      Array.from({ length: 8 }, (_, i) => `ip6:2a03:2880:f10${i}a:83::/64`).join(" ") +
+      " ip4:192.0.2.0/24 -all";
+    expect(countSpfLookups(flattened)).toBe(1);
+    vi.mocked(fetch).mockResolvedValueOnce(dohResponse([{ data: flattened }]));
+    expect(await checkSpf("example.com")).toEqual([]);
   });
 
   it("returns no vulns for a well-formed SPF record with -all", async () => {
@@ -328,5 +348,66 @@ describe("DNSSEC is checked at the zone apex", () => {
     expect(vulns).toHaveLength(1);
     expect(vulns[0]!.name).toMatch(/DNSSEC/i);
     expect(vulns[0]!.evidence).toMatch(/example\.com/);
+  });
+});
+
+describe("SPF lookup counting", () => {
+  it("counts whole lookup terms only", () => {
+    expect(countSpfLookups("v=spf1 a mx:mail.example.com include:x.net ~a:foo.example redirect=_spf.example.com")).toBe(5);
+    expect(countSpfLookups("v=spf1 ip4:1.2.3.4 ip6:fe80::a:1 -all")).toBe(0);
+  });
+});
+
+describe("registrableDomain", () => {
+  it("keeps the organisation label under common multi-label suffixes", () => {
+    expect(registrableDomain("www.example.co.uk")).toBe("example.co.uk");
+    expect(registrableDomain("a.b.example.com.au")).toBe("example.com.au");
+    expect(registrableDomain("shop.example.co.jp")).toBe("example.co.jp");
+    expect(registrableDomain("www.example.com")).toBe("example.com");
+    expect(registrableDomain("example.com")).toBe("example.com");
+  });
+});
+
+describe("DKIM is asked about the registrable domain", () => {
+  it("probes selectors under example.co.uk, not co.uk, for www.example.co.uk", async () => {
+    const urls: string[] = [];
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes("_dmarc.")) return dohResponse([{ data: "v=DMARC1; p=none" }]);
+      return noTxt();
+    });
+    const vulns = await checkDnsSecurity("https://www.example.co.uk/");
+    const dkimUrls = urls.filter((u) => u.includes("_domainkey."));
+    expect(dkimUrls.length).toBeGreaterThan(0);
+    expect(dkimUrls.every((u) => u.includes("_domainkey.example.co.uk"))).toBe(true);
+    const dkim = vulns.find((v) => /DKIM/.test(v.name));
+    expect(dkim?.description).toMatch(/for example\.co\.uk/);
+  });
+
+  it("hedges a no-DKIM result: guessed selectors are weak evidence", async () => {
+    vi.mocked(fetch).mockImplementation(async () => noTxt());
+    const [v] = await checkDkim("example.com");
+    expect(v!.name).toMatch(/common selectors/i);
+    expect(v!.description).toMatch(/custom selector/i);
+    expect(v!.confidence).toBeLessThan(60);
+  });
+});
+
+describe("DMARC sp= on an inherited record", () => {
+  const record = "v=DMARC1; p=none; sp=reject; rua=mailto:r@example.com";
+  const mock = () =>
+    vi.mocked(fetch).mockImplementation(async (input) =>
+      String(input).includes("name=_dmarc.example.com") ? dohResponse([{ data: record }]) : noTxt());
+
+  it("does not report p=none for a subdomain that inherits sp=reject", async () => {
+    mock();
+    expect(await checkDmarc("app.example.com")).toEqual([]);
+  });
+
+  it("still reports p=none for the domain that publishes the record", async () => {
+    mock();
+    const vulns = await checkDmarc("example.com");
+    expect(vulns.some((v) => /policy set to none/i.test(v.name))).toBe(true);
   });
 });
