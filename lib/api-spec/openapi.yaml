@@ -969,6 +969,13 @@ components:
             and as an anonymous visitor, and reports when the second account is
             served the first account's data. Use two ordinary accounts that own
             different data, not an admin and a user.
+        githubRepoUrl:
+          type: string
+          description: >-
+            A public GitHub repository to read for committed secrets, as
+            `https://github.com/owner/repo` (or `owner/repo`). Only public
+            repositories are read, with no token, and only GitHub is contacted
+            for it, never the scan target. Leave it out to skip the source scan.
 
     ScanCredentials:
       type: object

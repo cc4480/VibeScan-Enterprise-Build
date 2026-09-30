@@ -52,6 +52,10 @@ export const scansTable = pgTable("scans", {
   // credentials — automated sign-in is a different legal posture from an
   // unauthenticated header check, and the claim should outlive the credentials.
   credentialsAuthorizedAt: timestamp("credentials_authorized_at", { withTimezone: true }),
+  // A public GitHub repository the requester asked us to read for secrets, stored as the
+  // normalised https://github.com/owner/repo URL. Not a secret (the repository is public),
+  // so unlike the credentials it stays after the scan and the report can say what was read.
+  githubRepoUrl: text("github_repo_url"),
 }, (table) => [
   index("idx_scans_user_id").on(table.userId),
   index("idx_scans_status").on(table.status),

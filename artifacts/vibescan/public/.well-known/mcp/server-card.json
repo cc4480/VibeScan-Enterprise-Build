@@ -22,7 +22,7 @@
     {
       "name": "scan_url",
       "title": "Scan a website",
-      "description": "Start a SecScan security scan of a web application the user owns or is authorised to test. Returns a scan_id; most scans finish in under a minute — then call get_scan_status with wait_seconds, or get_report. Active tests (injection, XSS, SSRF…) run only on domains the user has verified; others get passive checks. Each scan uses one of the user's free scans, plan scans or credits.",
+      "description": "Start a SecScan security scan of a web application the user owns or is authorised to test. Returns a scan_id; most scans finish in under a minute — then call get_scan_status with wait_seconds, or get_report. Active tests (injection, XSS, SSRF…) run only on domains the user has verified; others get passive checks. Optionally also reads a public GitHub repository for committed secrets (github_repo); that only contacts GitHub, never the site. Each scan uses one of the user's free scans, plan scans or credits.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -31,6 +31,11 @@
             "minLength": 1,
             "maxLength": 2048,
             "description": "The URL to scan, e.g. https://example.com"
+          },
+          "github_repo": {
+            "type": "string",
+            "maxLength": 300,
+            "description": "Optional public GitHub repository to check for committed secrets, e.g. https://github.com/owner/repo. Public repositories only."
           }
         },
         "required": [

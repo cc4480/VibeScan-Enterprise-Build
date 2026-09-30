@@ -32,7 +32,7 @@ export const API_V1_SPEC = {
         description: "Spends one of your free scans, plan scans or credits, exactly as the website does.",
         requestBody: {
           required: true,
-          content: { "application/json": { schema: { type: "object", required: ["url"], properties: { url: { type: "string", example: "https://staging.example.com" } } } } },
+          content: { "application/json": { schema: { type: "object", required: ["url"], properties: { url: { type: "string", example: "https://staging.example.com" }, githubRepo: { type: "string", description: "Optional. A public GitHub repository to also read for committed secrets, e.g. https://github.com/owner/repo. Only GitHub is contacted for it, never the scanned site.", example: "https://github.com/owner/repo" } } } } },
         },
         responses: {
           "202": { description: "Queued. Poll GET /scans/{id}, or pass ?wait=60 there." },

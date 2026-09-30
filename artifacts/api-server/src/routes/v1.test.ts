@@ -11,6 +11,7 @@ const state = {
   reports: {} as Record<string, { id: string; targetUrl: string; scannedAt: Date; data: unknown }>,
   launch: { status: 201, body: { scanId: SCAN_ID, paidWith: "free" } as Record<string, unknown> },
   scopeAsked: [] as string[],
+  launched: [] as { url: string; githubRepo?: string }[],
 };
 
 vi.mock("../lib/apiTokens", () => ({
@@ -24,7 +25,10 @@ vi.mock("../lib/apiTokens", () => ({
 
 vi.mock("./appRouteRunner", () => ({
   UUID: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-  launchScan: async () => state.launch,
+  launchScan: async (_req: unknown, _user: unknown, url: string, githubRepo?: string) => {
+    state.launched.push({ url, githubRepo });
+    return state.launch;
+  },
   // Scoped to the caller, like the real one: another user's scan is simply not found.
   ownScan: async (userId: string, id: string) => (userId === "u1" ? (state.scans[id] ?? null) : null),
   reportForScan: async (_userId: string, id: string) => state.reports[id] ?? null,
@@ -118,6 +122,16 @@ describe("POST /v1/scans", () => {
     expect(res.status).toBe(202);
     const body = await res.json();
     expect(body).toMatchObject({ id: SCAN_ID, status: "queued", paidWith: "free" });
+  });
+
+  it("hands an optional GitHub repository to the launcher, and sends none when it is absent", async () => {
+    state.launched.length = 0;
+    await post("/v1/scans", { url: "https://a.example", githubRepo: "https://github.com/acme/shop" });
+    await post("/v1/scans", { url: "https://b.example" });
+    expect(state.launched).toEqual([
+      { url: "https://a.example", githubRepo: "https://github.com/acme/shop" },
+      { url: "https://b.example", githubRepo: undefined },
+    ]);
   });
 
   it("rejects a body without a url", async () => {

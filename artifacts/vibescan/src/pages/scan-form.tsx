@@ -12,6 +12,7 @@ import {
   type SecondAccountValue,
 } from "@/components/scan-credentials-fields";
 import { secondCredentialsPayload } from "@/components/second-account";
+import { GithubRepoField, looksLikeGithubRepo } from "@/components/github-repo-field";
 import { Shield, Zap, Globe, Lock, CheckCircle2, Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -254,6 +255,7 @@ export default function ScanFormPage() {
   const [url, setUrl] = useState("");
   const [credentials, setCredentials] = useState<ScanCredentialsValue>(emptyCredentials);
   const [secondAccount, setSecondAccount] = useState<SecondAccountValue>(emptySecondAccount);
+  const [githubRepo, setGithubRepo] = useState("");
   const [, setLocation] = useLocation();
 
   const createScan = useCreateScan();
@@ -298,6 +300,7 @@ export default function ScanFormPage() {
           targetUrl,
           ...(creds ? { credentials: creds } : {}),
           ...(secondCreds ? { secondaryCredentials: secondCreds } : {}),
+          ...(githubRepo.trim() ? { githubRepoUrl: githubRepo.trim() } : {}),
         },
       },
       {
@@ -387,6 +390,8 @@ export default function ScanFormPage() {
             </p>
           </div>
 
+          <GithubRepoField value={githubRepo} onChange={setGithubRepo} />
+
           <ScanCredentialsFields
             value={credentials}
             onChange={setCredentials}
@@ -398,7 +403,7 @@ export default function ScanFormPage() {
           <div className="pt-6 border-t border-white/5 flex flex-col items-center gap-4">
             <button
               type="submit"
-              disabled={createScan.isPending || !url.trim()}
+              disabled={createScan.isPending || !url.trim() || !looksLikeGithubRepo(githubRepo)}
               className="w-full sm:w-auto min-w-[260px] px-8 py-4 bg-primary text-primary-foreground text-lg font-bold rounded-xl shadow-[0_0_30px_rgba(20,184,120,0.25)] hover:shadow-[0_0_40px_rgba(20,184,120,0.4)] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 flex items-center justify-center gap-2"
             >
               {createScan.isPending ? (

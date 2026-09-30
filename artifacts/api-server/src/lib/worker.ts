@@ -216,6 +216,7 @@ export async function processScanJob(job: ScanJob): Promise<void> {
       .select({
         blob: scansTable.credentialsEncrypted,
         secondBlob: scansTable.secondaryCredentialsEncrypted,
+        githubRepoUrl: scansTable.githubRepoUrl,
       })
       .from(scansTable)
       .where(eq(scansTable.id, scanId));
@@ -272,6 +273,9 @@ export async function processScanJob(job: ScanJob): Promise<void> {
         // callbacks correlate back to this scan.
         scanId,
         live.add,
+        // A public repository the requester named, read for committed secrets. Null for
+        // scans that did not ask for one, including every monitor rescan.
+        scanRow?.githubRepoUrl ? { githubRepoUrl: scanRow.githubRepoUrl } : undefined,
       ),
       scanTimeout,
     ]);

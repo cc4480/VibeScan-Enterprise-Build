@@ -6,6 +6,7 @@ import {
   ListScansResponseItem,
   GetScanStatusResponse,
 } from "@workspace/api-zod";
+import { normaliseGithubRepoInput } from "../lib/githubRepoInput";
 import { enqueueScan } from "../lib/queue";
 import { validateCredentials, encryptCredentials } from "../lib/scanCredentials";
 import { checkScanTarget } from "../lib/ssrfGuard";
@@ -156,6 +157,14 @@ export async function createScanHandler(req: Request, res: Response): Promise<vo
   }
 
   const { targetUrl, credentials, secondaryCredentials } = parsed.data;
+
+  // Checked before anything is charged: a mistyped repository should be a plain 400, not a refund.
+  const repoInput = normaliseGithubRepoInput(parsed.data.githubRepoUrl);
+  if (!repoInput.ok) {
+    res.status(400).json({ error: repoInput.error });
+    return;
+  }
+  const githubRepoUrl = repoInput.url;
 
   // Free scans first, then paid credits. Spending a credit while free scans
   // remain would charge someone for something they already had.
@@ -329,6 +338,7 @@ export async function createScanHandler(req: Request, res: Response): Promise<vo
       credentialsEncrypted,
       secondaryCredentialsEncrypted,
       credentialsAuthorizedAt,
+      githubRepoUrl,
       // Recorded so a scan that fails later is refunded to the same place.
       paidWith,
     })

@@ -80,7 +80,7 @@ async function authenticate(req: Request, res: Response, next: NextFunction): Pr
   next();
 }
 
-const ScanBody = z.object({ url: z.string().trim().min(1).max(2048) });
+const ScanBody = z.object({ url: z.string().trim().min(1).max(2048), githubRepo: z.string().max(300).optional() });
 
 // The spec is public: it describes the API and names no one's data.
 router.get("/v1/openapi.json", (_req, res) => {
@@ -99,7 +99,7 @@ router.post("/v1/scans", authenticate, async (req, res): Promise<void> => {
     return;
   }
   const user = (req as Authed).apiUser;
-  const result = await launchScan(req, user, parsed.data.url);
+  const result = await launchScan(req, user, parsed.data.url, parsed.data.githubRepo);
   if (result.status >= 400 || !result.body?.scanId) {
     fail(res, result.status >= 400 ? result.status : 502, codeFor(result.status), String(result.body?.error ?? "The scan could not be started."));
     return;

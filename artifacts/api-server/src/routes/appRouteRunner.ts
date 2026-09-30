@@ -19,13 +19,18 @@ export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
  * Run the website's scan-launch handler for this user and capture its answer.
  * Only the fields that handler reads are supplied (see createScanHandler).
  */
-export async function launchScan(httpReq: Request, user: TokenUser, url: string): Promise<{ status: number; body: any }> {
+export async function launchScan(
+  httpReq: Request,
+  user: TokenUser,
+  url: string,
+  githubRepo?: string,
+): Promise<{ status: number; body: any }> {
   // A request-shaped object carrying the token's user and the REAL client
   // address, so the per-user and per-network limits count against the same
   // buckets as the website — an editor gets no extra allowance.
   const asUser = Object.assign(Object.create(httpReq), {
     user,
-    body: { targetUrl: url },
+    body: { targetUrl: url, ...(githubRepo ? { githubRepoUrl: githubRepo } : {}) },
     isAuthenticated: () => true,
   }) as Request;
 
