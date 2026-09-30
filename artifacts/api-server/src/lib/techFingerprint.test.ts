@@ -83,11 +83,11 @@ describe("detectTechnologies — HTML: AI-builder / BaaS platforms", () => {
   it("detects Lovable from lovable.dev script", () =>
     expect(detectTechnologies({}, `<script src="https://lovable.dev/client.js"></script>`)).toContain("Lovable"));
   it("detects Bolt.new from stackblitz.io reference", () =>
-    expect(detectTechnologies({}, `<meta content="https://stackblitz.io/embed"/>`)).toContain("Bolt.new"));
+    expect(detectTechnologies({}, `<script src="https://stackblitz.io/embed.js"></script>`)).toContain("Bolt.new"));
   it("detects Supabase from supabase.co URL", () =>
-    expect(detectTechnologies({}, `const url = 'https://abc.supabase.co'`)).toContain("Supabase"));
+    expect(detectTechnologies({}, `<script>const url = 'https://abc.supabase.co'</script>`)).toContain("Supabase"));
   it("detects Firebase from firebaseConfig", () =>
-    expect(detectTechnologies({}, `const firebaseConfig = { apiKey: "abc" }`)).toContain("Firebase"));
+    expect(detectTechnologies({}, `<script>const firebaseConfig = { apiKey: "abc" }</script>`)).toContain("Firebase"));
 });
 
 describe("detectTechnologies — HTML: JS frameworks", () => {
@@ -100,7 +100,7 @@ describe("detectTechnologies — HTML: JS frameworks", () => {
   it("detects Angular from ng-version", () =>
     expect(detectTechnologies({}, `<app-root ng-version="17.0.0"></app-root>`)).toContain("Angular"));
   it("detects Svelte from SvelteKit marker", () =>
-    expect(detectTechnologies({}, `<!-- SvelteKit -->`)).toContain("Svelte"));
+    expect(detectTechnologies({}, `<body data-sveltekit-preload-data="hover">`)).toContain("Svelte"));
   it("detects Remix from __remixContext", () =>
     expect(detectTechnologies({}, `window.__remixContext = {}`)).toContain("Remix"));
   it("detects Astro from astro-island", () =>
@@ -113,11 +113,11 @@ describe("detectTechnologies — HTML: analytics", () => {
   it("detects Google Analytics from gtag(", () =>
     expect(detectTechnologies({}, `gtag('config', 'G-ABC')`)).toContain("Google Analytics"));
   it("detects Sentry from Sentry.init", () =>
-    expect(detectTechnologies({}, `Sentry.init({ dsn: "https://abc@sentry.io" })`)).toContain("Sentry"));
+    expect(detectTechnologies({}, `<script>Sentry.init({ dsn: "https://abc@sentry.io" })</script>`)).toContain("Sentry"));
   it("detects Stripe from js.stripe.com", () =>
     expect(detectTechnologies({}, `<script src="https://js.stripe.com/v3/"></script>`)).toContain("Stripe"));
   it("detects Intercom from intercomSettings", () =>
-    expect(detectTechnologies({}, `window.intercomSettings = { app_id: "abc" }`)).toContain("Intercom"));
+    expect(detectTechnologies({}, `<script>window.intercomSettings = { app_id: "abc" }</script>`)).toContain("Intercom"));
 });
 
 describe("detectTechnologies — HTML: Ruby on Rails", () => {

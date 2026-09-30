@@ -7,6 +7,8 @@
  * orchestration and vulnerability analysis.
  */
 
+import { assetUrls, scriptText, generators, loadsFromHost } from "./techEvidence.js";
+
 function headerVal(headers: Record<string, string>, name: string): string | undefined {
   const lower = name.toLowerCase();
   const key = Object.keys(headers).find((k) => k.toLowerCase() === lower);
@@ -44,7 +46,8 @@ export function detectTechnologies(headers: Record<string, string>, html: string
   // ── Server header ────────────────────────────────────────────────────
   const server = headerVal(headers, "server") ?? "";
   if (/nginx/i.test(server))                      techs.add("Nginx");
-  if (/apache/i.test(server))                     techs.add("Apache");
+  // Apache-Coyote is Tomcat's connector banner, not the Apache httpd.
+  if (/apache(?!-coyote)/i.test(server))          techs.add("Apache");
   if (/microsoft-iis/i.test(server))              techs.add("IIS");
   if (/cloudflare/i.test(server))                 techs.add("Cloudflare");
   if (/vercel/i.test(server))                     techs.add("Vercel");
@@ -53,7 +56,9 @@ export function detectTechnologies(headers: Record<string, string>, html: string
   if (/openresty/i.test(server))                  techs.add("OpenResty");
   if (/caddy/i.test(server))                      techs.add("Caddy");
   if (/gunicorn/i.test(server))                   techs.add("Gunicorn");
-  if (/unicorn/i.test(server))                    techs.add("Unicorn");
+  // \b: "gunicorn" contains "unicorn" but is not the Unicorn server.
+  if (/\bunicorn\b/i.test(server))                techs.add("Unicorn");
+  if (/\b(?:cpython|python|werkzeug|wsgiserver|uvicorn|hypercorn)\b/i.test(server)) techs.add("Python");
   if (/cowboy/i.test(server))                     techs.add("Cowboy");
   if (/kestrel/i.test(server))                    techs.add("Kestrel (.NET)");
   if (/gfe|google frontend/i.test(server))        techs.add("Google Cloud / GFE");
@@ -80,7 +85,9 @@ export function detectTechnologies(headers: Record<string, string>, html: string
   if (headerVal(headers, "fly-request-id"))       techs.add("Fly.io");
   if (headerVal(headers, "x-railway-request-id")) techs.add("Railway");
   if (headerVal(headers, "x-render-origin-server")) techs.add("Render");
-  if (headerVal(headers, "x-served-by"))          techs.add("Fastly");
+  // x-served-by is set by any Varnish stack; only Fastly's POP-id shape
+  // (cache-<pop><n>-<IATA>) identifies Fastly.
+  if (/^cache-[a-z0-9]+-[A-Za-z]{3}/i.test(headerVal(headers, "x-served-by") ?? "")) techs.add("Fastly");
   if (headerVal(headers, "x-cache")) {
     const xc = headerVal(headers, "x-cache") ?? "";
     if (/cloudfront/i.test(xc))                   techs.add("AWS CloudFront");
@@ -122,31 +129,51 @@ export function detectTechnologies(headers: Record<string, string>, html: string
   if (/ASP\.NET_SessionId/i.test(setCookie))      techs.add("ASP.NET");
   if (/JSESSIONID/i.test(setCookie))              techs.add("Java / Servlet");
   if (/laravel_session/i.test(setCookie))         techs.add("Laravel");
-  if (/csrftoken|sessionid/i.test(setCookie))     techs.add("Django");
+  // csrftoken only: `sessionid` is a generic session-cookie name many stacks use.
+  if (/(?:^|[\s,;])csrftoken=/i.test(setCookie))   techs.add("Django");
   if (/rack\.session/i.test(setCookie))           techs.add("Ruby on Rails");
   if (/shopify/i.test(setCookie))                 techs.add("Shopify");
   if (/__stripe/i.test(setCookie))                techs.add("Stripe");
 
   // ── HTML-based detection (first 80KB) ───────────────────────────────
+  //
+  // Evidence must be structural (see techEvidence.ts): an asset the page loads,
+  // a `<meta name="generator">`, or a global used in executable script content.
+  // A bare mention or an `<a href>` to a vendor's site is prose, not evidence —
+  // a blog linking to shopify.com does not run on Shopify, and the CVE monitor
+  // matches these names against advisories.
   const s = html.slice(0, 80_000);
+  const assets = assetUrls(s);
+  const js = scriptText(s);
+  const gens = generators(s);
+  const generatedBy = (re: RegExp) => gens.some((g) => re.test(g));
+  const assetPath = (re: RegExp) => assets.some((u) => re.test(u));
 
   // CMS platforms
-  if (/<meta[^>]*generator[^>]*wordpress/i.test(s) || /wp-content|wp-includes|wpemoji/i.test(s))  techs.add("WordPress");
-  if (/<meta[^>]*generator[^>]*drupal/i.test(s) || /drupal\.settings|Drupal\.behaviors/i.test(s)) techs.add("Drupal");
-  if (/<meta[^>]*generator[^>]*joomla/i.test(s) || /\/media\/jui\//i.test(s))                     techs.add("Joomla");
-  if (/<meta[^>]*generator[^>]*ghost/i.test(s) || /ghost\.org|content="Ghost/i.test(s))           techs.add("Ghost");
-  if (/shopify\.com|cdn\.shopify\.com|Shopify\.theme/i.test(s))                                   techs.add("Shopify");
-  if (/squarespace\.com|squarespace-cdn|data-squarespace/i.test(s))                               techs.add("Squarespace");
-  if (/wix\.com|static\.wixstatic|wixsite\.com/i.test(s))                                         techs.add("Wix");
-  if (/webflow\.com|uploads-ssl\.webflow/i.test(s))                                               techs.add("Webflow");
+  if (generatedBy(/wordpress/i) || /wp-content|wp-includes|wpemoji/i.test(s))                     techs.add("WordPress");
+  if (generatedBy(/drupal/i) || /drupal\.settings|Drupal\.behaviors/i.test(js))                   techs.add("Drupal");
+  if (generatedBy(/joomla/i) || /\/media\/jui\//i.test(s))                                        techs.add("Joomla");
+  if (generatedBy(/ghost/i))                                                                      techs.add("Ghost");
+  if (loadsFromHost(assets, "cdn.shopify.com", "shopifycdn.com") || /Shopify\.theme/.test(js))    techs.add("Shopify");
+  if (loadsFromHost(assets, "squarespace-cdn.com", "static1.squarespace.com") || /\sdata-squarespace/i.test(s) || generatedBy(/squarespace/i)) techs.add("Squarespace");
+  if (loadsFromHost(assets, "wixstatic.com", "parastorage.com") || generatedBy(/^wix\.com/i))     techs.add("Wix");
+  if (loadsFromHost(assets, "uploads-ssl.webflow.com", "website-files.com") || /\sdata-wf-(?:site|page)=/i.test(s) || generatedBy(/webflow/i)) techs.add("Webflow");
 
-  // AI-builder / vibe-coding platforms
-  if (/(?:src|href|content)=["'][^"']*(?:lovable\.(?:app|dev)|gptengineer\.app)|https?:\/\/[^"'\s]*lovable\.(?:app|dev)/i.test(s))  techs.add("Lovable");
-  if (/(?:src|href|content)=["'][^"']*(?:bolt\.new|stackblitz\.io|webcontainer\.io)|https?:\/\/[^"'\s]*(?:bolt\.new|stackblitz\.io)/i.test(s)) techs.add("Bolt.new");
+  // AI-builder / vibe-coding platforms. og:image is honoured for Lovable only: its
+  // template ships an `og:image` on lovable.dev that sites rarely change. Any
+  // other meta `content=` (SEO keywords, descriptions) is prose.
+  const ogImages = [...s.matchAll(/<meta\b[^>]*\b(?:property|name)=["'](?:og|twitter):image["'][^>]*>/gi)]
+    .map((m) => /\bcontent=["']([^"']*)/i.exec(m[0])?.[1] ?? "");
+  if (loadsFromHost([...assets, ...ogImages], "lovable.app", "lovable.dev", "gptengineer.app"))   techs.add("Lovable");
+  if (loadsFromHost(assets, "bolt.new", "stackblitz.io", "webcontainer.io"))                       techs.add("Bolt.new");
 
   // Backend-as-a-Service platforms (informational, used for agent fix routing)
-  if (/supabase\.co|supabase\.in|createClient.*supabase|SUPABASE_URL/i.test(s))                   techs.add("Supabase");
-  if (/firebase\.google\.com|firebaseapp\.com|initializeApp|firebaseConfig/i.test(s))             techs.add("Firebase");
+  if (loadsFromHost(assets, "supabase.co", "supabase.in") || /supabase\.(?:co|in)|createClient.*supabase|SUPABASE_URL/i.test(js)) techs.add("Supabase");
+  if (
+    loadsFromHost(assets, "firebaseapp.com") ||
+    assetPath(/gstatic\.com\/firebasejs/i) ||
+    /firebaseConfig|firebaseapp\.com|firebase\.initializeApp|from\s+["']firebase\//i.test(js)
+  ) techs.add("Firebase");
 
   // JS frameworks
   // Next.js: structural markers only. Matching the bare token `__NEXT_DATA__`
@@ -159,22 +186,24 @@ export function detectTechnologies(headers: Record<string, string>, html: string
     /__NEXT_DATA__\s*=/.test(s) ||
     /next\/dist/i.test(s)
   ) techs.add("Next.js");
-  if (/__nuxt__|nuxt\.js|_nuxt\//i.test(s))                                                       techs.add("Nuxt.js");
-  if (/gatsby|___gatsby|__GATSBY/i.test(s))                                                       techs.add("Gatsby");
-  if (/data-reactroot|ReactDOM|react\.development|react\.production|__react_/i.test(s))           techs.add("React");
-  if (/__vue_app__|data-v-[a-f0-9]{8}|Vue\.version|vue\.min\.js/i.test(s))                        techs.add("Vue.js");
+  if (assetPath(/\/_nuxt\//i) || /\sid=["']__nuxt["']/i.test(s) || /__nuxt__|__NUXT__/i.test(js))   techs.add("Nuxt.js");
+  if (/\sid=["']___gatsby["']/i.test(s) || /___gatsby|__GATSBY/i.test(js) || generatedBy(/^gatsby/i)) techs.add("Gatsby");
+  if (/\sdata-reactroot\b/i.test(s) || /ReactDOM|__react(?:Fiber|Container|Props)/.test(js) || assetPath(/react(?:-dom)?\.(?:development|production)/i)) techs.add("React");
+  if (/__vue_app__/i.test(s) || /\sdata-v-[a-f0-9]{8}[\s=>]/.test(s) || /Vue\.version/.test(js) || assetPath(/vue(?:\.runtime)?(?:\.global)?\.(?:min\.)?js/i)) techs.add("Vue.js");
   if (/ng-version|ng-app|angular\.js|angular\.min\.js|platformBrowserDynamic/i.test(s))           techs.add("Angular");
-  if (/svelte-[a-z0-9]+|__svelte|SvelteKit/i.test(s))                                             techs.add("Svelte");
+  // Svelte's scoped-CSS hash always carries a digit (`svelte-1abc2de`); a bare
+  // `svelte-check` / `svelte-preprocess` is the tooling's name, not a class.
+  if (/\bclass=["'][^"']*\bsvelte-(?=[a-z]*\d)[a-z0-9]{4,8}\b/i.test(s) || /__svelte|data-sveltekit-/i.test(s)) techs.add("Svelte");
   if (/__remixContext|remix-manifest/i.test(s))                                                    techs.add("Remix");
   // Astro emits island markers only where a component hydrates, so a fully
   // static Astro site carries neither. Key on the generator meta the official
   // template ships. A site that strips it is simply not detected — which is the
   // right outcome: reporting nothing beats reporting the wrong framework.
-  if (/astro-island|astro-root/i.test(s) || /<meta[^>]*generator[^>]*content=["']Astro/i.test(s)) {
+  if (/astro-island|astro-root/i.test(s) || generatedBy(/^Astro/i)) {
     techs.add("Astro");
   }
-  if (/data-ember-|emberjs|Ember\.VERSION/i.test(s))                                              techs.add("Ember.js");
-  if (/backbone\.js|Backbone\.View/i.test(s))                                                     techs.add("Backbone.js");
+  if (/\sdata-ember-/i.test(s) || /Ember\.VERSION|EmberENV/.test(js) || assetPath(/\/ember(?:[.-][\w.-]*)?\.js/i)) techs.add("Ember.js");
+  if (/Backbone\.View/.test(js) || assetPath(/\/backbone(?:[.-][\w.-]*)?\.js/i))                   techs.add("Backbone.js");
 
   // CSS frameworks
   //
@@ -205,22 +234,28 @@ export function detectTechnologies(headers: Record<string, string>, html: string
   // Analytics & tracking
   if (/google-analytics\.com|gtag\(|ga\.js|GoogleAnalyticsObject/i.test(s))                      techs.add("Google Analytics");
   if (/googletagmanager\.com\/gtm/i.test(s))                                                      techs.add("Google Tag Manager");
-  if (/plausible\.io|data-domain/i.test(s) && /plausible/i.test(s))                              techs.add("Plausible Analytics");
-  if (/mixpanel\.com|mixpanel\.init/i.test(s))                                                    techs.add("Mixpanel");
-  if (/segment\.com|analytics\.load|analytics\.page/i.test(s))                                   techs.add("Segment");
-  if (/hotjar\.com|hjid/i.test(s))                                                                techs.add("Hotjar");
-  if (/intercom\.io|intercomSettings/i.test(s))                                                   techs.add("Intercom");
-  if (/js\.stripe\.com|Stripe\(/i.test(s))                                                        techs.add("Stripe");
-  if (/sentry\.io|Sentry\.init/i.test(s))                                                         techs.add("Sentry");
+  // A vendor link or mention is not a vendor script: require the script it
+  // serves (or its init call in executable content), never `<a href>` or prose.
+  if (loadsFromHost(assets, "plausible.io") || /<script\b[^>]*\bdata-domain=[^>]*plausible|<script\b[^>]*plausible[^>]*\bdata-domain=/i.test(s)) techs.add("Plausible Analytics");
+  if (loadsFromHost(assets, "mixpanel.com", "mxpnl.com") || /mixpanel\.init/.test(js))            techs.add("Mixpanel");
+  if (loadsFromHost(assets, "segment.com", "segment.io") || /analytics\.load\(|analytics\.page\(/.test(js)) techs.add("Segment");
+  if (loadsFromHost(assets, "hotjar.com") || /\bhjid\b|static\.hotjar\.com/.test(js))            techs.add("Hotjar");
+  if (loadsFromHost(assets, "intercom.io", "intercomcdn.com") || /intercomSettings/.test(js))     techs.add("Intercom");
+  if (loadsFromHost(assets, "js.stripe.com") || /\bStripe\(/.test(js))                            techs.add("Stripe");
+  if (loadsFromHost(assets, "sentry.io", "sentry-cdn.com") || /Sentry\.init\(|ingest\.sentry\.io/.test(js)) techs.add("Sentry");
 
   // Static site generators (meta generator tag)
-  if (/<meta[^>]*generator[^>]*hugo/i.test(s))                                                    techs.add("Hugo");
-  if (/<meta[^>]*generator[^>]*jekyll/i.test(s))                                                  techs.add("Jekyll");
-  if (/<meta[^>]*generator[^>]*eleventy/i.test(s))                                                techs.add("Eleventy");
-  if (/<meta[^>]*generator[^>]*hexo/i.test(s))                                                    techs.add("Hexo");
+  if (generatedBy(/hugo/i))                                                                       techs.add("Hugo");
+  if (generatedBy(/jekyll/i))                                                                     techs.add("Jekyll");
+  if (generatedBy(/eleventy/i))                                                                   techs.add("Eleventy");
+  if (generatedBy(/hexo/i))                                                                       techs.add("Hexo");
 
-  // Language indicators from error messages / comments
-  if (/python|django|flask|fastapi/i.test(s) && techs.size === 0)                                 techs.add("Python");
+  // Language indicators. The old fallback matched the words python|flask|
+  // fastapi|django anywhere on an otherwise-unrecognised page, so a tutorial
+  // about Python was reported as running it. Match what a Python stack emits: a
+  // traceback, the Werkzeug/Django debug pages, and Django's CSRF form field.
+  if (/Traceback \(most recent call last\)|You're seeing this error because you have <code>DEBUG = True|Werkzeug Debugger/.test(s)) techs.add("Python");
+  if (/name=["']csrfmiddlewaretoken["']/i.test(s))                                                techs.add("Django");
   // Rails: match structural markers only. The old `rack` substring matched
   // "tracking" (Tailwind's tracking-* utilities), "bracket", "crack", etc. —
   // firing on nearly every styled page. Use Rails-specific signals instead:
