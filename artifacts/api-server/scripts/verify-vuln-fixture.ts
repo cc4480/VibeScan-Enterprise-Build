@@ -51,7 +51,7 @@ const EXPECTED: Array<{ module: string; label: string; match: RegExp }> = [
   //   - "Rate Limiting Not Advertised in Response Headers" (the header
   //     heuristic) is deliberately dropped by scanner.ts whenever the
   //     behavioural burst test in apiProbe.ts also fired — which it does here
-  //     ("API Endpoints Without Rate Limiting" below) — so seeing the
+  //     ("No Rate Limiting Observed on Sensitive API Endpoints" below) — so seeing the
   //     stronger finding and not the weaker one is the dedup working.
   { module: "cveCheck.ts", label: "Nginx EOL/CVE", match: /Nginx.*(?:CVE|End-of-Life)/i },
   { module: "cveCheck.ts", label: "PHP EOL", match: /PHP .* is End-of-Life/i },

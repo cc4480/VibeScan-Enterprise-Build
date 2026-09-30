@@ -18,6 +18,65 @@ DATABASE_URL=postgres://localhost/anything \
 `DATABASE_URL` only has to be *set* — the scanner module imports the db layer at
 load time. It is never read by a passive scan.
 
+## 2026-09-30 — code review of every probe family, and the fixes
+
+Not a live sweep. Six reviewers each took a family of checks (new acting probes, passive
+checks, active probes) and fed the real functions realistic BENIGN responses through mocked
+fetch, looking for a finding that fires on a healthy site. Every item below was reproduced
+before it was fixed, and every fix has a clean-twin test that failed on the old code plus a test
+that the real problem is still found. The vulnerable-fixture gate stayed at 82/82 with no false
+alarms, and its planted inner config was changed to a genuinely sensitive one (the old plant was
+public runtime config, which was the false positive itself) with a public-config twin added.
+
+### Fixed
+
+| Area | Benign input that produced a finding | Now |
+|---|---|---|
+| Secrets | `NEXT_PUBLIC_*` public keys (Stripe pk, Supabase anon, Firebase, Mapbox, PostHog) | Not flagged; real secrets under those names still are |
+| Secrets | Dev compose passwords, SQL comments, UI/validation text as "passwords", a hash as an AWS secret, the jwt.io sample token | Not flagged |
+| Secrets | A bare AWS key ID, Twilio SID, Firebase config block | Titled and rated for what was seen (Low/Info) |
+| Technology | Prose or links naming Shopify, Wix, Ghost, Bolt.new, Segment, Stripe, Python; `gunicorn`, `sessionid`, `Apache-Coyote` | Tags need structural evidence (asset URL, generator meta, header, cookie) |
+| WAF | A vendor bot-protection script tag on an ordinary page graded the whole report N/A | Only a stub or challenge page counts |
+| Versions | PHP 8.2 called End-of-Life before its EOL date; distro-packaged nginx/Apache/PHP called vulnerable | Judged by date; distro banners get a low-confidence verify note |
+| Access control | Same app shell for every id, public numbered pages, the same login used as both accounts | Suppressed; identical accounts refused at scan creation |
+| API | Unrouted DELETE answering 404, public GETs, a 12-request burst | Only 2xx or validation-level replies count; rate limit is Info on sensitive endpoints only |
+| Race | A generic JSON 403/429 as the sixth reply | Inconclusive unless the reply says the action was already used |
+| BaaS | `200 []` from an RLS-protected table, public catalogue rows, PocketBase/Appwrite empty lists | Info (public, empty) or hedged; sensitive rows stay Critical |
+| Takeover | A live host whose 404 or copy mentions the provider | Needs the provider's unclaimed-resource page; Netlify and Fly.io are hedged |
+| Attribution | Third-party GraphQL hosts and unowned public buckets filed against the customer | Own host only; unowned buckets are hedged Low |
+| SSRF | The scanner following an open redirect onto its own collector | Redirects are not followed when planting |
+| XSS | Reflection inside a script string, comment, textarea or title | Needs a reflected closer that breaks out |
+| Redirect / CORS | A query string carrying the payload; reflected Origin without credentials | Landing host is checked; credential-less reflection is Low |
+| Crawler | Inner-route `/config.json`, `/.env`, debug log and API-doc probes without catch-all or HTML guards | Same guards and structural validators as root probing |
+| Headers | CSP with a nonce or `strict-dynamic`, `wasm-unsafe-eval`, duplicate `nosniff`, homepage `ACAO: *`, mixed content under `upgrade-insecure-requests` | Directives are parsed |
+| TLS | A grade "A" shown when SSL Labs timed out | No grade is shown |
+| DNS | IPv6 ranges counted as SPF lookups; DKIM checked against `co.uk` | Whole terms only; small public-suffix helper; DKIM hedged |
+| Other | JSON-LD "internal hostname" on version strings, source maps without `sourcesContent`, AI SDK default base URLs, deleted cookies | Parsed or downgraded |
+
+### Narrowed on purpose (a real problem in these shapes can now be missed)
+
+- An access-control or anonymous-read app that renders the same record for any id, including a
+  made-up one, is suppressed.
+- An unauthenticated DELETE that answers 404 for a missing id is no longer reported; only
+  idempotent-delete style success counts.
+- Inner-route `.env` mixed with non-`KEY=VALUE` lines, `config.json` without credential-shaped keys, and a
+  debug log with fewer than two log-shaped lines are missed.
+- A bucket whose first 100 objects are all static assets reads as Info even if a sensitive file
+  sits further in.
+
+### Not verified, or still open
+
+- Whether PostgREST validates columns before row-level security. An ambiguous 400 to the write probe is
+  now an Info note, not Critical.
+- The unclaimed-page texts for Vercel, Ghost, Tumblr, Readme, Heroku and GitHub Pages were written
+  from memory of each provider's page, not fetched. The Resend key format likewise.
+- There is no version floor for CVE-2026-42533 (nginx) or CVE-2026-34356 (Apache) in the repo, and
+  none was invented. nginx 1.29.8 still matches CVE-2026-42533 at hedged Medium until the real ranges are added.
+- The Google Analytics, jQuery, Lodash, Alpine and HTMX technology rules still match loosely.
+- The 30-day certificate-expiry alert cannot tell a Let's Encrypt certificate about to auto-renew;
+  the monitor stores only the expiry date. Not changed.
+- A session cookie missing `SameSite` stays Medium: Firefox and Safari do not reliably default to Lax.
+
 ## 2026-09-24 — 30-site re-sweep, and a false positive on amazon.co.uk
 
 Re-ran the Sept 8 thirty-site list on the current scanner, to replace a published
