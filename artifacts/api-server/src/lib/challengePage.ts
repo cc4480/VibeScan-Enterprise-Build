@@ -49,7 +49,7 @@ const BODY_SIGNALS: { vendor: string; re?: RegExp; all?: RegExp[]; label: string
   { vendor: "Cloudflare", re: /cf_chl_opt|__cf_chl_/i, label: "cf_chl_opt challenge payload" },
   { vendor: "Cloudflare", re: /cf-browser-verification|cf-im-under-attack/i, label: "cf-browser-verification marker" },
   { vendor: "Cloudflare", re: /<title>\s*Attention Required!\s*\|\s*Cloudflare\s*<\/title>/i, label: "Cloudflare block title" },
-  { vendor: "Imperva/Incapsula", re: /_Incapsula_Resource|Incapsula incident ID/i, label: "Incapsula resource marker" },
+  { vendor: "Imperva/Incapsula", re: /Incapsula incident ID/i, label: "Incapsula block-page incident ID" },
   { vendor: "Akamai", re: /errors\.edgesuite\.net|AkamaiGHost/i, label: "Akamai error host" },
   // Akamai Bot Manager's interstitial: a ~2 KB page that posts a proof-of-work
   // to /_sec/verify and reloads. Found on amazon.co.uk (2026-09-24), where it was
@@ -61,9 +61,11 @@ const BODY_SIGNALS: { vendor: string; re?: RegExp; all?: RegExp[]; label: string
   // The form target is a path only that page posts to.
   { vendor: "Amazon", re: /\/errors(?:_page)?\/validateCaptcha/i, label: "Amazon robot-check form" },
   { vendor: "Sucuri", re: /Sucuri WebSite Firewall|sucuri_cloudproxy/i, label: "Sucuri firewall page" },
-  { vendor: "PerimeterX", re: /_pxhd|px-captcha|perimeterx/i, label: "PerimeterX challenge" },
-  { vendor: "DataDome", re: /datadome|geo\.captcha-delivery\.com/i, label: "DataDome challenge" },
-  { vendor: "AWS WAF", re: /awswaf\.com|aws-waf-token/i, label: "AWS WAF token" },
+  // The vendors' challenge surfaces only. Their sensor tags (js.datadome.co, client.perimeterx.net,
+  // /_Incapsula_Resource, *.awswaf.com/challenge.js) are on ordinary pages of every customer, so
+  // they count only on a bare stub document; see SENSOR_SIGNALS.
+  { vendor: "PerimeterX", re: /px-captcha/i, label: "PerimeterX challenge" },
+  { vendor: "DataDome", re: /geo\.captcha-delivery\.com/i, label: "DataDome challenge" },
   // Reddit's proof-of-work interstitial (server: snooserv): a ~8 KB page titled just "Reddit"
   // whose only content is a hidden GET form that a script fills in and submits. Its title and
   // headers carry no signal, and it ships its own CSP, which the crawler then took for the
@@ -72,6 +74,36 @@ const BODY_SIGNALS: { vendor: string; re?: RegExp; all?: RegExp[]; label: string
   // could be an ordinary form field or a sentence in a developer's write-up.
   { vendor: "Reddit", all: [/name=["']js_challenge["']/i, /name=["']jsc_token["']/i], label: "Reddit js_challenge form" },
 ];
+
+/**
+ * Vendor sensor/loader references. A customer's real page loads these too
+ * (DataDome's tags.js, PerimeterX's sensor, Imperva's injected /_Incapsula_Resource, the AWS WAF
+ * SDK), so the reference alone proves nothing. The vendor's actual JS challenge is a stub whose
+ * only job is to load that script, so a match counts only in markup (never prose) of a stub
+ * document (isStubDocument). Same class as the /cdn-cgi/challenge-platform/ bug above.
+ */
+const SENSOR_SIGNALS: { vendor: string; re: RegExp; label: string }[] = [
+  { vendor: "Imperva/Incapsula", re: /_Incapsula_Resource/i, label: "Incapsula challenge stub" },
+  { vendor: "PerimeterX", re: /perimeterx|_pxhd/i, label: "PerimeterX challenge stub" },
+  { vendor: "DataDome", re: /datadome/i, label: "DataDome challenge stub" },
+  { vendor: "AWS WAF", re: /awswaf\.com|aws-waf-token|AwsWafIntegration/i, label: "AWS WAF challenge stub" },
+];
+
+/** Text between tags dropped (script bodies kept, they are code), so a mention in prose is not a reference. */
+function markupOnly(html: string): string {
+  return html.replace(/(<script\b[\s\S]*?<\/script>)|>[^<]*</gi, (_m, script?: string) => script ?? "><");
+}
+
+/**
+ * A challenge stub has no page in it: a few KB, almost no visible text and none of the
+ * structure a published page has (headings, paragraphs, navigation, footer).
+ */
+function isStubDocument(html: string): boolean {
+  if (html.length > 6_000) return false;
+  if (/<(?:h[1-6]|p|nav|footer|main|article|section)\b/i.test(html)) return false;
+  const visible = html.replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  return visible.length < 150;
+}
 
 /**
  * Interstitial titles.
@@ -150,6 +182,12 @@ export function detectChallengePage(
     for (const b of BODY_SIGNALS) {
       const hit = b.all ? b.all.every((re) => re.test(html)) : (b.re?.test(html) ?? false);
       if (hit) return { isChallenge: true, vendor: b.vendor, signal: b.label };
+    }
+    if (isStubDocument(html)) {
+      const markup = markupOnly(html);
+      for (const b of SENSOR_SIGNALS) {
+        if (b.re.test(markup)) return { isChallenge: true, vendor: b.vendor, signal: b.label };
+      }
     }
   }
 

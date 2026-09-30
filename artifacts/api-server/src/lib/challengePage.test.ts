@@ -219,3 +219,34 @@ describe("the markup Cloudflare actually emits", () => {
     expect(v.vendor).toBe("Cloudflare");
   });
 });
+
+describe("vendor sensor tags are not interstitials", () => {
+  // Same class as the Cloudflare /cdn-cgi/challenge-platform/ bug: the reference
+  // to a bot-protection vendor's script is on the customer's ordinary pages.
+  const page = (head: string, body = `<h1>Acme Widgets</h1><nav>Shop</nav><p>${"Welcome to our shop. ".repeat(40)}</p>`) =>
+    `<!doctype html><html><head><title>Acme Widgets - Home</title>${head}</head><body>${body}</body></html>`;
+
+  it.each([
+    ["DataDome tags.js", page(`<script src="https://js.datadome.co/tags.js" async></script>`)],
+    ["Imperva injected resource", page(`<script src="/_Incapsula_Resource?SWJIYLWA=5074a744,719d34d3"></script>`)],
+    ["PerimeterX sensor", page(`<script src="https://client.perimeterx.net/PXabc123/main.min.js"></script>`)],
+    ["AWS WAF SDK", page(`<script src="https://1234.edge.sdk.awswaf.com/1234/567/challenge.js"></script>`)],
+    ["blog post about datadome", page("", "<p>We evaluated datadome and perimeterx and awswaf.com for bot mitigation.</p>")],
+    ["tiny page, vendor only in prose", `<html><body>datadome perimeterx _Incapsula_Resource</body></html>`],
+  ])("leaves an ordinary page with %s alone", (_n, html) => {
+    expect(detectChallengePage(200, html, {}).isChallenge).toBe(false);
+  });
+
+  it.each([
+    ["Imperva JS challenge stub", `<html style="height:100%"><head><META NAME="ROBOTS" CONTENT="NOINDEX, NOFOLLOW"></head><body style="margin:0px;height:100%"><iframe id="main-iframe" src="/_Incapsula_Resource?SWUDNSAI=31&xinfo=1-2" frameborder=0 width="100%" height="100%"></iframe></body></html>`],
+    ["AWS WAF challenge stub", `<html><head></head><body><script src="https://1234.edge.sdk.awswaf.com/1234/567/challenge.js"></script><script>AwsWafIntegration.saveReferrer();AwsWafIntegration.checkForceRefresh();</script></body></html>`],
+    ["DataDome stub", `<html><head><meta name="robots" content="noindex"></head><body><script src="https://js.datadome.co/captcha.js"></script></body></html>`],
+    ["PerimeterX stub", `<html><body><script src="https://client.perimeterx.net/PXabc123/captcha.js"></script></body></html>`],
+  ])("still flags the %s", (_n, html) => {
+    expect(detectChallengePage(200, html, {}).isChallenge).toBe(true);
+  });
+
+  it("still flags PerimeterX's Press & Hold container on a larger block page", () => {
+    expect(detectChallengePage(403, `<html><body><div id="px-captcha"></div>${"<i></i>".repeat(500)}</body></html>`).isChallenge).toBe(true);
+  });
+});
