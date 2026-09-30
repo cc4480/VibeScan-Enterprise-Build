@@ -97,6 +97,7 @@ function osvCacheKey(packageName: string, version: string, ecosystem: string): s
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+import { classifyEol, isDistroPackaged, matchRange, rangeFinding } from "./bannerRules";
 import { type DetectedVersion, type VersionPattern, VERSION_PATTERNS, PHP_EOL, NGINX_VULN_RANGES, APACHE_VULN_RANGES, IIS_EOL_MAJOR } from "./cve-patterns";
 
 
@@ -136,7 +137,7 @@ export function extractVersionedTechnologies(
   const poweredBy = Object.entries(headers).find(([k]) => k.toLowerCase() === "x-powered-by")?.[1] ?? "";
 
   // PHP version from X-Powered-By header (not in OSV, checked locally)
-  const phpMatch = /PHP\/(\d+\.\d+\.?\d*)/i.exec(poweredBy);
+  const phpMatch = /PHP\/(\d+\.\d+\.?\d*)(\S*)/i.exec(poweredBy);
   if (phpMatch?.[1] && !seen.has("php")) {
     found.push({
       displayName: "PHP",
@@ -144,21 +145,22 @@ export function extractVersionedTechnologies(
       packageName: "php",
       ecosystem: "local",
       version: phpMatch[1],
+      distroPackaged: isDistroPackaged(phpMatch[2] ?? ""),
     });
     seen.add("php");
   }
 
   // Nginx version from Server header
-  const nginxMatch = /nginx\/(\d+\.\d+\.\d+)/i.exec(serverHeader);
+  const nginxMatch = /nginx\/(\d+\.\d+\.\d+)(.*)/i.exec(serverHeader);
   if (nginxMatch?.[1] && !seen.has("nginx")) {
-    found.push({ displayName: "Nginx", techName: "Nginx", packageName: "nginx", ecosystem: "local", version: nginxMatch[1] });
+    found.push({ displayName: "Nginx", techName: "Nginx", packageName: "nginx", ecosystem: "local", version: nginxMatch[1], distroPackaged: isDistroPackaged(nginxMatch[2] ?? "") });
     seen.add("nginx");
   }
 
   // Apache version from Server header — techName matches detectTechnologies() output "Apache"
-  const apacheMatch = /Apache\/(\d+\.\d+\.\d+)/i.exec(serverHeader);
+  const apacheMatch = /Apache\/(\d+\.\d+\.\d+)(.*)/i.exec(serverHeader);
   if (apacheMatch?.[1] && !seen.has("apache")) {
-    found.push({ displayName: "Apache HTTPD", techName: "Apache", packageName: "apache", ecosystem: "local", version: apacheMatch[1] });
+    found.push({ displayName: "Apache HTTPD", techName: "Apache", packageName: "apache", ecosystem: "local", version: apacheMatch[1], distroPackaged: isDistroPackaged(apacheMatch[2] ?? "") });
     seen.add("apache");
   }
 
@@ -376,28 +378,19 @@ export function warnIfLocalDataStale(): void {
 
 // PHP EOL dates — versions that are fully end-of-life as of 2026
 
-function semverLt(a: string, b: string): boolean {
-  const pa = a.split(".").map(Number);
-  const pb = b.split(".").map(Number);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const na = pa[i] ?? 0;
-    const nb = pb[i] ?? 0;
-    if (na < nb) return true;
-    if (na > nb) return false;
-  }
-  return false;
-}
-
 function checkLocalVulns(detected: DetectedVersion[]): ScanVulnerability[] {
   const findings: ScanVulnerability[] = [];
 
   for (const d of detected) {
-    if (d.packageName === "php") {
+    if (d.packageName === "php" && !d.distroPackaged) {
+      // A distro PHP (8.1.2-1ubuntu2.14) is supported by the distro past upstream EOL, so
+      // the upstream date says nothing about it; see bannerRules.ts.
       const major = d.version.split(".").slice(0, 1).join(".");
       const majorMinor = d.version.split(".").slice(0, 2).join(".");
       const phpEol = getLivePhpEol();
       const eolMsg = phpEol[majorMinor] || phpEol[major];
-      if (eolMsg) {
+      const eol = eolMsg ? classifyEol(eolMsg) : null;
+      if (eol?.state === "eol") {
         findings.push(vuln({
           name: `PHP ${d.version} is End-of-Life`,
           severity: "high",
@@ -408,31 +401,31 @@ function checkLocalVulns(detected: DetectedVersion[]): ScanVulnerability[] {
           cweId: "CWE-1104",
           cvssScore: 7.5,
         }));
+      } else if (eol?.state === "upcoming") {
+        // Still receiving security fixes today: an early warning, not a vulnerability.
+        findings.push(vuln({
+          name: `PHP ${d.version} Reaches End-of-Life in ${eol.label}`,
+          severity: "info",
+          category: "Outdated Software",
+          description: `PHP ${d.version} is detected in the X-Powered-By header. This release branch still receives security fixes, but upstream support ends in ${eol.label}. Plan the upgrade before then.`,
+          evidence: `X-Powered-By: PHP/${d.version}`,
+          solution: `Schedule an upgrade to a PHP release with a later end-of-life date. See https://www.php.net/supported-versions.php`,
+          cweId: "CWE-1104",
+          cvssScore: null,
+          confidence: 80,
+        }));
       }
     }
 
     if (d.packageName === "nginx") {
-      let nginxCveFlagged = false;
-      for (const vuln_entry of NGINX_VULN_RANGES) {
-        if (semverLt(d.version, vuln_entry.lt)) {
-          findings.push(vuln({
-            name: `Nginx ${d.version} — Known Vulnerability (${vuln_entry.cve})`,
-            severity: cvssToSeverity(vuln_entry.cvss),
-            category: "Outdated Software",
-            description: `Nginx ${d.version} is vulnerable to ${vuln_entry.cve}: ${vuln_entry.desc}. Versions before ${vuln_entry.lt} are affected.`,
-            evidence: `Server: nginx/${d.version}`,
-            solution: `Upgrade Nginx to version ${vuln_entry.lt} or later. Use your package manager: apt upgrade nginx, or yum update nginx. Verify with: nginx -v`,
-            cweId: "CWE-1104",
-            cvssScore: vuln_entry.cvss,
-          }));
-          nginxCveFlagged = true;
-          break; // report worst one only
-        }
-      }
-      // Supplement: if no CVE-specific finding was raised, check live EOL cycle data.
-      // This catches versions in EOL cycles not covered by the hardcoded CVE ranges
-      // (e.g. Nginx 1.24.x — EOL but newer than any hardcoded CVE threshold).
-      if (!nginxCveFlagged) {
+      // Report the worst matching CVE only. A distro-packaged banner still gets it, as a
+      // LOW "verify your package" note (see rangeFinding); EOL-cycle claims are skipped for it.
+      const hit = matchRange(d.version, NGINX_VULN_RANGES);
+      if (hit) {
+        findings.push(vuln(rangeFinding("Nginx", d, hit, "Server", cvssToSeverity(hit.cvss))));
+      } else if (!d.distroPackaged) {
+        // No CVE row matched: check live EOL cycle data. Catches cycles newer than any
+        // hardcoded threshold (e.g. Nginx 1.24.x).
         const nginxCycle = d.version.split(".").slice(0, 2).join(".");
         if (getLiveNginxEolCycles().has(nginxCycle)) {
           findings.push(vuln({
@@ -456,27 +449,11 @@ function checkLocalVulns(detected: DetectedVersion[]): ScanVulnerability[] {
     }
 
     if (d.packageName === "apache") {
-      let apacheCveFlagged = false;
-      for (const vuln_entry of APACHE_VULN_RANGES) {
-        if (semverLt(d.version, vuln_entry.lt)) {
-          findings.push(vuln({
-            name: `Apache ${d.version} — Known Vulnerability (${vuln_entry.cve})`,
-            severity: cvssToSeverity(vuln_entry.cvss),
-            category: "Outdated Software",
-            description: `Apache HTTPD ${d.version} is vulnerable to ${vuln_entry.cve}: ${vuln_entry.desc}. Upgrade to ${vuln_entry.lt} or later.`,
-            evidence: `Server: Apache/${d.version}`,
-            solution: `Upgrade Apache to the latest stable release. On Debian/Ubuntu: apt upgrade apache2. On RHEL/CentOS: yum update httpd. Confirm with: apache2 -v`,
-            cweId: "CWE-1104",
-            cvssScore: vuln_entry.cvss,
-            wstgId: "WSTG-INFO-02",
-          }));
-          apacheCveFlagged = true;
-          break;
-        }
-      }
-      // Supplement: if no CVE-specific finding was raised, check live EOL cycle data.
-      // This catches EOL Apache branches (e.g. 2.2.x) not covered by CVE thresholds.
-      if (!apacheCveFlagged) {
+      const hit = matchRange(d.version, APACHE_VULN_RANGES);
+      if (hit) {
+        findings.push(vuln({ ...rangeFinding("Apache HTTPD", d, hit, "Server", cvssToSeverity(hit.cvss)), wstgId: "WSTG-INFO-02" }));
+      } else if (!d.distroPackaged) {
+        // No CVE row matched: check live EOL cycle data. Catches EOL branches (e.g. 2.2.x).
         const apacheCycle = d.version.split(".").slice(0, 2).join(".");
         if (getLiveApacheEolCycles().has(apacheCycle)) {
           findings.push(vuln({

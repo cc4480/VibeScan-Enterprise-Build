@@ -34,7 +34,9 @@ describe("checkForKnownVulnerabilities — nginx", () => {
     const findings = await detect({ server: "nginx/1.28.0" });
     const hit = findings.find((f) => f.name.includes("Nginx"));
     expect(hit?.name).toContain("CVE-2026-42533");
-    expect(hit?.severity).toBe("high"); // CVSS 8.1
+    // CVSS 8.1 would be high, but the flaw needs a regex map directive a banner cannot show,
+    // so a banner-only match is capped at medium (see bannerRules.rangeFinding).
+    expect(hit?.severity).toBe("medium");
   });
 
   it("still flags a very old nginx — with the newest applicable CVE, not a stale one", async () => {
