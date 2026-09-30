@@ -1,66 +1,6 @@
-/** Probes that read the page and its transport: SRI, error disclosure, HTTPS redirect, rate limiting. */
-import { expectsIntegrity } from "./sriPolicy";
+/** Probes that read the page and its transport: error disclosure, HTTPS redirect, rate limiting. */
 import type { ScanVulnerability } from "./scanner";
 import { vuln, safeGet } from "./probesCore";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 6. SUBRESOURCE INTEGRITY (SRI) CHECK
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function checkSRI(html: string, baseUrl: string, requestedUrl?: string): Promise<ScanVulnerability[]> {
-  let baseHost: string;
-  try {
-    baseHost = new URL(baseUrl).hostname;
-  } catch {
-    return [];
-  }
-  // The address the user asked for is the site's too, even if it redirected to another domain.
-  let requestedHost: string | null = null;
-  try {
-    if (requestedUrl) requestedHost = new URL(requestedUrl).hostname;
-  } catch { /* ignore an unparseable request address */ }
-
-  const scriptRegex = /<script[^>]+src=["']([^"']+)["'][^>]*>/gi;
-  const linkRegex = /<link[^>]+href=["']([^"']+)["'][^>]*rel=["']stylesheet["'][^>]*>/gi;
-  const missingIntegrity: string[] = [];
-
-  const checkTag = (tag: string, src: string) => {
-    try {
-      const u = new URL(src, baseUrl);
-      // Third-party only, and not a provider that updates the script in place (lib/sriPolicy.ts):
-      // the site's own CDN needs no SRI, and SRI on Stripe.js or Tag Manager breaks them.
-      if (expectsIntegrity(baseHost, u, requestedHost ? [requestedHost] : []) && !tag.includes("integrity=")) {
-        // Skip resources whose URL pathname contains a long hex content hash.
-        // Content-addressed URLs (e.g. webpack chunks: "/chunk.a1b2c3d4e5f6a7b8.js")
-        // are effectively pinned by the hash in the filename — SRI is redundant
-        // because changing the file content would change the URL, not silently
-        // serve a tampered version. Flagging these would be a false positive.
-        const hasContentHash = /[a-f0-9]{16,}/i.test(u.pathname);
-        if (!hasContentHash) {
-          missingIntegrity.push(src);
-        }
-      }
-    } catch { /* relative URL */ }
-  };
-
-  let m: RegExpExecArray | null;
-  while ((m = scriptRegex.exec(html)) !== null) checkTag(m[0], m[1]);
-  while ((m = linkRegex.exec(html)) !== null) checkTag(m[0], m[1]);
-
-  if (missingIntegrity.length === 0) return [];
-
-  return [vuln({
-    name: "External Resources Missing Subresource Integrity (SRI)",
-    severity: "medium",
-    category: "Supply Chain Security",
-    description: `${missingIntegrity.length} external script(s)/stylesheet(s) are loaded from third-party CDNs without Subresource Integrity hashes. If any of these CDNs are compromised (which has happened to major CDNs), attackers can inject arbitrary JavaScript that runs on your site for all visitors—stealing credentials, hijacking sessions, or installing skimmers.`,
-    evidence: missingIntegrity.slice(0, 5).map((s) => `<script/link src="${s}" (no integrity= attribute)>`).join("\n"),
-    solution: 'Add integrity and crossorigin to all external resources: `<script src="https://cdn.example.com/lib.js" integrity="sha384-..." crossorigin="anonymous">`. Generate hashes at https://www.srihash.org/ or using `openssl dgst -sha384 -binary FILE | openssl base64 -A`.',
-    cweId: "CWE-353",
-    cvssScore: 6.1,
-    wstgId: "WSTG-CONF-04",
-  })];
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 7. ERROR PAGE DISCLOSURE

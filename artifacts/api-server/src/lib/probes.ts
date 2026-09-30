@@ -11,11 +11,13 @@ import { type TestLedger, NOT_VERIFIED } from "./testLedger";
 import type { ScanVulnerability } from "./scanner";
 import { checkSensitiveFiles, checkRobotsTxt, checkSecurityTxt, checkDirectoryListing } from "./probesFiles";
 import { checkHttpMethods, checkActiveCors, checkClickjacking, checkOpenRedirect } from "./probesHttp";
-import { checkSRI, checkErrorDisclosure, checkHttpsRedirect, checkRateLimiting } from "./probesPage";
+import { checkSRI } from "./probesSri";
+import { checkErrorDisclosure, checkHttpsRedirect, checkRateLimiting } from "./probesPage";
 import { checkSupabaseRLS } from "./probesSupabase";
 export { checkSensitiveFiles, checkRobotsTxt, checkSecurityTxt, checkDirectoryListing } from "./probesFiles";
 export { checkHttpMethods, checkActiveCors, checkClickjacking, checkOpenRedirect } from "./probesHttp";
-export { checkSRI, checkErrorDisclosure, checkHttpsRedirect, checkRateLimiting } from "./probesPage";
+export { checkSRI } from "./probesSri";
+export { checkErrorDisclosure, checkHttpsRedirect, checkRateLimiting } from "./probesPage";
 export { checkSupabaseRLS } from "./probesSupabase";
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -7,7 +7,7 @@ Every finding the scanner can emit, read out of `artifacts/api-server/src/lib`. 
 complete list; [SCAN_COVERAGE.md](SCAN_COVERAGE.md) is the readable one, grouped by module with
 the Basic/Deep tier and the methodology behind each group.
 
-**310 findings across 58 modules**, in 38 categories. 85 critical, 73 high, 56 medium, 31 low, 65 info.
+**310 findings across 59 modules**, in 38 categories. 85 critical, 73 high, 56 medium, 31 low, 65 info.
 
 A finding is a distinct name the scanner can put in a report, which is not the same as a check
 type: the data-table modules below define many findings from one piece of detection logic —
@@ -65,9 +65,9 @@ module does. `none` — neither, so no test exercises it at all.
 | `crawlerHeaders.ts` | 5 | 202 | — | indirect, via crawler.test.ts (split from crawler) |
 | `cveCheckLocal.ts` | 5 | 225 | — | indirect, via cveCheck.test.ts (split from cveCheck) |
 | `secret-pattern-ai.ts` | 5 | 61 | — | indirect, via secret-pattern-generic.test.ts |
-| `probesPage.ts` | 4 | 304 | — | indirect, via probes.test.ts (split from probes) |
 | `accessControlFindings.ts` | 3 | 129 | — | indirect, via accessControlProbe.test.ts |
 | `probesFiles.ts` | 3 | 261 | — | indirect, via probes.test.ts (split from probes) |
+| `probesPage.ts` | 3 | 244 | — | indirect, via probes.test.ts (split from probes) |
 | `probesSupabase.ts` | 3 | 154 | — | indirect, via probes.test.ts (split from probes) |
 | `scannerCoverage.ts` | 3 | 103 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts (split from scanner) |
 | `scannerTransportChecks.ts` | 3 | 70 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts (split from scanner) |
@@ -78,6 +78,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `workerAi.ts` | 2 | 100 | — | indirect, via worker.test.ts (split from worker) |
 | `bannerRules.ts` | 1 | 112 | — | indirect, via cveCheckLocal.test.ts, cveCheckVersions.test.ts |
 | `githubFindings.ts` | 1 | 60 | — | indirect, via githubSourceProbe.test.ts |
+| `probesSri.ts` | 1 | 79 | — | indirect, via probes.test.ts (split from probes) |
 | `scanner.ts` | 1 | 298 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts |
 
 ## Findings by module
@@ -498,14 +499,21 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `probesPage.ts`
 
-*4 findings · 304 lines · no test file.*
+*3 findings · 244 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
 | Flask/Werkzeug Interactive Debugger Exposed (Remote Code Execution) / Verbose Error Pages Expose Internal Application Details | Critical / Medium | Information Disclosure | 10 | — | WSTG-CONF-02 |
-| External Resources Missing Subresource Integrity (SRI) | Medium | Supply Chain Security | 6.1 | CWE-353 | WSTG-CONF-04 |
 | HTTP Traffic Not Redirected to HTTPS | Medium | Transport Security | 5.3 | CWE-319 | WSTG-CONF-07 |
 | Rate Limiting Not Advertised in Response Headers | Info | Brute Force Protection | 0 | CWE-307 | WSTG-ATHN-03 |
+
+### `probesSri.ts`
+
+*1 findings · 79 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| External Resources Missing Subresource Integrity (SRI) | Medium | Supply Chain Security | 6.1 | CWE-353 | WSTG-CONF-04 |
 
 ### `probesSupabase.ts`
 

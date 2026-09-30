@@ -52,6 +52,7 @@ function sharedSuffixLabels(a: string[], b: string[]): number {
 /** A site's own CDN under a different registrable domain: [site, its CDN]. */
 const OWNED_CDNS: Array<[string, string]> = [
   ["dropbox.com", "dropboxstatic.com"], ["stripe.com", "stripecdn.com"], ["linkedin.com", "licdn.com"],
+  ["theguardian.com", "guim.co.uk"],
 ];
 
 export function isFirstParty(pageHost: string, resourceHost: string): boolean {
@@ -108,4 +109,23 @@ export function isDynamicByDesign(resource: URL): boolean {
 export function expectsIntegrity(pageHost: string, resource: URL, alsoFirstParty: string[] = []): boolean {
   const own = [pageHost, ...alsoFirstParty].some((h) => isFirstParty(h, resource.hostname));
   return !own && !isDynamicByDesign(resource);
+}
+
+/**
+ * Marketing and analytics tags that the provider edits in place under a fixed URL. The finding is still
+ * true for them (a compromised vendor runs code on the page), but "add an integrity attribute" is advice
+ * that breaks them: the next vendor update fails the hash and the tag silently stops. They are reported
+ * with advice that can be followed. Matched on the host or any parent domain.
+ */
+const VENDOR_UPDATED_DOMAINS = [
+  "bizible.com", "marketo.net", "marketo.com", "mktoresp.com", "munchkin.marketo.net",
+  "parsely.com", "clearbit.com", "clearbitjs.com", "digitalgov.gov",
+  "segment.com", "segment.io", "fullstory.com", "mouseflow.com", "drift.com", "driftt.com",
+  "pardot.com", "pi.pardot.com", "demandbase.com", "6sc.co", "6sense.com", "zoominfo.com",
+  "optimizely.com", "mixpanel.com", "amplitude.com", "quantserve.com", "taboola.com", "outbrain.com",
+];
+
+export function isVendorUpdated(resource: URL): boolean {
+  const h = resource.hostname.toLowerCase();
+  return VENDOR_UPDATED_DOMAINS.some((d) => h === d || h.endsWith("." + d));
 }

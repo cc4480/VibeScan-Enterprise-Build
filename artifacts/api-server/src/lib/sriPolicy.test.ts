@@ -135,3 +135,29 @@ describe("the address the user asked for counts as first-party after a redirect"
     expect(expectsIntegrity("www.zoom.com", url("https://cdn.bc0a.com/a.js"), ["zoom.us"])).toBe(true);
   });
 });
+
+describe("vendor-updated tags get advice that can be followed", async () => {
+  const { checkSRI } = await import("./probesSri.js");
+  const page = (...srcs: string[]) => srcs.map((s) => `<script src="${s}"></script>`).join("");
+
+  it("still reports the finding, but does not tell the site to pin a tag the vendor edits in place", async () => {
+    const [v] = await checkSRI(page("https://cdn.bizible.com/scripts/bizible.js", "https://munchkin.marketo.net/munchkin.js"), "https://www.example.com/");
+    expect(v!.name).toBe("External Resources Missing Subresource Integrity (SRI)");
+    expect(v!.evidence).toContain("[vendor-updated tag]");
+    expect(v!.solution).toContain("self-host a pinned copy");
+    expect(v!.solution).not.toContain("openssl");
+  });
+
+  it("gives the pinning advice for ordinary CDN files, and both when mixed", async () => {
+    const [a] = await checkSRI(page("https://cdn.example.net/lib.js"), "https://www.example.com/");
+    expect(a!.solution).toContain("openssl");
+    expect(a!.evidence).not.toContain("vendor-updated");
+    const [b] = await checkSRI(page("https://cdn.example.net/lib.js", "https://tag.clearbit.com/x.js"), "https://www.example.com/");
+    expect(b!.solution).toContain("openssl");
+    expect(b!.solution).toContain("[vendor-updated tag]");
+  });
+
+  it("treats the Guardian's guim.co.uk as its own CDN", async () => {
+    expect(await checkSRI(page("https://assets.guim.co.uk/a.js"), "https://www.theguardian.com/")).toEqual([]);
+  });
+});
