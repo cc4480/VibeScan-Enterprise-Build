@@ -62,6 +62,7 @@ export interface PdfReportData {
     complianceNotes?: string | null;
     /** The prompt written for the user's AI editor; the app shows it as "Fix with your AI agent". */
     agentFixPrompt?: string | null;
+    source?: "ai" | "template";
   } | null;
   compliance?: SharedReportData["data"]["compliance"];
   pagesScanned?: string[];

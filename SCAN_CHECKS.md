@@ -7,7 +7,7 @@ Every finding the scanner can emit, read out of `artifacts/api-server/src/lib`. 
 complete list; [SCAN_COVERAGE.md](SCAN_COVERAGE.md) is the readable one, grouped by module with
 the Basic/Deep tier and the methodology behind each group.
 
-**309 findings across 40 modules**, in 38 categories. 85 critical, 73 high, 56 medium, 30 low, 65 info.
+**309 findings across 41 modules**, in 38 categories. 85 critical, 73 high, 56 medium, 30 low, 65 info.
 
 A finding is a distinct name the scanner can put in a report, which is not the same as a check
 type: the data-table modules below define many findings from one piece of detection logic —
@@ -38,13 +38,14 @@ module does. `none` — neither, so no test exercises it at all.
 | `baasProbes.ts` | 4 | 326 | 11 | direct |
 | `firebase-probes.ts` | 4 | 301 | 8 | direct |
 | `baasDepth.ts` | 3 | 148 | 11 | direct |
+| `isolationHeaders.ts` | 3 | 77 | 4 | direct |
 | `mailTls.ts` | 3 | 337 | 13 | direct |
 | `aiFeatureProbe.ts` | 2 | 152 | 21 | direct |
 | `graphqlExtra.ts` | 2 | 105 | 8 | direct |
 | `graphqlProbe.ts` | 2 | 330 | 12 | direct |
 | `injectionExtra.ts` | 2 | 140 | 9 | direct |
 | `injectionProbe.ts` | 2 | 280 | 13 | direct |
-| `worker.ts` | 2 | 1082 | 3 | direct |
+| `worker.ts` | 2 | 1086 | 3 | direct |
 | `apiDocsProbe.ts` | 1 | 320 | 9 | direct |
 | `crossAccountStep.ts` | 1 | 172 | 16 | direct |
 | `deserializationProbe.ts` | 1 | 105 | 9 | direct |
@@ -54,7 +55,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `raceConditionProbe.ts` | 1 | 181 | 21 | direct |
 | `sourceMaps.ts` | 1 | 180 | 14 | direct |
 | `ssrfProbe.ts` | 1 | 200 | 7 | direct |
-| `scanner.ts` | 32 | 1572 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, grading.test.ts, scoring.test.ts |
+| `scanner.ts` | 29 | 1526 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts |
 | `subdomain-service-data.ts` | 19 | 165 | — | indirect, via subdomainTakeover.test.ts |
 | `secret-pattern-ai.ts` | 5 | 61 | — | indirect, via secret-pattern-data.test.ts |
 | `accessControlFindings.ts` | 3 | 129 | — | indirect, via accessControlProbe.test.ts |
@@ -270,6 +271,16 @@ module does. `none` — neither, so no test exercises it at all.
 | SQL Injection (Error-Based) | Critical | Injection | 9.8 | CWE-89 | WSTG-INPV-05 |
 | Reflected Cross-Site Scripting (XSS) | High | Injection | 6.1 | CWE-79 | WSTG-INPV-01 |
 
+### `isolationHeaders.ts`
+
+*3 findings · 77 lines · 4 tests.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| Missing Cross-Origin-Embedder-Policy (COEP) | Info | Browser Feature Control | — | CWE-16 | WSTG-CONF-07 |
+| Missing Cross-Origin-Opener-Policy (COOP) | Info | Browser Feature Control | — | CWE-16 | WSTG-CONF-07 |
+| Missing Cross-Origin-Resource-Policy (CORP) | Info | Browser Feature Control | — | CWE-16 | WSTG-CONF-07 |
+
 ### `jwtAnalysis.ts`
 
 *6 findings · 262 lines · 9 tests.*
@@ -465,7 +476,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `scanner.ts`
 
-*32 findings · 1572 lines · no test file.*
+*29 findings · 1526 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -492,9 +503,6 @@ module does. `none` — neither, so no test exercises it at all.
 | ${unrunFamilies.length} check group${unrunFamilies.length > 1 ? "s" : ""} could not be completed | Info | Scan Coverage | — | — | — |
 | Active security testing was skipped for this scan | Info | Scan Coverage | — | — | — |
 | Missing Cache-Control Headers | Info | Information Disclosure | — | CWE-524 | WSTG-CONF-07 |
-| Missing Cross-Origin-Embedder-Policy (COEP) | Info | Browser Feature Control | — | CWE-346 | WSTG-CONF-07 |
-| Missing Cross-Origin-Opener-Policy (COOP) | Info | Browser Feature Control | — | CWE-346 | WSTG-CONF-07 |
-| Missing Cross-Origin-Resource-Policy (CORP) | Info | Browser Feature Control | — | CWE-346 | WSTG-CONF-07 |
 | Non-Session Cookie Missing SameSite Attribute | Info | CSRF Protection | 2.1 | CWE-352 | WSTG-SESS-02 |
 | Non-Session Cookie Readable by JavaScript | Info | Session Management | 2.6 | CWE-1004 | WSTG-SESS-02 |
 | Scan session expired before the scan finished | Info | Scan Coverage | — | — | — |
@@ -646,7 +654,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `worker.ts`
 
-*2 findings · 1082 lines · 3 tests.*
+*2 findings · 1086 lines · 3 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|

@@ -49,6 +49,7 @@ export interface SharedReportData {
       complianceNotes?: string | null;
       /** The prompt written for the user's AI editor. */
       agentFixPrompt?: string | null;
+      source?: "ai" | "template";
     } | null;
     /** What ran, what was skipped and why. Absent on reports from before test records existed. */
     tests?: CoverageTest[] | null;

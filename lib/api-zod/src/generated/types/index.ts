@@ -8,6 +8,7 @@
 
 export * from "./aiAnalysis";
 export * from "./aiAnalysisDetectedAgent";
+export * from "./aiAnalysisSource";
 export * from "./authorizationSessionHeaderParameter";
 export * from "./authUser";
 export * from "./authUserEnvelope";

@@ -33,7 +33,8 @@ import { summariseChanges } from "./scanDiff";
 import { countTests, formatTestLine, formatTestSummary, newlyRunTests, NOT_VERIFIED, type TestRecord } from "./testLedger";
 import { warnIfLocalDataStale, OSV_CACHE_MAX_SIZE } from "./cveCheck";
 import { refreshEolData, loadEolCacheFromDb, EOL_REFRESH_QUEUE } from "./eolFetcher";
-import { callDeepSeek } from "./deepseek";
+import { analyseFindings, describeAiFailure } from "./aiAnalysis";
+import type { AiFailure } from "./deepseek";
 import { checkSslLabs } from "./ssllabs";
 import { sendReportReadyEmail } from "./mailer";
 import { summariseCompliance, COMPLIANCE_DISCLAIMER } from "./compliance";
@@ -480,15 +481,15 @@ export async function processScanJob(job: ScanJob): Promise<void> {
     const aiOptedOut = verificationId ? false : await isAiAnalysisOptedOut(userId).catch(() => false);
     if (aiOptedOut) log.info("AI analysis skipped: turned off by the account owner");
 
-    aiAnalysis = verificationId || aiOptedOut ? null : await callDeepSeek(
-      targetUrl,
-      vulnsForAi,
-      scanResult.technologies,
-      tier,
-      // What ran and what was skipped, so the analysis never calls an
-      // untested area safe.
-      tests,
-    );
+    let aiFailure: AiFailure | null = null;
+    if (!verificationId && !aiOptedOut) {
+      // What ran and what was skipped is passed so the analysis never calls an
+      // untested area safe. When the AI writer gives nothing, a fix prompt built
+      // from the findings takes its place (labelled source: "template").
+      const result = await analyseFindings(targetUrl, vulnsForAi, scanResult.technologies, tier, tests);
+      aiAnalysis = result.analysis;
+      aiFailure = result.failure;
+    }
     if (aiOptedOut) {
       scanResult.vulnerabilities.push({
         id: randomUUID(),
@@ -500,8 +501,10 @@ export async function processScanJob(job: ScanJob): Promise<void> {
         wstgId: null,
         confidence: 100,
       } satisfies ScanVulnerability);
-    } else if (aiAnalysis) {
+    } else if (aiAnalysis && !aiFailure) {
       log.info("DeepSeek analysis complete");
+    } else if (verificationId) {
+      log.info("AI analysis not run for an ownership verification scan");
     } else {
       log.warn("DeepSeek analysis skipped or failed — continuing without AI");
 
@@ -514,17 +517,18 @@ export async function processScanJob(job: ScanJob): Promise<void> {
       //
       // Only when a key is configured. Where none is set the deployment simply
       // does not have this feature, and saying so on every scan would be noise.
-      if (process.env["DEEPSEEK_API_KEY"]) {
+      if (process.env["DEEPSEEK_API_KEY"] && aiFailure) {
+        const why = describeAiFailure(aiFailure);
         scanResult.vulnerabilities.push({
           id: randomUUID(),
           name: "AI analysis could not be completed for this scan",
           severity: "info",
           category: "Scan Coverage",
           description:
-            "Every security check ran and the findings below are complete — but the written analysis that normally accompanies them (the plain-English risk summary, the prioritised fixes and the per-agent fix prompts) could not be generated for this scan. The AI provider did not answer in time. This says nothing about your site: it is a gap in the explanation, not in the testing.",
-          evidence: "The AI provider did not return an analysis within the 30-second budget.",
+            "Every security check ran and the findings below are complete — but the written analysis that normally accompanies them (the plain-English risk summary, the prioritised fixes and the per-agent fix prompts) could not be generated for this scan. " + why.reason + " A fix prompt has been built from the findings instead, without the AI writer's summary. This says nothing about your site: it is a gap in the explanation, not in the testing.",
+          evidence: why.evidence,
           solution:
-            "Re-run the scan to get the written analysis. The findings themselves do not change — only the commentary on them is missing — so you can also act on the list below as it stands.",
+            "Re-run the scan to get the written analysis. The findings themselves do not change — only the commentary on them is missing — so you can also act on the list below, or use the fix prompt built from them.",
           cweId: null,
           cvssScore: null,
           wstgId: null,

@@ -93,7 +93,7 @@ import { scanJavaScriptForSecrets, collectFirstPartyJavaScript } from "./jsScann
 import { extractSystemPromptText } from "./aiFeatureProbe";
 import { runPromptInjectionProbeDetailed } from "./promptInjectionProbe";
 import { runCrossAccountStep } from "./crossAccountStep";
-import { parseGithubRepoRef, scanGithubRepo, githubNotScannedReason } from "./githubSourceProbe";
+import { parseGithubRepoRef, scanGithubRepo, githubProbeOutcome } from "./githubSourceProbe";
 import { runRaceConditionProbeDetailed } from "./raceConditionProbe";
 import { crawlAndCheck } from "./crawler";
 import { checkForKnownVulnerabilities, extractVersionedTechnologies } from "./cveCheck";
@@ -103,6 +103,7 @@ import { checkPathTraversal } from "./pathTraversal";
 import { runInjectionProbes } from "./injectionProbe";
 import { checkSourceMaps } from "./sourceMaps";
 import { checkVibeStackSecurity } from "./vibeStackProbes";
+import { checkIsolationHeaders } from "./isolationHeaders";
 import { autoEnrichConfidence } from "./scoring";
 import { detectTechnologies } from "./techFingerprint";
 import { runBaasProbes } from "./baasProbes";
@@ -925,53 +926,8 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
     }));
   }
 
-  // ── Cross-Origin isolation headers (COOP / COEP / CORP) ─────────────
-  // These headers enable cross-origin isolation, which is required to safely
-  // use SharedArrayBuffer and high-resolution timers. Most public-facing web
-  // apps don't use these APIs and don't need full isolation — absence is
-  // therefore informational, not a direct vulnerability. Flag as INFO so
-  // teams can make an informed choice rather than reflexively chasing headers.
-  const coop = headerVal(rawHeaders, "cross-origin-opener-policy");
-  if (!coop) {
-    vulnerabilities.push(vuln({
-      name: "Missing Cross-Origin-Opener-Policy (COOP)",
-      severity: "info",
-      category: "Browser Feature Control",
-      description: "The Cross-Origin-Opener-Policy header is not set. COOP isolates your browsing context from cross-origin popups, preventing other pages from accessing your window object. It is required to safely enable SharedArrayBuffer and high-resolution timers. Most public web apps do not need these APIs, so absence is typically informational — but enabling COOP is a free defence-in-depth measure.",
-      evidence: `GET ${finalUrl}\nCross-Origin-Opener-Policy: (header absent from response)`,
-      solution: "Add: Cross-Origin-Opener-Policy: same-origin (most secure) or same-origin-allow-popups if you need cross-origin popup interaction. Only required if you use SharedArrayBuffer or high-resolution timers.",
-      cweId: "CWE-346",
-      wstgId: "WSTG-CONF-07",
-    }));
-  }
-
-  const coep = headerVal(rawHeaders, "cross-origin-embedder-policy");
-  if (!coep) {
-    vulnerabilities.push(vuln({
-      name: "Missing Cross-Origin-Embedder-Policy (COEP)",
-      severity: "info",
-      category: "Browser Feature Control",
-      description: "The Cross-Origin-Embedder-Policy header is not set. COEP (require-corp) prevents the page from loading cross-origin resources unless they explicitly opt in. It is required alongside COOP to achieve cross-origin isolation. Absence is informational for most sites — only needed if your app uses SharedArrayBuffer or high-resolution performance timers.",
-      evidence: `GET ${finalUrl}\nCross-Origin-Embedder-Policy: (header absent from response)`,
-      solution: "Add: Cross-Origin-Embedder-Policy: require-corp. Note: this requires all subresources to serve a CORP or CORS header. Use credentialless if require-corp causes third-party resource breakage.",
-      cweId: "CWE-346",
-      wstgId: "WSTG-CONF-07",
-    }));
-  }
-
-  const corp = headerVal(rawHeaders, "cross-origin-resource-policy");
-  if (!corp) {
-    vulnerabilities.push(vuln({
-      name: "Missing Cross-Origin-Resource-Policy (CORP)",
-      severity: "info",
-      category: "Browser Feature Control",
-      description: "The Cross-Origin-Resource-Policy header is absent. Without CORP, other origins can include this resource in their pages (via <img>, <script>, etc.). In cross-origin isolated contexts this could expose content to Spectre-class timing attacks. For most public resources this is informational — but adding CORP: same-origin or same-site is a low-effort hardening step.",
-      evidence: `GET ${finalUrl}\nCross-Origin-Resource-Policy: (header absent from response)`,
-      solution: "Add: Cross-Origin-Resource-Policy: same-origin (for same-site-only resources) or same-site. Use cross-origin only for truly public resources.",
-      cweId: "CWE-346",
-      wstgId: "WSTG-CONF-07",
-    }));
-  }
+  // Cross-origin isolation headers (COOP / COEP / CORP) — isolationHeaders.ts.
+  vulnerabilities.push(...checkIsolationHeaders(rawHeaders, finalUrl));
 
   // ── CORS ───────────────────────────────────────────────────────────────
   const acao = headerVal(rawHeaders, "access-control-allow-origin");
@@ -1140,7 +1096,7 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
   // failure of the family. It reports them individually through this callback.
   const innerProbeFailures: string[] = [];
 
-  const namedProbes: Array<{ family: string; run: Promise<ScanVulnerability[]> }> = [
+  const namedProbes: Array<{ family: string; run: Promise<ScanVulnerability[]>; tracked?: boolean }> = [
     {
       family: "HTTP probes (headers, files, methods, CORS)",
       run: runAllProbes(finalUrl, html, allowActiveProbes, (checkName, reason) => {
@@ -1236,13 +1192,11 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
     if (repoRef) {
       namedProbes.push({
         family: "GitHub source code secrets",
-        // A repository that could not be read throws, so the ledger records it as failed and
-        // the coverage note names it, instead of it reading as a clean "nothing found".
-        run: scanGithubRepo(repoRef).then((outcome) => {
-          const why = githubNotScannedReason(outcome.status);
-          if (why) throw new Error(why);
-          return outcome.findings;
-        }),
+        // Recorded here, through trackOutcome, so a private or missing repository reads as "not
+        // tested" (see githubProbeOutcome) while a GitHub outage or rate limit still throws and is
+        // recorded as failed, instead of either reading as a clean "nothing found".
+        tracked: true,
+        run: ledger.trackOutcome("passive", "GitHub source code secrets", scanGithubRepo(repoRef).then(githubProbeOutcome)),
       });
     } else {
       ledger.skip("passive", "GitHub source code secrets", "the supplied value was not a recognisable GitHub repository");
@@ -1266,7 +1220,7 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
       namedProbes.map((p) =>
         // The HTTP probes bundle records its thirteen checks one by one inside
         // runAllProbes; recording the bundle too would count them twice.
-        p.family.startsWith("HTTP probes")
+        p.family.startsWith("HTTP probes") || p.tracked
           ? p.run
           : ledger.track(activeFamilies.includes(p.family) ? "active" : "passive", p.family, p.run),
       ),

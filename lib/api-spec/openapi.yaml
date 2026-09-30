@@ -1112,6 +1112,10 @@ components:
           type: string
           enum: [lovable, bolt, nextjs, wordpress, supabase, generic]
           description: The AI coding tool/platform detected from the scanned app's tech stack, used to format agentFixPrompt.
+        source:
+          type: string
+          enum: [ai, template]
+          description: ai when the AI writer produced this analysis; template when it was assembled from the findings because the AI writer gave none.
 
     ReportData:
       type: object

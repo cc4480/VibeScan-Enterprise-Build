@@ -32,6 +32,7 @@
  * run, and a truncated file list or the 25-file cap left no trace at all.
  * Every request — the body as well as the headers — runs under one timeout.
  */
+import type { ProbeOutcome } from "./testLedger";
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 import { scanContent, redactContext, redactSecret } from "./jsScanner";
@@ -170,6 +171,24 @@ export function githubNotScannedReason(status: GithubScanOutcome["status"]): str
     case "unreadable": return "GitHub answered, but the repository's files could not be read";
     default: return null;
   }
+}
+
+/**
+ * How the ledger should record a GitHub scan. A repository GitHub says is private or does not exist is
+ * an input this scan cannot use, not a fault in the scan: it is "not tested", with the reason and the
+ * fact that only public repositories can be read, so the report does not count it as a failed test. A
+ * GitHub outage, a rate limit, a block or unreadable files are failures (they throw), as before.
+ */
+export function githubProbeOutcome(outcome: GithubScanOutcome): ProbeOutcome {
+  if (outcome.status === "not_public_or_missing") {
+    return {
+      findings: [],
+      notTested: "the repository is private or does not exist (only public repositories can be read)",
+    };
+  }
+  const why = githubNotScannedReason(outcome.status);
+  if (why) throw new Error(why);
+  return { findings: outcome.findings };
 }
 
 const NOT_SCANNED = (status: GithubScanOutcome["status"]): GithubScanOutcome => ({ findings: [], status, filesRead: 0 });

@@ -852,7 +852,7 @@ const AGENT_CONFIGS: AgentConfig[] = [
   },
 ];
 
-function AgentFixPromptCard({ prompt }: { prompt: string }) {
+function AgentFixPromptCard({ prompt, fromTemplate = false }: { prompt: string; fromTemplate?: boolean }) {
   const [selectedAgent, setSelectedAgent] = useState<AgentId>("cursor");
   const [copied, setCopied] = useState(false);
 
@@ -894,6 +894,11 @@ function AgentFixPromptCard({ prompt }: { prompt: string }) {
           )}
         </button>
       </div>
+      {fromTemplate && (
+        <p className="text-xs text-muted-foreground mb-4">
+          Built from your findings — the AI writer was unavailable for this scan. Every line is taken from the findings above.
+        </p>
+      )}
 
       {/* Agent selector */}
       <div className="flex flex-wrap gap-2 mb-4">
@@ -1706,7 +1711,7 @@ export interface PrintableReportData {
   technologies: string[];
   server?: string | null;
   tlsGrade?: string | null;
-  aiAnalysis?: { overallRisk: string; topPriorities: string[]; quickWins: string[]; complianceNotes?: string | null; agentFixPrompt?: string | null } | null;
+  aiAnalysis?: { overallRisk: string; topPriorities: string[]; quickWins: string[]; complianceNotes?: string | null; agentFixPrompt?: string | null; source?: "ai" | "template" } | null;
   compliance?: ComplianceData | null;
   categoryCounts: Record<string, number>;
   pagesScanned?: string[];
@@ -2876,7 +2881,7 @@ export default function ReportViewer() {
 
           {/* Fix with your AI agent */}
           {aiAnalysis?.agentFixPrompt && (
-            <AgentFixPromptCard prompt={aiAnalysis.agentFixPrompt} />
+            <AgentFixPromptCard prompt={aiAnalysis.agentFixPrompt} fromTemplate={aiAnalysis.source === "template"} />
           )}
 
           {/* Software Inventory */}

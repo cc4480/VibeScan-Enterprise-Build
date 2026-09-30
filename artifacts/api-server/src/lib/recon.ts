@@ -18,6 +18,7 @@ import * as net from "node:net";
 import * as dns from "node:dns/promises";
 import { randomUUID } from "node:crypto";
 import { logger } from "./logger";
+import { isCloudflareIp } from "./cloudflareIps";
 import type { ScanVulnerability } from "./scanner";
 
 // ─── Public types ─────────────────────────────────────────────────────────────
@@ -286,6 +287,22 @@ async function enumerateSubdomains(domain: string): Promise<SubdomainEntry[]> {
   return entries;
 }
 
+// ─── Ports behind a CDN ───────────────────────────────────────────────
+
+/**
+ * For a site proxied by Cloudflare the address we resolve is Cloudflare's, so the "open ports" are
+ * its edge listening for that site (it answers 8080 and 8443 for every proxied domain), not
+ * anything on the owner's server. Left unlabelled, a report on a proxied site lists ports like 8080
+ * and 8443 as if the owner had opened them. The label goes on the service name, which every
+ * consumer already shows, so no schema changes.
+ */
+export const EDGE_PORT_LABEL = " — Cloudflare edge";
+
+export function labelEdgePorts(openPorts: PortEntry[], resolvedIp: string | null): PortEntry[] {
+  if (!resolvedIp || !isCloudflareIp(resolvedIp)) return openPorts;
+  return openPorts.map((p) => ({ ...p, service: `${p.service}${EDGE_PORT_LABEL}` }));
+}
+
 // ─── Dangerous port → vulnerability ──────────────────────────────────────────
 
 function portVulns(openPorts: PortEntry[]): ScanVulnerability[] {
@@ -376,7 +393,7 @@ export async function runRecon(
   );
 
   return {
-    recon: { subdomains, openPorts, dnsRecords, reconDurationMs },
+    recon: { subdomains, openPorts: labelEdgePorts(openPorts, resolvedIp), dnsRecords, reconDurationMs },
     vulns: portVulns(openPorts),
   };
 }

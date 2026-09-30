@@ -88,11 +88,15 @@ vi.mock("./scanner", () => ({
   gradeForResult: () => "A",
 }));
 
-vi.mock("./deepseek", () => ({
-  callDeepSeek: () => {
+vi.mock("./aiAnalysis", () => ({
+  analyseFindings: () => {
     callLog.callDeepSeek += 1;
-    return Promise.resolve(null);
+    return Promise.resolve({
+      analysis: { overallRisk: "", topPriorities: [], quickWins: [], complianceNotes: null, agentFixPrompt: "", source: "template" },
+      failure: { kind: "timeout", attempts: 2 },
+    });
   },
+  describeAiFailure: () => ({ reason: "The AI provider did not answer in time.", evidence: "test" }),
 }));
 
 vi.mock("./ssllabs", () => ({ checkSslLabs: () => Promise.resolve(null) }));

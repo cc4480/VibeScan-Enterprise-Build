@@ -1,0 +1,136 @@
+/**
+ * The analysis a report gets when the AI provider gives none.
+ *
+ * The fix prompt is the part of a report a developer without a security team acts on, and it used
+ * to exist only if a third-party call succeeded, so one rate limit or a bad key left a report with
+ * findings and nothing to paste into a coding tool. This builds a plain prompt from the findings
+ * themselves: each finding's own name, description and recommended fix, most severe first, and
+ * nothing else. It invents no detail (every sentence is one the scanner already wrote) and says
+ * so, and it is labelled `source: "template"` so a report never presents it as AI-written.
+ *
+ * It is pasted into other tools, so like the AI path it goes through redactForLlm and carries no
+ * evidence: anything shaped like a key or password is removed and the raw evidence is not included.
+ */
+import type { ScanVulnerability } from "./scanner";
+import type { TestRecord } from "./testLedger";
+import type { AgentEnvironment } from "./deepseek-prompts";
+import type { AiAnalysisResult } from "./deepseek";
+import { redactForLlm } from "./llmRedact";
+
+export type FallbackAnalysis = AiAnalysisResult & { source: "template" };
+
+const RANK: Record<ScanVulnerability["severity"], number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+const MAX_MAIN = 12;
+const MAX_LOWER = 5;
+
+/** Scan Coverage notes say what did not run; there is nothing in an app to change for them. */
+const isFixable = (v: ScanVulnerability) => v.category !== "Scan Coverage" && v.solution.trim().length > 0;
+
+function firstSentence(text: string, max: number): string {
+  const clean = redactForLlm(text).replace(/\s+/g, " ").trim();
+  const cut = clean.search(/(?<=[.!?])\s/);
+  const sentence = cut > 0 ? clean.slice(0, cut) : clean;
+  return sentence.length > max ? `${sentence.slice(0, max - 1).trimEnd()}…` : sentence;
+}
+
+function bySeverity(a: ScanVulnerability, b: ScanVulnerability): number {
+  return RANK[a.severity] - RANK[b.severity] || (b.confidence ?? 100) - (a.confidence ?? 100);
+}
+
+/** One line about where the change gets made, only where the platform changes how. */
+function platformLine(agent: AgentEnvironment): string {
+  switch (agent) {
+    case "lovable":
+    case "bolt":
+      return "This app was built with a chat-based app builder: make each change through the builder's chat and its settings, and describe changes in plain terms.";
+    case "hosted":
+      return "This site runs on a hosted site builder, so server files usually cannot be edited: use the platform's own settings for headers, access and redirects, and say which findings cannot be fixed there.";
+    case "wordpress":
+      return "This is a WordPress site: prefer theme, plugin and server settings over editing WordPress core files.";
+    default:
+      return "";
+  }
+}
+
+function describeNotRun(tests: TestRecord[]): string {
+  const notRun = tests.filter((t) => t.status !== "ran");
+  if (notRun.length === 0) return "";
+  const names = notRun.slice(0, 4).map((t) => t.name).join("; ");
+  const more = notRun.length > 4 ? ` and ${notRun.length - 4} more` : "";
+  return ` ${notRun.length} check${notRun.length === 1 ? "" : "s"} did not run (${names}${more}), so a clean result does not cover ${notRun.length === 1 ? "it" : "them"}.`;
+}
+
+function summary(vulns: ScanVulnerability[], tests: TestRecord[]): string {
+  const counted = vulns.filter((v) => v.category !== "Scan Coverage");
+  const n = (s: ScanVulnerability["severity"]) => counted.filter((v) => v.severity === s).length;
+  const total = counted.length;
+  return (
+    `This scan reported ${total} finding${total === 1 ? "" : "s"}: ${n("critical")} critical, ${n("high")} high, ` +
+    `${n("medium")} medium, ${n("low")} low and ${n("info")} informational. ` +
+    `This summary was assembled from the findings list itself, without the AI writer, so it only restates what the scan found.` +
+    describeNotRun(tests)
+  );
+}
+
+function buildPrompt(targetUrl: string, main: ScanVulnerability[], lower: ScanVulnerability[], hidden: number, agent: AgentEnvironment): string {
+  const parts: string[] = [
+    `Please fix the following security findings in my web app (${targetUrl}).`,
+    "",
+    "They come from an automated black-box scan. Work through them in order, most severe first. For each one make the smallest change that fixes it and leave unrelated code alone. " +
+      "If a finding does not apply to how this app is built, say so instead of guessing. Do not add a package unless a fix needs one.",
+  ];
+  const platform = platformLine(agent);
+  if (platform) parts.push("", platform);
+
+  let i = 1;
+  const block = (v: ScanVulnerability, label: string) => {
+    parts.push(
+      "",
+      `## ${i++}. ${redactForLlm(v.name)} (${label})`,
+      `What was found: ${firstSentence(v.description, 320)}`,
+      `How to fix it: ${redactForLlm(v.solution).replace(/\s+/g, " ").trim()}`,
+    );
+  };
+  for (const v of main) block(v, v.severity);
+  if (lower.length > 0) {
+    parts.push("", "## Optional, lower priority");
+    for (const v of lower) block(v, "informational");
+  }
+  if (hidden > 0) {
+    parts.push("", `${hidden} further finding${hidden === 1 ? " is" : "s are"} listed in the full report.`);
+  }
+  parts.push("", "When you are done, list what you changed for each finding, and anything you skipped and why.");
+  return parts.join("\n");
+}
+
+export function buildFallbackAnalysis(input: {
+  targetUrl: string;
+  vulnerabilities: ScanVulnerability[];
+  agent: AgentEnvironment;
+  tests: TestRecord[];
+}): FallbackAnalysis {
+  const { targetUrl, vulnerabilities, agent, tests } = input;
+  const fixable = vulnerabilities.filter(isFixable).sort(bySeverity);
+  const actionable = fixable.filter((v) => v.severity !== "info");
+  const infoOnly = fixable.filter((v) => v.severity === "info");
+
+  const main = actionable.slice(0, MAX_MAIN);
+  const lower = infoOnly.slice(0, MAX_LOWER);
+  const hidden = fixable.length - main.length - lower.length;
+
+  const topPriorities = actionable.slice(0, 5).map((v) => `${redactForLlm(v.name)} — ${firstSentence(v.solution, 140)}`);
+  const quickWins = fixable
+    .filter((v) => !actionable.slice(0, 5).includes(v) && v.solution.trim().length <= 160)
+    .slice(0, 3)
+    .map((v) => `${redactForLlm(v.name)} — ${redactForLlm(v.solution).replace(/\s+/g, " ").trim()}`);
+
+  return {
+    overallRisk: summary(vulnerabilities, tests),
+    topPriorities,
+    quickWins,
+    complianceNotes: null,
+    agentFixPrompt: fixable.length === 0 ? "" : buildPrompt(targetUrl, main, lower, hidden, agent),
+    detectedAgent: agent,
+    source: "template",
+  };
+}

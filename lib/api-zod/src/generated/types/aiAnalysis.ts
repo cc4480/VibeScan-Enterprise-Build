@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { AiAnalysisDetectedAgent } from "./aiAnalysisDetectedAgent";
+import type { AiAnalysisSource } from "./aiAnalysisSource";
 
 export interface AiAnalysis {
   overallRisk: string;
@@ -16,4 +17,6 @@ export interface AiAnalysis {
   agentFixPrompt?: string;
   /** The AI coding tool/platform detected from the scanned app's tech stack, used to format agentFixPrompt. */
   detectedAgent?: AiAnalysisDetectedAgent;
+  /** ai when the AI writer produced this analysis; template when it was assembled from the findings because the AI writer gave none. */
+  source?: AiAnalysisSource;
 }

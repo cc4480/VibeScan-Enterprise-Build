@@ -367,6 +367,12 @@ export const GetReportResponse = zod.object({
           .describe(
             "The AI coding tool\/platform detected from the scanned app's tech stack, used to format agentFixPrompt.",
           ),
+        source: zod
+          .enum(["ai", "template"])
+          .optional()
+          .describe(
+            "ai when the AI writer produced this analysis; template when it was assembled from the findings because the AI writer gave none.",
+          ),
       })
       .optional(),
     recon: zod
@@ -630,6 +636,12 @@ export const GetSharedReportResponse = zod.object({
           .optional()
           .describe(
             "The AI coding tool\/platform detected from the scanned app's tech stack, used to format agentFixPrompt.",
+          ),
+        source: zod
+          .enum(["ai", "template"])
+          .optional()
+          .describe(
+            "ai when the AI writer produced this analysis; template when it was assembled from the findings because the AI writer gave none.",
           ),
       })
       .optional(),
