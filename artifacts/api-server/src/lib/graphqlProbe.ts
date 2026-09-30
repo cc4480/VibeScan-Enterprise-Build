@@ -57,6 +57,35 @@ const GRAPHQL_SPECIFIC_PATHS = [
   "/graphql/v2",
 ];
 
+/** Hosts many unrelated customers share; a sibling subdomain there is NOT the same site. */
+const SHARED_SUFFIXES = [
+  "vercel.app", "netlify.app", "herokuapp.com", "github.io", "pages.dev", "workers.dev",
+  "web.app", "firebaseapp.com", "onrender.com", "fly.dev", "azurewebsites.net", "appspot.com",
+  "amazonaws.com", "cloudfront.net", "railway.app", "supabase.co", "glitch.me", "repl.co",
+];
+
+/** Registrable-domain guess: last two labels, three under a two-letter ccTLD's second level (co.uk). */
+function siteOf(host: string): string {
+  const labels = host.toLowerCase().replace(/^www\./, "").split(".");
+  const cc = labels.length >= 3 && labels[labels.length - 1]!.length === 2 &&
+    ["co", "com", "org", "net", "gov", "ac", "edu"].includes(labels[labels.length - 2]!);
+  return labels.slice(cc ? -3 : -2).join(".");
+}
+
+/**
+ * Whether a JS-referenced endpoint belongs to the scanned site: the same host, or a
+ * subdomain of the same registrable domain (api.example.com for www.example.com).
+ * A vendor's endpoint (a headless CMS, a public data API) is never probed or reported
+ * against the customer; the introspection POST would also be traffic to a third party.
+ */
+export function isOwnHost(candidateHost: string, targetHost: string): boolean {
+  const a = candidateHost.toLowerCase().replace(/^www\./, "");
+  const b = targetHost.toLowerCase().replace(/^www\./, "");
+  if (a === b) return true;
+  if (SHARED_SUFFIXES.some((x) => a === x || a.endsWith("." + x) || b === x || b.endsWith("." + x))) return false;
+  return siteOf(a) === siteOf(b);
+}
+
 function extractGraphqlUrlsFromJs(html: string, origin: string): string[] {
   const inlineRx = /<script(?:[^>]*)>([\s\S]*?)<\/script>/gi;
   const js: string[] = [];
@@ -76,9 +105,10 @@ function extractGraphqlUrlsFromJs(html: string, origin: string): string[] {
     while ((pm = rx.exec(content)) !== null) {
       try {
         const parsed = new URL(pm[1], origin);
-        // Only same-origin or explicit graphql mentions — skip if it's a CDN or analytics URL
-        if (parsed.pathname.toLowerCase().includes("graphql") ||
-            parsed.hostname === new URL(origin).hostname) {
+        // Own host (or a subdomain of the same site) only. A third-party endpoint
+        // inlined in the page is neither ours to probe nor the customer's to own.
+        if (isOwnHost(parsed.hostname, new URL(origin).hostname) &&
+            (parsed.pathname.toLowerCase().includes("graphql") || parsed.hostname === new URL(origin).hostname)) {
           candidates.push(parsed.href);
         }
       } catch { /* skip invalid */ }
@@ -206,14 +236,15 @@ async function checkEndpoint(url: string): Promise<ScanVulnerability[]> {
 
     findings.push(vuln({
       name: "GraphQL Introspection Enabled in Production",
-      severity: "high",
+      severity: "medium",
       category: "API Security",
       description:
         `GraphQL introspection is enabled at ${path}. This lets any external party retrieve ` +
-        `the full API schema — every type, query, mutation, and field name — in a single request. ` +
-        `Introspection is a reconnaissance tool: it hands attackers the complete attack surface ` +
-        `of your API${typeCount > 0 ? ` (${typeCount} types exposed)` : ""}. ` +
-        `Tools like GraphQL Voyager can visualise the entire schema from one introspection call.`,
+        `the API schema — type, query, mutation and field names — in a single request` +
+        `${typeCount > 0 ? ` (${typeCount} types returned)` : ""}. ` +
+        `It exposes structure, not data, and many public or developer-facing APIs leave it on ` +
+        `deliberately; it becomes a real weakness when the API is private or relies on ` +
+        `obscurity of its fields for access control. Verify whether this schema is meant to be public.`,
       evidence: `POST ${url}\n{"query":"{ __schema { types { name } } }"}\nHTTP ${introRes.status} — full schema returned (${typeCount} types)\nConfirmed via __typename endpoint verification`,
       solution:
         "Disable introspection in production. Apollo Server: pass `introspection: false` (default when NODE_ENV=production). " +
@@ -221,9 +252,10 @@ async function checkEndpoint(url: string): Promise<ScanVulnerability[]> {
         "GraphQL Yoga: pass `disableIntrospection: true`. " +
         "If you need introspection for internal tooling, restrict it by IP or API key.",
       cweId: "CWE-200",
-      cvssScore: 7.5,
+      cvssScore: 5.3,
       wstgId: "WSTG-INFO-01",
-      confidence: 97,
+      // The schema response is directly observed; whether it is intended is not.
+      confidence: 90,
     }));
   }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { runGraphqlProbe } from "./graphqlProbe.js";
+import { runGraphqlProbe, isOwnHost } from "./graphqlProbe.js";
 
 /**
  * First tests for this module — nothing reached it before, because its only
@@ -88,5 +88,46 @@ describe("runGraphqlProbe — field suggestions", () => {
     answerWith({ errors: [{ message: 'Cannot query field "x". Did you mean "y"?' }] });
 
     expect(await runGraphqlProbe("https://example.com/", EMPTY_PAGE)).toEqual([]);
+  });
+});
+
+describe("runGraphqlProbe — third-party endpoints and severity", () => {
+  it("never POSTs to a vendor GraphQL endpoint inlined in the page (clean twin)", async () => {
+    const hosts: string[] = [];
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+      const u = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      hosts.push(u.host);
+      if (u.host === "cms.vendor.test") {
+        return new Response(JSON.stringify({ data: { __typename: "Query", __schema: { types: schemaTypes } } }), {
+          status: 200, headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response("Not Found", { status: 404 });
+    }) as typeof fetch;
+
+    const page = `<script>const client = new ApolloClient({ uri: "https://cms.vendor.test/graphql" });</script>`;
+    const vulns = await runGraphqlProbe("https://www.example.test/", page);
+    expect(vulns).toEqual([]);
+    expect(hosts).not.toContain("cms.vendor.test");
+  });
+
+  it("still probes and reports the site's own subdomain endpoint", async () => {
+    answerWith({ data: { __typename: "Query", __schema: { types: schemaTypes } } });
+    const page = `<script>const client = new ApolloClient({ uri: "https://api.example.test/graphql" });</script>`;
+    const vulns = await runGraphqlProbe("https://www.example.test/", page);
+    expect(vulns.some((v) => /introspection/i.test(v.name) && v.evidence.includes("api.example.test"))).toBe(true);
+  });
+
+  it("does not treat sibling tenants on a shared host as the same site", () => {
+    expect(isOwnHost("api.example.test", "www.example.test")).toBe(true);
+    expect(isOwnHost("other.vercel.app", "mine.vercel.app")).toBe(false);
+    expect(isOwnHost("cms.vendor.test", "www.example.test")).toBe(false);
+  });
+
+  it("introspection alone is MEDIUM, not HIGH, and says it may be intentional", async () => {
+    answerWith({ data: { __typename: "Query", __schema: { types: schemaTypes } } });
+    const v = (await runGraphqlProbe("https://example.com/", EMPTY_PAGE)).find((x) => /introspection/i.test(x.name))!;
+    expect(v.severity).toBe("medium");
+    expect(v.description).toMatch(/deliberately|Verify/);
   });
 });
