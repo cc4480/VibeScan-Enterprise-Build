@@ -15,6 +15,7 @@ import { activeProbesStillAllowed, type VerifyHost } from "./activeScopeGuard";
 import { randomUUID } from "node:crypto";
 import { detectChallengePage } from "./challengePage.js";
 import { analyzeCsp, findMixedContent, hasNosniff } from "./headerAnalysis.js";
+import { parseSetCookie } from "./cookieFlags.js";
 import { isLikelySessionCookie, requiresHttpOnly } from "./cookieClassification.js";
 
 /**
@@ -250,9 +251,11 @@ function analyzeCookies(setCookies: string[], flattenedFallback?: string): ScanV
     // These are date fragments produced when "expires=Wed, 03-Jan-2025" is
     // mis-split at the comma (the regex above can't distinguish that comma from
     // a multi-cookie separator). A valid Set-Cookie first segment MUST contain "=".
-    const firstSegment = cookie.split(";")[0] ?? "";
-    if (!firstSegment.includes("=")) continue;
-    const namePart = firstSegment.split("=")[0]?.trim() ?? "cookie";
+    const parsed = parseSetCookie(cookie);
+    if (!parsed) continue;
+    // A cookie the server is clearing (Max-Age=0 / past Expires) carries no session.
+    if (parsed.deleted) continue;
+    const namePart = parsed.name;
 
     // Skip cookies owned by third-party infrastructure — the site operator
     // cannot add Secure/HttpOnly/SameSite to cookies they don't set.
@@ -260,13 +263,13 @@ function analyzeCookies(setCookies: string[], flattenedFallback?: string): ScanV
 
     const isSession = isLikelySessionCookie(namePart);
 
-    if (!/secure/i.test(cookie))   (isSession ? noSecure : noSecureOther).push(namePart);
+    if (!parsed.secure)   (isSession ? noSecure : noSecureOther).push(namePart);
     // A CSRF token is exempt from HttpOnly and only from HttpOnly: the page has
     // to read it to echo it back. It still needs Secure and SameSite.
-    if (!/httponly/i.test(cookie) && requiresHttpOnly(namePart)) {
+    if (!parsed.httpOnly && requiresHttpOnly(namePart)) {
       (isSession ? noHttpOnly : noHttpOnlyOther).push(namePart);
     }
-    if (!/samesite/i.test(cookie)) (isSession ? noSameSite : noSameSiteOther).push(namePart);
+    if (!parsed.sameSite) (isSession ? noSameSite : noSameSiteOther).push(namePart);
   }
 
   const findings: ScanVulnerability[] = [];
