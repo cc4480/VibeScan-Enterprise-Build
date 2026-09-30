@@ -1,0 +1,156 @@
+import { Link } from "wouter";
+import { CheckCircle2, Zap, Bell, Bot, Package } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { BuyOptions } from "@/components/billing-options";
+
+/** What you get, and the prices. */
+export function PricingSection() {
+  return (
+    <section id="pricing" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="text-center mb-16">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold mb-4 uppercase tracking-wider">
+          <Zap className="w-3.5 h-3.5" /> Free Trial
+        </div>
+        <h2 className="text-3xl md:text-4xl font-bold mb-4">3 free scans every month, everything included</h2>
+        <p className="text-muted-foreground max-w-2xl mx-auto">Every account gets 3 free scans a month, renewing on the 1st — every check, no tier to pick. Paid plans and scan credits are coming soon; we'll email you when they open.</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+        {[
+          {
+            icon: Bot,
+            title: "Security Scan",
+            desc: "Every check we have, on every scan.",
+            features: [
+              "Headers, TLS and DNS",
+              "Injection, XSS and path traversal",
+              "API surface and access control",
+              "AI analysis",
+              "Step-by-step fix guides",
+            ],
+            cta: "Run a Scan",
+            href: "/scan",
+            color: "text-primary",
+            bg: "bg-primary/10",
+            border: "border-primary/50 shadow-[0_0_30px_rgba(20,184,120,0.1)]",
+            popular: true,
+          },
+          {
+            icon: Bell,
+            title: "Monitoring — from $19/month",
+            desc: "Starter: 3 sites and 20 scans a month. Pro ($49): 5 sites and 100 scans a month.",
+            features: [
+              "3 sites (Starter) or 5 sites (Pro) watched around the clock",
+              "20 or 100 on-demand full scans every month",
+              "Hourly uptime, header and certificate checks",
+              "Hourly CVE matching, ranked by EPSS",
+              "Rescans that follow your grade (A: 14d → F: 3d)",
+              "Regression alerts and Slack webhooks",
+            ],
+            cta: "See pricing",
+            href: "#buy",
+            color: "text-indigo-400",
+            bg: "bg-indigo-400/10",
+            border: "border-indigo-500/30",
+          },
+        ].map((item, i) => (
+          <div key={i} className={cn("glass-panel p-8 rounded-2xl flex flex-col relative", item.border)}>
+            {item.popular && (
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-primary text-primary-foreground px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+                Most Popular
+              </div>
+            )}
+            <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center mb-5", item.bg, item.color)}>
+              <item.icon className="w-6 h-6" />
+            </div>
+            <h3 className="text-xl font-bold mb-2">{item.title}</h3>
+            <p className="text-sm text-muted-foreground pb-5 border-b border-white/10 mb-5">{item.desc}</p>
+            <ul className="flex flex-col gap-2.5 mb-8 flex-1">
+              {item.features.map((feat, j) => (
+                <li key={j} className="flex items-start gap-2 text-sm">
+                  <CheckCircle2 className={cn("w-4 h-4 shrink-0 mt-0.5", item.color)} />
+                  <span>{feat}</span>
+                </li>
+              ))}
+            </ul>
+            <Link
+              href={item.href}
+              onClick={(e) => {
+                // In-page anchor: scroll to the plans rather than route.
+                if (item.href.startsWith("#")) {
+                  e.preventDefault();
+                  document.getElementById(item.href.slice(1))?.scrollIntoView({ behavior: "smooth" });
+                }
+              }}
+              className={cn(
+                "w-full py-3 rounded-xl font-bold transition-all text-center block",
+                item.popular
+                  ? "bg-primary text-primary-foreground hover:shadow-[0_0_20px_rgba(20,184,120,0.4)]"
+                  : item.href === "#buy"
+                  ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30"
+                  : "bg-secondary text-foreground hover:bg-white/10",
+              )}
+            >
+              {item.cta}
+            </Link>
+          </div>
+        ))}
+      </div>
+
+      <div id="buy" className="mt-14 max-w-5xl mx-auto scroll-mt-24">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary border border-white/10 text-muted-foreground text-xs font-semibold mb-4 uppercase tracking-wider">
+            <Package className="w-3.5 h-3.5" /> Plans & Credits
+          </div>
+          <h3 className="text-2xl md:text-3xl font-bold mb-3">Keep going once your free scans are gone</h3>
+          <p className="text-muted-foreground max-w-xl mx-auto text-sm">Paid plans and scan credits are coming soon, with the same checks, AI report and fix guides. We'll email you when they open.</p>
+        </div>
+
+        {/* Live Buy / Subscribe buttons once Stripe is configured; until then,
+            the prices as information and an honest "not live yet". Prices in
+            the live view come from the server, not from this file. */}
+        <BuyOptions fallback={<StaticPricing />} />
+      </div>
+    </section>
+  );
+}
+
+/** Prices as information only — shown until checkout is switched on. */
+function StaticPricing() {
+  return (
+    <>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        {[
+          { label: "SecScan Starter", price: "$19", per: "per month · 3 sites watched · 20 scans", note: null },
+          { label: "SecScan Pro", price: "$49", per: "per month · 5 sites watched · 100 scans", note: null, popular: true },
+          { label: "10 Scan Credits", price: "$12", per: "$1.20 / scan", note: null },
+          { label: "50 Scan Credits", price: "$49", per: "$0.98 / scan", note: "18% off" },
+        ].map((tier, i) => (
+          <div
+            key={i}
+            className={cn(
+              "glass-panel p-6 rounded-xl flex flex-col items-center text-center gap-1 relative",
+              tier.popular ? "border-primary/50" : "border-white/10",
+            )}
+          >
+            {tier.popular && (
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-primary text-primary-foreground px-3 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider">
+                Best Value
+              </div>
+            )}
+            <span className="text-sm text-muted-foreground mt-1">{tier.label}</span>
+            <span className="text-3xl font-bold">{tier.price}</span>
+            <span className="text-xs text-muted-foreground">
+              {tier.per}
+              {tier.note && <span className="text-primary font-semibold"> · {tier.note}</span>}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="text-center text-xs text-muted-foreground mt-6">
+        Purchasing isn't live yet — <Link href="/scan" className="underline hover:text-foreground">start with this month's 3 free scans</Link> and we'll email you when plans and credits are ready to buy.
+      </p>
+    </>
+  );
+}
+
