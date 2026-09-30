@@ -115,7 +115,7 @@ describe("runGraphqlProbe — third-party endpoints and severity", () => {
     answerWith({ data: { __typename: "Query", __schema: { types: schemaTypes } } });
     const page = `<script>const client = new ApolloClient({ uri: "https://api.example.test/graphql" });</script>`;
     const vulns = await runGraphqlProbe("https://www.example.test/", page);
-    expect(vulns.some((v) => /introspection/i.test(v.name) && v.evidence.includes("api.example.test"))).toBe(true);
+    expect(vulns.some((v) => /introspection/i.test(v.name) && v.evidence?.includes("api.example.test"))).toBe(true);
   });
 
   it("does not treat sibling tenants on a shared host as the same site", () => {
