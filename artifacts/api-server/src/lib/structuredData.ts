@@ -25,6 +25,7 @@
 import { randomUUID } from "node:crypto";
 import { detectChallengePage } from "./challengePage.js";
 import type { ScanVulnerability } from "./scanner.js";
+import { internalUrlsIn } from "./structuredDataHosts.js";
 
 function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
   return { id: randomUUID(), ...partial };
@@ -127,39 +128,6 @@ export function extractPageMetadata(html: string): PageMetadata {
 
 // ── internal-host detection ────────────────────────────────────────────────
 
-/**
- * Hostnames and addresses that should never appear in a public document.
- *
- * Deliberately narrow. Anything ambiguous — a hostname that merely looks
- * internal, a private-looking path — is left alone; the value of this check
- * depends entirely on it not crying wolf.
- */
-const INTERNAL_HOST = new RegExp(
-  [
-    "localhost",
-    "\\b127\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\b",
-    "\\b10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\b",
-    "\\b192\\.168\\.\\d{1,3}\\.\\d{1,3}\\b",
-    "\\b172\\.(?:1[6-9]|2\\d|3[01])\\.\\d{1,3}\\.\\d{1,3}\\b",
-    "\\b[a-z0-9-]+\\.(?:local|internal|lan|intranet|corp|test|localdomain)\\b",
-  ].join("|"),
-  "i",
-);
-
-/** Collect every string value in a JSON-LD document, however deeply nested. */
-function collectStrings(value: unknown, out: string[], depth = 0): void {
-  if (depth > 12 || out.length > 2000) return;
-  if (typeof value === "string") {
-    out.push(value);
-  } else if (Array.isArray(value)) {
-    for (const v of value) collectStrings(v, out, depth + 1);
-  } else if (value && typeof value === "object") {
-    for (const v of Object.values(value as Record<string, unknown>)) {
-      collectStrings(v, out, depth + 1);
-    }
-  }
-}
-
 // ── host comparison ────────────────────────────────────────────────────────
 
 /**
@@ -227,15 +195,9 @@ export function structuredDataFindings(
   // ── security-relevant ────────────────────────────────────────────────────
 
   // Internal hosts leaked through structured data.
+  // URL-valued fields only, judged on the parsed host (see structuredDataHosts.ts).
   const leaked = new Set<string>();
-  for (const block of md.jsonLd) {
-    const strings: string[] = [];
-    collectStrings(block.value, strings);
-    for (const s of strings) {
-      const hit = INTERNAL_HOST.exec(s);
-      if (hit) leaked.add(s.slice(0, 160));
-    }
-  }
+  for (const block of md.jsonLd) internalUrlsIn(block.value, leaked);
   if (leaked.size > 0) {
     findings.push(vuln({
       name: "Internal Hostname Exposed in Structured Data",

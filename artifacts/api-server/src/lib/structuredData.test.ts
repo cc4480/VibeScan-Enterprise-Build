@@ -138,6 +138,26 @@ describe("internal host disclosure", () => {
     expect(names(html)).not.toContain("Internal Hostname Exposed in Structured Data");
   });
 
+  it("does not flag prose, versions or file names that merely look internal", () => {
+    // A tech-blog article: localhost in a sentence, a macOS version, foo.test / settings.local file names.
+    const html = goodHtml(`<script type="application/ld+json">
+      {"@context":"https://schema.org","@type":"TechArticle","url":"https://blog.example.com/post",
+       "headline":"Run the dev server","description":"Open http://localhost:3000, then rename foo.test and edit settings.local",
+       "softwareVersion":"10.15.7.1","operatingSystem":"macOS 10.15.7.1"}
+    </script>`);
+    expect(names(html)).not.toContain("Internal Hostname Exposed in Structured Data");
+  });
+
+  it("flags an internal host in a nested sameAs or image URL", () => {
+    const html = goodHtml(`<script type="application/ld+json">
+      {"@context":"https://schema.org","@type":"Organization","sameAs":["https://twitter.com/x","http://intranet.corp/x"],
+       "image":{"@type":"ImageObject","url":"http://192.168.1.20/a.png"}}
+    </script>`);
+    const leak = structuredDataFindings(PAGE, html).find((v) => v.name === "Internal Hostname Exposed in Structured Data");
+    expect(leak?.evidence).toContain("intranet.corp");
+    expect(leak?.evidence).toContain("192.168.1.20");
+  });
+
   it("does not walk into a block that failed to parse", () => {
     const html = goodHtml(`<script type="application/ld+json">{"url":"http://10.0.0.1",}</script>`);
     const f = names(html);
