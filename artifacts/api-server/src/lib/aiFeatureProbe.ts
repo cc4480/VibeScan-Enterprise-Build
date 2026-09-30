@@ -33,8 +33,25 @@ const PROVIDER_HOSTS = [
 ];
 const hostAlt = PROVIDER_HOSTS.map((h) => h.replace(/\./g, "\\.")).join("|");
 
-/** fetch("https://api.openai.com/...") or baseURL: "https://api.groq.com/..." — a call, not a mention in text. */
-const DIRECT_CALL = new RegExp(`(?:fetch\\(\\s*|baseURL\\s*:\\s*|baseUrl\\s*:\\s*|url\\s*:\\s*)["'\`]https://(${hostAlt})(?:/[^"'\`\\s]*)?["'\`]`, "i");
+/** fetch("https://api.openai.com/...") — the page itself issues a request to a provider. */
+const FETCH_CALL = new RegExp(`fetch\\(\\s*["'\`]https://(${hostAlt})(?:/[^"'\`\\s]*)?["'\`]`, "i");
+/**
+ * baseURL/url naming a provider. On its own that is the default every AI SDK carries in a bundle, and
+ * says nothing about who sends requests, so it counts only with a credential in the same object.
+ */
+const CONFIG_HOST = new RegExp(`(?:baseURL|baseUrl|url)\\s*:\\s*["'\`]https://(${hostAlt})(?:/[^"'\`\\s]*)?["'\`]`, "gi");
+const CREDENTIAL_NEAR = /api[_-]?key|authorization|bearer\s/i;
+const CONFIG_WINDOW = 200;
+
+/** A configuration that names a provider host AND carries a credential right beside it. */
+function configWithCredential(js: string): string | null {
+  for (const m of js.matchAll(CONFIG_HOST)) {
+    const at = m.index ?? 0;
+    const near = js.slice(Math.max(0, at - CONFIG_WINDOW), at + m[0].length + CONFIG_WINDOW);
+    if (CREDENTIAL_NEAR.test(near)) return m[1]!;
+  }
+  return null;
+}
 const BROWSER_FLAG = /dangerouslyAllowBrowser\s*:\s*(?:true|!0)/;
 
 /**
@@ -45,8 +62,16 @@ const BROWSER_FLAG = /dangerouslyAllowBrowser\s*:\s*(?:true|!0)/;
 const ROLE = String.raw`["']?role["']?\s*:\s*["']system["']`;
 const CONTENT = String.raw`["']?content["']?\s*:\s*`;
 const LITERAL = String.raw`(?:(["'])((?:(?!\1)[^\\\n]|\\.){80,}?)\1|\x60((?:[^\x60\\]|\\[\s\S]){80,}?)\x60)`;
-const SYSTEM_PROMPT = new RegExp(`${ROLE}\\s*,\\s*${CONTENT}${LITERAL}`);
-const SYSTEM_PROMPT_REVERSED = new RegExp(`${CONTENT}${LITERAL}\\s*,\\s*${ROLE}`);
+const SYSTEM_PROMPT = new RegExp(`${ROLE}\\s*,\\s*${CONTENT}${LITERAL}`, "g");
+const SYSTEM_PROMPT_REVERSED = new RegExp(`${CONTENT}${LITERAL}\\s*,\\s*${ROLE}`, "g");
+
+/**
+ * A documentation or tutorial bundle prints example code that contains a role:"system" message.
+ * Code fences, <pre>/<code> blocks and highlighter markup just before the literal mark it as
+ * something being shown to a reader, not sent to a model.
+ */
+const DOCS_CONTEXT = /```|<pre\b|<code\b|\bhljs\b|language-(?:js|ts|javascript|typescript|json)\b/i;
+const DOCS_LOOKBEHIND = 400;
 
 function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
   return { id: randomUUID(), ...partial };
@@ -63,20 +88,25 @@ function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
  * fully leaked prompt score 49 of 182 in plain text and a prompt of short lines score zero.
  */
 export function extractSystemPromptText(js: string): string | null {
-  const prompt = SYSTEM_PROMPT.exec(js) ?? SYSTEM_PROMPT_REVERSED.exec(js);
-  if (!prompt) return null;
-  const raw = prompt[2] ?? prompt[3];
-  return raw === undefined ? null : unescapeJsLiteral(raw);
+  for (const re of [SYSTEM_PROMPT, SYSTEM_PROMPT_REVERSED]) {
+    for (const prompt of js.matchAll(re)) {
+      const at = prompt.index ?? 0;
+      if (DOCS_CONTEXT.test(js.slice(Math.max(0, at - DOCS_LOOKBEHIND), at))) continue;
+      const raw = prompt[2] ?? prompt[3];
+      if (raw !== undefined) return unescapeJsLiteral(raw);
+    }
+  }
+  return null;
 }
 
 export function scanAiUsage(js: string): ScanVulnerability[] {
   const out: ScanVulnerability[] = [];
 
-  const call = DIRECT_CALL.exec(js);
+  const callHost = FETCH_CALL.exec(js)?.[1] ?? configWithCredential(js);
   const flag = BROWSER_FLAG.test(js);
-  if (call || flag) {
+  if (callHost || flag) {
     const signals = [
-      call ? `Request aimed straight at ${call[1]}` : null,
+      callHost ? `Request aimed straight at ${callHost}` : null,
       flag ? "OpenAI SDK option dangerouslyAllowBrowser is enabled" : null,
     ].filter(Boolean);
     out.push(vuln({
