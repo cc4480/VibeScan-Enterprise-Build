@@ -46,6 +46,20 @@ export async function dnsQuery(
   name: string,
   type: "TXT" | "MX" | "A" | "DNSKEY" | "NS",
 ): Promise<{ answers: DnsAnswer[]; status: number }> {
+  const first = await dnsQueryOnce(name, type);
+  // SERVFAIL is a resolver hiccup, not an answer: nasa.gov's TXT lookup returns it about one time in ten,
+  // and one retry nearly always gets the real answer. A second SERVFAIL is passed on as such.
+  if (first.status === 2) {
+    const second = await dnsQueryOnce(name, type);
+    if (second.status !== 2) return second;
+  }
+  return first;
+}
+
+async function dnsQueryOnce(
+  name: string,
+  type: "TXT" | "MX" | "A" | "DNSKEY" | "NS",
+): Promise<{ answers: DnsAnswer[]; status: number }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), DNS_TIMEOUT_MS);
   try {
@@ -124,17 +138,22 @@ export async function findUpChain(
 }> {
   const checked: string[] = [];
   let firstStatus = -1;
+  // A lookup that failed (SERVFAIL and the like) up the chain means "could not ask", not "no record":
+  // the most specific name can answer cleanly with nothing while the parent, where the record
+  // usually lives, errored. Concluding "absent" from that reported nasa.gov as having no SPF record.
+  let askFailed = false;
   for (const domain of ancestorDomains(hostname)) {
     const queried = label(domain);
     checked.push(queried);
     const { answers, status } = await dnsQuery(queried, "TXT");
     if (checked.length === 1) firstStatus = status;
     if (status === -1) return { found: null, at: null, status: -1, conclusive: false, checked };
+    if (status !== 0 && status !== 3) askFailed = true;
     if (status === 3 && nxdomainMeansAbsent) continue;
     const records = answers.map((a) => a.data.replace(/^"|"$/g, "").replace(/"\s*"/g, ""));
     const hit = records.find(match);
     if (hit) return { found: hit, at: queried, status, conclusive: true, checked };
   }
-  const conclusive = firstStatus === 0 || (nxdomainMeansAbsent && firstStatus === 3);
+  const conclusive = !askFailed && (firstStatus === 0 || (nxdomainMeansAbsent && firstStatus === 3));
   return { found: null, at: null, status: firstStatus, conclusive, checked };
 }
