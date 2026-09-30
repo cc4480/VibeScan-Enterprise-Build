@@ -24,7 +24,7 @@ export const CATALOG_HTTP: CatalogTest[] = [
     ["info", "Missing Cross-Origin-Embedder-Policy (COEP)", "Missing Cross-Origin-Embedder-Policy (COEP)"],
     ["info", "Missing Cross-Origin-Resource-Policy (CORP)", "Missing Cross-Origin-Resource-Policy (CORP)"],
     ["info", "Missing Cache-Control Headers", "Missing Cache-Control Headers"],
-    ["medium", "Permissive CORS Policy (Wildcard Origin)", "Permissive CORS Policy (Wildcard Origin)", undefined, "CORS Misconfiguration"],
+    ["info", "Permissive CORS Policy (Wildcard Origin)", "Permissive CORS Policy (Wildcard Origin)", undefined, "CORS Misconfiguration"],
     ["medium", "Mixed Content (HTTP Resources on HTTPS Page)", "Mixed Content (HTTP Resources on HTTPS Page)"],
     ["info", "Server Version Disclosure", "Server Version Disclosure", undefined, "Information Disclosure"],
     ["info", "X-Powered-By Header Discloses Technology Stack", "X-Powered-By Header Discloses Technology Stack", undefined, "Information Disclosure"],

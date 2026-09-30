@@ -14,6 +14,7 @@
 import { activeProbesStillAllowed, type VerifyHost } from "./activeScopeGuard";
 import { randomUUID } from "node:crypto";
 import { detectChallengePage } from "./challengePage.js";
+import { analyzeCsp, findMixedContent, hasNosniff } from "./headerAnalysis.js";
 import { isLikelySessionCookie, requiresHttpOnly } from "./cookieClassification.js";
 
 /**
@@ -627,7 +628,10 @@ async function runScanInner(
   }
 
   const isHttps = finalUrl.startsWith("https://");
-  const tlsGrade = isHttps ? "A" : null;
+  // No grade is assigned here: nothing in this scan measures TLS quality, and a
+  // hard-coded "A" would be shown as fact if SSL Labs times out. worker.ts sets
+  // it only from a completed SSL Labs assessment; null means "not assessed".
+  const tlsGrade: string | null = null;
   const server = headerVal(rawHeaders, "server") ?? null;
 
   // Detect technologies and enrich with version numbers where available
@@ -749,25 +753,15 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
       wstgId: "WSTG-CONF-12",
     }));
   } else {
-    // Parse directives into a map so we can check WHICH directives contain
-    // unsafe-inline / unsafe-eval.  This matters because:
+    // Directives are parsed in headerAnalysis.ts. 'unsafe-inline' next to a nonce, hash
+    // or 'strict-dynamic' is ignored by browsers, and 'wasm-unsafe-eval' is not
+    // 'unsafe-eval', so neither counts as weakness.
     //   • unsafe-inline / unsafe-eval in script-src → MEDIUM (XSS, scripts execute)
     //   • unsafe-inline ONLY in style-src (script-src is clean) → LOW (CSS injection
     //     only — can spoof UI / exfiltrate via attribute selectors, but cannot run JS)
-    const cspDirMap = new Map<string, string>();
-    for (const seg of csp.split(";").map((s) => s.trim()).filter(Boolean)) {
-      const spaceIdx = seg.indexOf(" ");
-      const dname = spaceIdx === -1 ? seg : seg.slice(0, spaceIdx);
-      const dval  = spaceIdx === -1 ? ""  : seg.slice(spaceIdx + 1);
-      cspDirMap.set(dname.toLowerCase(), dval);
-    }
-
-    const defaultSrc      = cspDirMap.get("default-src") ?? "";
-    const effectiveScript = cspDirMap.get("script-src") ?? defaultSrc;
-    const effectiveStyle  = cspDirMap.get("style-src")  ?? defaultSrc;
-
-    const scriptHasUnsafe = /unsafe-inline|unsafe-eval/i.test(effectiveScript);
-    const styleOnlyUnsafe = /unsafe-inline/i.test(effectiveStyle) && !scriptHasUnsafe;
+    const cspVerdict = analyzeCsp(csp);
+    const scriptHasUnsafe = cspVerdict.scriptUnsafeInline || cspVerdict.scriptUnsafeEval;
+    const styleOnlyUnsafe = cspVerdict.styleUnsafeInline && !scriptHasUnsafe;
 
     if (scriptHasUnsafe) {
       vulnerabilities.push(vuln({
@@ -775,7 +769,7 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
         severity: "medium",
         category: "Injection Defense",
         description: "The Content-Security-Policy allows 'unsafe-inline' or 'unsafe-eval' in script-src (or default-src). This significantly weakens XSS protection — attackers who achieve HTML injection can execute arbitrary JavaScript in the page's security context.",
-        evidence: `GET ${finalUrl}\nContent-Security-Policy: ${csp}\n(unsafe-inline or unsafe-eval present in script-src — inline script execution is permitted)`,
+        evidence: `GET ${finalUrl}\nContent-Security-Policy: ${csp}\n(${[cspVerdict.scriptUnsafeInline && "unsafe-inline (no nonce/hash/strict-dynamic to override it)", cspVerdict.scriptUnsafeEval && "unsafe-eval"].filter(Boolean).join(" and ")} in effect for scripts)`,
         solution: "Replace 'unsafe-inline' with nonce-based or hash-based CSP directives. Avoid 'unsafe-eval' entirely. Use a CSP evaluator (csp-evaluator.withgoogle.com) to audit your policy.",
         cweId: "CWE-79",
         cvssScore: 5.4,
@@ -880,14 +874,14 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
 
   // ── X-Content-Type-Options ────────────────────────────────────────────
   const xcto = headerVal(rawHeaders, "x-content-type-options");
-  if (!xcto || xcto.toLowerCase() !== "nosniff") {
+  if (!hasNosniff(xcto)) {
     vulnerabilities.push(vuln({
       name: "Missing X-Content-Type-Options: nosniff",
       severity: "medium",
       category: "Content Sniffing",
       description: "The X-Content-Type-Options header is absent or not set to 'nosniff'. Browsers may MIME-sniff response content and execute it as a different content type, enabling content-injection attacks.",
       evidence: xcto
-        ? `GET ${finalUrl}\nX-Content-Type-Options: ${xcto}\n(must be exactly "nosniff")`
+        ? `GET ${finalUrl}\nX-Content-Type-Options: ${xcto}\n(must include "nosniff")`
         : `GET ${finalUrl}\nX-Content-Type-Options: (header absent from response)`,
       solution: "Add to all responses: X-Content-Type-Options: nosniff",
       cweId: "CWE-16",
@@ -979,15 +973,21 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
   // ── CORS ───────────────────────────────────────────────────────────────
   const acao = headerVal(rawHeaders, "access-control-allow-origin");
   if (acao === "*") {
+    // GitHub Pages, Netlify and CDNs send this by default for public assets, and
+    // browsers never attach cookies or credentials to a "*" response, so on its own
+    // it exposes only what any visitor already sees. Credentials paired with "*"
+    // is an invalid combination that signals a misconfigured intent, so keep LOW.
+    const withCredentials = /^true$/i.test(headerVal(rawHeaders, "access-control-allow-credentials") ?? "");
     vulnerabilities.push(vuln({
       name: "Permissive CORS Policy (Wildcard Origin)",
-      severity: "medium",
+      severity: withCredentials ? "low" : "info",
       category: "CORS Misconfiguration",
-      description: "The server responds with Access-Control-Allow-Origin: *, meaning any website can make cross-origin requests to this endpoint and read the response. If this endpoint returns sensitive data, that data is exposed to all origins.",
-      evidence: `GET ${finalUrl}\nAccess-Control-Allow-Origin: *`,
-      solution: "Replace the wildcard with a specific allowlist of trusted origins: Access-Control-Allow-Origin: https://your-frontend.com. Never use * on endpoints that return user-specific data.",
+      description: withCredentials
+        ? "The page responds with Access-Control-Allow-Origin: * and Access-Control-Allow-Credentials: true. Browsers reject that combination, so credentialed cross-origin reads do not work, but it suggests the CORS configuration was not thought through."
+        : "The page responds with Access-Control-Allow-Origin: *, so any website can read this response from a browser. That is normal for public, static content (hosting platforms and CDNs add it by default) and browsers do not send cookies with wildcard requests. It only matters if this or other endpoints return user-specific data without relying on cookies.",
+      evidence: `GET ${finalUrl}\nAccess-Control-Allow-Origin: *${withCredentials ? "\nAccess-Control-Allow-Credentials: true" : ""}`,
+      solution: "If this site serves only public content, no action is needed. For endpoints that return user-specific data, replace the wildcard with an allowlist of trusted origins: Access-Control-Allow-Origin: https://your-frontend.com.",
       cweId: "CWE-942",
-      cvssScore: 6.5,
       wstgId: "WSTG-CONF-07",
     }));
   }
@@ -1025,16 +1025,25 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
   vulnerabilities.push(...analyzeCookies(initial.setCookies ?? [], setCookie));
 
   // ── Mixed content ─────────────────────────────────────────────────────
-  if (isHttps && /src=["']http:\/\//i.test(html.slice(0, 100_000))) {
+  // Skipped when the CSP carries upgrade-insecure-requests: browsers rewrite those
+  // http:// loads to https:// before requesting them.
+  const mixed = isHttps && !(csp && analyzeCsp(csp).upgradeInsecureRequests)
+    ? findMixedContent(html.slice(0, 100_000))
+    : [];
+  if (mixed.length > 0) {
+    const activeMixed = mixed.some((m) => m.active);
     vulnerabilities.push(vuln({
       name: "Mixed Content (HTTP Resources on HTTPS Page)",
-      severity: "medium",
+      // Browsers auto-upgrade or block passive (image/media) loads; scripts, styles and frames are the risk.
+      severity: activeMixed ? "medium" : "low",
       category: "Transport Security",
-      description: "The HTTPS page loads resources (scripts, stylesheets, images) over plain HTTP. Browsers block or warn about mixed content, and the HTTP resources can be intercepted and modified by attackers.",
-      evidence: `GET ${finalUrl}\nPage is served over HTTPS but contains src="http://..." resource references`,
+      description: activeMixed
+        ? "The HTTPS page references scripts, stylesheets or frames over plain HTTP. Browsers block these, which breaks the page, and where they are allowed the HTTP resources can be intercepted and modified by attackers."
+        : "The HTTPS page references images or media over plain HTTP. Modern browsers upgrade or block these, but they can be intercepted and swapped on older clients.",
+      evidence: `GET ${finalUrl}\nHTTP subresources on an HTTPS page (${mixed.length}):\n${mixed.slice(0, 5).map((m) => `<${m.tag}> ${m.url.slice(0, 200)}`).join("\n")}`,
       solution: "Update all resource URLs to use HTTPS. Use protocol-relative URLs (//example.com/resource) or absolute HTTPS URLs. Enable Content-Security-Policy: upgrade-insecure-requests",
       cweId: "CWE-311",
-      cvssScore: 5.9,
+      cvssScore: activeMixed ? 5.9 : 3.1,
       wstgId: "WSTG-CRYP-01",
     }));
   }
