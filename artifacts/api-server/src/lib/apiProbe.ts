@@ -321,9 +321,11 @@ export async function runApiProbes(input: ApiProbeInput): Promise<ScanVulnerabil
         // The phase-04 comparison applied per endpoint: if a second account is
         // served byte-comparable data from a URL naming a record, one of them
         // is reading data that is not theirs.
-        // Skipped when an anonymous caller got the same data: then it is public, and "the
-        // second account can read it" says nothing about ownership.
-        if (secondary && anonymousBody === null && /\/\d+(?:\/|$)/.test(new URL(url).pathname)) {
+        // Skipped when an anonymous caller got the same data and it is not personal: then it is
+        // public, and "the second account can read it" says nothing about ownership.
+        const publicToAnyone =
+          anonymousBody !== null && !PERSONAL_DATA_RE.test(res.body) && exposedSensitiveFields(res.body).length === 0;
+        if (secondary && !publicToAnyone && /\/\d+(?:\/|$)/.test(new URL(url).pathname)) {
           const asOther = await scanFetch(url, { as: secondary, timeoutMs: TIMEOUT_MS });
           if (
             asOther &&

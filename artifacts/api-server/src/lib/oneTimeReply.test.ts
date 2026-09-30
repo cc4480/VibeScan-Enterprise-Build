@@ -72,6 +72,7 @@ describe("isSpentReply: only 'already used' proves a one-time rule", () => {
     ["a 200 saying already been claimed", 200, `{"message":"Reward has already been claimed"}`],
     ["alreadyClaimed:true", 200, `{"alreadyClaimed":true}`],
     ["plain text", 400, "This coupon was already used"],
+    ["a coupon that is no longer valid", 409, `{"error":"Coupon is no longer valid"}`],
   ])("accepts %s", (_l, status, body) => {
     expect(isSpentReply(reply(status, body))).toBe(true);
   });
@@ -83,6 +84,7 @@ describe("isSpentReply: only 'already used' proves a one-time rule", () => {
     ["an invalid code", 400, `{"error":"Invalid code"}`],
     ["an outage", 503, `{"error":"already used"}`],
     ["a login wall", 401, `{"error":"Sign in required"}`],
+    ["an expired session", 401, `{"error":"Your session is no longer valid"}`],
   ])("rejects %s", (_l, status, body) => {
     expect(isSpentReply(reply(status, body))).toBe(false);
   });

@@ -82,7 +82,7 @@ export function classifyReply(res: HttpResult | null): ReplyKind {
 
 /** Wording that says THIS action was already taken, as opposed to any refusal at all. */
 const SPENT_RE =
-  /\b(?:already (?:been )?(?:used|redeemed|claimed|applied|taken|consumed|activated)|(?:has|have) been (?:used|redeemed|claimed|consumed)|previously (?:used|redeemed|claimed)|fully (?:redeemed|used)|only (?:be )?(?:used|redeemed|claimed) once|one[- ]time use|maximum (?:number of )?(?:uses|redemptions)|redemption limit)\b/i;
+  /\b(?:already (?:been )?(?:used|redeemed|claimed|applied|taken|consumed|activated)|(?:has|have) been (?:used|redeemed|claimed|consumed)|previously (?:used|redeemed|claimed)|(?:coupon|code|promo(?:tion)?|voucher|reward|offer|bonus|gift)\b[^.]{0,30}\bno longer (?:valid|available)|fully (?:redeemed|used)|only (?:be )?(?:used|redeemed|claimed) once|one[- ]time use|maximum (?:number of )?(?:uses|redemptions)|redemption limit)\b/i;
 const SPENT_KEYS = new Set(["alreadyclaimed", "alreadyredeemed", "alreadyused", "alreadyapplied"]);
 
 function spentJson(value: unknown): boolean {
