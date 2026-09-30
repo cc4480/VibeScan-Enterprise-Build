@@ -32,13 +32,19 @@
  * run, and a truncated file list or the 25-file cap left no trace at all.
  * Every request — the body as well as the headers — runs under one timeout.
  */
-import type { ProbeOutcome } from "./testLedger";
+
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 import { scanContent, redactContext, redactSecret } from "./jsScanner";
 import { scanConfigSecrets } from "./configSecrets";
 import { isCandidatePath, prioritise, MAX_FILES } from "./githubCandidates";
 import { configFinding, partialNote } from "./githubFindings";
+import { type GithubRepoRef } from "./githubSourceProbeRef";
+import { type GithubScanOutcome, NOT_SCANNED } from "./githubSourceProbeOutcome";
+export { parseGithubRepoRef } from "./githubSourceProbeRef";
+export { githubNotScannedReason, githubProbeOutcome } from "./githubSourceProbeOutcome";
+export type { GithubRepoRef } from "./githubSourceProbeRef";
+export type { GithubScanOutcome } from "./githubSourceProbeOutcome";
 
 export { isCandidatePath } from "./githubCandidates";
 
@@ -47,53 +53,6 @@ const MAX_FILE_SIZE_BYTES = 200_000;
 
 function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
   return { id: randomUUID(), ...partial };
-}
-
-export interface GithubRepoRef {
-  owner: string;
-  repo: string;
-  /** A branch named in a pasted /tree/<branch> URL. The default branch is used when absent. */
-  branch?: string;
-}
-
-const NAME = /^[\w.-]+$/;
-
-/** A name that is really a name: plain characters, and not empty, "." or ".." (which would be a path of its own). */
-function isPlainName(s: string): boolean {
-  return NAME.test(s) && s !== "." && s !== "..";
-}
-
-/** Accepts a bare "owner/repo" or a full https://github.com/owner/repo(.git)(/tree/<branch>) URL. */
-export function parseGithubRepoRef(input: string): GithubRepoRef | null {
-  const trimmed = input.trim();
-  const bare = /^([\w.-]+)\/([\w.-]+)$/.exec(trimmed);
-  if (bare) {
-    // The same checks as the URL form: "../.." and ".git/.git" are not repositories, and both end up in fetched URLs.
-    const owner = bare[1]!;
-    const repo = bare[2]!.replace(/\.git$/, "");
-    return isPlainName(owner) && isPlainName(repo) ? { owner, repo } : null;
-  }
-
-  try {
-    const url = new URL(trimmed);
-    if (url.hostname !== "github.com" && url.hostname !== "www.github.com") return null;
-    const parts = url.pathname.split("/").filter(Boolean);
-    if (parts.length < 2) return null;
-    const owner = parts[0]!;
-    const repo = parts[1]!.replace(/\.git$/, "");
-    // Both end up in URLs that are fetched: a name that is not plain would be a path of its own.
-    if (!isPlainName(owner) || !isPlainName(repo)) return null;
-    if (parts[2] === "tree" && parts.length > 3) {
-      try {
-        return { owner, repo, branch: decodeURIComponent(parts.slice(3).join("/")) };
-      } catch {
-        return { owner, repo };
-      }
-    }
-    return { owner, repo };
-  } catch {
-    return null;
-  }
 }
 
 /** A GitHub answer, fully read: the body is part of the request and runs under the same timeout. */
@@ -144,54 +103,6 @@ interface TreeEntry {
   type: string;
   size?: number;
 }
-
-/**
- * What a scan of one repository actually did. "Nothing found" only means something when
- * `status` is "scanned" (or "empty", a repo with no files at all); every other status is a
- * repository that was not looked at.
- */
-export interface GithubScanOutcome {
-  findings: ScanVulnerability[];
-  status: "scanned" | "empty" | "unreachable" | "rate_limited" | "not_public_or_missing" | "blocked" | "unreadable";
-  /** Files that matched the candidate list and were read. */
-  filesRead: number;
-  /** Candidate files left unread because of the file cap. */
-  skipped?: number;
-  /** GitHub cut the file list short, so files beyond it were never seen. */
-  truncated?: boolean;
-}
-
-/** Why a repository was not looked at, or null when it was. */
-export function githubNotScannedReason(status: GithubScanOutcome["status"]): string | null {
-  switch (status) {
-    case "unreachable": return "GitHub could not be reached, or answered with a server error";
-    case "rate_limited": return "GitHub's public API rate limit was reached";
-    case "not_public_or_missing": return "the repository is private or does not exist";
-    case "blocked": return "GitHub refused to serve this repository (it may be blocked or restricted)";
-    case "unreadable": return "GitHub answered, but the repository's files could not be read";
-    default: return null;
-  }
-}
-
-/**
- * How the ledger should record a GitHub scan. A repository GitHub says is private or does not exist is
- * an input this scan cannot use, not a fault in the scan: it is "not tested", with the reason and the
- * fact that only public repositories can be read, so the report does not count it as a failed test. A
- * GitHub outage, a rate limit, a block or unreadable files are failures (they throw), as before.
- */
-export function githubProbeOutcome(outcome: GithubScanOutcome): ProbeOutcome {
-  if (outcome.status === "not_public_or_missing") {
-    return {
-      findings: [],
-      notTested: "the repository is private or does not exist (only public repositories can be read)",
-    };
-  }
-  const why = githubNotScannedReason(outcome.status);
-  if (why) throw new Error(why);
-  return { findings: outcome.findings };
-}
-
-const NOT_SCANNED = (status: GithubScanOutcome["status"]): GithubScanOutcome => ({ findings: [], status, filesRead: 0 });
 
 /**
  * Why a non-OK answer was not a repository to scan. A 403 is a rate limit only on evidence: an
