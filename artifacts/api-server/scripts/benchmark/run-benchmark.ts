@@ -21,45 +21,15 @@
  * Every tool's raw output is written to --out unchanged, so the scoring can be
  * re-run, disputed, or redone by somebody else with a different mapping.
  */
+
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { GROUND_TRUTH, CATEGORIES, type GroundTruthItem } from "./ground-truth";
-
-// ── Arguments ─────────────────────────────────────────────────────────────────
-
-const argv = process.argv.slice(2);
-const flag = (name: string, fallback: string): string => {
-  const i = argv.indexOf(`--${name}`);
-  return i >= 0 && argv[i + 1] ? argv[i + 1]! : fallback;
-};
-const has = (name: string) => argv.includes(`--${name}`);
-
-const OUT_DIR = resolve(flag("out", "benchmark-out"));
-const TOOLS = flag("tools", "zap,nuclei,secscan").split(",").map((t) => t.trim());
-const ZAP_MODE = flag("zap-mode", "full");
-const SCORE_ONLY = has("score-only");
-
-/** The fixture as the host sees it, and as a container sees it. */
-const HOST_TARGET = flag("target", "http://127.0.0.1:4100");
-const DOCKER_TARGET = HOST_TARGET.replace(/127\.0\.0\.1|localhost/, "host.docker.internal");
-
-// ESM: no __dirname. import.meta.url is the module's own location.
-const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = resolve(HERE, "..", "..", "..", "..");
+import { OUT_DIR, TOOLS, ZAP_MODE, SCORE_ONLY, HOST_TARGET, DOCKER_TARGET, REPO_ROOT } from "./run-benchmark-config";
+import { type Normalised, parseZap, parseNuclei, parseSecscan } from "./run-benchmark-parse";
 
 if (!existsSync(OUT_DIR)) mkdirSync(OUT_DIR, { recursive: true });
-
-// ── A normalised finding, whatever produced it ────────────────────────────────
-
-interface Normalised {
-  /** Everything the tool said, lowercased, for matching against. */
-  haystack: string;
-  /** The tool's own headline name, for printing in the report. */
-  name: string;
-  severity: string;
-}
 
 function sh(cmd: string, args: string[], timeoutMs: number): string {
   return execFileSync(cmd, args, {
@@ -125,92 +95,6 @@ function runSecscan(): void {
     "--json", join(OUT_DIR, "secscan.json"),
   ], 20 * 60_000);
   console.log(out.split("\n").slice(-6).join("\n"));
-}
-
-// ── Parsers ───────────────────────────────────────────────────────────────────
-
-function parseZap(): Normalised[] {
-  const path = join(OUT_DIR, "zap.json");
-  if (!existsSync(path)) return [];
-  const doc = JSON.parse(readFileSync(path, "utf8")) as {
-    site?: Array<{ alerts?: Array<Record<string, unknown>> }>;
-  };
-  const out: Normalised[] = [];
-  for (const site of doc.site ?? []) {
-    for (const a of site.alerts ?? []) {
-      const instances = (a["instances"] as Array<Record<string, unknown>>) ?? [];
-      // NAME + per-instance evidence only.
-      //
-      // ZAP's desc/solution/reference fields are generic security education
-      // text — paragraphs that mention cookies, CORS, CSP and XSS regardless of
-      // what was actually found. Including them made almost every matcher hit
-      // almost every alert: a first pass credited ZAP with finding reflected
-      // XSS on the strength of a CORS alert, and path traversal on the strength
-      // of a cross-domain script include. It scored ZAP 44/74 on prose.
-      //
-      // Only the alert name and the instance-specific fields describe what this
-      // particular alert found, so only those are matched against.
-      const parts = [
-        a["alert"], a["name"], a["cweid"] ? `CWE-${a["cweid"]}` : "",
-        // NOT the instance URI. A URI in the haystack means only that the tool
-        // visited that path — it credited ZAP with "finding" .env exposed
-        // because ZAP reported a CORS issue AT /.env, having never flagged the
-        // file exposure at all.
-        ...instances.flatMap((i) => [i["evidence"], i["param"]]),
-      ];
-      out.push({
-        name: String(a["alert"] ?? a["name"] ?? "(unnamed)"),
-        severity: String(a["riskdesc"] ?? "").split(" ")[0] || "unknown",
-        haystack: parts.filter(Boolean).join(" ").toLowerCase(),
-      });
-    }
-  }
-  return out;
-}
-
-function parseNuclei(): Normalised[] {
-  const path = join(OUT_DIR, "nuclei.jsonl");
-  if (!existsSync(path)) return [];
-  const out: Normalised[] = [];
-  for (const line of readFileSync(path, "utf8").split("\n")) {
-    if (!line.trim()) continue;
-    let r: Record<string, unknown>;
-    try { r = JSON.parse(line); } catch { continue; }
-    const info = (r["info"] as Record<string, unknown>) ?? {};
-    // Template id, name, tags and the matched URL. info.description is
-    // dropped for the same reason ZAP's desc is — see parseZap.
-    const parts = [
-      r["template-id"], r["template-path"], r["type"],
-      info["name"], (info["tags"] as string[] | undefined)?.join(" "),
-      r["extracted-results"] ? JSON.stringify(r["extracted-results"]) : "",
-    ];
-    out.push({
-      name: String(info["name"] ?? r["template-id"] ?? "(unnamed)"),
-      severity: String(info["severity"] ?? "unknown"),
-      haystack: parts.filter(Boolean).join(" ").toLowerCase(),
-    });
-  }
-  return out;
-}
-
-function parseSecscan(): Normalised[] {
-  const path = join(OUT_DIR, "secscan.json");
-  if (!existsSync(path)) return [];
-  const doc = JSON.parse(readFileSync(path, "utf8")) as {
-    results?: Array<{ findings?: Array<Record<string, unknown>> }>;
-  };
-  const out: Normalised[] = [];
-  for (const site of doc.results ?? []) {
-    for (const f of site.findings ?? []) {
-      const parts = [f["name"], f["category"], f["cweId"], f["wstgId"], f["evidence"]];
-      out.push({
-        name: String(f["name"] ?? "(unnamed)"),
-        severity: String(f["severity"] ?? "unknown"),
-        haystack: parts.filter(Boolean).join(" ").toLowerCase(),
-      });
-    }
-  }
-  return out;
 }
 
 // ── Scoring ───────────────────────────────────────────────────────────────────
