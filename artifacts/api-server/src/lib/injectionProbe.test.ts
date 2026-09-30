@@ -95,3 +95,53 @@ describe("runInjectionProbes — edge cases", () => {
     expect(await runInjectionProbes(`${TARGET}?q=1`, "")).toEqual([]);
   });
 });
+
+describe("runInjectionProbes — reflection context decides exploitability", () => {
+  const xssOf = async () =>
+    (await runInjectionProbes(TARGET, "<html></html>")).find((f) => f.name === "Reflected Cross-Site Scripting (XSS)");
+
+  const raw = (v: string) => v; // a page that echoes the value with no encoding at all
+  /** Echo the value inside `wrap`, without any encoding, on every request. */
+  const echoIn = (wrap: (v: string) => string) => mockFetch((v) => `<html><body>${wrap(raw(v))}</body></html>`);
+
+  it("flags a marker reflected into HTML body text", async () => {
+    echoIn((v) => `<p>Results for ${v}</p>`);
+    expect(await xssOf()).toBeDefined();
+  });
+
+  it("flags a marker that breaks out of an unescaped attribute quote", async () => {
+    echoIn((v) => `<input name="q" value="${v}">`);
+    expect(await xssOf()).toBeDefined();
+  });
+
+  it.each([
+    ["a script JSON state block", (v: string) => `<script>window.__S__=${JSON.stringify({ q: v })};</script>`],
+    ["an application/json script", (v: string) => `<script type="application/json">${JSON.stringify({ q: v })}</script>`],
+    ["an HTML comment", (v: string) => `<!-- q=${v} -->`],
+    ["a textarea", (v: string) => `<textarea name="q">${v}</textarea>`],
+    ["a title", (v: string) => `<title>${v}</title>`],
+    ["a style block", (v: string) => `<style>/* ${v} */</style>`],
+    ["a quoted attribute whose quotes are encoded", (v: string) => `<input value="${v.replace(/"/g, "&quot;").replace(/'/g, "&#39;")}">`],
+  ])("does not flag a marker inert inside %s", async (_n, wrap) => {
+    // The page passes "<" through but neutralises closing sequences, so nothing can break out.
+    mockFetch((v) => `<html><body>${wrap(v.replace(/<\//g, "<\\/").replace(/-->/g, "--&gt;"))}</body></html>`);
+    expect(await xssOf()).toBeUndefined();
+  });
+
+  it.each([
+    ["a script block", (v: string) => `<script>var q = "${v}";</script>`],
+    ["a textarea", (v: string) => `<textarea>${v}</textarea>`],
+    ["a title", (v: string) => `<title>${v}</title>`],
+    ["an HTML comment", (v: string) => `<!-- ${v} -->`],
+  ])("still flags %s when the closing sequence reflects unencoded (real break-out)", async (_n, wrap) => {
+    echoIn(wrap);
+    const xss = await xssOf();
+    expect(xss).toBeDefined();
+    expect(xss!.evidence).toMatch(/break/i);
+  });
+
+  it("does not flag a script block that escapes < as \\u003c", async () => {
+    echoIn((v) => `<script>var q = "${v.replace(/</g, "\\u003c")}";</script>`);
+    expect(await xssOf()).toBeUndefined();
+  });
+});
