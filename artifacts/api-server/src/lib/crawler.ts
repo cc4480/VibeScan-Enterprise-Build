@@ -223,7 +223,8 @@ function snapshotHeaders(headers: Record<string, string>): HeaderSnapshot {
 }
 
 
-import { type PathProbe, PATH_PROBES } from "./crawler-data";
+import { type PathProbe, PATH_PROBES, looksLikeHtmlDocument } from "./crawler-data";
+import { detectCatchAll, matchesCatchAll, type CatchAllFingerprint } from "./spaCatchAll";
 import { scanFetch } from "./http";
 import { isDestructiveUrl } from "./destructive";
 
@@ -238,6 +239,8 @@ async function probePathSensitiveFiles(
   origin: string,
   expectedHostname: string,
   timeoutMs: number,
+  // Directories already probed this crawl, so sibling pages share one round of probes.
+  probedDirs: Set<string> = new Set(),
 ): Promise<ScanVulnerability[]> {
   let pathname: string;
   try {
@@ -252,6 +255,14 @@ async function probePathSensitiveFiles(
 
   // Skip probing root prefix — root-level probes are already handled by probes.ts
   if (dirPrefix === "/") return [];
+  if (probedDirs.has(dirPrefix)) return [];
+  probedDirs.add(dirPrefix);
+
+  // Same guard as root probing: a directory whose unknown paths all answer 200
+  // with one app shell has no exposed files, however the shell's text reads.
+  const catchAll: CatchAllFingerprint | null = await detectCatchAll(
+    `${origin}${dirPrefix.replace(/\/$/, "")}`,
+  ).catch(() => null);
 
   const findings: ScanVulnerability[] = [];
 
@@ -269,6 +280,10 @@ async function probePathSensitiveFiles(
       } catch {
         return;
       }
+
+      if (matchesCatchAll(result.body, catchAll)) return;
+      // A file that comes back as a full HTML document is the app shell, not the file.
+      if (!probe.servesHtml && looksLikeHtmlDocument(result.body)) return;
 
       const ct = result.headers["content-type"] ?? "";
       if (!probe.validate(result.body, ct, result.status)) return;
@@ -669,6 +684,7 @@ export async function crawlAndCheck(
   const crawlDeadline = Date.now() + CRAWL_TIMEOUT_MS;
   const perPageFindings: ScanVulnerability[] = [];
   const pagesVisited: string[] = [];
+  const probedDirs = new Set<string>();
 
   // Minimum remaining budget required to start a new page fetch (avoids starting
   // a request that can never complete within the overall time bound)
@@ -743,7 +759,7 @@ export async function crawlAndCheck(
     const probeRemaining = crawlDeadline - Date.now();
     if (probeRemaining >= MIN_BUDGET_MS) {
       const probeTimeout = Math.min(PAGE_TIMEOUT_MS, probeRemaining);
-      const pathFindings = await probePathSensitiveFiles(url, origin, expectedHostname, probeTimeout);
+      const pathFindings = await probePathSensitiveFiles(url, origin, expectedHostname, probeTimeout, probedDirs);
       perPageFindings.push(...pathFindings);
     }
 
@@ -774,15 +790,36 @@ export async function crawlAndCheck(
   // Aggregate header gap findings (one finding per header type covering all affected paths)
   const headerGapFindings = buildHeaderGapVulns(rootSnapshot, gapMap, probedSet);
 
-  // Deduplicate: sensitive file probes may return the same finding for different paths
+  // Deduplicate: the same file type found under several directories is one
+  // finding (same host, same evidence class); the extra locations are listed in
+  // its evidence rather than filed again. Other findings dedupe on name + evidence.
+  const pathProbeNames = new Set(PATH_PROBES.map((p) => p.name));
   const seenSensitiveKeys = new Set<string>();
+  const firstByProbe = new Map<string, ScanVulnerability>();
+  const extraLocations = new Map<string, string[]>();
   const dedupedPerPage: ScanVulnerability[] = [];
   for (const finding of perPageFindings) {
+    if (pathProbeNames.has(finding.name)) {
+      const first = firstByProbe.get(finding.name);
+      if (first) {
+        const loc = /^GET (\S+)/.exec(finding.evidence ?? "")?.[1];
+        if (loc) extraLocations.set(finding.name, [...(extraLocations.get(finding.name) ?? []), loc]);
+        continue;
+      }
+      firstByProbe.set(finding.name, finding);
+      dedupedPerPage.push(finding);
+      continue;
+    }
     const key = `${finding.name}::${finding.evidence?.slice(0, 80) ?? ""}`;
     if (!seenSensitiveKeys.has(key)) {
       seenSensitiveKeys.add(key);
       dedupedPerPage.push(finding);
     }
+  }
+  for (const [name, locs] of extraLocations) {
+    const first = firstByProbe.get(name)!;
+    const shown = locs.slice(0, 5).join(", ");
+    first.evidence += `\nAlso found at: ${shown}${locs.length > 5 ? ` (+${locs.length - 5} more)` : ""}`;
   }
 
   return {

@@ -1,4 +1,6 @@
 import type { ScanVulnerability } from "./scanner";
+import { isOpenApiSpec } from "./apiDocsProbe";
+import { isSecretBearingConfigJson } from "./probes-data";
 
 export interface PathProbe {
   suffix: string;
@@ -11,47 +13,71 @@ export interface PathProbe {
   description: (path: string) => string;
   solution: string;
   validate: (body: string, ct: string, status: number) => boolean;
+  /**
+   * The file's genuine content is itself an HTML document (a GraphQL playground).
+   * Every other probe result that is a full HTML document is an app shell, not
+   * the file, and the crawler drops it before `validate` runs.
+   */
+  servesHtml?: boolean;
+}
+
+/** Full HTML document, as opposed to a file that merely contains angle brackets. */
+export const looksLikeHtmlDocument = (body: string): boolean =>
+  /<!doctype\s+html|<html[\s>]/i.test(body.slice(0, 4000));
+
+/** dotenv shape: every non-blank, non-comment line is KEY=VALUE. */
+function looksLikeEnvFile(body: string): boolean {
+  if (looksLikeHtmlDocument(body)) return false;
+  const lines = body.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+  return lines.length > 0 && lines.every((l) => /^(?:export\s+)?[A-Za-z_][A-Za-z0-9_.]*\s*=/.test(l));
+}
+
+/** A log file has timestamped or level-prefixed lines, several of them. */
+const LOG_LINE = /^\s*(?:[[(]?\d{4}[-/]\d{2}[-/]\d{2}|[[(]?\d{2}:\d{2}:\d{2}|[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}|[[(]?(?:ERROR|WARN(?:ING)?|INFO|DEBUG|TRACE|FATAL|CRITICAL)\b)/;
+function looksLikeLogFile(body: string): boolean {
+  if (looksLikeHtmlDocument(body)) return false;
+  return body.split(/\r?\n/).filter((l) => LOG_LINE.test(l)).length >= 2;
 }
 
 export const PATH_PROBES: PathProbe[] = [
   {
     suffix: "/swagger.json",
     name: "API Documentation Exposed on Inner Route (Swagger)",
-    severity: "medium",
+    severity: "info",
     category: "Information Disclosure",
     cweId: "CWE-200",
-    cvssScore: 5.3,
+    cvssScore: 0,
     wstgId: "WSTG-CONF-04",
     description: (path) =>
       `Swagger/OpenAPI documentation is publicly accessible at "${path}swagger.json". This gives attackers a complete blueprint of every API endpoint, parameters, authentication schemes, and data models — without needing to reverse-engineer the application.`,
     solution: "Require authentication to access API docs in production, or restrict them to internal networks.",
-    validate: (body) => /"swagger"|"openapi"/.test(body.slice(0, 500)),
+    validate: (body) => isOpenApiSpec(body),
   },
   {
     suffix: "/openapi.json",
     name: "API Documentation Exposed on Inner Route (OpenAPI)",
-    severity: "medium",
+    severity: "info",
     category: "Information Disclosure",
     cweId: "CWE-200",
-    cvssScore: 5.3,
+    cvssScore: 0,
     wstgId: "WSTG-CONF-04",
     description: (path) =>
       `OpenAPI documentation is publicly accessible at "${path}openapi.json". This exposes a complete map of your API surface to unauthenticated users.`,
     solution: "Restrict API documentation to authenticated users or internal network access.",
-    validate: (body) => /"openapi"|"swagger"/.test(body.slice(0, 500)),
+    validate: (body) => isOpenApiSpec(body),
   },
   {
     suffix: "/api-docs",
     name: "API Documentation Exposed on Inner Route",
-    severity: "medium",
+    severity: "info",
     category: "Information Disclosure",
     cweId: "CWE-200",
-    cvssScore: 5.3,
+    cvssScore: 0,
     wstgId: "WSTG-CONF-04",
     description: (path) =>
       `API documentation is publicly accessible at "${path}api-docs". This may expose internal endpoint details and data structures.`,
     solution: "Restrict API documentation to authenticated users.",
-    validate: (body) => /"swagger"|"openapi"|"paths"/.test(body.slice(0, 1000)),
+    validate: (body) => isOpenApiSpec(body),
   },
   {
     suffix: "/.env",
@@ -64,7 +90,7 @@ export const PATH_PROBES: PathProbe[] = [
     description: (path) =>
       `A .env file is publicly accessible at "${path}.env". This file typically contains database passwords, API keys, JWT secrets, and third-party tokens that can immediately compromise all connected services.`,
     solution: "Block .env* files at the web server level. Rotate all exposed credentials immediately.",
-    validate: (body, ct) => !ct.includes("text/html") || /^[A-Z_][A-Z0-9_]*\s*=.+/m.test(body),
+    validate: (body) => looksLikeEnvFile(body),
   },
   {
     suffix: "/.git/HEAD",
@@ -88,9 +114,11 @@ export const PATH_PROBES: PathProbe[] = [
     cvssScore: 6.5,
     wstgId: "WSTG-CONF-04",
     description: (path) =>
-      `A configuration file is publicly accessible at "${path}config.json". It may contain connection strings, API keys, or internal endpoint URLs.`,
+      `A configuration file containing credential-shaped values is publicly accessible at "${path}config.json". Anything served from the web root is readable by anyone, so any secret in it is public.`,
     solution: "Remove config.json from web-accessible paths. Use environment variables for runtime configuration.",
-    validate: (body, ct) => (ct.includes("json") || body.trim().startsWith("{")) && !ct.includes("text/html") && body.length > 20,
+    // Public bootstrap config (API URLs, flags, publishable SDK keys) is not a
+    // finding; same rule as the root config.json probe in probes-data.ts.
+    validate: (body, ct) => isSecretBearingConfigJson(body, ct),
   },
   {
     suffix: "/graphql",
@@ -103,6 +131,7 @@ export const PATH_PROBES: PathProbe[] = [
     description: (path) =>
       `A GraphQL endpoint appears accessible at "${path}graphql". If introspection is enabled, attackers can enumerate your entire schema including all queries, mutations, types, and fields.`,
     solution: "Disable GraphQL introspection in production. Add depth limiting and query complexity analysis.",
+    servesHtml: true,
     // Structural, not the word. The old test matched /graphql|GraphQL/i
     // anywhere in the body, so nytimes.com's ordinary HTML page — which names
     // the word in a script URL — was reported as an exposed GraphQL endpoint.
@@ -146,6 +175,6 @@ export const PATH_PROBES: PathProbe[] = [
     description: (path) =>
       `A debug log file is publicly accessible at "${path}debug.log". Logs can contain sensitive request data, stack traces, and application internals.`,
     solution: "Store logs outside the web root. Block .log files at the web server.",
-    validate: (body) => body.length > 100 && /error|warn|debug|exception|trace/i.test(body.slice(0, 3000)),
+    validate: (body) => looksLikeLogFile(body),
   },
 ];
