@@ -8,6 +8,8 @@
  * are shared with the probe, which applies them leg by leg.
  */
 
+import type { ScanCredentials } from "./http";
+
 // Two responses count as "the same content" above this token overlap. Not exact
 // equality: real pages carry CSRF tokens, timestamps and nonces that differ on
 // every render, and demanding byte equality would miss every genuine finding.
@@ -66,4 +68,42 @@ export function isDenied(status: number, body: string): boolean {
       body.slice(0, 2_000),
     )
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shell detection and identity
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A page that is only the app's layout, with the record still to be fetched by script. Two
+ * accounts get the same one because the layout is the same, not because they share a record.
+ */
+export function looksLikeShell(body: string): boolean {
+  const text = normalise(body);
+  if (/\b(loading|please wait|fetching|skeleton)\b/.test(text)) return true;
+  return /aria-busy=["']true|class=["'][^"']*(skeleton|spinner|loading)/i.test(body.slice(0, 20_000));
+}
+
+function identityKey(c: ScanCredentials): { cookies: string; headers: string } {
+  return {
+    cookies: (c.cookie ?? "").split(";").map((x) => x.trim()).filter(Boolean).sort().join(";"),
+    headers: Object.entries(c.headers ?? {})
+      .map(([k, v]) => `${k.toLowerCase()}:${v.trim()}`)
+      .sort()
+      .join("\n"),
+  };
+}
+
+/**
+ * True when both sessions would sign in as the same user: identical cookie set and headers, or the
+ * same Authorization value. Comparing an account with itself makes every record "shared".
+ */
+export function sameIdentity(a: ScanCredentials, b: ScanCredentials): boolean {
+  const ka = identityKey(a);
+  const kb = identityKey(b);
+  if (!ka.cookies && !ka.headers && !kb.cookies && !kb.headers) return false; // nothing to compare
+  const authA = a.headers && Object.entries(a.headers).find(([k]) => k.toLowerCase() === "authorization")?.[1]?.trim();
+  const authB = b.headers && Object.entries(b.headers).find(([k]) => k.toLowerCase() === "authorization")?.[1]?.trim();
+  if (authA && authA === authB) return true;
+  return ka.cookies === kb.cookies && ka.headers === kb.headers;
 }

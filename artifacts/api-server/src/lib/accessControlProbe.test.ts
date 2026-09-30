@@ -34,6 +34,9 @@ function who(req: http.IncomingMessage): "owner" | "other" | "anon" {
   return "anon";
 }
 
+/** A real record store: ids 1000-1099 exist, anything else (including a made-up id) is not found. */
+const exists = (req: http.IncomingMessage) => /\/invoices\/10\d\d(\?|$)/.test(req.url ?? "");
+
 const loginPage = "<h1>Please log in</h1><form><input type='password' name='p'></form>";
 
 /** Enough distinct words that the similarity comparison has something to work on. */
@@ -96,6 +99,11 @@ describe("runAccessControlProbes", () => {
         res.end(loginPage);
         return;
       }
+      if (!exists(req)) {
+        res.writeHead(404);
+        res.end("Not found");
+        return;
+      }
       // The bug: any signed-in user gets the owner's invoice.
       res.writeHead(200, { "content-type": "text/html" });
       res.end(record("Ada"));
@@ -145,7 +153,12 @@ describe("runAccessControlProbes", () => {
   it("reports unauthenticated exposure rather than IDOR when everyone can read it", async () => {
     // Same bytes to everyone: the finding is "no session required", and calling
     // it IDOR would misdescribe it.
-    const port = await serve((_req, res) => {
+    const port = await serve((req, res) => {
+      if (!exists(req)) {
+        res.writeHead(404);
+        res.end("Not found");
+        return;
+      }
       res.writeHead(200, { "content-type": "text/html" });
       res.end(record("Ada"));
     });
@@ -230,7 +243,7 @@ describe("enumeration by identifier mutation", () => {
         res.end(loginPage);
         return;
       }
-      const id = /\/invoices\/(\d+)/.exec(req.url ?? "")?.[1];
+      const id = /\/invoices\/(10\d\d)/.exec(req.url ?? "")?.[1];
       if (!id) {
         res.writeHead(404);
         res.end("no");

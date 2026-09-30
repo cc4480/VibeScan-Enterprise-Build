@@ -95,6 +95,7 @@ describe("runAccessControlProbesDetailed", () => {
     // made for itself is not, and the report has to say so.
     const port = await serve((req, res) => {
       if (who(req) === "anon") { res.writeHead(401).end(loginPage); return; }
+      if (!/\/invoices\/10\d\d$/.test(req.url ?? "")) { res.writeHead(404).end("Not found"); return; }
       res.writeHead(200, { "content-type": "text/html" }).end(record("Ada"));
     });
     const own = await probeDetailed(port, [`http://localhost:${port}/invoices/1042`]);
@@ -109,6 +110,7 @@ describe("runAccessControlProbesDetailed", () => {
   it("returns exactly what runAccessControlProbes returns", async () => {
     const port = await serve((req, res) => {
       if (who(req) === "anon") { res.writeHead(401).end(loginPage); return; }
+      if (!/\/invoices\/10\d\d$/.test(req.url ?? "")) { res.writeHead(404).end("Not found"); return; }
       res.writeHead(200, { "content-type": "text/html" }).end(record("Ada"));
     });
     const urls = [`http://localhost:${port}/invoices/1042`];

@@ -158,7 +158,7 @@ export async function runCrossAccountStep(
       probe({ urls, primary, secondary, secondaryAutoCreated: autoCreated }).then((r) => ({
         findings: r.findings,
         ...(r.compared === 0
-          ? { notTested: "nothing was compared: none of the record URLs could be read by the first account, or a request for the second account or the anonymous check did not complete" }
+          ? { notTested: r.notTested ?? "nothing was compared: none of the record URLs could be read by the first account, or a request for the second account or the anonymous check did not complete" }
           : {}),
       })),
     )

@@ -108,3 +108,66 @@ export function mutateIdentifiers(url: string): string[] {
   out.delete(url);
   return [...out];
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Baselines and public-by-design records
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The same URL with its identifier swapped for one nothing can exist at. If the app answers it
+ * exactly as it answers the real record, the page is not about the record (a layout shell, a
+ * catch-all) and identical answers for two accounts prove nothing. Null when no identifier found.
+ */
+export function nonexistentVariant(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  const swap = (v: string) => (NUMERIC_ID_RE.test(v) ? "999999937" : UUID_RE.test(v) ? "00000000-0000-4000-8000-000000000000" : "zz9zz9zz9zz9");
+  const segments = parsed.pathname.split("/");
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const seg = segments[i]!;
+    if (NUMERIC_ID_RE.test(seg) || UUID_RE.test(seg) || (OPAQUE_ID_RE.test(seg) && /\d/.test(seg))) {
+      segments[i] = swap(seg);
+      parsed.pathname = segments.join("/");
+      return parsed.toString();
+    }
+  }
+  for (const [key, value] of parsed.searchParams) {
+    if (ID_PARAM_RE.test(key)) {
+      parsed.searchParams.set(key, swap(value));
+      return parsed.toString();
+    }
+  }
+  return null;
+}
+
+/** Collections whose pages are public by design: the same for everyone is what they are. */
+const PUBLIC_COLLECTION_RE =
+  /^(products?|catalog(ue)?|categories|category|posts?|articles?|blogs?|news|pages?|p|plans?|pricing|faqs?|events|courses|recipes|listings|shops?|stores?|tags|reviews|changelog|releases|docs|jobs|careers|topics|questions|videos|books|movies)$/i;
+
+/**
+ * Could a page at this URL be private to one account? A numeric/UUID/query identifier under a
+ * collection that is not a public one. A slug with a digit in it (/blog/top-10-tips-2024) or an
+ * id under /products is content, and being readable without signing in is the point of it.
+ */
+export function mayBePrivateRecord(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  const segments = parsed.pathname.split("/").filter(Boolean);
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i]!;
+    if (!NUMERIC_ID_RE.test(seg) && !UUID_RE.test(seg) && !(OPAQUE_ID_RE.test(seg) && /\d/.test(seg))) continue;
+    const parent = segments[i - 1];
+    return !(parent && PUBLIC_COLLECTION_RE.test(parent));
+  }
+  // An id in the query string: judged by the path's own last segment.
+  const last = segments[segments.length - 1];
+  return !(last && PUBLIC_COLLECTION_RE.test(last));
+}

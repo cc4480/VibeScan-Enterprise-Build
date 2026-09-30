@@ -548,10 +548,12 @@ app.get("/app/debug.log", (_req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // accessControlProbe.ts — an HTML page naming a record (/account/1001), whose
-// content ignores both the caller's identity and the id in the URL: any
-// signed-in session sees account #1001's data, and any nearby id
-// (mutateIdentifiers) does too, so this covers both IDOR and "records
-// enumerable by editing the identifier" from the one bug. Anonymous is denied.
+// content ignores the caller's identity: any signed-in session sees account
+// #1001's data, and any nearby id (mutateIdentifiers) does too, so this covers
+// both IDOR and "records enumerable by editing the identifier" from the one
+// bug. Anonymous is denied. Ids outside 1000-1099 do not exist and answer 404,
+// as a real record store does: the probe requests a made-up id to tell a
+// record from a layout that renders for anything.
 // ─────────────────────────────────────────────────────────────────────────────
 app.get("/account/:id", (req, res) => {
   const session = sessionFromCookie(req);
@@ -561,9 +563,13 @@ app.get("/account/:id", (req, res) => {
     );
     return;
   }
+  if (!/^10\d\d$/.test(req.params.id)) {
+    res.status(404).type("text/html").send(`<html><body><h1>Not found</h1></body></html>`);
+    return;
+  }
   // Deliberately does not check whether req.params.id belongs to `session` —
-  // that is the bug. Always renders account #1001 regardless of who asked or
-  // which id was in the URL.
+  // that is the bug. Renders account #1001 regardless of who asked or which
+  // existing id was in the URL.
   res.type("text/html").send(
     `<html><body><h1>Account #1001</h1><p>Name: Alice Example</p><p>Email: alice@example.com</p>` +
       `<p>SSN: 078-05-1120</p><p>Plan: Enterprise</p><p>Balance: $4,213.00</p></body></html>`,
@@ -574,8 +580,9 @@ app.get("/account/:id", (req, res) => {
 // apiProbe.ts — the OpenAPI-declared /api/records/{id}. GET returns sensitive
 // fields to ANYONE (no auth check at all, and ignores identity — both the
 // "served without authentication" and the API-level IDOR finding come from
-// this one handler). DELETE/PATCH on a nonexistent id return 404 without
-// checking auth first — the BFLA finding.
+// this one handler). DELETE on a nonexistent id is accepted (idempotent, 204)
+// without checking auth first — the BFLA finding. (A bare 404 would prove
+// nothing: any router answers 404 to a verb it never routed.)
 // ─────────────────────────────────────────────────────────────────────────────
 const RECORDS: Record<string, unknown> = {
   "1": { id: "1", owner: "alice@example.com", email: "alice@example.com", password_hash: "$2b$10$fakeHashNotReal000000000000000000000", ssn: "078-05-1120", balance: 4213 },
@@ -588,13 +595,9 @@ app.get("/api/records/:id", (req, res) => {
   res.json(RECORDS["1"]);
 });
 app.delete("/api/records/:id", (req, res) => {
-  // Auth is never checked. The lookup runs first, so a nonexistent id 404s
-  // regardless of who is asking — the exact BFLA signature apiProbe.ts tests
-  // for: authorization would have to run before this to matter.
-  if (!RECORDS[req.params.id]) {
-    res.status(404).json({ error: "not found" });
-    return;
-  }
+  // Auth is never checked, and deleting a record that is not there is a
+  // success (idempotent delete), so an unauthenticated DELETE of a nonexistent
+  // id answers 2xx — the BFLA signature apiProbe.ts tests for.
   delete RECORDS[req.params.id];
   res.status(204).end();
 });

@@ -26,14 +26,18 @@
  *
  * The anonymous leg is what keeps public pages out of the report. A product
  * page returns the same bytes to everyone, and without checking ∅ that is
- * indistinguishable from a leak.
+ * indistinguishable from a leak. Two more things keep layouts and public
+ * content out: an identifier nothing can exist at is requested too, and a page
+ * that answers it as it answers the record is a shell or a catch-all rather
+ * than a record; and a public collection (/products/12, /blog/...) is never
+ * reported as a private record readable without signing in.
  *
  * Layout. This file is the orchestration: it picks the candidate URLs, makes
  * the three requests and applies the comparison. The parts with no network in
  * them live beside it and are re-exported from here, so every import of this
  * module keeps working:
  *
- *   accessControlIdentifiers.ts  which URLs name a record; the neighbours to try
+ *   accessControlIdentifiers.ts  which URLs name a record; the neighbours to try; a made-up id
  *   accessControlCompare.ts      content similarity and the denial test
  *   accessControlFindings.ts     the three findings and their wording
  */
@@ -41,11 +45,13 @@
 import type { ScanVulnerability } from "./scanner";
 import { scanFetch, type ScanCredentials } from "./http";
 import { isDestructiveUrl } from "./destructive";
-import { namesARecord, mutateIdentifiers } from "./accessControlIdentifiers";
+import { namesARecord, mutateIdentifiers, nonexistentVariant, mayBePrivateRecord } from "./accessControlIdentifiers";
 import {
   contentSimilarity,
   isDenied,
   normalise,
+  looksLikeShell,
+  sameIdentity,
   SAME_CONTENT_THRESHOLD,
   DIFFERENT_CONTENT_THRESHOLD,
 } from "./accessControlCompare";
@@ -99,6 +105,8 @@ export interface AccessControlOutcome {
    * anything, which is not the same as comparing and finding nothing.
    */
   compared: number;
+  /** Why nothing could be tested at all, when that is a fact about the input rather than the target. */
+  notTested?: string;
 }
 
 export async function runAccessControlProbes(
@@ -110,6 +118,15 @@ export async function runAccessControlProbes(
 export async function runAccessControlProbesDetailed(
   input: AccessControlInput,
 ): Promise<AccessControlOutcome> {
+  // One account given twice: both "users" see the same records because they are the same user.
+  if (sameIdentity(input.primary, input.secondary)) {
+    return {
+      findings: [],
+      compared: 0,
+      notTested: "both logins are the same account, so there is no second user to compare with the first",
+    };
+  }
+
   const candidates = accessControlCandidates(input.urls);
 
   if (candidates.length === 0) return { findings: [], compared: 0 };
@@ -125,6 +142,14 @@ export async function runAccessControlProbesDetailed(
     .filter((u) => !candidates.includes(u))
     .filter((u) => !isDestructiveUrl(u))
     .slice(0, MAX_MUTATIONS);
+
+  /** Does an identifier nothing can exist at get (nearly) the same page as `body`, as this caller? */
+  async function answersLikeIt(url: string, body: string, as: ScanCredentials | null): Promise<boolean> {
+    const variant = nonexistentVariant(url);
+    if (!variant) return false;
+    const res = await scanFetch(variant, { as, timeoutMs: TIMEOUT_MS });
+    return !!res && !isDenied(res.status, res.body) && contentSimilarity(body, res.body) >= SAME_CONTENT_THRESHOLD;
+  }
 
   for (const url of [...candidates, ...mutated]) {
     const isMutation = mutated.includes(url);
@@ -149,7 +174,10 @@ export async function runAccessControlProbesDetailed(
       // Readable without any session at all. Also means the IDOR comparison
       // below would be meaningless — everyone can read it, so "B can read it"
       // says nothing about authorisation between users.
-      anonHits.push(url);
+      // Only a record that could be private is worth reporting, and only when the app tells this
+      // record from one that does not exist: a page that answers a made-up id the same way is a
+      // public page or a catch-all, not a record.
+      if (mayBePrivateRecord(url) && !(await answersLikeIt(url, asNobody.body, null))) anonHits.push(url);
       continue;
     }
 
@@ -163,7 +191,14 @@ export async function runAccessControlProbesDetailed(
     const otherDiffersFromAnon =
       contentSimilarity(asOther.body, asNobody.body) < DIFFERENT_CONTENT_THRESHOLD;
 
-    if (otherSame && otherDiffersFromAnon) {
+    // The same page for a record and for an id that cannot exist is the app's layout, not the
+    // record; an app shell that loads its data by script says so in its own words.
+    if (
+      otherSame &&
+      otherDiffersFromAnon &&
+      !looksLikeShell(asOther.body) &&
+      !(await answersLikeIt(url, asOther.body, input.secondary))
+    ) {
       // Two separate accounts cannot both own one record, so identical content
       // for both means at least one of them is reading data that is not theirs.
       // For a mutated identifier it also proves the records are enumerable —
