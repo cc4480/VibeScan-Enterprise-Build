@@ -7,7 +7,7 @@ Every finding the scanner can emit, read out of `artifacts/api-server/src/lib`. 
 complete list; [SCAN_COVERAGE.md](SCAN_COVERAGE.md) is the readable one, grouped by module with
 the Basic/Deep tier and the methodology behind each group.
 
-**309 findings across 50 modules**, in 38 categories. 85 critical, 73 high, 56 medium, 30 low, 65 info.
+**309 findings across 55 modules**, in 38 categories. 85 critical, 73 high, 56 medium, 30 low, 65 info.
 
 A finding is a distinct name the scanner can put in a report, which is not the same as a check
 type: the data-table modules below define many findings from one piece of detection logic —
@@ -22,17 +22,12 @@ module does. `none` — neither, so no test exercises it at all.
 | Module | Findings | Lines | Tests | Coverage |
 |---|---:|---:|---:|---|
 | `secret-pattern-data.ts` | 28 | 441 | 18 | direct |
-| `probes.ts` | 17 | 1018 | 17 | direct |
 | `recon-data.ts` | 14 | 178 | 12 | direct |
 | `dnsChecks.ts` | 9 | 499 | 34 | direct |
 | `nextjsProbe.ts` | 9 | 248 | 7 | direct |
 | `structuredData.ts` | 9 | 377 | 36 | direct |
-| `supabase-probes.ts` | 9 | 685 | 7 | direct |
 | `crawler-data.ts` | 8 | 181 | 35 | direct |
-| `apiProbe.ts` | 7 | 730 | 40 | direct |
-| `crawler.ts` | 7 | 831 | 50 | direct |
 | `jwtAnalysis.ts` | 6 | 262 | 9 | direct |
-| `cveCheck.ts` | 5 | 571 | 22 | direct |
 | `storageProbe.ts` | 5 | 304 | 11 | direct |
 | `baasProbes.ts` | 4 | 326 | 11 | direct |
 | `firebase-probes.ts` | 4 | 301 | 8 | direct |
@@ -44,7 +39,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `graphqlProbe.ts` | 2 | 330 | 12 | direct |
 | `injectionExtra.ts` | 2 | 140 | 9 | direct |
 | `injectionProbe.ts` | 2 | 280 | 13 | direct |
-| `worker.ts` | 2 | 1086 | 3 | direct |
+| `supabase-probes.ts` | 2 | 104 | 7 | direct |
 | `apiDocsProbe.ts` | 1 | 320 | 9 | direct |
 | `crossAccountStep.ts` | 1 | 172 | 16 | direct |
 | `deserializationProbe.ts` | 1 | 105 | 9 | direct |
@@ -59,10 +54,18 @@ module does. `none` — neither, so no test exercises it at all.
 | `subdomain-service-data.ts` | 19 | 165 | — | indirect, via subdomainTakeover.test.ts |
 | `probes-data-server.ts` | 17 | 177 | — | indirect, via probes-data.test.ts |
 | `probes-data-infra.ts` | 14 | 148 | — | indirect, via probes-data.test.ts |
+| `apiProbeFindings.ts` | 7 | 215 | — | indirect, via apiProbe.test.ts |
+| `probesHttp.ts` | 7 | 218 | — | indirect, via probes.test.ts |
+| `supabase-probes-report.ts` | 7 | 234 | — | indirect, via supabase-probes.test.ts |
+| `crawlerHeaders.ts` | 5 | 202 | — | indirect, via crawler.test.ts |
+| `cveCheckLocal.ts` | 5 | 225 | — | indirect, via cveCheck.test.ts |
 | `secret-pattern-ai.ts` | 5 | 61 | — | indirect, via secret-pattern-data.test.ts |
+| `probesPage.ts` | 4 | 299 | — | indirect, via probes.test.ts |
 | `accessControlFindings.ts` | 3 | 129 | — | indirect, via accessControlProbe.test.ts |
+| `probesFiles.ts` | 3 | 247 | — | indirect, via probes.test.ts |
+| `probesSupabase.ts` | 3 | 154 | — | indirect, via probes.test.ts |
+| `crawlerCookies.ts` | 2 | 178 | — | indirect, via crawler.test.ts |
 | `secret-pattern-jwt.ts` | 2 | 81 | — | indirect, via secret-pattern-data.test.ts |
-| `bannerRules.ts` | 1 | 112 | — | indirect, via cveCheck.test.ts |
 | `githubFindings.ts` | 1 | 60 | — | indirect, via githubSourceProbe.test.ts |
 | `scanner.ts` | 1 | 297 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts |
 | `scannerCspChecks.ts` | 7 | 149 | — | **none** |
@@ -71,8 +74,10 @@ module does. `none` — neither, so no test exercises it at all.
 | `scannerCoverage.ts` | 3 | 103 | — | **none** |
 | `scannerTransportChecks.ts` | 3 | 70 | — | **none** |
 | `scannerPageChecks.ts` | 2 | 56 | — | **none** |
+| `workerAi.ts` | 2 | 100 | — | **none** |
+| `bannerRules.ts` | 1 | 112 | — | **none** |
 
-> **6 modules carrying 28 findings have no test reaching them:** `scannerCookies`, `scannerCoverage`, `scannerCspChecks`, `scannerHeaderChecks`, `scannerPageChecks`, `scannerTransportChecks`.
+> **8 modules carrying 31 findings have no test reaching them:** `bannerRules`, `scannerCookies`, `scannerCoverage`, `scannerCspChecks`, `scannerHeaderChecks`, `scannerPageChecks`, `scannerTransportChecks`, `workerAi`.
 
 ## Findings by module
 
@@ -103,9 +108,9 @@ module does. `none` — neither, so no test exercises it at all.
 |---|---|---|---:|---|---|
 | Exposed API Documentation — ${label} at ${path} | Info / Low | Information Disclosure | 0 | CWE-200 | WSTG-CONF-02 |
 
-### `apiProbe.ts`
+### `apiProbeFindings.ts`
 
-*7 findings · 730 lines · 40 tests.*
+*7 findings · 215 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -146,20 +151,6 @@ module does. `none` — neither, so no test exercises it at all.
 |---|---|---|---:|---|---|
 | ${shown} — Verify Distro Package Against ${r.cve} | Low | Outdated Software | — | CWE-1104 | — |
 
-### `crawler.ts`
-
-*7 findings · 831 lines · 50 tests.*
-
-| Finding | Severity | Category | CVSS | CWE | WSTG |
-|---|---|---|---:|---|---|
-| Content-Security-Policy Missing on Internal Routes | High | Security Header Inconsistency | 7.2 | CWE-79 | WSTG-CONF-12 |
-| Session Cookie Missing Secure Flag on Inner Page / Non-Session Cookie Missing Secure Flag on Inner Page | High / Low | Session Management | 6.5 | CWE-614 | WSTG-SESS-02 |
-| Session Cookie Missing HttpOnly Flag on Inner Page / Non-Session Cookie Readable by JavaScript on Inner Page | Medium / Info | Session Management | 5.3 | CWE-1004 | WSTG-SESS-02 |
-| X-Content-Type-Options Missing on Internal Routes | Medium | Security Header Inconsistency | 4.3 | CWE-16 | WSTG-CONF-07 |
-| X-Frame-Options / frame-ancestors Missing on Internal Routes | Medium | Security Header Inconsistency | 4.3 | CWE-1021 | WSTG-CLNT-09 |
-| Referrer-Policy Missing on Internal Routes | Low | Security Header Inconsistency | 3.1 | CWE-200 | WSTG-CONF-07 |
-| Strict-Transport-Security Missing on Internal Routes | Low | Security Header Inconsistency | 3.1 | CWE-523 | WSTG-CONF-07 |
-
 ### `crawler-data.ts`
 
 *8 findings · 181 lines · 35 tests.*
@@ -175,6 +166,27 @@ module does. `none` — neither, so no test exercises it at all.
 | API Documentation Exposed on Inner Route (OpenAPI) | Info | Information Disclosure | 0 | CWE-200 | WSTG-CONF-04 |
 | API Documentation Exposed on Inner Route (Swagger) | Info | Information Disclosure | 0 | CWE-200 | WSTG-CONF-04 |
 
+### `crawlerCookies.ts`
+
+*2 findings · 178 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| Session Cookie Missing Secure Flag on Inner Page / Non-Session Cookie Missing Secure Flag on Inner Page | High / Low | Session Management | 6.5 | CWE-614 | WSTG-SESS-02 |
+| Session Cookie Missing HttpOnly Flag on Inner Page / Non-Session Cookie Readable by JavaScript on Inner Page | Medium / Info | Session Management | 5.3 | CWE-1004 | WSTG-SESS-02 |
+
+### `crawlerHeaders.ts`
+
+*5 findings · 202 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| Content-Security-Policy Missing on Internal Routes | High | Security Header Inconsistency | 7.2 | CWE-79 | WSTG-CONF-12 |
+| X-Content-Type-Options Missing on Internal Routes | Medium | Security Header Inconsistency | 4.3 | CWE-16 | WSTG-CONF-07 |
+| X-Frame-Options / frame-ancestors Missing on Internal Routes | Medium | Security Header Inconsistency | 4.3 | CWE-1021 | WSTG-CLNT-09 |
+| Referrer-Policy Missing on Internal Routes | Low | Security Header Inconsistency | 3.1 | CWE-200 | WSTG-CONF-07 |
+| Strict-Transport-Security Missing on Internal Routes | Low | Security Header Inconsistency | 3.1 | CWE-523 | WSTG-CONF-07 |
+
 ### `crossAccountStep.ts`
 
 *1 findings · 172 lines · 16 tests.*
@@ -183,9 +195,9 @@ module does. `none` — neither, so no test exercises it at all.
 |---|---|---|---:|---|---|
 | A disposable test account was created on your site during this scan / A disposable test account may have been created on your site by this scan | Info | Scan Coverage | — | — | — |
 
-### `cveCheck.ts`
+### `cveCheckLocal.ts`
 
-*5 findings · 571 lines · 22 tests.*
+*5 findings · 225 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -339,30 +351,6 @@ module does. `none` — neither, so no test exercises it at all.
 |---|---|---|---:|---|---|
 | Path Traversal / Local File Inclusion (LFI) | Critical | Information Disclosure | 9.8 | CWE-22 | WSTG-AUTHZ-01 |
 
-### `probes.ts`
-
-*17 findings · 1018 lines · 17 tests.*
-
-| Finding | Severity | Category | CVSS | CWE | WSTG |
-|---|---|---|---:|---|---|
-| CORS Misconfiguration — Credentials Allowed from Arbitrary Origin | Critical | CORS Misconfiguration | 9.1 | CWE-942 | WSTG-CONF-07 |
-| Flask/Werkzeug Interactive Debugger Exposed (Remote Code Execution) / Verbose Error Pages Expose Internal Application Details | Critical / Medium | Information Disclosure | 10 | — | WSTG-CONF-02 |
-| Supabase Tables Exposed — Row Level Security (RLS) Disabled | Critical | Database Security | 9.8 | CWE-862 | WSTG-ATHZ-01 |
-| Directory Listing Enabled | Medium | Information Disclosure | 5.3 | CWE-548 | WSTG-CONF-04 |
-| External Resources Missing Subresource Integrity (SRI) | Medium | Supply Chain Security | 6.1 | CWE-353 | WSTG-CONF-04 |
-| HTTP CONNECT Method Enabled | Medium | HTTP Security | 6.1 | CWE-441 | WSTG-CONF-06 |
-| HTTP TRACE Method Enabled (Cross-Site Tracing) | Medium | HTTP Security | 5.8 | CWE-16 | WSTG-CONF-06 |
-| HTTP Traffic Not Redirected to HTTPS | Medium | Transport Security | 5.3 | CWE-319 | WSTG-CONF-07 |
-| Open Redirect Vulnerability | Medium | Unvalidated Redirects | 6.1 | CWE-601 | WSTG-CLNT-04 |
-| Write HTTP Methods Advertised (${dangerousMethods.join(", ")}) | Medium | HTTP Security | 5.3 | CWE-650 | WSTG-CONF-06 |
-| X-Frame-Options Header Misconfigured | Medium | UI Security | 4.3 | CWE-1021 | WSTG-CLNT-09 |
-| CORS — Origin Reflected Without Credentials | Low | CORS Misconfiguration | 3.7 | CWE-942 | WSTG-CONF-07 |
-| Missing security.txt (RFC 9116) | Info | Information Disclosure | 0 | CWE-205 | — |
-| Rate Limiting Not Advertised in Response Headers | Info | Brute Force Protection | 0 | CWE-307 | WSTG-ATHN-03 |
-| robots.txt Discloses Sensitive Application Paths | Info | Information Disclosure | — | CWE-200 | WSTG-INFO-01 |
-| Supabase Detected — Verify Row Level Security (RLS) | Info | Database Security | 0 | — | WSTG-ATHZ-01 |
-| Supabase Public Content Tables Readable Without Authentication | Info | Database Security | 0 | — | WSTG-ATHZ-01 |
-
 ### `probes-data-config.ts`
 
 *23 findings · 273 lines · no test file.*
@@ -468,6 +456,51 @@ module does. `none` — neither, so no test exercises it at all.
 | Staging Environment File Exposed | High | Credential Exposure | 8.2 | CWE-312 | — |
 | SVN Repository Exposed | High | Source Code Exposure | 7.5 | CWE-538 | — |
 | Spring Boot Beans Exposed | Medium | Information Disclosure | 5.3 | CWE-200 | — |
+
+### `probesFiles.ts`
+
+*3 findings · 247 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| Directory Listing Enabled | Medium | Information Disclosure | 5.3 | CWE-548 | WSTG-CONF-04 |
+| Missing security.txt (RFC 9116) | Info | Information Disclosure | 0 | CWE-205 | — |
+| robots.txt Discloses Sensitive Application Paths | Info | Information Disclosure | — | CWE-200 | WSTG-INFO-01 |
+
+### `probesHttp.ts`
+
+*7 findings · 218 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| CORS Misconfiguration — Credentials Allowed from Arbitrary Origin | Critical | CORS Misconfiguration | 9.1 | CWE-942 | WSTG-CONF-07 |
+| HTTP CONNECT Method Enabled | Medium | HTTP Security | 6.1 | CWE-441 | WSTG-CONF-06 |
+| HTTP TRACE Method Enabled (Cross-Site Tracing) | Medium | HTTP Security | 5.8 | CWE-16 | WSTG-CONF-06 |
+| Open Redirect Vulnerability | Medium | Unvalidated Redirects | 6.1 | CWE-601 | WSTG-CLNT-04 |
+| Write HTTP Methods Advertised (${dangerousMethods.join(", ")}) | Medium | HTTP Security | 5.3 | CWE-650 | WSTG-CONF-06 |
+| X-Frame-Options Header Misconfigured | Medium | UI Security | 4.3 | CWE-1021 | WSTG-CLNT-09 |
+| CORS — Origin Reflected Without Credentials | Low | CORS Misconfiguration | 3.7 | CWE-942 | WSTG-CONF-07 |
+
+### `probesPage.ts`
+
+*4 findings · 299 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| Flask/Werkzeug Interactive Debugger Exposed (Remote Code Execution) / Verbose Error Pages Expose Internal Application Details | Critical / Medium | Information Disclosure | 10 | — | WSTG-CONF-02 |
+| External Resources Missing Subresource Integrity (SRI) | Medium | Supply Chain Security | 6.1 | CWE-353 | WSTG-CONF-04 |
+| HTTP Traffic Not Redirected to HTTPS | Medium | Transport Security | 5.3 | CWE-319 | WSTG-CONF-07 |
+| Rate Limiting Not Advertised in Response Headers | Info | Brute Force Protection | 0 | CWE-307 | WSTG-ATHN-03 |
+
+### `probesSupabase.ts`
+
+*3 findings · 154 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| Supabase Tables Exposed — Row Level Security (RLS) Disabled | Critical | Database Security | 9.8 | CWE-862 | WSTG-ATHZ-01 |
+| Supabase Detected — Verify Row Level Security (RLS) | Info | Database Security | 0 | — | WSTG-ATHZ-01 |
+| Supabase Public Content Tables Readable Without Authentication | Info | Database Security | 0 | — | WSTG-ATHZ-01 |
 
 ### `promptInjectionProbe.ts`
 
@@ -712,23 +745,30 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `supabase-probes.ts`
 
-*9 findings · 685 lines · 7 tests.*
+*2 findings · 104 lines · 7 tests.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| Supabase Storage Bucket List Exposed Without Authentication | Medium | Information Disclosure | 5.3 | CWE-200 | WSTG-CONF-04 |
+| Supabase Backend Detected | Info | Technology Fingerprint | 0 | — | — |
+
+### `supabase-probes-report.ts`
+
+*7 findings · 234 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
 | Supabase Service Role Key Exposed in Client-Side Code | Critical | Exposed Secrets / Credentials | 10 | CWE-522 | WSTG-CONF-04 |
 | Supabase Tables Accept Unauthenticated Writes | Critical | Broken Access Control | 9.3 | CWE-284 | WSTG-ATHZ-01 |
 | Supabase Tables Readable Without Authentication (CVE-2025-48757) | Critical | Broken Access Control | 9.3 | CWE-284 | WSTG-ATHZ-01 |
-| Supabase Storage Bucket List Exposed Without Authentication | Medium | Information Disclosure | 5.3 | CWE-200 | WSTG-CONF-04 |
-| Supabase Backend Detected | Info | Technology Fingerprint | 0 | — | — |
 | Supabase Backend Detected — RLS Appears Configured | Info | Technology Fingerprint | 0 | — | — |
 | Supabase Public Content Tables Readable Without Authentication | Info | Information Disclosure | 0 | — | — |
 | Supabase Tables Returned Empty Results To Anonymous Requests (Inconclusive) | Info | Broken Access Control | 0 | — | — |
 | Supabase Write Access Not Confirmed (Inconclusive Probe Response) | Info | Broken Access Control | 0 | — | — |
 
-### `worker.ts`
+### `workerAi.ts`
 
-*2 findings · 1086 lines · 3 tests.*
+*2 findings · 100 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|

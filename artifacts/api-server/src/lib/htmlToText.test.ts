@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import fs from "node:fs";
 import path from "node:path";
 import { htmlToPlainText } from "./htmlToText";
+import { moduleSource } from "../testing/moduleSource";
 
 /**
  * Every email this service sent was HTML-only — no text part at all — which is
@@ -79,7 +79,7 @@ describe("every outgoing email carries a text part", () => {
   // payload with only `html`. resendBody derives the text part centrally for
   // exactly that reason, so what has to stay true is that senders go through
   // resendBody rather than hand-rolling a fetch body.
-  const source = fs.readFileSync(path.join(process.cwd(), "src", "lib", "mailer.ts"), "utf-8");
+  const source = moduleSource(path.join(process.cwd(), "src", "lib"), "mailer.ts");
 
   it("routes every Resend call through resendBody, which supplies the text part", () => {
     // Count the sends against the payload builders. A `body:` in a Resend fetch

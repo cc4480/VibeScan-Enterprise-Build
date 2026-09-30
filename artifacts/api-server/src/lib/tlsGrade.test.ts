@@ -4,10 +4,10 @@
  * be reported when SSL Labs times out or errors (checkSslLabs then returns null).
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { moduleSource } from "../testing/moduleSource";
 import { join } from "node:path";
 
-const src = (f: string) => readFileSync(join(__dirname, f), "utf8");
+const src = (f: string) => moduleSource(__dirname, f);
 
 describe("TLS grade is never fabricated", () => {
   it("the header scan assigns no letter grade of its own", () => {
