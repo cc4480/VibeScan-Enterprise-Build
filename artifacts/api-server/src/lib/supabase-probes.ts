@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { probeSupabaseAuth, probeSupabaseStorageContents } from "./baasDepth";
 import type { ScanVulnerability } from "./scanner";
 import { logger } from "./logger";
+import { classifyExposure, rowColumns } from "./baasExposure";
 
 const TIMEOUT_MS = 10_000;
 const MAX_TABLES_TO_TEST = 12;
@@ -206,7 +207,9 @@ function extractTableNamesFromContent(content: string): string[] {
   return [...names].slice(0, MAX_TABLES_TO_TEST);
 }
 
-type ReadResult = "open" | "empty" | "protected" | "error";
+type ReadResult =
+  | { kind: "open"; rows: unknown[] }
+  | { kind: "empty" | "protected" | "error" };
 
 async function testTableRead(
   baseUrl: string,
@@ -218,18 +221,27 @@ async function testTableRead(
     { headers: { apikey: anonKey, Accept: "application/json" } },
     8_000,
   );
-  if (!result) return "error";
-  if (result.status === 401 || result.status === 403) return "protected";
+  if (!result) return { kind: "error" };
+  if (result.status === 401 || result.status === 403) return { kind: "protected" };
   if (result.status === 200) {
     try {
       const rows = JSON.parse(result.body);
-      if (Array.isArray(rows)) return rows.length > 0 ? "open" : "empty";
+      if (Array.isArray(rows)) {
+        return rows.length > 0 ? { kind: "open", rows } : { kind: "empty" };
+      }
     } catch { /* not JSON */ }
   }
-  return "error";
+  return { kind: "error" };
 }
 
-type WriteResult = "open" | "protected" | "error";
+/**
+ * "open" only on an unambiguous 2xx. "unconfirmed" is a 400/409/422, which
+ * proves nothing about access (see testTableWrite).
+ */
+type WriteResult =
+  | { kind: "open" }
+  | { kind: "unconfirmed"; status: number; code: string }
+  | { kind: "protected" | "error" };
 
 /**
  * Non-destructive INSERT probe. Sends a payload with a synthetic field name
@@ -238,9 +250,14 @@ type WriteResult = "open" | "protected" | "error";
  * does accept it, which is the 201 case below: the row is real and is deleted
  * again immediately.
  *
- *   401 / 403  → auth is checked before schema validation → PROTECTED
- *   400 / 409 / 422 → schema rejected the field name, but auth PASSED → VULNERABLE
- *   201        → table has no NOT NULL constraints; row created; immediately cleaned up
+ *   401 / 403  → RLS rejected the insert → PROTECTED
+ *   400 / 409 / 422 → UNCONFIRMED. This used to be read as "auth passed, schema
+ *     rejected the field" and reported CRITICAL, but PostgREST validates the
+ *     body's columns against its schema cache (PGRST204 "Could not find the
+ *     column") before the statement reaches Postgres, so a table with RLS on
+ *     answers 400 here exactly like an unprotected one. Not verified against a
+ *     live server, so this is reported as an inconclusive INFO, never as open.
+ *   2xx        → row created (this branch cleans it up) → OPEN
  */
 async function testTableWrite(
   baseUrl: string,
@@ -260,12 +277,15 @@ async function testTableWrite(
     },
     8_000,
   );
-  if (!result) return "error";
+  if (!result) return { kind: "error" };
 
-  if (result.status === 401 || result.status === 403) return "protected";
+  if (result.status === 401 || result.status === 403) return { kind: "protected" };
 
-  // Schema rejected unknown column but auth passed — write access confirmed
-  if (result.status === 400 || result.status === 409 || result.status === 422) return "open";
+  if (result.status === 400 || result.status === 409 || result.status === 422) {
+    let code = "";
+    try { code = String((JSON.parse(result.body) as { code?: unknown }).code ?? ""); } catch { /* not JSON */ }
+    return { kind: "unconfirmed", status: result.status, code };
+  }
 
   // Row was actually inserted — clean it up immediately.
   //
@@ -276,7 +296,7 @@ async function testTableWrite(
   // else — user_id, pk, slug, a composite — found no value at all and skipped
   // the DELETE entirely while still reporting "open". Both left a row behind in
   // someone else's database, against a promise we make publicly.
-  if (result.status === 201) {
+  if (result.status >= 200 && result.status < 300) {
     let deleted = false;
     try {
       const rows = JSON.parse(result.body) as Array<Record<string, unknown>>;
@@ -305,10 +325,10 @@ async function testTableWrite(
         "Supabase write probe created a row it could not delete — manual cleanup may be needed",
       );
     }
-    return "open";
+    return { kind: "open" };
   }
 
-  return "error";
+  return { kind: "error" };
 }
 
 async function testStorageBuckets(
@@ -417,29 +437,42 @@ export async function runSupabaseProbes(
     tables.map(async (t) => ({ table: t, result: await testTableRead(baseUrl, anonKey, t) })),
   );
 
-  const openReadTables: string[] = [];
-  const emptyOpenTables: string[] = [];
+  const openReadTables: string[] = [];      // rows of sensitive/unclassified tables
+  const publicReadTables: string[] = [];    // rows of public-catalogue tables
+  const emptyTables: string[] = [];
+  const publicColumns = new Map<string, string>();
 
   for (const r of readResults) {
     if (r.status !== "fulfilled") continue;
-    if (r.value.result === "open") openReadTables.push(r.value.table);
-    if (r.value.result === "empty") emptyOpenTables.push(r.value.table);
+    const { table, result } = r.value;
+    if (result.kind === "empty") emptyTables.push(table);
+    if (result.kind !== "open") continue;
+    if (classifyExposure(table, result.rows) === "public") {
+      publicReadTables.push(table);
+      publicColumns.set(table, rowColumns(result.rows));
+    } else {
+      openReadTables.push(table);
+    }
   }
 
-  // Test write access on open tables. This is the most invasive thing the
-  // scanner does — it attempts an actual insert against the target's database
-  // — and it used to be reserved for the deep tier. With one tier it runs on
-  // every scan.
+  // Test write access on every table that answered the read. This is the most
+  // invasive thing the scanner does — it attempts an actual insert against the
+  // target's database — and it used to be reserved for the deep tier. With one
+  // tier it runs on every scan.
   const openWriteTables: string[] = [];
+  const unconfirmedWrites: Array<{ table: string; status: number; code: string }> = [];
   {
-    const writeTargets = [...openReadTables, ...emptyOpenTables];
+    const writeTargets = [...openReadTables, ...publicReadTables, ...emptyTables];
     if (writeTargets.length > 0) {
       const writeResults = await Promise.allSettled(
         writeTargets.map(async (t) => ({ table: t, result: await testTableWrite(baseUrl, anonKey, t) })),
       );
       for (const r of writeResults) {
-        if (r.status === "fulfilled" && r.value.result === "open") {
-          openWriteTables.push(r.value.table);
+        if (r.status !== "fulfilled") continue;
+        const w = r.value.result;
+        if (w.kind === "open") openWriteTables.push(r.value.table);
+        if (w.kind === "unconfirmed") {
+          unconfirmedWrites.push({ table: r.value.table, status: w.status, code: w.code });
         }
       }
     }
@@ -481,32 +514,64 @@ export async function runSupabaseProbes(
       cweId: "CWE-284",
       cvssScore: 9.3,
       wstgId: "WSTG-ATHZ-01",
+      confidence: 90,
     }));
   }
 
-  // Report tables that are open but currently empty
-  const unreportedEmptyTables = emptyOpenTables.filter((t) => !openReadTables.includes(t));
-  if (unreportedEmptyTables.length > 0) {
+  // Public-catalogue tables: rows came back, but the table looks like content
+  // the app shows every visitor anyway (products, posts, pricing...) with no
+  // personal or secret-looking columns. Observed, not a vulnerability by itself.
+  if (publicReadTables.length > 0) {
     findings.push(vuln({
-      name: "Supabase Tables Accessible Without Authentication (Currently Empty — CVE-2025-48757 Pattern)",
-      severity: "high",
+      name: "Supabase Public Content Tables Readable Without Authentication",
+      severity: "info",
+      category: "Information Disclosure",
+      description:
+        `${publicReadTables.length} Supabase table(s) return rows to the public anon key, but ` +
+        "their names and columns look like public catalogue content (products, posts, " +
+        "pricing and similar) with no personal or secret-looking fields in the sampled " +
+        "row. That is normal for content the site shows every visitor, so this is not " +
+        "reported as a vulnerability. Confirm the tables are meant to be public and " +
+        "hold no draft, hidden or per-user rows.",
+      evidence:
+        `Tables: ${publicReadTables.join(", ")}\n` +
+        `Sampled columns (${publicReadTables[0]}): ${publicColumns.get(publicReadTables[0]!) ?? ""}\n` +
+        `GET ${baseUrl}/rest/v1/${publicReadTables[0]}?select=*&limit=1 → HTTP 200 with rows`,
+      solution:
+        "If any of these tables should not be public, enable RLS and add a SELECT policy. " +
+        "For intentionally public content, restrict the policy to published rows " +
+        "(e.g. USING (published = true)) and keep write policies authenticated-only.",
+      cweId: null,
+      cvssScore: 0,
+      confidence: 60,
+    }));
+  }
+
+  // Tables that answered 200 with an empty array. PostgREST answers exactly
+  // that for a table with RLS ENABLED and no anon SELECT policy (the correct,
+  // protected configuration) as well as for an unprotected empty table, so the
+  // response cannot distinguish them and proves nothing was readable.
+  if (emptyTables.length > 0) {
+    findings.push(vuln({
+      name: "Supabase Tables Returned Empty Results To Anonymous Requests (Inconclusive)",
+      severity: "info",
       category: "Broken Access Control",
       description:
-        `${unreportedEmptyTables.length} Supabase table(s) respond to unauthenticated ` +
-        "SELECT requests with HTTP 200. The tables are currently empty, so no data " +
-        "is exposed yet — but RLS is missing and the tables will leak data the " +
-        "moment any records are inserted. This is the same misconfiguration as " +
-        "CVE-2025-48757.",
+        `${emptyTables.length} Supabase table(s) answered an anonymous SELECT with HTTP 200 and ` +
+        "an empty array. No data was readable. PostgREST returns this both for a table with " +
+        "Row Level Security enabled and no anon policy (correctly protected) and for an " +
+        "empty table without RLS, so this is not evidence of a misconfiguration. It is " +
+        "listed so you can confirm RLS is enabled on these tables.",
       evidence:
-        `Tables returning HTTP 200 unauthenticated (empty): ${unreportedEmptyTables.join(", ")}\n` +
-        `GET ${baseUrl}/rest/v1/${unreportedEmptyTables[0]}?select=*&limit=1 → 200 []`,
+        `Tables: ${emptyTables.join(", ")}\n` +
+        `GET ${baseUrl}/rest/v1/${emptyTables[0]}?select=*&limit=1 → 200 []`,
       solution:
-        "Enable RLS on these tables before users create any data:\n" +
-        "  ALTER TABLE <table_name> ENABLE ROW LEVEL SECURITY;\n" +
-        "Then add appropriate policies. Do not wait — fix this before launch.",
-      cweId: "CWE-284",
-      cvssScore: 7.5,
-      wstgId: "WSTG-ATHZ-01",
+        "Confirm RLS is enabled: SELECT tablename, rowsecurity FROM pg_tables " +
+        "WHERE schemaname = 'public'; a table with rowsecurity = false will expose rows " +
+        "to the anon key as soon as it holds data.",
+      cweId: null,
+      cvssScore: 0,
+      confidence: 40,
     }));
   }
 
@@ -527,7 +592,7 @@ export async function runSupabaseProbes(
         `Test: POST ${baseUrl}/rest/v1/${openWriteTables[0]}\n` +
         `Headers: apikey: <anon key>, Content-Type: application/json\n` +
         `Body: {\"__vibescan_probe__\": true}\n` +
-        `Result: HTTP 400/422 (schema rejected unknown column — auth was not checked)`,
+        `Result: HTTP 2xx (the insert was accepted; the probe row was then deleted)`,
       solution:
         "Enable RLS and add INSERT policies:\n" +
         "  ALTER TABLE <table_name> ENABLE ROW LEVEL SECURITY;\n\n" +
@@ -538,13 +603,40 @@ export async function runSupabaseProbes(
       cweId: "CWE-284",
       cvssScore: 9.3,
       wstgId: "WSTG-ATHZ-01",
+      confidence: 90,
+    }));
+  }
+
+  // 400/409/422 to the write probe: PostgREST rejects the unknown column
+  // before RLS is evaluated, so this neither proves nor rules out write access.
+  const ambiguousOnly = unconfirmedWrites.filter((w) => !openWriteTables.includes(w.table));
+  if (ambiguousOnly.length > 0) {
+    findings.push(vuln({
+      name: "Supabase Write Access Not Confirmed (Inconclusive Probe Response)",
+      severity: "info",
+      category: "Broken Access Control",
+      description:
+        `An anonymous INSERT probe to ${ambiguousOnly.length} table(s) was rejected with a ` +
+        "400/409/422 validation error rather than 401/403 or success. PostgREST validates " +
+        "the request body against its schema before Row Level Security is evaluated, so " +
+        "this response does not show whether anonymous inserts are allowed. No row was " +
+        "created. Verify that INSERT policies on these tables require authentication.",
+      evidence:
+        ambiguousOnly.map((w) => `${w.table}: HTTP ${w.status}${w.code ? ` (${w.code})` : ""}`).join("\n"),
+      solution:
+        "Review INSERT policies: SELECT tablename, policyname, cmd, roles, with_check " +
+        "FROM pg_policies WHERE schemaname = 'public' AND cmd IN ('INSERT', 'ALL'); " +
+        "any policy granting anon/public with WITH CHECK (true) allows anonymous writes.",
+      cweId: null,
+      cvssScore: 0,
+      confidence: 30,
     }));
   }
 
   // Report clean tables as informational
-  const allTestedTables = [...openReadTables, ...emptyOpenTables, ...openWriteTables];
+  const allTestedTables = [...openReadTables, ...publicReadTables, ...emptyTables];
   const protectedCount = tables.length - allTestedTables.length;
-  if (openReadTables.length === 0 && emptyOpenTables.length === 0) {
+  if (openReadTables.length === 0 && publicReadTables.length === 0 && emptyTables.length === 0) {
     findings.push(vuln({
       name: "Supabase Backend Detected — RLS Appears Configured",
       severity: "info",

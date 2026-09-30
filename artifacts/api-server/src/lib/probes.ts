@@ -14,6 +14,7 @@ import { scanFetch, type HttpResult } from "./http";
 import type { ScanVulnerability } from "./scanner";
 import { OPEN_REDIRECT_PROBE, OPEN_REDIRECT_PARAMS } from "./payloads";
 import { detectCatchAll, matchesCatchAll } from "./spaCatchAll";
+import { classifyExposure } from "./baasExposure";
 
 const PROBE_TIMEOUT_MS = 8_000;
 
@@ -796,7 +797,7 @@ export async function checkSecurityTxt(
  * CVE-2025-48757 (Lovable breach) was caused by exactly this pattern — ~10% of all
  * Lovable-hosted apps had fully open tables leaking plaintext credentials.
  */
-async function checkSupabaseRLS(html: string): Promise<ScanVulnerability[]> {
+export async function checkSupabaseRLS(html: string): Promise<ScanVulnerability[]> {
   // 1. Find Supabase project URL
   const projectMatch = /https:\/\/([a-z0-9]{20})\.supabase\.co/.exec(html);
   if (!projectMatch) return [];
@@ -826,16 +827,19 @@ async function checkSupabaseRLS(html: string): Promise<ScanVulnerability[]> {
 
   if (!anonKey) {
     // Supabase detected but key is in a lazy-loaded bundle — advise manual check
+    // Nothing was observed here — no key, no request — so this is a pointer to
+    // check, not a finding about the customer's database: INFO, low confidence.
     return [vuln({
       name: "Supabase Detected — Verify Row Level Security (RLS)",
-      severity: "medium",
+      severity: "info",
       category: "Database Security",
-      description: "A Supabase backend was detected. 83% of Supabase database exposures involve misconfigured Row Level Security (RLS) policies that let anyone read or write data using only the public key. The Lovable platform breach (CVE-2025-48757) was caused by exactly this — roughly 1 in 10 Lovable-hosted apps had fully open database tables leaking plaintext credentials.",
-      evidence: `Supabase project detected: ${supabaseOrigin}\nAnon key could not be extracted from inline HTML — it may be in a JS bundle. Manual RLS verification recommended.`,
-      solution: "In Supabase Dashboard → Table Editor, enable RLS on EVERY table (especially users, profiles, orders, payments). Add policies that restrict reads/writes to authenticated users only. Test by hitting your REST API with just the anon key — you should get 0 rows or a 403, not data.",
-      cweId: "CWE-862",
-      cvssScore: 6.5,
+      description: "A Supabase backend was detected, but its public key could not be read from the page, so no table was tested. Nothing here shows a misconfiguration. Row Level Security (RLS) is the access control for Supabase data (CVE-2025-48757 affected apps that left it off), so it is worth confirming it is enabled on every table that holds non-public data.",
+      evidence: `Supabase project detected: ${supabaseOrigin}\nAnon key could not be extracted from inline HTML — it may be in a JS bundle. No request was made to the project.`,
+      solution: "In Supabase Dashboard → Table Editor, confirm RLS is enabled on every table with non-public data (users, profiles, orders, payments). Test by hitting your REST API with just the anon key — you should get 0 rows or a 403 for those tables.",
+      cweId: null,
+      cvssScore: 0,
       wstgId: "WSTG-ATHZ-01",
+      confidence: 30,
     })];
   }
 
@@ -869,6 +873,7 @@ async function checkSupabaseRLS(html: string): Promise<ScanVulnerability[]> {
 
   // 4. Query each table with the anon key — any 200 with rows = RLS is off
   const exposedTables: string[] = [];
+  const publicTables: string[] = [];
   await Promise.allSettled(
     tableNames.map(async (table) => {
       const tableUrl = `${restBase}${encodeURIComponent(table)}?select=*&limit=1`;
@@ -878,7 +883,10 @@ async function checkSupabaseRLS(html: string): Promise<ScanVulnerability[]> {
       if (res?.status === 200) {
         try {
           const rows = JSON.parse(res.body);
-          if (Array.isArray(rows) && rows.length > 0) exposedTables.push(table);
+          if (Array.isArray(rows) && rows.length > 0) {
+            // Rows from a public catalogue (products, posts...) are not RLS-off.
+            (classifyExposure(table, rows) === "public" ? publicTables : exposedTables).push(table);
+          }
         } catch { /* not JSON */ }
       }
     }),
@@ -895,6 +903,25 @@ async function checkSupabaseRLS(html: string): Promise<ScanVulnerability[]> {
       cweId: "CWE-862",
       cvssScore: 9.8,
       wstgId: "WSTG-ATHZ-01",
+      confidence: 90,
+    })];
+  }
+
+  // Only public-catalogue tables (products, posts...) answered with rows: that is
+  // what the storefront shows every visitor, not "RLS disabled". Observed
+  // fact, reported as INFO for the owner to confirm.
+  if (publicTables.length > 0) {
+    return [vuln({
+      name: "Supabase Public Content Tables Readable Without Authentication",
+      severity: "info",
+      category: "Database Security",
+      description: `${publicTables.length} table(s) returned rows to the public anon key (${publicTables.join(", ")}), but they look like public catalogue content with no personal or secret-looking fields in the sampled row. This is normal for content the site shows every visitor; confirm the tables are meant to be public and hold no hidden or per-user rows.`,
+      evidence: `Supabase project: ${supabaseOrigin}\nGET ${restBase}${publicTables[0]}?select=*&limit=1 → HTTP 200 with rows (anon key only)`,
+      solution: "If any of these tables should not be public, enable RLS and add a SELECT policy limited to published rows.",
+      cweId: null,
+      cvssScore: 0,
+      wstgId: "WSTG-ATHZ-01",
+      confidence: 60,
     })];
   }
 

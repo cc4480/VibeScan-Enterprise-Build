@@ -37,7 +37,7 @@ export const CATALOG_SURFACE: CatalogTest[] = [
     ["critical", "Supabase Service Role Key Exposed in Client-Side Code", "Supabase Service Role Key Exposed in Client-Side Code"],
     ["info", "Supabase Backend Detected", "Supabase Backend Detected"],
     ["critical", "Supabase Tables Readable Without Authentication (CVE-2025-48757)", "Supabase Tables Readable Without Authentication (CVE-2025-48757)"],
-    ["high", "Supabase Tables Accessible Without Authentication (Currently Empty)", "Supabase Tables Accessible Without Authentication (Currently Empty"],
+    ["info", "Supabase Tables Returned Empty Results To Anonymous Requests", "Supabase Tables Returned Empty Results To Anonymous Requests"],
     ["critical", "Supabase Tables Accept Unauthenticated Writes", "Supabase Tables Accept Unauthenticated Writes"],
     ["info", "Supabase Backend Detected — RLS Appears Configured", "Supabase Backend Detected — RLS Appears Configured"],
     ["medium", "Supabase Storage Bucket List Exposed Without Authentication", "Supabase Storage Bucket List Exposed Without Authentication"],
