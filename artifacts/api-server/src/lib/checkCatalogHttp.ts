@@ -72,7 +72,7 @@ export const CATALOG_HTTP: CatalogTest[] = [
   ]),
   test("active CORS", "CORS Misconfiguration", PROBES, [
     ["high", "CORS Misconfiguration — Credentials Allowed from Arbitrary Origin", "CORS Misconfiguration — Credentials Allowed from Arbitrary Origin"],
-    ["high", "CORS Misconfiguration — Origin Reflected Without Allowlist", "CORS Misconfiguration — Origin Reflected Without Allowlist"],
+    ["low", "CORS — Origin Reflected Without Credentials", "CORS — Origin Reflected Without Credentials"],
   ]),
   test("open redirect", "Unvalidated Redirects", PROBES, [
     ["medium", "Open Redirect Vulnerability", "Open Redirect Vulnerability"],

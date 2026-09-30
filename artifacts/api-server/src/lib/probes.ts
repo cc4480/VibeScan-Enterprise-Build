@@ -235,16 +235,20 @@ export async function checkActiveCors(targetUrl: string): Promise<ScanVulnerabil
     }
 
     if (reflectsOrigin && !withCredentials) {
+      // Without Allow-Credentials the browser sends no cookies, so this only
+      // exposes what the tested URL already serves to anyone. Only that one URL
+      // was tested, so the wording stays at what was observed.
       return [vuln({
-        name: "CORS Misconfiguration — Origin Reflected Without Allowlist",
-        severity: "medium",
+        name: "CORS — Origin Reflected Without Credentials",
+        severity: "low",
         category: "CORS Misconfiguration",
-        description: `The server reflects any Origin value in Access-Control-Allow-Origin without validating it. While credentials are not currently sent, this enables cross-origin data theft from any public API endpoint your application exposes.`,
-        evidence: `GET ${targetUrl}\nRequest header: Origin: ${origin}\nResponse: Access-Control-Allow-Origin: ${acao}`,
-        solution: "Validate the Origin header against an explicit allowlist. Only reflect origins that are on the approved list. Never use a catch-all reflection.",
+        description: `This URL reflects any Origin value in Access-Control-Allow-Origin without an allowlist, but does not set Access-Control-Allow-Credentials: true, so browsers will not attach cookies or other credentials to cross-origin requests. Only the tested URL was checked; if it (or other endpoints with the same policy) returns data that is not meant to be public, a third-party site could read it. Public content is not affected.`,
+        evidence: `GET ${targetUrl}\nRequest header: Origin: ${origin}\nResponse: Access-Control-Allow-Origin: ${acao}\nResponse: Access-Control-Allow-Credentials: ${acac ?? "(absent)"}`,
+        solution: "Validate the Origin header against an explicit allowlist for any endpoint that returns non-public data. Reflecting every origin is acceptable only for content that is public anyway.",
         cweId: "CWE-942",
-        cvssScore: 6.5,
+        cvssScore: 3.7,
         wstgId: "WSTG-CONF-07",
+        confidence: 75,
       })];
     }
   }
@@ -259,6 +263,7 @@ export async function checkActiveCors(targetUrl: string): Promise<ScanVulnerabil
 export async function checkOpenRedirect(targetUrl: string): Promise<ScanVulnerability[]> {
   const base = new URL(targetUrl);
   const probeTarget = OPEN_REDIRECT_PROBE.template;
+  const probeHost = new URL(probeTarget).hostname.toLowerCase();
 
   for (const param of OPEN_REDIRECT_PARAMS) {
     const testUrl = new URL(targetUrl);
@@ -269,7 +274,13 @@ export async function checkOpenRedirect(targetUrl: string): Promise<ScanVulnerab
 
     if (result.status >= 300 && result.status < 400) {
       const location = result.headers["location"] ?? "";
-      if (OPEN_REDIRECT_PROBE.indicator!.test(location)) {
+      // The host the browser would land on, not a substring match: a canonical
+      // redirect or /login?next=<url> merely echoes the payload in its query.
+      let landsOnProbe = false;
+      try {
+        landsOnProbe = new URL(location, testUrl).hostname.toLowerCase() === probeHost;
+      } catch { /* unparseable Location */ }
+      if (landsOnProbe) {
         return [vuln({
           name: "Open Redirect Vulnerability",
           severity: "medium",
