@@ -15,9 +15,9 @@ export const CATALOG_SURFACE: CatalogTest[] = [
   ]),
   test("known-CVE and end-of-life versions", "Outdated Software", "cveCheck.ts", [
     ["critical", "PHP end-of-life release", "is End-of-Life"],
-    ["varies", "Nginx version with a known CVE", "Nginx ${d.version} — Known Vulnerability"],
+    ["varies", "Nginx version with a known CVE", " — Version Below Fix for", "bannerRules.ts"],
     ["high", "Nginx end-of-life release cycle", "Nginx ${d.version} — End-of-Life Release Cycle"],
-    ["varies", "Apache version with a known CVE", "Apache ${d.version} — Known Vulnerability"],
+    ["varies", "Apache version with a known CVE", " — Version Below Fix for", "bannerRules.ts"],
     ["critical", "Apache HTTPD end-of-life release branch", "Apache HTTPD ${d.version} — End-of-Life Release Branch"],
     ["critical", "Microsoft IIS 6.0 — CVE-2017-7269 WebDAV RCE", "Microsoft IIS ${d.version} — CVE-2017-7269"],
     ["varies", "Detected version matched against OSV.dev", "${target.displayName} ${target.version} — Known Vulnerability"],
