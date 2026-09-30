@@ -7,7 +7,7 @@ Every finding the scanner can emit, read out of `artifacts/api-server/src/lib`. 
 complete list; [SCAN_COVERAGE.md](SCAN_COVERAGE.md) is the readable one, grouped by module with
 the Basic/Deep tier and the methodology behind each group.
 
-**309 findings across 58 modules**, in 38 categories. 85 critical, 73 high, 56 medium, 30 low, 65 info.
+**310 findings across 58 modules**, in 38 categories. 85 critical, 73 high, 56 medium, 31 low, 65 info.
 
 A finding is a distinct name the scanner can put in a report, which is not the same as a check
 type: the data-table modules below define many findings from one piece of detection logic —
@@ -25,6 +25,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `nextjsProbe.ts` | 9 | 248 | 7 | direct |
 | `structuredData.ts` | 9 | 285 | 36 | direct |
 | `crawler-data.ts` | 8 | 181 | 35 | direct |
+| `scannerCspChecks.ts` | 7 | 155 | 10 | direct |
 | `jwtAnalysis.ts` | 6 | 262 | 9 | direct |
 | `storageProbe.ts` | 5 | 251 | 11 | direct |
 | `firebase-probes.ts` | 4 | 301 | 8 | direct |
@@ -37,16 +38,16 @@ module does. `none` — neither, so no test exercises it at all.
 | `graphqlProbe.ts` | 2 | 256 | 12 | direct |
 | `injectionExtra.ts` | 2 | 140 | 9 | direct |
 | `injectionProbe.ts` | 2 | 280 | 13 | direct |
+| `sourceMaps.ts` | 2 | 231 | 19 | direct |
 | `supabase-probes.ts` | 2 | 104 | 7 | direct |
 | `apiDocsProbe.ts` | 1 | 129 | 9 | direct |
 | `crossAccountStep.ts` | 1 | 172 | 16 | direct |
 | `deserializationProbe.ts` | 1 | 105 | 9 | direct |
-| `dnsChecks.ts` | 1 | 163 | 34 | direct |
+| `dnsChecks.ts` | 1 | 163 | 39 | direct |
 | `healthEndpointProbe.ts` | 1 | 114 | 10 | direct |
 | `pathTraversal.ts` | 1 | 195 | 4 | direct |
 | `promptInjectionProbe.ts` | 1 | 214 | 26 | direct |
 | `raceConditionProbe.ts` | 1 | 181 | 21 | direct |
-| `sourceMaps.ts` | 1 | 180 | 14 | direct |
 | `ssrfProbe.ts` | 1 | 200 | 7 | direct |
 | `probes-data-vcs.ts` | 24 | 244 | — | indirect, via probes-data.test.ts (split from probes-data) |
 | `probes-data-config.ts` | 23 | 273 | — | indirect, via probes-data.test.ts (split from probes-data) |
@@ -57,7 +58,6 @@ module does. `none` — neither, so no test exercises it at all.
 | `dnsChecksMail.ts` | 8 | 205 | — | indirect, via dnsChecks.test.ts (split from dnsChecks) |
 | `apiProbeFindings.ts` | 7 | 215 | — | indirect, via apiProbe.test.ts (split from apiProbe) |
 | `probesHttp.ts` | 7 | 218 | — | indirect, via probes.test.ts (split from probes) |
-| `scannerCspChecks.ts` | 7 | 149 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts (split from scanner) |
 | `scannerHeaderChecks.ts` | 7 | 133 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts (split from scanner) |
 | `secret-pattern-generic.ts` | 7 | 144 | — | indirect, via secret-pattern-data.test.ts (split from secret-pattern-data) |
 | `supabase-probes-report.ts` | 7 | 234 | — | indirect, via supabase-probes.test.ts (split from supabase-probes) |
@@ -65,7 +65,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `crawlerHeaders.ts` | 5 | 202 | — | indirect, via crawler.test.ts (split from crawler) |
 | `cveCheckLocal.ts` | 5 | 225 | — | indirect, via cveCheck.test.ts (split from cveCheck) |
 | `secret-pattern-ai.ts` | 5 | 61 | — | indirect, via secret-pattern-generic.test.ts |
-| `probesPage.ts` | 4 | 299 | — | indirect, via probes.test.ts (split from probes) |
+| `probesPage.ts` | 4 | 304 | — | indirect, via probes.test.ts (split from probes) |
 | `accessControlFindings.ts` | 3 | 129 | — | indirect, via accessControlProbe.test.ts |
 | `probesFiles.ts` | 3 | 247 | — | indirect, via probes.test.ts (split from probes) |
 | `probesSupabase.ts` | 3 | 154 | — | indirect, via probes.test.ts (split from probes) |
@@ -78,7 +78,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `workerAi.ts` | 2 | 100 | — | indirect, via worker.test.ts (split from worker) |
 | `bannerRules.ts` | 1 | 112 | — | indirect, via cveCheckLocal.test.ts, cveCheckVersions.test.ts |
 | `githubFindings.ts` | 1 | 60 | — | indirect, via githubSourceProbe.test.ts |
-| `scanner.ts` | 1 | 297 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts |
+| `scanner.ts` | 1 | 298 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts |
 
 ## Findings by module
 
@@ -225,7 +225,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `dnsChecks.ts`
 
-*1 findings · 163 lines · 34 tests.*
+*1 findings · 163 lines · 39 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -498,7 +498,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `probesPage.ts`
 
-*4 findings · 299 lines · no test file.*
+*4 findings · 304 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -556,7 +556,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `scanner.ts`
 
-*1 findings · 297 lines · no test file.*
+*1 findings · 298 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -587,7 +587,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `scannerCspChecks.ts`
 
-*7 findings · 149 lines · no test file.*
+*7 findings · 155 lines · 10 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -697,11 +697,12 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `sourceMaps.ts`
 
-*1 findings · 180 lines · 14 tests.*
+*2 findings · 231 lines · 19 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
 | JavaScript Source Map Exposed — Full Source Code Accessible / JavaScript Source Map Exposed — Source File Names Only | High / Low | Source Code Exposure | 7.5 | CWE-540 | WSTG-CONF-04 |
+| JavaScript Source Map Exposed — Third-Party Library Code | Low | Source Code Exposure | 3.1 | CWE-540 | WSTG-CONF-04 |
 
 ### `ssrfProbe.ts`
 

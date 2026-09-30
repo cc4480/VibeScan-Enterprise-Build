@@ -52,12 +52,25 @@ npmjs.com now returns its real page to the scanner instead of a Cloudflare chall
 - `http://archive.org` answers 200 with no redirect. `_dmarc.european-union.europa.eu` and `_dmarc.europa.eu` are both NXDOMAIN.
 - The three source maps exist, return 200 and embed source text (see the severity question below).
 
-### Open — found this round
+### Open items from this round — fixed the same day
 
-1. **gitlab.com "Missing Content-Security-Policy" (High) is wrong as worded.** `gitlab.com` redirects to `about.gitlab.com`, whose response has no CSP header but whose HTML carries `<meta http-equiv="Content-Security-Policy">`. Browsers enforce that. The policy is very weak (`'unsafe-inline' 'unsafe-eval' https: http:` in `script-src`), so there is a real finding, but not the one reported. The scanner reads only the header. The 2026-09-24 round checked headers only and called this finding true.
-2. **zoom.us SRI lists Zoom's own `st1.zoom.us`.** `zoom.us` redirects to `www.zoom.com`; its assets stay on `zoom.us`. First-party is judged against the final host only, so the address the user typed is not counted.
-3. **Source map severity ignores what is in the map.** fastly.com's map has 126 sources, 125 of them `node_modules` libraries and one Sentry config file; archive.org's is a vendored `lit` polyfill. Both are High "Full Source Code Accessible". gitlab's has 20 first-party files among 301. Severity depends only on whether `sourcesContent` is present.
-4. **SRI on provider-updated marketing scripts** (gitlab: bizible, marketo; nasa: dap.digitalgov.gov, parsely; slack: clearbit) and on a site's own asset domain the scanner cannot know (theguardian: `assets.guim.co.uk`). Accurate, but not something the owner can fix by adding `integrity`. A policy question, not a bug.
+Each has a clean-twin test that fails on the old code, and a test that the real problem is still found.
+
+1. **gitlab.com "Missing Content-Security-Policy" (High).** A policy delivered in `<meta http-equiv="Content-Security-Policy">` is now read (`extractMetaCsp`), analysed like a header's, and quoted as a meta tag in the evidence. gitlab.com now reports what is true: `unsafe-inline` and `unsafe-eval` in `script-src` (Medium) and `object-src https: http:` (Medium). A commented-out tag and a Report-Only tag are not treated as policies. Clickjacking still reads headers only, correctly, because a meta tag cannot carry `frame-ancestors`.
+2. **zoom.us SRI listing `st1.zoom.us`.** The address the user asked to scan now also counts as first-party (`requestedUrl` reaches `expectsIntegrity`). Only the real third party, `cdn.bc0a.com`, is reported. A lookalike such as `zoom.us.evil.example` is still a stranger.
+3. **Source-map severity.** A map is rated by whose code it embeds. Fewer than three own files and under 5% of the sources, or a map served from a `/vendor/` path, is now a Low "Third-Party Library Code" finding that says how many files are the site's own. archive.org went from High to Low. fastly.com now shows both maps its pages expose: the library one as Low, and a second one holding `SearchCombobox.astro`, the site's own component, as High. The earlier run only reported the first map it found.
+
+### Found by the re-sweep, and fixed: a resolver error read as "no SPF record"
+
+Scanning nasa.gov ten times gave "Missing SPF Record" (Medium) on one run in five. nasa.gov's TXT lookup returns SERVFAIL about one time in ten. `findUpChain` decided "absent" from the first name only (www.nasa.gov, a clean NOERROR with no TXT) and ignored that the parent, where the record lives, had errored. Now any resolver error up the chain makes the answer inconclusive, and `dnsQuery` retries a SERVFAIL once. Ten of ten scans clean afterwards. The same chain code serves DMARC, so it could have produced the same false claim there.
+
+### Re-sweep after the fixes
+
+`scan-results/2026-09-30-sweep-30-after-fixes.json`. The differences from the run above are the fixes: gitlab, archive.org, fastly and zoom as described. apnews.com happened to be served its real page this time instead of a challenge, which added seven findings that an independent fetch agreed with. The fixture gate stayed at 82/82.
+
+### Still open
+
+- SRI on provider-updated marketing scripts (gitlab: bizible, marketo; nasa: dap.digitalgov.gov, parsely; slack: clearbit) and on a site's own asset domain the scanner cannot know (theguardian: `assets.guim.co.uk`). Accurate, but not something the owner can fix by adding `integrity`. A policy question, not a bug.
 
 Guard baselines after this round: google 15/6, github 11/5 (unchanged); cloudflare 7/2 (was 8/4) and mozilla 6/2 (was 7/3), both from the SRI fix above.
 
