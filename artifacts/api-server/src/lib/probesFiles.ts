@@ -109,11 +109,17 @@ export async function checkRobotsTxt(baseUrl: string): Promise<ScanVulnerability
   // scrutinised site on the internet. A path being under /api/ says nothing
   // about whether it is meant to be private; the patterns below name things
   // that are not supposed to face the public at all.
+  //
+  // The words match as whole path tokens, not as substrings. wikipedia.org disallows
+  // /wiki/Wikipedia:Administratoren/Probleme/ and /wiki/Wikipedia:Requests_for_adminship/, which are
+  // discussion pages about the role, and a bare /admin/ matched them. A real admin path still matches:
+  // /admin/, /wp-admin/, /index.php/admin/, */store/admin, /administrator/.
+  const word = (w: string) => new RegExp(`(?:^|[/\\-_.*:?=&])${w}(?:$|[/\\-_.*:?=&])`, "i");
   const sensitivePatterns = [
-    /admin/i, /backup/i, /config/i, /private/i, /secret/i,
-    /internal/i, /database/i, /\/db\//i, /\.sql/i,
-    /staging/i, /\/dev\//i, /\/logs?\//i, /debug/i,
-    /\/tmp\//i, /\/test\//i, /\.env/i, /credentials/i,
+    word("admin(?:istrator)?"), word("backups?"), word("configs?"), word("private"), word("secrets?"),
+    word("internal"), word("database"), /\/db\//i, /\.sql/i,
+    word("staging"), /\/dev\//i, /\/logs?\//i, word("debug"),
+    /\/tmp\//i, /\/test\//i, /\.env/i, word("credentials"),
   ];
 
   const sensitivePaths = disallowedPaths.filter((p) =>
@@ -216,13 +222,19 @@ export async function checkSecurityTxt(
   // finding is right; claiming the file is absent is not, and anyone who checks
   // sees a file sitting there and reports the scanner as broken.
   const observed: string[] = [];
+  // A path we were refused or could not reach says nothing about whether the file exists. npmjs.com
+  // answers a scanner 403 (a Cloudflare challenge) on both paths while /.well-known/security.txt is a
+  // valid file; reporting it "missing" on that was wrong. Only a definitive answer (404, 410, a page
+  // with no RFC 9116 fields) supports "missing", so any refusal or failure makes the result unknown.
+  let couldNotTell = false;
   for (const p of paths) {
-    // null (network error) reads the same as absent, which is the intent here.
     const res = await safeGet(origin + p, { redirect: "follow" }, 6_000);
     if (!res) {
       observed.push(`GET ${origin}${p} → no response`);
+      couldNotTell = true;
       continue;
     }
+    if (res.status === 401 || res.status === 403 || res.status === 429 || res.status >= 500) couldNotTell = true;
     if (res.status >= 200 && res.status < 300) {
       if (/Contact:|Expires:|Policy:/i.test(res.body)) return [];
       observed.push(
@@ -232,6 +244,8 @@ export async function checkSecurityTxt(
     }
     observed.push(`GET ${origin}${p} → HTTP ${res.status}`);
   }
+
+  if (couldNotTell) return [];
 
   return [vuln({
     name: "Missing security.txt (RFC 9116)",
