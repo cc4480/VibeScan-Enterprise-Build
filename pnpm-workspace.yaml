@@ -22,7 +22,7 @@ catalog:
   '@vitejs/plugin-react': ^5.0.4
   class-variance-authority: ^0.7.1
   clsx: 2.1.1
-  drizzle-orm: ^0.45.1
+  drizzle-orm: ^0.45.2
   framer-motion: 12.35.1
   lucide-react: ^0.545.0
   react: 19.1.0
@@ -50,6 +50,15 @@ onlyBuiltDependencies:
   - unrs-resolver
 
 overrides:
+  # Security advisories in transitive dependencies (pnpm audit --prod, 2026-09-30). Each is pinned to the
+  # patched line within its own major, so nothing here moves a package across a breaking version.
+  'path-to-regexp@^8': '^8.4.0'
+  'qs@^6': '^6.16.0'
+  'fast-uri@^3': '^3.1.8'
+  'picomatch@^2': '^2.3.2'
+  'picomatch@>=4.0.0 <4.0.4': '^4.0.4'
+  'body-parser@^2': '^2.3.0'
+  'dompurify@^3': '^3.4.13'
   '@esbuild-kit/esm-loader': npm:tsx@^4.21.0
   '@expo/ngrok-bin>@expo/ngrok-bin-darwin-arm64': '-'
   '@expo/ngrok-bin>@expo/ngrok-bin-darwin-x64': '-'
