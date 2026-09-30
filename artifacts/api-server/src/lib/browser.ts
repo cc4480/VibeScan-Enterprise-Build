@@ -14,6 +14,7 @@
  * Pages are closed immediately after rendering.
  */
 
+import { guardBrowser } from "./browserGuard";
 import { logger } from "./logger";
 import { CHROMIUM_ARGS } from "./browserArgs";
 import { getScanHttpContext } from "./http";
@@ -221,10 +222,12 @@ export async function renderPage(url: string): Promise<RenderedPage | null> {
     const credentials = ctx?.credentials;
     const inScope = ctx?.scope.includes(url) ?? false;
 
-    const extraHTTPHeaders: Record<string, string> = {};
+    // Sent only to requests in scope, by the guard below. As context-wide extraHTTPHeaders they went to
+    // every host the page loaded from, including third parties and redirect targets.
+    const credentialHeaders: Record<string, string> = {};
     if (credentials && inScope) {
-      if (credentials.cookie) extraHTTPHeaders["Cookie"] = credentials.cookie;
-      Object.assign(extraHTTPHeaders, credentials.headers ?? {});
+      if (credentials.cookie) credentialHeaders["Cookie"] = credentials.cookie;
+      Object.assign(credentialHeaders, credentials.headers ?? {});
     }
 
     context = await (_browser as {
@@ -232,14 +235,18 @@ export async function renderPage(url: string): Promise<RenderedPage | null> {
         userAgent: string;
         ignoreHTTPSErrors: boolean;
         javaScriptEnabled: boolean;
-        extraHTTPHeaders?: Record<string, string>;
       }): Promise<unknown>;
     }).newContext({
       userAgent:
         "Mozilla/5.0 (compatible; VibeScan-Security-Bot/1.0; +https://secscan.us/bot)",
       ignoreHTTPSErrors: false,
       javaScriptEnabled: true,
-      ...(Object.keys(extraHTTPHeaders).length > 0 ? { extraHTTPHeaders } : {}),
+    });
+    // Every request the page makes, redirect hops included, must be to a public address, and the
+    // credentials go only where the scan is in scope.
+    await guardBrowser(context as never, {
+      credentialHeaders,
+      inScope: (u) => ctx?.scope.includes(u) ?? false,
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

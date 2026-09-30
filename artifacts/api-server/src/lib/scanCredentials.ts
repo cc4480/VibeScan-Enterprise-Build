@@ -16,6 +16,7 @@
  * password itself never leaves this module.
  */
 
+import { guardBrowser } from "./browserGuard";
 import { encryptSecret, decryptSecret, isEncryptionConfigured } from "./crypto";
 import type { ScanCredentials as HttpCredentials } from "./http";
 import { logger } from "./logger";
@@ -153,6 +154,9 @@ async function formLogin(
 
   try {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
+    // The sign-in page is somewhere the requester named, and its script and redirects run in our network:
+    // hold it to the same public-addresses-only rule as everything else the scanner fetches.
+    await guardBrowser(context as never);
     const page = await context.newPage();
     await page.goto(input.loginUrl, { waitUntil: "domcontentloaded", timeout: 20_000 });
 
