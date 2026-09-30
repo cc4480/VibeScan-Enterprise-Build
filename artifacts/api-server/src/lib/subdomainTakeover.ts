@@ -15,6 +15,8 @@ import type { ScanVulnerability } from "./scanner";
 
 const DOH_ENDPOINT = "https://cloudflare-dns.com/dns-query";
 const TIMEOUT_MS = 8_000;
+/** Provider unclaimed-resource pages are tiny; a large page is a live site. */
+const MAX_ERROR_PAGE_CHARS = 20_000;
 
 function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
   return { id: randomUUID(), ...partial };
@@ -118,20 +120,30 @@ export async function checkSubdomainTakeover(
 
   if (!result) return [];
 
-  const confirmed = service.bodyFingerprints.some((rx) => rx.test(result.body));
-  if (!confirmed) return [];
+  // The provider's own unclaimed-resource page is an error response with a short
+  // body. A live host that merely CNAMEs to the provider serves 2xx, or a large
+  // page in which a fingerprint phrase happens to appear (a Netlify page
+  // mentioning "404", a Ghost post quoting the error text).
+  if (result.status < 400 || result.body.length > MAX_ERROR_PAGE_CHARS) return [];
+  if (!service.bodyFingerprints.some((rx) => rx.test(result.body))) return [];
+
+  const ambiguous = service.ambiguous === true;
+  const severity = ambiguous ? "medium" : service.severity;
 
   return [
     vuln({
-      name: `Subdomain Takeover — ${service.name} (${hostname})`,
-      severity: service.severity,
+      name: `Subdomain Takeover — ${service.name} (${hostname})${ambiguous ? " — Unverified" : ""}`,
+      severity,
       category: "DNS Security",
-      description: `The hostname ${hostname} has a CNAME pointing to ${cname} (${service.name}), but that ${service.name} resource is no longer provisioned. An attacker can register or reclaim it and serve arbitrary content — phishing pages, malware, or credential harvesters — under your trusted domain name. This is fully exploitable with no technical barrier.`,
-      evidence: `CNAME chain: ${hostname} → ${cname}\nService: ${service.name}\nUnclaimed fingerprint confirmed in HTTP response.`,
+      description: ambiguous
+        ? `The hostname ${hostname} has a CNAME pointing to ${cname} (${service.name}) and answers with a bare ${service.name} not-found page (HTTP ${result.status}). That same page is also what a claimed ${service.name} site with no matching route returns, so this may be a dangling record or a live site — verify by checking whether the ${service.name} project still exists and serves this domain. If it does not, an attacker can claim it and serve content under your domain.`
+        : `The hostname ${hostname} has a CNAME pointing to ${cname} (${service.name}), but that ${service.name} resource is no longer provisioned. An attacker can register or reclaim it and serve arbitrary content — phishing pages, malware, or credential harvesters — under your trusted domain name. This is fully exploitable with no technical barrier.`,
+      evidence: `CNAME chain: ${hostname} → ${cname}\nService: ${service.name}\nHTTP ${result.status} with the provider's unclaimed-resource message${ambiguous ? " (identical to a claimed site's default 404 — verify)" : ""}.`,
       solution: `Immediately either: (1) Remove the dangling CNAME DNS record for ${hostname}, or (2) Reprovision the ${service.name} resource to reclaim ownership. Audit all DNS CNAME records regularly — especially after decommissioning cloud services — to catch dangling entries before attackers do.`,
       cweId: "CWE-350",
-      cvssScore: service.cvssScore,
+      cvssScore: ambiguous ? 5.3 : service.cvssScore,
       wstgId: "WSTG-CONF-10",
+      confidence: ambiguous ? 40 : 85,
     }),
   ];
 }

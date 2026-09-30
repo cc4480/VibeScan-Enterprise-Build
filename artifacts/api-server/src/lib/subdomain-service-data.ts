@@ -8,8 +8,19 @@ import type { ScanVulnerability } from "./scanner";
 export interface ServiceFingerprint {
   name: string;
   cnamePattern: RegExp;
-  /** Patterns found in the HTTP body that confirm the resource is unclaimed. */
+  /**
+   * Patterns in the HTTP body that confirm the resource is unclaimed. Each must be
+   * the provider's own unclaimed-resource message: a generic "404", a bare product
+   * name or marketing-style copy also appears on live, claimed sites. The check
+   * additionally requires an error status (>= 400) and a small page.
+   */
   bodyFingerprints: RegExp[];
+  /**
+   * True when the provider's unclaimed page is indistinguishable from a claimed
+   * site's own default 404 (Netlify's "Not Found - Request ID", Fly's bare
+   * "404 Not Found"). Reported as an unverified, low-confidence candidate.
+   */
+  ambiguous?: boolean;
   severity: ScanVulnerability["severity"];
   cvssScore: number;
 }
@@ -39,21 +50,22 @@ export const SERVICES: ServiceFingerprint[] = [
   {
     name: "Netlify",
     cnamePattern: /\.netlify\.app$|\.netlify\.com$/i,
-    bodyFingerprints: [/Not Found - Request ID|Netlify.*404/i],
+    bodyFingerprints: [/^\s*Not Found - Request ID: [\w-]+\s*$/i],
+    ambiguous: true,
     severity: "critical",
     cvssScore: 9.1,
   },
   {
     name: "Vercel",
     cnamePattern: /\.vercel\.app$/i,
-    bodyFingerprints: [/The deployment could not be found|404: NOT_FOUND/i],
+    bodyFingerprints: [/The deployment could not be found on Vercel|DEPLOYMENT_NOT_FOUND/i],
     severity: "critical",
     cvssScore: 9.1,
   },
   {
     name: "Azure App Service",
     cnamePattern: /\.azurewebsites\.net$|\.cloudapp\.azure\.com$|\.cloudapp\.net$/i,
-    bodyFingerprints: [/404 Web Site not found|Error 404.*Web app not found/i],
+    bodyFingerprints: [/404 Web Site not found/i],
     severity: "critical",
     cvssScore: 9.1,
   },
@@ -67,14 +79,14 @@ export const SERVICES: ServiceFingerprint[] = [
   {
     name: "Shopify",
     cnamePattern: /\.myshopify\.com$|shops\.myshopify\.com$/i,
-    bodyFingerprints: [/Sorry, this shop is currently unavailable|Only one step away/i],
+    bodyFingerprints: [/Sorry, this shop is currently unavailable/i],
     severity: "high",
     cvssScore: 8.1,
   },
   {
     name: "Ghost Pro",
     cnamePattern: /\.ghost\.io$/i,
-    bodyFingerprints: [/The thing you were looking for is no longer here|404 Not found/i],
+    bodyFingerprints: [/The thing you were looking for is no longer here, or never was/i],
     severity: "high",
     cvssScore: 8.1,
   },
@@ -95,7 +107,7 @@ export const SERVICES: ServiceFingerprint[] = [
   {
     name: "Readme.io",
     cnamePattern: /\.readme\.io$|\.readmessl\.com$/i,
-    bodyFingerprints: [/Project doesnt exist|404 Not found/i],
+    bodyFingerprints: [/Project doesnt exist/i],
     severity: "high",
     cvssScore: 8.1,
   },
@@ -116,7 +128,7 @@ export const SERVICES: ServiceFingerprint[] = [
   {
     name: "Tumblr",
     cnamePattern: /\.tumblr\.com$/i,
-    bodyFingerprints: [/There.s nothing here|Whatever you were looking for doesn.t currently exist/i],
+    bodyFingerprints: [/Whatever you were looking for doesn.t currently exist at this address/i],
     severity: "medium",
     cvssScore: 6.5,
   },
@@ -130,7 +142,8 @@ export const SERVICES: ServiceFingerprint[] = [
   {
     name: "Fly.io",
     cnamePattern: /\.fly\.dev$/i,
-    bodyFingerprints: [/404 Not Found/i],
+    bodyFingerprints: [/^\s*404 Not Found\s*$/i],
+    ambiguous: true,
     severity: "high",
     cvssScore: 8.1,
   },
