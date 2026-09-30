@@ -1,0 +1,69 @@
+import { headerVal, vuln, type ScanVulnerability, type PageContext } from "./scannerTypes";
+import { isHstsPreloaded } from "./scannerHstsPreload";
+
+/** Plaintext HTTP and Strict-Transport-Security checks on the first response. */
+export async function transportFindings({ finalUrl, rawHeaders, isHttps }: PageContext): Promise<ScanVulnerability[]> {
+  const vulnerabilities: ScanVulnerability[] = [];
+
+  // ── TLS / HTTPS ───────────────────────────────────────────────────────
+  if (!isHttps) {
+    vulnerabilities.push(vuln({
+      name: "No HTTPS / Plaintext HTTP",
+      severity: "critical",
+      category: "Transport Security",
+      description: "The application is served over HTTP without TLS encryption. All data transmitted between the browser and the server—including passwords and session tokens—can be intercepted by any network observer.",
+      evidence: `URL: ${finalUrl}\nProtocol: HTTP (no TLS)`,
+      solution: "Obtain a TLS certificate (free from Let's Encrypt) and redirect all HTTP traffic to HTTPS. Set up HSTS once HTTPS is working.",
+      cweId: "CWE-319",
+      cvssScore: 9.1,
+      wstgId: "WSTG-CRYP-01",
+    }));
+  }
+
+  // ── HTTP Strict-Transport-Security ────────────────────────────────────
+  const hsts = headerVal(rawHeaders, "strict-transport-security");
+  if (!hsts && isHttps) {
+    // Before flagging: check the HSTS preload list. Preloaded domains have HTTPS
+    // enforced in browsers before the first request, so the header is optional.
+    // This also prevents false positives when the scanner runs behind a
+    // TLS-terminating proxy that strips security headers from HTTPS responses.
+    const preloaded = await isHstsPreloaded(new URL(finalUrl).hostname).catch(() => false);
+    if (!preloaded) {
+      // Since we successfully fetched this site over HTTPS, it clearly HAS HTTPS.
+      // A missing STS header means browsers won't cache the HTTPS preference, but
+      // HTTPS itself is working. This is MEDIUM (not HIGH). HIGH is reserved for
+      // sites with no HTTPS at all (handled above). Some sites (e.g. google.com)
+      // intentionally omit the header, relying on the HSTS preload list instead.
+      vulnerabilities.push(vuln({
+        name: "Missing HTTP Strict-Transport-Security (HSTS)",
+        severity: "medium",
+        category: "Transport Security",
+        description: "HSTS is not configured via response header. Without it, browsers won't cache the HTTPS-only preference, leaving users vulnerable to downgrade attacks and SSL stripping on their first visit or after cache expiry. Note: some sites rely on HSTS preloading (browser built-in list) instead — verify at https://hstspreload.org.",
+        evidence: `GET ${finalUrl}\nStrict-Transport-Security: (header absent from response)`,
+        solution: "Add this header to all HTTPS responses: Strict-Transport-Security: max-age=31536000; includeSubDomains; preload\n\nFor the strongest protection, also submit your domain to the HSTS preload list at https://hstspreload.org",
+        cweId: "CWE-523",
+        cvssScore: 5.3,
+        wstgId: "WSTG-CONF-07",
+      }));
+    }
+  } else if (hsts) {
+    // Check for weak HSTS config
+    const maxAgeMatch = /max-age=(\d+)/i.exec(hsts);
+    const maxAge = maxAgeMatch ? parseInt(maxAgeMatch[1], 10) : 0;
+    if (maxAge < 15552000) { // less than 180 days
+      vulnerabilities.push(vuln({
+        name: "HSTS max-age Too Short",
+        severity: "low",
+        category: "Transport Security",
+        description: `The HSTS max-age is set to ${maxAge} seconds (${Math.round(maxAge / 86400)} days), which is below the recommended minimum of 180 days (15552000 seconds). Short max-age values mean users lose HTTPS protection shortly after their browser cache expires.`,
+        evidence: `GET ${finalUrl}\nStrict-Transport-Security: ${hsts}\n(max-age=${maxAge} — minimum recommended: 15552000)`,
+        solution: "Set max-age to at least 15552000 (180 days). For preloading eligibility, use max-age=31536000; includeSubDomains; preload.",
+        cweId: "CWE-523",
+        cvssScore: 3.1,
+        wstgId: "WSTG-CONF-07",
+      }));
+    }
+  }
+
+  return vulnerabilities;
+}

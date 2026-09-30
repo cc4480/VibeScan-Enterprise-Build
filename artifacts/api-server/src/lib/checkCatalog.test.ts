@@ -3,12 +3,22 @@
  * against the code that does the checking rather than trusted.
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { CATALOG, TOTAL_CHECKS, catalogFor } from "./checkCatalog";
 
 const LIB = __dirname;
-const src = (file: string) => readFileSync(join(LIB, file), "utf8");
+/**
+ * A module's source: the file itself plus the parts split out of it (foo.ts, fooBar.ts, fooBaz.ts),
+ * because a check moves between them when a file is split for size.
+ */
+const src = (file: string) => {
+  const base = file.replace(/\.ts$/, "");
+  const parts = readdirSync(LIB).filter(
+    (f) => f === file || (/^[A-Z]/.test(f.slice(base.length)) && f.startsWith(base) && f.endsWith(".ts") && !f.endsWith(".test.ts")),
+  );
+  return parts.map((f) => readFileSync(join(LIB, f), "utf8")).join("\n");
+};
 
 describe("the catalog matches the scanner's source", () => {
   it("carries the number of checks the site claims, itemised", () => {

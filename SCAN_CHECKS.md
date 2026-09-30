@@ -7,7 +7,7 @@ Every finding the scanner can emit, read out of `artifacts/api-server/src/lib`. 
 complete list; [SCAN_COVERAGE.md](SCAN_COVERAGE.md) is the readable one, grouped by module with
 the Basic/Deep tier and the methodology behind each group.
 
-**309 findings across 41 modules**, in 38 categories. 85 critical, 73 high, 56 medium, 30 low, 65 info.
+**309 findings across 47 modules**, in 38 categories. 85 critical, 73 high, 56 medium, 30 low, 65 info.
 
 A finding is a distinct name the scanner can put in a report, which is not the same as a check
 type: the data-table modules below define many findings from one piece of detection logic —
@@ -55,13 +55,21 @@ module does. `none` — neither, so no test exercises it at all.
 | `raceConditionProbe.ts` | 1 | 181 | 21 | direct |
 | `sourceMaps.ts` | 1 | 180 | 14 | direct |
 | `ssrfProbe.ts` | 1 | 200 | 7 | direct |
-| `scanner.ts` | 29 | 1526 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts |
 | `subdomain-service-data.ts` | 19 | 165 | — | indirect, via subdomainTakeover.test.ts |
 | `secret-pattern-ai.ts` | 5 | 61 | — | indirect, via secret-pattern-data.test.ts |
 | `accessControlFindings.ts` | 3 | 129 | — | indirect, via accessControlProbe.test.ts |
 | `secret-pattern-jwt.ts` | 2 | 81 | — | indirect, via secret-pattern-data.test.ts |
 | `bannerRules.ts` | 1 | 112 | — | indirect, via cveCheck.test.ts |
 | `githubFindings.ts` | 1 | 60 | — | indirect, via githubSourceProbe.test.ts |
+| `scanner.ts` | 1 | 304 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts |
+| `scannerCspChecks.ts` | 7 | 149 | — | **none** |
+| `scannerHeaderChecks.ts` | 7 | 133 | — | **none** |
+| `scannerCookies.ts` | 6 | 202 | — | **none** |
+| `scannerCoverage.ts` | 3 | 103 | — | **none** |
+| `scannerTransportChecks.ts` | 3 | 70 | — | **none** |
+| `scannerPageChecks.ts` | 2 | 56 | — | **none** |
+
+> **6 modules carrying 28 findings have no test reaching them:** `scannerCookies`, `scannerCoverage`, `scannerCspChecks`, `scannerHeaderChecks`, `scannerPageChecks`, `scannerTransportChecks`.
 
 ## Findings by module
 
@@ -476,39 +484,81 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `scanner.ts`
 
-*29 findings · 1526 lines · no test file.*
+*1 findings · 304 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| ${unrunFamilies.length} check group${unrunFamilies.length > 1 ? "s" : ""} could not be completed | Info | Scan Coverage | — | — | — |
+
+### `scannerCookies.ts`
+
+*6 findings · 202 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| Session Cookie Missing Secure Flag | High | Session Management | 6.5 | CWE-614 | WSTG-SESS-02 |
+| Session Cookie Missing HttpOnly Flag | Medium | Session Management | 5.3 | CWE-1004 | WSTG-SESS-02 |
+| Session Cookie Missing SameSite Attribute | Medium | CSRF Protection | 4.3 | CWE-352 | WSTG-SESS-02 |
+| Non-Session Cookie Missing Secure Flag | Low | Session Management | 3.1 | CWE-614 | WSTG-SESS-02 |
+| Non-Session Cookie Missing SameSite Attribute | Info | CSRF Protection | 2.1 | CWE-352 | WSTG-SESS-02 |
+| Non-Session Cookie Readable by JavaScript | Info | Session Management | 2.6 | CWE-1004 | WSTG-SESS-02 |
+
+### `scannerCoverage.ts`
+
+*3 findings · 103 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| Active security testing was skipped for this scan | Info | Scan Coverage | — | — | — |
+| Scan session expired before the scan finished | Info | Scan Coverage | — | — | — |
+| Scan was intercepted by a bot-protection challenge | Info | Scan Coverage | — | — | — |
+
+### `scannerCspChecks.ts`
+
+*7 findings · 149 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| CSP script-src Contains Wildcard — XSS Protection Bypassed | High | Injection Defense | 7.2 | CWE-79 | WSTG-CONF-12 |
+| Missing Content-Security-Policy (CSP) | High | Injection Defense | 7.2 | CWE-79 | WSTG-CONF-12 |
+| Content-Security-Policy is report-only (not enforced) | Medium | Injection Defense | 5.3 | CWE-79 | WSTG-CONF-12 |
+| CSP Missing object-src 'none' Directive | Medium | Injection Defense | 4.3 | CWE-79 | WSTG-CONF-12 |
+| Weak Content-Security-Policy (unsafe-inline / unsafe-eval in script-src) | Medium | Injection Defense | 5.4 | CWE-79 | WSTG-CONF-12 |
+| Content-Security-Policy Allows Inline Styles (unsafe-inline in style-src) | Low | Injection Defense | 3.1 | CWE-79 | WSTG-CONF-12 |
+| CSP Missing base-uri Directive | Low | Injection Defense | 3.5 | CWE-79 | WSTG-CONF-12 |
+
+### `scannerHeaderChecks.ts`
+
+*7 findings · 133 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| Missing Clickjacking Protection (X-Frame-Options) | Medium | UI Security | 4.3 | CWE-1021 | WSTG-CLNT-09 |
+| Missing X-Content-Type-Options: nosniff | Medium | Content Sniffing | 4.3 | CWE-16 | WSTG-CONF-07 |
+| Missing Permissions-Policy Header | Low | Browser Feature Control | 2.4 | CWE-16 | WSTG-CONF-07 |
+| Missing Referrer-Policy Header | Low | Information Disclosure | 3.1 | CWE-200 | WSTG-CONF-07 |
+| Permissive CORS Policy (Wildcard Origin) | Low / Info | CORS Misconfiguration | — | CWE-942 | WSTG-CONF-07 |
+| Server Version Disclosure | Info | Information Disclosure | — | CWE-200 | WSTG-INFO-02 |
+| X-Powered-By Header Discloses Technology Stack | Info | Information Disclosure | — | CWE-200 | WSTG-INFO-09 |
+
+### `scannerPageChecks.ts`
+
+*2 findings · 56 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| Mixed Content (HTTP Resources on HTTPS Page) | Medium / Low | Transport Security | 5.9 | CWE-311 | WSTG-CRYP-01 |
+| Missing Cache-Control Headers | Info | Information Disclosure | — | CWE-524 | WSTG-CONF-07 |
+
+### `scannerTransportChecks.ts`
+
+*3 findings · 70 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
 | No HTTPS / Plaintext HTTP | Critical | Transport Security | 9.1 | CWE-319 | WSTG-CRYP-01 |
-| CSP script-src Contains Wildcard — XSS Protection Bypassed | High | Injection Defense | 7.2 | CWE-79 | WSTG-CONF-12 |
-| Missing Content-Security-Policy (CSP) | High | Injection Defense | 7.2 | CWE-79 | WSTG-CONF-12 |
-| Session Cookie Missing Secure Flag | High | Session Management | 6.5 | CWE-614 | WSTG-SESS-02 |
-| Content-Security-Policy is report-only (not enforced) | Medium | Injection Defense | 5.3 | CWE-79 | WSTG-CONF-12 |
-| CSP Missing object-src 'none' Directive | Medium | Injection Defense | 4.3 | CWE-79 | WSTG-CONF-12 |
-| Missing Clickjacking Protection (X-Frame-Options) | Medium | UI Security | 4.3 | CWE-1021 | WSTG-CLNT-09 |
 | Missing HTTP Strict-Transport-Security (HSTS) | Medium | Transport Security | 5.3 | CWE-523 | WSTG-CONF-07 |
-| Missing X-Content-Type-Options: nosniff | Medium | Content Sniffing | 4.3 | CWE-16 | WSTG-CONF-07 |
-| Mixed Content (HTTP Resources on HTTPS Page) | Medium / Low | Transport Security | 5.9 | CWE-311 | WSTG-CRYP-01 |
-| Session Cookie Missing HttpOnly Flag | Medium | Session Management | 5.3 | CWE-1004 | WSTG-SESS-02 |
-| Session Cookie Missing SameSite Attribute | Medium | CSRF Protection | 4.3 | CWE-352 | WSTG-SESS-02 |
-| Weak Content-Security-Policy (unsafe-inline / unsafe-eval in script-src) | Medium | Injection Defense | 5.4 | CWE-79 | WSTG-CONF-12 |
-| Content-Security-Policy Allows Inline Styles (unsafe-inline in style-src) | Low | Injection Defense | 3.1 | CWE-79 | WSTG-CONF-12 |
-| CSP Missing base-uri Directive | Low | Injection Defense | 3.5 | CWE-79 | WSTG-CONF-12 |
 | HSTS max-age Too Short | Low | Transport Security | 3.1 | CWE-523 | WSTG-CONF-07 |
-| Missing Permissions-Policy Header | Low | Browser Feature Control | 2.4 | CWE-16 | WSTG-CONF-07 |
-| Missing Referrer-Policy Header | Low | Information Disclosure | 3.1 | CWE-200 | WSTG-CONF-07 |
-| Non-Session Cookie Missing Secure Flag | Low | Session Management | 3.1 | CWE-614 | WSTG-SESS-02 |
-| Permissive CORS Policy (Wildcard Origin) | Low / Info | CORS Misconfiguration | — | CWE-942 | WSTG-CONF-07 |
-| ${unrunFamilies.length} check group${unrunFamilies.length > 1 ? "s" : ""} could not be completed | Info | Scan Coverage | — | — | — |
-| Active security testing was skipped for this scan | Info | Scan Coverage | — | — | — |
-| Missing Cache-Control Headers | Info | Information Disclosure | — | CWE-524 | WSTG-CONF-07 |
-| Non-Session Cookie Missing SameSite Attribute | Info | CSRF Protection | 2.1 | CWE-352 | WSTG-SESS-02 |
-| Non-Session Cookie Readable by JavaScript | Info | Session Management | 2.6 | CWE-1004 | WSTG-SESS-02 |
-| Scan session expired before the scan finished | Info | Scan Coverage | — | — | — |
-| Scan was intercepted by a bot-protection challenge | Info | Scan Coverage | — | — | — |
-| Server Version Disclosure | Info | Information Disclosure | — | CWE-200 | WSTG-INFO-02 |
-| X-Powered-By Header Discloses Technology Stack | Info | Information Disclosure | — | CWE-200 | WSTG-INFO-09 |
 
 ### `secret-pattern-ai.ts`
 
