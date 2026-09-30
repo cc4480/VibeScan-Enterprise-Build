@@ -192,3 +192,59 @@ describe("checkSourceMaps — evidence matches what was actually found", () => {
     expect(v!.severity).toBe("high");
   });
 });
+
+/**
+ * A map is only as sensitive as what it embeds. Found by the 2026-09-30 sweep: fastly.com's map is
+ * 125 node_modules files and one Sentry config; archive.org's is a vendored copy of a public library.
+ * Both were High "Full Source Code Accessible".
+ */
+describe("checkSourceMaps — rated by whose code the map contains", () => {
+  const mapOf = (sources: string[]) =>
+    JSON.stringify({ version: 3, sources, sourcesContent: sources.map((s) => `// ${s}`), mappings: "AAAA" });
+  const libs = (n: number) => Array.from({ length: n }, (_, i) => `../../node_modules/.pnpm/pkg${i}@1.0.0/node_modules/pkg${i}/index.js`);
+
+  it("rates a map that is nearly all node_modules as Low, and says how much is the site's own", async () => {
+    serve({ "https://example.com/_astro/page.js.map": { body: mapOf([...libs(125), "../../sentry.client.config.js"]) } });
+    const [v] = await checkSourceMaps(page("/_astro/page.js"), "https://example.com/");
+    expect(v!.severity).toBe("low");
+    expect(v!.name).toMatch(/Third-Party Library Code/);
+    expect(v!.name).not.toMatch(/Full Source Code/);
+    expect(v!.evidence).toMatch(/126, of which the site's own: 1/);
+    expect(v!.evidence).toMatch(/sentry\.client\.config\.js/);
+  });
+
+  it("rates a map served from a vendor directory as Low even when its paths look like source", async () => {
+    serve({
+      "https://example.com/assets/vendor/lit/polyfill-support.js.map": {
+        body: mapOf(["../reactive-element/src/polyfill-support.ts", "../lit-html/src/polyfill-support.ts", "../lit-element/src/polyfill-support.ts"]),
+      },
+    });
+    const [v] = await checkSourceMaps(page("/assets/vendor/lit/polyfill-support.js"), "https://example.com/");
+    expect(v!.severity).toBe("low");
+    expect(v!.evidence).toMatch(/site's own: 0/);
+  });
+
+  it("keeps High when a real share of the map is the site's own code, even inside a large bundle", async () => {
+    const own = Array.from({ length: 20 }, (_, i) => `../../app/components/Thing${i}.vue`);
+    serve({ "https://example.com/_nuxt/entry.js.map": { body: mapOf([...libs(281), ...own]) } });
+    const [v] = await checkSourceMaps(page("/_nuxt/entry.js"), "https://example.com/");
+    expect(v!.severity).toBe("high");
+    expect(v!.name).toMatch(/Full Source Code Accessible/);
+  });
+
+  it("keeps High for a small app whose whole map is its own code", async () => {
+    serve({ "https://example.com/assets/app.js.map": { body: mapOf(["src/main.ts", "src/auth.ts"]) } });
+    const [v] = await checkSourceMaps(page("/assets/app.js"), "https://example.com/");
+    expect(v!.severity).toBe("high");
+  });
+
+  it("reports both when a page exposes an application map and a library map", async () => {
+    serve({
+      "https://example.com/app.js.map": { body: mapOf(["src/main.ts", "src/auth.ts", "src/api.ts"]) },
+      "https://example.com/vendor/lib.js.map": { body: mapOf(["src/lib.ts"]) },
+    });
+    const html = `<html><script src="/app.js"></script><script src="/vendor/lib.js"></script></html>`;
+    const vs = await checkSourceMaps(html, "https://example.com/");
+    expect(vs.map((v) => v.severity).sort()).toEqual(["high", "low"]);
+  });
+});

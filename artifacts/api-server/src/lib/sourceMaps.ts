@@ -93,6 +93,39 @@ function hasSourceContent(body: string): boolean {
 }
 
 /**
+ * Which of a map's sources are the site's own code, as opposed to bundled libraries.
+ *
+ * A map is only as sensitive as what it embeds. fastly.com's holds 126 files of which 125 are
+ * node_modules packages and one is a Sentry config; archive.org's is a vendored copy of the public
+ * lit polyfill. Calling either "Full Source Code Accessible" (High) tells the owner their
+ * application is downloadable when nothing of theirs is in it.
+ *
+ * Own code = a source with embedded text that is not under node_modules, in a map that is not itself
+ * served from a vendor directory.
+ */
+export function ownSources(mapUrl: string, body: string): { total: number; own: string[] } {
+  try {
+    const json = JSON.parse(body) as Record<string, unknown>;
+    const sources = Array.isArray(json["sources"]) ? (json["sources"] as unknown[]).map(String) : [];
+    const content = Array.isArray(json["sourcesContent"]) ? (json["sourcesContent"] as unknown[]) : [];
+    let path = mapUrl;
+    try { path = new URL(mapUrl).pathname; } catch { /* keep as given */ }
+    const vendored = /\/(?:vendor|vendors|node_modules|third[-_]?party)\//i.test(path);
+    const own = vendored
+      ? []
+      : sources.filter((s, i) => !/(?:^|[\\/])node_modules[\\/]/.test(s) && typeof content[i] === "string" && (content[i] as string).trim().length > 0);
+    return { total: sources.length, own };
+  } catch {
+    return { total: 0, own: [] };
+  }
+}
+
+/** Almost nothing in the map is the site's own: fewer than three files and under 5% of the sources. */
+export function mostlyLibraryCode(total: number, ownCount: number): boolean {
+  return ownCount === 0 || (ownCount < 3 && ownCount / Math.max(total, 1) < 0.05);
+}
+
+/**
  * With sourcesContent the original code is downloadable (High); with only a
  * sources list an attacker learns file names and layout but not the code (Low),
  * so the title and severity say which was observed.
@@ -103,6 +136,24 @@ function mapFinding(opts: { mapUrl: string; body: string; linkedFrom?: string })
   const hasContent = hasSourceContent(body);
   const path = (u: string) => { try { return new URL(u).pathname; } catch { return u; } };
   const how = linkedFrom ? "is linked from the production bundle and " : "";
+  if (hasContent) {
+    const { total, own } = ownSources(mapUrl, body);
+    if (mostlyLibraryCode(total, own.length)) {
+      const ownNote = own.length === 0 ? "none of it is this site's own code" : `only ${own.length} of its ${total} files are this site's own`;
+      return vuln({
+        name: "JavaScript Source Map Exposed — Third-Party Library Code",
+        severity: "low",
+        category: "Source Code Exposure",
+        description: `A JavaScript source map ${how}is publicly accessible at ${path(mapUrl)} and embeds source text, but ${ownNote}: the rest is third-party library code that is already public. Anyone can read what the bundle is made of, and the library versions, but not the application's logic.`,
+        evidence: `${linkedFrom ? `Linked from: ${path(linkedFrom)}\n` : ""}Source map URL: ${mapUrl}\nSource files mapped: ${total}, of which the site's own: ${own.length}${own.length ? `\n${own.slice(0, 5).map((s) => `  • ${s}`).join("\n")}` : ""}`,
+        solution: "Disable source map generation in production builds, or serve maps only to your error-reporting service (Webpack: devtool: 'hidden-source-map'). If the map belongs to a vendored library, no action is needed.",
+        cweId: "CWE-540",
+        cvssScore: 3.1,
+        wstgId: "WSTG-CONF-04",
+        confidence: 80,
+      });
+    }
+  }
   return vuln({
     name: hasContent
       ? "JavaScript Source Map Exposed — Full Source Code Accessible"
