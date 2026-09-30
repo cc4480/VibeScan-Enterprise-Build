@@ -7,7 +7,7 @@ Every finding the scanner can emit, read out of `artifacts/api-server/src/lib`. 
 complete list; [SCAN_COVERAGE.md](SCAN_COVERAGE.md) is the readable one, grouped by module with
 the Basic/Deep tier and the methodology behind each group.
 
-**299 findings across 37 modules**, in 39 categories. 88 critical, 76 high, 65 medium, 25 low, 45 info.
+**302 findings across 40 modules**, in 39 categories. 87 critical, 76 high, 64 medium, 27 low, 48 info.
 
 A finding is a distinct name the scanner can put in a report, which is not the same as a check
 type: the data-table modules below define many findings from one piece of detection logic —
@@ -22,18 +22,18 @@ module does. `none` — neither, so no test exercises it at all.
 | Module | Findings | Lines | Tests | Coverage |
 |---|---:|---:|---:|---|
 | `probes-data.ts` | 78 | 838 | 29 | direct |
-| `secret-pattern-data.ts` | 34 | 514 | 18 | direct |
+| `secret-pattern-data.ts` | 28 | 441 | 18 | direct |
 | `probes.ts` | 16 | 980 | 15 | direct |
 | `recon-data.ts` | 14 | 178 | 12 | direct |
 | `dnsChecks.ts` | 9 | 493 | 26 | direct |
 | `nextjsProbe.ts` | 9 | 248 | 7 | direct |
 | `structuredData.ts` | 9 | 415 | 34 | direct |
 | `crawler-data.ts` | 8 | 152 | 26 | direct |
-| `apiProbe.ts` | 7 | 651 | 33 | direct |
+| `apiProbe.ts` | 7 | 730 | 40 | direct |
 | `crawler.ts` | 7 | 794 | 46 | direct |
 | `supabase-probes.ts` | 7 | 593 | 7 | direct |
 | `jwtAnalysis.ts` | 6 | 262 | 9 | direct |
-| `cveCheck.ts` | 4 | 594 | 10 | direct |
+| `cveCheck.ts` | 5 | 571 | 22 | direct |
 | `baasDepth.ts` | 3 | 148 | 11 | direct |
 | `firebase-probes.ts` | 3 | 264 | 5 | direct |
 | `mailTls.ts` | 3 | 337 | 13 | direct |
@@ -52,11 +52,14 @@ module does. `none` — neither, so no test exercises it at all.
 | `healthEndpointProbe.ts` | 1 | 114 | 10 | direct |
 | `pathTraversal.ts` | 1 | 195 | 4 | direct |
 | `promptInjectionProbe.ts` | 1 | 214 | 26 | direct |
-| `raceConditionProbe.ts` | 1 | 177 | 20 | direct |
+| `raceConditionProbe.ts` | 1 | 181 | 21 | direct |
 | `ssrfProbe.ts` | 1 | 192 | 6 | direct |
 | `scanner.ts` | 32 | 1560 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, grading.test.ts, scoring.test.ts |
 | `subdomain-service-data.ts` | 19 | 152 | — | indirect, via subdomainTakeover.test.ts |
+| `secret-pattern-ai.ts` | 5 | 61 | — | indirect, via secret-pattern-data.test.ts |
 | `accessControlFindings.ts` | 3 | 129 | — | indirect, via accessControlProbe.test.ts |
+| `secret-pattern-jwt.ts` | 2 | 81 | — | indirect, via secret-pattern-data.test.ts |
+| `bannerRules.ts` | 1 | 112 | — | indirect, via cveCheck.test.ts |
 | `githubFindings.ts` | 1 | 60 | — | indirect, via githubSourceProbe.test.ts |
 
 ## Findings by module
@@ -90,7 +93,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `apiProbe.ts`
 
-*7 findings · 651 lines · 33 tests.*
+*7 findings · 730 lines · 40 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -99,8 +102,8 @@ module does. `none` — neither, so no test exercises it at all.
 | Write Endpoints Reachable Without Authentication | Critical | Broken Access Control | 9.1 | CWE-862 | WSTG-ATHZ-02 |
 | API Endpoints Served Without Authentication | High | Broken Access Control | 7.5 | CWE-306 | WSTG-ATHZ-01 |
 | Sensitive Fields Returned by the API | High | Information Disclosure | 7.5 | CWE-213 | WSTG-ATHZ-04 |
-| API Endpoints Without Rate Limiting | Medium | Security Misconfiguration | 5.3 | CWE-770 | WSTG-ATHN-04 |
 | Privilege Fields Accepted in Request Bodies | Medium | Broken Access Control | 6.5 | CWE-915 | WSTG-BUSL-01 |
+| No Rate Limiting Observed on Sensitive API Endpoints | Info | Security Misconfiguration | 0 | CWE-770 | WSTG-ATHN-04 |
 
 ### `baasDepth.ts`
 
@@ -120,6 +123,14 @@ module does. `none` — neither, so no test exercises it at all.
 |---|---|---|---:|---|---|
 | Appwrite — Unauthenticated Document Read on '${coll}' | Critical / High | BaaS Misconfiguration | 9.1 | CWE-284 | — |
 | PocketBase — Unauthenticated Access to '${col}' Collection | Critical / High | BaaS Misconfiguration | 9.1 | CWE-284 | — |
+
+### `bannerRules.ts`
+
+*1 findings · 112 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| ${shown} — Verify Distro Package Against ${r.cve} | Low | Outdated Software | — | CWE-1104 | — |
 
 ### `crawler.ts`
 
@@ -160,7 +171,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `cveCheck.ts`
 
-*4 findings · 594 lines · 10 tests.*
+*5 findings · 571 lines · 22 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -168,6 +179,7 @@ module does. `none` — neither, so no test exercises it at all.
 | PHP ${d.version} is End-of-Life | High | Outdated Software | 7.5 | CWE-1104 | — |
 | Apache HTTPD ${d.version} — End-of-Life Release Branch | Medium | Outdated Software | 6.5 | CWE-1104 | WSTG-INFO-02 |
 | Nginx ${d.version} — End-of-Life Release Cycle | Medium | Outdated Software | 6.5 | CWE-1104 | — |
+| PHP ${d.version} Reaches End-of-Life in ${eol.label} | Info | Outdated Software | — | CWE-1104 | — |
 
 ### `deserializationProbe.ts`
 
@@ -420,7 +432,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `raceConditionProbe.ts`
 
-*1 findings · 177 lines · 20 tests.*
+*1 findings · 181 lines · 21 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -486,20 +498,29 @@ module does. `none` — neither, so no test exercises it at all.
 | Server Version Disclosure | Info | Information Disclosure | — | CWE-200 | WSTG-INFO-02 |
 | X-Powered-By Header Discloses Technology Stack | Info | Information Disclosure | — | CWE-200 | WSTG-INFO-09 |
 
-### `secret-pattern-data.ts`
+### `secret-pattern-ai.ts`
 
-*34 findings · 514 lines · 18 tests · emitted by `jsScanner.ts`.*
+*5 findings · 61 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
-| Anthropic (Claude) API Key Exposed | Critical | Exposed Secrets / Credentials | 9.8 | CWE-798 | — |
-| AWS Access Key ID Exposed | Critical | Exposed Secrets / Credentials | 9.8 | CWE-798 | — |
+| Anthropic (Claude) API Key Exposed | Critical | — | 9.8 | CWE-798 | — |
+| OpenAI API Key Exposed | Critical | — | 9.8 | CWE-798 | — |
+| ElevenLabs API Key Exposed | High | — | 8.1 | CWE-798 | — |
+| Replicate API Token Exposed | High | — | 8.1 | CWE-798 | — |
+| Resend API Key Exposed | High | — | 8.1 | CWE-798 | — |
+
+### `secret-pattern-data.ts`
+
+*28 findings · 441 lines · 18 tests · emitted by `jsScanner.ts`.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
 | AWS Secret Access Key Exposed | Critical | Exposed Secrets / Credentials | 9.8 | CWE-798 | — |
 | Database Connection URL with Credentials Exposed | Critical | Exposed Secrets / Credentials | 10 | CWE-312 | — |
 | GitHub Fine-Grained Access Token Exposed | Critical | Exposed Secrets / Credentials | 9.1 | CWE-798 | — |
 | GitHub Personal Access Token Exposed | Critical | Exposed Secrets / Credentials | 9.1 | CWE-798 | — |
 | Google OAuth Client Secret Exposed | Critical | Exposed Secrets / Credentials | 9.1 | CWE-798 | — |
-| OpenAI API Key Exposed | Critical | Exposed Secrets / Credentials | 9.8 | CWE-798 | — |
 | Private Key Exposed in JavaScript | Critical | Exposed Secrets / Credentials | 10 | CWE-321 | — |
 | Secret Environment Variable Leaked in Frontend Bundle | Critical | Exposed Secrets / Credentials | 9.5 | CWE-312 | — |
 | Sentry Auth Token Exposed | Critical | Exposed Secrets / Credentials | 8.5 | CWE-798 | — |
@@ -507,25 +528,31 @@ module does. `none` — neither, so no test exercises it at all.
 | Stripe Live Secret Key Exposed | Critical | Exposed Secrets / Credentials | 9.8 | CWE-798 | — |
 | Supabase Service Role Key Exposed (sb_secret_) | Critical | Exposed Secrets / Credentials | 10 | CWE-798 | — |
 | Supabase Service Role Key Exposed in JavaScript | Critical | Exposed Secrets / Credentials | 10 | CWE-522 | — |
-| ElevenLabs API Key Exposed | High | Exposed Secrets / Credentials | 8.1 | CWE-798 | — |
-| Hardcoded JWT Token in Source | High | Exposed Secrets / Credentials | 8.1 | CWE-798 | — |
 | Hardcoded Password in Source Code | High | Exposed Secrets / Credentials | 7.5 | CWE-259 | — |
 | Mailchimp API Key Exposed | High | Exposed Secrets / Credentials | 7.5 | CWE-798 | — |
-| Replicate API Token Exposed | High | Exposed Secrets / Credentials | 8.1 | CWE-798 | — |
-| Resend API Key Exposed | High | Exposed Secrets / Credentials | 8.1 | CWE-798 | — |
 | SendGrid API Key Exposed | High | Exposed Secrets / Credentials | 8.1 | CWE-798 | — |
 | Slack Bot/OAuth Token Exposed | High | Exposed Secrets / Credentials | 8.1 | CWE-798 | — |
 | Stripe Webhook Secret Exposed | High | Exposed Secrets / Credentials | 8.1 | CWE-798 | — |
-| Twilio API Key Exposed | High | Exposed Secrets / Credentials | 8.1 | CWE-798 | — |
+| Twilio API Key SID and Secret Exposed | High | Exposed Secrets / Credentials | 8.1 | CWE-798 | — |
 | Hardcoded Secret or Auth Token in Source | Medium | Exposed Secrets / Credentials | 6.5 | CWE-798 | — |
 | Slack Incoming Webhook URL Exposed | Medium | Exposed Secrets / Credentials | 5.3 | CWE-798 | — |
-| Stripe Test Secret Key in Production | Medium | Exposed Secrets / Credentials | 5.3 | CWE-798 | — |
+| Stripe Test-Mode Secret Key in Client Code | Medium | Exposed Secrets / Credentials | 5.3 | CWE-798 | — |
+| AWS Access Key ID Found in Client Code | Low | Exposed Secrets / Credentials | 3.7 | CWE-200 | — |
 | Internal IP Address Exposed | Low | Exposed Secrets / Credentials | 3.1 | CWE-200 | — |
 | API Key in Client Code (verify restrictions) | Info | Exposed Secrets / Credentials | 0 | CWE-798 | — |
-| Firebase API Key with Open Security Rules | Info | Exposed Secrets / Credentials | 3.1 | CWE-798 | — |
+| Firebase Configuration Found in Client Code | Info | Exposed Secrets / Credentials | 3.1 | CWE-798 | — |
 | Google API Key in Client Code (verify referrer restrictions) | Info | Exposed Secrets / Credentials | 0 | CWE-798 | — |
-| JWT-Shaped Publishable Key in Client Code (verify it is not a credential) | Info | Exposed Secrets / Credentials | 0 | CWE-798 | — |
 | Mapbox Public Token — Restrict to Your Domain | Info | Exposed Secrets / Credentials | 2.6 | CWE-200 | — |
+| Twilio API Key SID Found in Client Code | Info | Exposed Secrets / Credentials | 0 | CWE-200 | — |
+
+### `secret-pattern-jwt.ts`
+
+*2 findings · 81 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| Hardcoded JWT Token in Source | High | — | 8.1 | CWE-798 | — |
+| JWT-Shaped Publishable Key in Client Code (verify it is not a credential) | Info | — | 0 | CWE-798 | — |
 
 ### `sourceMaps.ts`
 
