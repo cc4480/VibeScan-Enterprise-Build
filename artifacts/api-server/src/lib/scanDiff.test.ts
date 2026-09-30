@@ -11,7 +11,7 @@ const JWT = "JWT analysis";
 const CORS = "active CORS";
 const CSP = "Missing Content-Security-Policy (CSP)";
 const JWT_NONE = "JWT Using alg:none — Signature Verification Bypass";
-const CORS_REFLECT = "CORS Misconfiguration — Origin Reflected Without Allowlist";
+const CORS_REFLECT = "CORS — Origin Reflected Without Credentials";
 
 describe("diffScans: like with like", () => {
   const tests = [t(HEADERS), t(JWT), t(CORS)];

@@ -22,7 +22,7 @@ vi.mock("./queue", () => ({
 
 const t = (name: string, status = "ran") => ({ group: "g", name, status, findings: 0, durationMs: 1 });
 const CSP = "Missing Content-Security-Policy (CSP)";
-const CORS = "CORS Misconfiguration — Origin Reflected Without Allowlist";
+const CORS = "CORS — Origin Reflected Without Credentials";
 const finding = (id: string, name: string, category = "HTTP Security") => ({ id, name, severity: "high", category, evidence: "", description: "d", solution: "s" });
 const HEADERS = "response headers and cookies";
 

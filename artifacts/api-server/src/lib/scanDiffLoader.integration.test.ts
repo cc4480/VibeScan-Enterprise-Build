@@ -86,7 +86,7 @@ suite("scanDiffLoader (real Postgres)", () => {
   });
 
   it("does not call a finding fixed when its test did not run this time", async () => {
-    await report("u1", "https://a.example/", 3, scanOf([vuln("CORS Misconfiguration — Origin Reflected Without Allowlist")], [test("response headers and cookies"), test("active CORS")]));
+    await report("u1", "https://a.example/", 3, scanOf([vuln("CORS — Origin Reflected Without Credentials")], [test("response headers and cookies"), test("active CORS")]));
     const now = await report("u1", "https://a.example/", 0, scanOf([], [test("response headers and cookies"), test("active CORS", "skipped")]));
     const c = await loader.changesForReport("u1", now);
     expect(c?.fixed).toEqual([]);
