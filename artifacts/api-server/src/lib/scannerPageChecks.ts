@@ -1,10 +1,10 @@
-import { analyzeCsp, findMixedContent } from "./headerAnalysis.js";
+import { analyzeCsp, extractMetaCsp, findMixedContent } from "./headerAnalysis.js";
 import { headerVal, vuln, type ScanVulnerability, type PageContext } from "./scannerTypes";
 
 /** Mixed content and caching checks that read the page as well as its headers. */
 export function pageFindings({ finalUrl, html, rawHeaders, isHttps }: PageContext): ScanVulnerability[] {
   const vulnerabilities: ScanVulnerability[] = [];
-  const csp = headerVal(rawHeaders, "content-security-policy");
+  const csp = headerVal(rawHeaders, "content-security-policy") ?? extractMetaCsp(html) ?? undefined;
 
   // ── Mixed content ─────────────────────────────────────────────────────
   // Skipped when the CSP carries upgrade-insecure-requests: browsers rewrite those

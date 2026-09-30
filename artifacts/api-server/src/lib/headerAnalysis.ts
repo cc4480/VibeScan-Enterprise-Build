@@ -55,6 +55,30 @@ export function analyzeCsp(csp: string): CspVerdict {
   };
 }
 
+const META_ENTITIES: Record<string, string> = { "&amp;": "&", "&quot;": '"', "&#39;": "'", "&apos;": "'", "&lt;": "<", "&gt;": ">" };
+
+/**
+ * The policy a page delivers through <meta http-equiv="Content-Security-Policy" content="...">, or null.
+ *
+ * Browsers enforce it (frame-ancestors, report-uri and sandbox excepted), so a page with no CSP header
+ * but this tag has a CSP: calling it "missing" is wrong, and its directives deserve the same analysis
+ * as a header's. gitlab.com's marketing site is delivered this way. A Report-Only meta is not honoured
+ * by browsers and is ignored here.
+ */
+export function extractMetaCsp(html: string): string | null {
+  // A commented-out tag is not a policy.
+  const live = html.slice(0, 300_000).replace(/<!--[\s\S]*?-->/g, "");
+  for (const m of live.matchAll(/<meta\b[^>]*>/gi)) {
+    const tag = m[0];
+    const equiv = /http-equiv\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(tag);
+    if ((equiv?.[1] ?? equiv?.[2] ?? equiv?.[3] ?? "").trim().toLowerCase() !== "content-security-policy") continue;
+    const content = /\bcontent\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag);
+    const value = (content?.[1] ?? content?.[2] ?? "").replace(/&(?:amp|quot|#39|apos|lt|gt);/g, (e) => META_ENTITIES[e] ?? e).replace(/\s+/g, " ").trim();
+    if (value) return value;
+  }
+  return null;
+}
+
 /**
  * A CDN in front of an origin that both set the header yields
  * "nosniff, nosniff"; browsers accept it, so any list member equal to nosniff counts.
