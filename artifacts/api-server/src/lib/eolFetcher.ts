@@ -23,166 +23,15 @@
  *   • DB load errors → logged at WARN; fallback to bundled tables
  */
 
-import { db, eolCacheTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
 import { logger } from "./logger";
+import { setEolCache, type EolCycle, FALLBACK_PHP_EOL, FALLBACK_NGINX_EOL_CYCLES, FALLBACK_APACHE_EOL_CYCLES, cache } from "./eolFetcherData";
+import { saveEolCacheToDb } from "./eolFetcherDb";
+export { getEolDataFetchedAt, getLivePhpEol, getLiveNginxEolCycles, getLiveApacheEolCycles } from "./eolFetcherData";
+export { loadEolCacheFromDb } from "./eolFetcherDb";
 
 // ─── pg-boss queue name (imported by worker.ts) ───────────────────────────────
 
 export const EOL_REFRESH_QUEUE = "eol-refresh";
-
-// ─── endoflife.date API response shape ───────────────────────────────────────
-
-interface EolCycle {
-  cycle: string;        // "8.3", "1.26", "2.4", …
-  releaseDate: string;  // ISO date
-  eol: string | false;  // ISO EOL date, or false when still actively supported
-  latest: string;       // latest patch release in this cycle
-  lts?: boolean;
-  support?: string | false;
-}
-
-// ─── DB payload shape ─────────────────────────────────────────────────────────
-//
-// Sets cannot be stored in JSON directly — serialised as sorted string arrays.
-
-interface EolDbPayload {
-  phpEol: Record<string, string>;
-  nginxEolCycles: string[];
-  apacheEolCycles: string[];
-}
-
-// ─── Bundled fallback data — mirrors the constants in cveCheck.ts ─────────────
-//
-// Used when neither in-memory cache nor DB row is available (e.g. first boot
-// with no network or DB before the async refresh completes).
-
-const FALLBACK_PHP_EOL: Record<string, string> = {
-  "5":   "Reached EOL in December 2018",
-  "7.0": "Reached EOL in December 2019",
-  "7.1": "Reached EOL in December 2019",
-  "7.2": "Reached EOL in November 2020",
-  "7.3": "Reached EOL in December 2021",
-  "7.4": "Reached EOL in November 2022",
-  "8.0": "Reached EOL in November 2023",
-  "8.1": "Reached EOL in December 2025",
-  "8.2": "Reaches EOL in December 2026",
-};
-
-// Nginx stable cycles known to be EOL as of the bundled date (2026-05).
-const FALLBACK_NGINX_EOL_CYCLES = new Set([
-  "1.14", "1.15", "1.16", "1.17", "1.18", "1.19",
-  "1.20", "1.21", "1.22", "1.23", "1.24", "1.25",
-]);
-
-// Apache HTTPD branches known to be EOL.
-const FALLBACK_APACHE_EOL_CYCLES = new Set(["2.0", "2.2"]);
-
-// ─── In-process cache ─────────────────────────────────────────────────────────
-
-interface EolCache {
-  phpEol: Record<string, string>;
-  nginxEolCycles: Set<string>;
-  apacheEolCycles: Set<string>;
-  fetchedAt: Date;
-}
-
-let cache: EolCache | null = null;
-
-const EOL_CACHE_KEY = "eol-data";
-
-// ─── Public getters ───────────────────────────────────────────────────────────
-
-/** Returns the timestamp of the last successful EOL data fetch, or null. */
-export function getEolDataFetchedAt(): Date | null {
-  return cache?.fetchedAt ?? null;
-}
-
-/**
- * PHP EOL map keyed by "major.minor" (or "major" for PHP 5.x).
- * Returns live data when available, bundled fallback otherwise.
- */
-export function getLivePhpEol(): Record<string, string> {
-  return cache?.phpEol ?? FALLBACK_PHP_EOL;
-}
-
-/**
- * Set of Nginx release-cycle strings (e.g. "1.24", "1.25") that are EOL.
- * Returns live data when available, bundled fallback otherwise.
- */
-export function getLiveNginxEolCycles(): Set<string> {
-  return cache?.nginxEolCycles ?? FALLBACK_NGINX_EOL_CYCLES;
-}
-
-/**
- * Set of Apache HTTPD release-cycle strings (e.g. "2.2") that are EOL.
- * Returns live data when available, bundled fallback otherwise.
- */
-export function getLiveApacheEolCycles(): Set<string> {
-  return cache?.apacheEolCycles ?? FALLBACK_APACHE_EOL_CYCLES;
-}
-
-// ─── DB persistence ───────────────────────────────────────────────────────────
-
-/**
- * Loads the last-persisted EOL data from the DB and hydrates the in-memory cache.
- * Call this once at startup (before any scans run) so fresh data is available
- * immediately without waiting for a network fetch to endoflife.date.
- */
-export async function loadEolCacheFromDb(): Promise<void> {
-  try {
-    const [row] = await db
-      .select()
-      .from(eolCacheTable)
-      .where(eq(eolCacheTable.key, EOL_CACHE_KEY))
-      .limit(1);
-
-    if (!row) {
-      logger.debug("[eolFetcher] No persisted EOL data in DB yet — bundled fallback active");
-      return;
-    }
-
-    const payload = row.payload as EolDbPayload;
-    cache = {
-      phpEol: payload.phpEol,
-      nginxEolCycles: new Set(payload.nginxEolCycles),
-      apacheEolCycles: new Set(payload.apacheEolCycles),
-      fetchedAt: row.fetchedAt,
-    };
-
-    logger.info(
-      {
-        fetchedAt: row.fetchedAt.toISOString(),
-        phpEolEntries: Object.keys(payload.phpEol).length,
-        nginxEolCycles: payload.nginxEolCycles.length,
-        apacheEolCycles: payload.apacheEolCycles.length,
-      },
-      "[eolFetcher] Loaded persisted EOL data from DB",
-    );
-  } catch (err) {
-    logger.warn(
-      { err },
-      "[eolFetcher] Could not load persisted EOL data from DB — bundled fallback active",
-    );
-  }
-}
-
-/** Persists the current cache to the DB (upsert). Errors are non-fatal. */
-async function saveEolCacheToDb(c: EolCache): Promise<void> {
-  const payload: EolDbPayload = {
-    phpEol: c.phpEol,
-    nginxEolCycles: Array.from(c.nginxEolCycles).sort(),
-    apacheEolCycles: Array.from(c.apacheEolCycles).sort(),
-  };
-
-  await db
-    .insert(eolCacheTable)
-    .values({ key: EOL_CACHE_KEY, payload, fetchedAt: c.fetchedAt })
-    .onConflictDoUpdate({
-      target: eolCacheTable.key,
-      set: { payload, fetchedAt: c.fetchedAt },
-    });
-}
 
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
 
@@ -323,7 +172,8 @@ export async function refreshEolData(): Promise<void> {
       : (cache?.apacheEolCycles ?? FALLBACK_APACHE_EOL_CYCLES);
 
   const fetchedAt = new Date();
-  cache = { phpEol, nginxEolCycles, apacheEolCycles, fetchedAt };
+  const refreshed = { phpEol, nginxEolCycles, apacheEolCycles, fetchedAt };
+  setEolCache(refreshed);
 
   log.info(
     {
@@ -339,7 +189,7 @@ export async function refreshEolData(): Promise<void> {
 
   // Persist to DB — non-fatal if it fails (in-memory cache is already updated)
   try {
-    await saveEolCacheToDb(cache);
+    await saveEolCacheToDb(refreshed);
     log.info("[eolFetcher] EOL data persisted to DB");
   } catch (dbErr) {
     log.warn(
