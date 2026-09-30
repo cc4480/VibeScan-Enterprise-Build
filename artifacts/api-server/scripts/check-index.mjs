@@ -48,10 +48,23 @@ const ASSUMPTIONS = [
  */
 const CENTRAL = {
   "secret-pattern-data": { cat: "Exposed Secrets / Credentials", emitter: "jsScanner.ts" },
+  "secret-pattern-vendors": { cat: "Exposed Secrets / Credentials", emitter: "jsScanner.ts" },
+  "secret-pattern-generic": { cat: "Exposed Secrets / Credentials", emitter: "jsScanner.ts" },
   "subdomain-service-data": { cat: "DNS Security", cwe: "CWE-350", emitter: "subdomainTakeover.ts" },
   "recon-data": { cat: "Exposed Service", emitter: "recon.ts" },
   nextjsProbe: { cat: "Secret Exposed in Page HTML", emitter: "nextjsProbe.ts" },
 };
+
+/**
+ * A module and the parts split out of it for size (foo.ts, fooBar.ts, foo-bar.ts) count as one:
+ * the exclusions and central-emitter entries below are named for the module, not for each part.
+ */
+const isPartOf = (f, modules) =>
+  [...modules].some((m) => {
+    const base = m.replace(/\.ts$/, "");
+    return f === m || (f.startsWith(base) && /^[A-Z-]/.test(f.slice(base.length)) && !f.endsWith(".test.ts"));
+  });
+const file = (mod) => `${mod}.ts`;
 
 /**
  * Modules that carry `severity:` for something that is NOT a scan finding.
@@ -75,7 +88,7 @@ const SEV_RANK = Object.fromEntries(SEV_ORDER.map((s, i) => [s, SEV_ORDER.length
 
 const files = readdirSync(LIB)
   .filter((f) => f.endsWith(".ts"))
-  .filter((f) => !NOT_A_SCANNER.has(f));
+  .filter((f) => !isPartOf(f, NOT_A_SCANNER));
 const sourceFiles = files.filter((f) => !f.endsWith(".test.ts"));
 const testFiles = files.filter((f) => f.endsWith(".test.ts"));
 
@@ -100,11 +113,26 @@ for (const f of files) {
   );
 }
 
+/**
+ * The module a part was split from (cveCheckLocal -> cveCheck, probes-data-vcs -> probes-data), if any.
+ * A part is exercised through its parent's tests, so it is not reported as untested.
+ */
+function parentOf(mod) {
+  const parents = sourceFiles
+    .map(modOf)
+    .filter((k) => k !== mod && mod.startsWith(k) && /^[A-Z-]/.test(mod.slice(k.length)))
+    .sort((a, b) => b.length - a.length);
+  return parents[0] ?? null;
+}
+const hasTests = (mod) => testsFor[mod] || (parentOf(mod) && testsFor[parentOf(mod)]);
+
 function coverage(mod) {
   if (testsFor[mod]) return { level: "direct", via: `${mod}.test.ts` };
+  const parent = parentOf(mod);
+  if (parent && testsFor[parent]) return { level: "indirect", via: `${parent}.test.ts (split from ${parent})` };
   const byTest = testFiles.filter((t) => importsOf[t].has(mod));
   if (byTest.length) return { level: "indirect", via: byTest.join(", ") };
-  const byTested = sourceFiles.filter((f) => importsOf[f].has(mod) && testsFor[modOf(f)]);
+  const byTested = sourceFiles.filter((f) => importsOf[f].has(mod) && hasTests(modOf(f)));
   if (byTested.length) return { level: "indirect", via: byTested.map((f) => `${modOf(f)}.test.ts`).join(", ") };
   return { level: "none", via: "nothing reaches it" };
 }
@@ -167,7 +195,7 @@ for (const f of sourceFiles) {
   const rows = parseModule(f, src[f]);
   if (!rows.length) continue;
   const mod = modOf(f);
-  const central = CENTRAL[mod] || {};
+  const central = CENTRAL[Object.keys(CENTRAL).find((k) => isPartOf(file(mod), new Set([`${k}.ts`]))) ?? mod] || {};
   modules.push({
     mod,
     file: f,

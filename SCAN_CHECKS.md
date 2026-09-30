@@ -7,7 +7,7 @@ Every finding the scanner can emit, read out of `artifacts/api-server/src/lib`. 
 complete list; [SCAN_COVERAGE.md](SCAN_COVERAGE.md) is the readable one, grouped by module with
 the Basic/Deep tier and the methodology behind each group.
 
-**309 findings across 55 modules**, in 38 categories. 85 critical, 73 high, 56 medium, 30 low, 65 info.
+**309 findings across 58 modules**, in 38 categories. 85 critical, 73 high, 56 medium, 30 low, 65 info.
 
 A finding is a distinct name the scanner can put in a report, which is not the same as a check
 type: the data-table modules below define many findings from one piece of detection logic —
@@ -21,63 +21,66 @@ module does. `none` — neither, so no test exercises it at all.
 
 | Module | Findings | Lines | Tests | Coverage |
 |---|---:|---:|---:|---|
-| `secret-pattern-data.ts` | 28 | 441 | 18 | direct |
 | `recon-data.ts` | 14 | 178 | 12 | direct |
-| `dnsChecks.ts` | 9 | 499 | 34 | direct |
 | `nextjsProbe.ts` | 9 | 248 | 7 | direct |
-| `structuredData.ts` | 9 | 377 | 36 | direct |
+| `structuredData.ts` | 9 | 285 | 36 | direct |
 | `crawler-data.ts` | 8 | 181 | 35 | direct |
 | `jwtAnalysis.ts` | 6 | 262 | 9 | direct |
-| `storageProbe.ts` | 5 | 304 | 11 | direct |
-| `baasProbes.ts` | 4 | 326 | 11 | direct |
+| `storageProbe.ts` | 5 | 251 | 11 | direct |
 | `firebase-probes.ts` | 4 | 301 | 8 | direct |
 | `baasDepth.ts` | 3 | 148 | 11 | direct |
 | `isolationHeaders.ts` | 3 | 77 | 4 | direct |
-| `mailTls.ts` | 3 | 337 | 13 | direct |
+| `mailTls.ts` | 3 | 139 | 13 | direct |
 | `aiFeatureProbe.ts` | 2 | 152 | 21 | direct |
+| `baasProbes.ts` | 2 | 161 | 11 | direct |
 | `graphqlExtra.ts` | 2 | 105 | 8 | direct |
-| `graphqlProbe.ts` | 2 | 330 | 12 | direct |
+| `graphqlProbe.ts` | 2 | 256 | 12 | direct |
 | `injectionExtra.ts` | 2 | 140 | 9 | direct |
 | `injectionProbe.ts` | 2 | 280 | 13 | direct |
 | `supabase-probes.ts` | 2 | 104 | 7 | direct |
-| `apiDocsProbe.ts` | 1 | 320 | 9 | direct |
+| `apiDocsProbe.ts` | 1 | 129 | 9 | direct |
 | `crossAccountStep.ts` | 1 | 172 | 16 | direct |
 | `deserializationProbe.ts` | 1 | 105 | 9 | direct |
+| `dnsChecks.ts` | 1 | 163 | 34 | direct |
 | `healthEndpointProbe.ts` | 1 | 114 | 10 | direct |
 | `pathTraversal.ts` | 1 | 195 | 4 | direct |
 | `promptInjectionProbe.ts` | 1 | 214 | 26 | direct |
 | `raceConditionProbe.ts` | 1 | 181 | 21 | direct |
 | `sourceMaps.ts` | 1 | 180 | 14 | direct |
 | `ssrfProbe.ts` | 1 | 200 | 7 | direct |
-| `probes-data-vcs.ts` | 24 | 244 | — | indirect, via probes-data.test.ts |
-| `probes-data-config.ts` | 23 | 273 | — | indirect, via probes-data.test.ts |
+| `probes-data-vcs.ts` | 24 | 244 | — | indirect, via probes-data.test.ts (split from probes-data) |
+| `probes-data-config.ts` | 23 | 273 | — | indirect, via probes-data.test.ts (split from probes-data) |
+| `secret-pattern-vendors.ts` | 21 | 247 | — | indirect, via secret-pattern-data.test.ts |
 | `subdomain-service-data.ts` | 19 | 165 | — | indirect, via subdomainTakeover.test.ts |
-| `probes-data-server.ts` | 17 | 177 | — | indirect, via probes-data.test.ts |
-| `probes-data-infra.ts` | 14 | 148 | — | indirect, via probes-data.test.ts |
-| `apiProbeFindings.ts` | 7 | 215 | — | indirect, via apiProbe.test.ts |
-| `probesHttp.ts` | 7 | 218 | — | indirect, via probes.test.ts |
-| `supabase-probes-report.ts` | 7 | 234 | — | indirect, via supabase-probes.test.ts |
-| `crawlerHeaders.ts` | 5 | 202 | — | indirect, via crawler.test.ts |
-| `cveCheckLocal.ts` | 5 | 225 | — | indirect, via cveCheck.test.ts |
-| `secret-pattern-ai.ts` | 5 | 61 | — | indirect, via secret-pattern-data.test.ts |
-| `probesPage.ts` | 4 | 299 | — | indirect, via probes.test.ts |
+| `probes-data-server.ts` | 17 | 177 | — | indirect, via probes-data.test.ts (split from probes-data) |
+| `probes-data-infra.ts` | 14 | 148 | — | indirect, via probes-data.test.ts (split from probes-data) |
+| `dnsChecksMail.ts` | 8 | 205 | — | indirect, via dnsChecks.test.ts (split from dnsChecks) |
+| `apiProbeFindings.ts` | 7 | 215 | — | indirect, via apiProbe.test.ts (split from apiProbe) |
+| `probesHttp.ts` | 7 | 218 | — | indirect, via probes.test.ts (split from probes) |
+| `secret-pattern-generic.ts` | 7 | 144 | — | indirect, via secret-pattern-data.test.ts |
+| `supabase-probes-report.ts` | 7 | 234 | — | indirect, via supabase-probes.test.ts (split from supabase-probes) |
+| `crawlerHeaders.ts` | 5 | 202 | — | indirect, via crawler.test.ts (split from crawler) |
+| `cveCheckLocal.ts` | 5 | 225 | — | indirect, via cveCheck.test.ts (split from cveCheck) |
+| `probesPage.ts` | 4 | 299 | — | indirect, via probes.test.ts (split from probes) |
 | `accessControlFindings.ts` | 3 | 129 | — | indirect, via accessControlProbe.test.ts |
-| `probesFiles.ts` | 3 | 247 | — | indirect, via probes.test.ts |
-| `probesSupabase.ts` | 3 | 154 | — | indirect, via probes.test.ts |
-| `crawlerCookies.ts` | 2 | 178 | — | indirect, via crawler.test.ts |
-| `secret-pattern-jwt.ts` | 2 | 81 | — | indirect, via secret-pattern-data.test.ts |
+| `probesFiles.ts` | 3 | 247 | — | indirect, via probes.test.ts (split from probes) |
+| `probesSupabase.ts` | 3 | 154 | — | indirect, via probes.test.ts (split from probes) |
+| `baasProbesPocketbase.ts` | 2 | 133 | — | indirect, via baasProbes.test.ts (split from baasProbes) |
+| `crawlerCookies.ts` | 2 | 178 | — | indirect, via crawler.test.ts (split from crawler) |
+| `workerAi.ts` | 2 | 100 | — | indirect, via worker.test.ts (split from worker) |
+| `bannerRules.ts` | 1 | 112 | — | indirect, via cveCheckLocal.test.ts, cveCheckVersions.test.ts |
 | `githubFindings.ts` | 1 | 60 | — | indirect, via githubSourceProbe.test.ts |
 | `scanner.ts` | 1 | 297 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts |
 | `scannerCspChecks.ts` | 7 | 149 | — | **none** |
 | `scannerHeaderChecks.ts` | 7 | 133 | — | **none** |
 | `scannerCookies.ts` | 6 | 202 | — | **none** |
+| `secret-pattern-ai.ts` | 5 | 61 | — | **none** |
 | `scannerCoverage.ts` | 3 | 103 | — | **none** |
 | `scannerTransportChecks.ts` | 3 | 70 | — | **none** |
 | `scannerPageChecks.ts` | 2 | 56 | — | **none** |
-| `workerAi.ts` | 2 | 100 | — | **none** |
-| `bannerRules.ts` | 1 | 112 | — | **none** |
+| `secret-pattern-jwt.ts` | 2 | 81 | — | **none** |
 
-> **8 modules carrying 31 findings have no test reaching them:** `bannerRules`, `scannerCookies`, `scannerCoverage`, `scannerCspChecks`, `scannerHeaderChecks`, `scannerPageChecks`, `scannerTransportChecks`, `workerAi`.
+> **8 modules carrying 35 findings have no test reaching them:** `scannerCookies`, `scannerCoverage`, `scannerCspChecks`, `scannerHeaderChecks`, `scannerPageChecks`, `scannerTransportChecks`, `secret-pattern-ai`, `secret-pattern-jwt`.
 
 ## Findings by module
 
@@ -102,7 +105,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `apiDocsProbe.ts`
 
-*1 findings · 320 lines · 9 tests.*
+*1 findings · 129 lines · 9 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -134,12 +137,19 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `baasProbes.ts`
 
-*4 findings · 326 lines · 11 tests.*
+*2 findings · 161 lines · 11 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
 | Appwrite — Collections Returned Empty Document Lists (Inconclusive) | Info | BaaS Misconfiguration | 0 | — | — |
 | Appwrite — Public Content Readable Without Authentication on '${coll}' / Appwrite — Unauthenticated Document Read on '${coll}' | Info / Critical | BaaS Misconfiguration | 0 | — | — |
+
+### `baasProbesPocketbase.ts`
+
+*2 findings · 133 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
 | PocketBase — Collections Returned Empty Lists (Inconclusive) | Info | BaaS Misconfiguration | 0 | — | — |
 | PocketBase — Public Content in '${col}' Collection Readable Without Authentication / PocketBase — Unauthenticated Access to '${col}' Collection | Info / Critical | BaaS Misconfiguration | 0 | — | — |
 
@@ -217,7 +227,15 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `dnsChecks.ts`
 
-*9 findings · 499 lines · 34 tests.*
+*1 findings · 163 lines · 34 tests.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| DNSSEC Not Enabled | Info | DNS Security | — | CWE-345 | — |
+
+### `dnsChecksMail.ts`
+
+*8 findings · 205 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -229,7 +247,6 @@ module does. `none` — neither, so no test exercises it at all.
 | No DKIM Records Found Under Common Selectors | Low | Email Security | — | CWE-345 | — |
 | SPF Record Exceeds DNS Lookup Limit | Low | Email Security | — | CWE-290 | — |
 | DMARC Record Missing Aggregate Report Address (rua=) | Info | Email Security | — | CWE-778 | — |
-| DNSSEC Not Enabled | Info | DNS Security | — | CWE-345 | — |
 
 ### `firebase-probes.ts`
 
@@ -261,7 +278,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `graphqlProbe.ts`
 
-*2 findings · 330 lines · 12 tests.*
+*2 findings · 256 lines · 12 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -319,7 +336,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `mailTls.ts`
 
-*3 findings · 337 lines · 13 tests.*
+*3 findings · 139 lines · 13 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -629,40 +646,19 @@ module does. `none` — neither, so no test exercises it at all.
 | Replicate API Token Exposed | High | — | 8.1 | CWE-798 | — |
 | Resend API Key Exposed | High | — | 8.1 | CWE-798 | — |
 
-### `secret-pattern-data.ts`
+### `secret-pattern-generic.ts`
 
-*28 findings · 441 lines · 18 tests · emitted by `jsScanner.ts`.*
+*7 findings · 144 lines · no test file · emitted by `jsScanner.ts`.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
-| AWS Secret Access Key Exposed | Critical | Exposed Secrets / Credentials | 9.8 | CWE-798 | — |
 | Database Connection URL with Credentials Exposed | Critical | Exposed Secrets / Credentials | 10 | CWE-312 | — |
-| GitHub Fine-Grained Access Token Exposed | Critical | Exposed Secrets / Credentials | 9.1 | CWE-798 | — |
-| GitHub Personal Access Token Exposed | Critical | Exposed Secrets / Credentials | 9.1 | CWE-798 | — |
-| Google OAuth Client Secret Exposed | Critical | Exposed Secrets / Credentials | 9.1 | CWE-798 | — |
-| Private Key Exposed in JavaScript | Critical | Exposed Secrets / Credentials | 10 | CWE-321 | — |
 | Secret Environment Variable Leaked in Frontend Bundle | Critical | Exposed Secrets / Credentials | 9.5 | CWE-312 | — |
-| Sentry Auth Token Exposed | Critical | Exposed Secrets / Credentials | 8.5 | CWE-798 | — |
-| Sentry Auth Token Exposed (legacy format) | Critical | Exposed Secrets / Credentials | 8.5 | CWE-798 | — |
-| Stripe Live Secret Key Exposed | Critical | Exposed Secrets / Credentials | 9.8 | CWE-798 | — |
-| Supabase Service Role Key Exposed (sb_secret_) | Critical | Exposed Secrets / Credentials | 10 | CWE-798 | — |
-| Supabase Service Role Key Exposed in JavaScript | Critical | Exposed Secrets / Credentials | 10 | CWE-522 | — |
 | Hardcoded Password in Source Code | High | Exposed Secrets / Credentials | 7.5 | CWE-259 | — |
-| Mailchimp API Key Exposed | High | Exposed Secrets / Credentials | 7.5 | CWE-798 | — |
-| SendGrid API Key Exposed | High | Exposed Secrets / Credentials | 8.1 | CWE-798 | — |
-| Slack Bot/OAuth Token Exposed | High | Exposed Secrets / Credentials | 8.1 | CWE-798 | — |
-| Stripe Webhook Secret Exposed | High | Exposed Secrets / Credentials | 8.1 | CWE-798 | — |
-| Twilio API Key SID and Secret Exposed | High | Exposed Secrets / Credentials | 8.1 | CWE-798 | — |
 | Hardcoded Secret or Auth Token in Source | Medium | Exposed Secrets / Credentials | 6.5 | CWE-798 | — |
-| Slack Incoming Webhook URL Exposed | Medium | Exposed Secrets / Credentials | 5.3 | CWE-798 | — |
-| Stripe Test-Mode Secret Key in Client Code | Medium | Exposed Secrets / Credentials | 5.3 | CWE-798 | — |
-| AWS Access Key ID Found in Client Code | Low | Exposed Secrets / Credentials | 3.7 | CWE-200 | — |
 | Internal IP Address Exposed | Low | Exposed Secrets / Credentials | 3.1 | CWE-200 | — |
 | API Key in Client Code (verify restrictions) | Info | Exposed Secrets / Credentials | 0 | CWE-798 | — |
-| Firebase Configuration Found in Client Code | Info | Exposed Secrets / Credentials | 3.1 | CWE-798 | — |
-| Google API Key in Client Code (verify referrer restrictions) | Info | Exposed Secrets / Credentials | 0 | CWE-798 | — |
 | Mapbox Public Token — Restrict to Your Domain | Info | Exposed Secrets / Credentials | 2.6 | CWE-200 | — |
-| Twilio API Key SID Found in Client Code | Info | Exposed Secrets / Credentials | 0 | CWE-200 | — |
 
 ### `secret-pattern-jwt.ts`
 
@@ -672,6 +668,34 @@ module does. `none` — neither, so no test exercises it at all.
 |---|---|---|---:|---|---|
 | Hardcoded JWT Token in Source | High | — | 8.1 | CWE-798 | — |
 | JWT-Shaped Publishable Key in Client Code (verify it is not a credential) | Info | — | 0 | CWE-798 | — |
+
+### `secret-pattern-vendors.ts`
+
+*21 findings · 247 lines · no test file · emitted by `jsScanner.ts`.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| AWS Secret Access Key Exposed | Critical | Exposed Secrets / Credentials | 9.8 | CWE-798 | — |
+| GitHub Fine-Grained Access Token Exposed | Critical | Exposed Secrets / Credentials | 9.1 | CWE-798 | — |
+| GitHub Personal Access Token Exposed | Critical | Exposed Secrets / Credentials | 9.1 | CWE-798 | — |
+| Google OAuth Client Secret Exposed | Critical | Exposed Secrets / Credentials | 9.1 | CWE-798 | — |
+| Private Key Exposed in JavaScript | Critical | Exposed Secrets / Credentials | 10 | CWE-321 | — |
+| Sentry Auth Token Exposed | Critical | Exposed Secrets / Credentials | 8.5 | CWE-798 | — |
+| Sentry Auth Token Exposed (legacy format) | Critical | Exposed Secrets / Credentials | 8.5 | CWE-798 | — |
+| Stripe Live Secret Key Exposed | Critical | Exposed Secrets / Credentials | 9.8 | CWE-798 | — |
+| Supabase Service Role Key Exposed (sb_secret_) | Critical | Exposed Secrets / Credentials | 10 | CWE-798 | — |
+| Supabase Service Role Key Exposed in JavaScript | Critical | Exposed Secrets / Credentials | 10 | CWE-522 | — |
+| Mailchimp API Key Exposed | High | Exposed Secrets / Credentials | 7.5 | CWE-798 | — |
+| SendGrid API Key Exposed | High | Exposed Secrets / Credentials | 8.1 | CWE-798 | — |
+| Slack Bot/OAuth Token Exposed | High | Exposed Secrets / Credentials | 8.1 | CWE-798 | — |
+| Stripe Webhook Secret Exposed | High | Exposed Secrets / Credentials | 8.1 | CWE-798 | — |
+| Twilio API Key SID and Secret Exposed | High | Exposed Secrets / Credentials | 8.1 | CWE-798 | — |
+| Slack Incoming Webhook URL Exposed | Medium | Exposed Secrets / Credentials | 5.3 | CWE-798 | — |
+| Stripe Test-Mode Secret Key in Client Code | Medium | Exposed Secrets / Credentials | 5.3 | CWE-798 | — |
+| AWS Access Key ID Found in Client Code | Low | Exposed Secrets / Credentials | 3.7 | CWE-200 | — |
+| Firebase Configuration Found in Client Code | Info | Exposed Secrets / Credentials | 3.1 | CWE-798 | — |
+| Google API Key in Client Code (verify referrer restrictions) | Info | Exposed Secrets / Credentials | 0 | CWE-798 | — |
+| Twilio API Key SID Found in Client Code | Info | Exposed Secrets / Credentials | 0 | CWE-200 | — |
 
 ### `sourceMaps.ts`
 
@@ -691,7 +715,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `storageProbe.ts`
 
-*5 findings · 304 lines · 11 tests.*
+*5 findings · 251 lines · 11 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -703,7 +727,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `structuredData.ts`
 
-*9 findings · 377 lines · 36 tests.*
+*9 findings · 285 lines · 36 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
