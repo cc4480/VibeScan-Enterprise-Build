@@ -195,9 +195,13 @@ export async function scanJavaScriptForSecrets(
   );
 
   const allExternalFindings: Array<{ pattern: SecretPattern; match: string; context: string; url: string }> = [];
+  const pageHost = (() => { try { return new URL(baseUrl).hostname; } catch { return ""; } })();
   externalContents.forEach((result, i) => {
     if (result.status === "fulfilled" && result.value) {
-      const findings = scanContent(result.value);
+      const scriptHost = (() => { try { return new URL(externalUrls[i]!).hostname; } catch { return ""; } })();
+      // A name-matched pattern (password, secret, apiKey) in a vendor's script describes the
+      // vendor's widget, not this site: only vendor-format tokens are reported from third parties.
+      const findings = scanContent(result.value).filter((f) => !f.pattern.firstPartyOnly || isFirstParty(pageHost, scriptHost));
       findings.forEach((f) => allExternalFindings.push({ ...f, url: externalUrls[i] }));
     }
   });

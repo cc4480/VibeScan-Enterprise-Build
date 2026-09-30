@@ -7,6 +7,9 @@ import type { ScanVulnerability } from "./scanner";
 import {
   shannonEntropy, looksLikeAName, looksLikeReference, isTrivialPassword, isLocalHost, isPlaceholderToken,
 } from "./secretPlaceholders";
+import { isPublicByDesignValue, isPublicByDesignName } from "./publicKeys";
+import { JWT_PATTERNS } from "./secret-pattern-jwt";
+import { AI_VENDOR_PATTERNS } from "./secret-pattern-ai";
 
 export interface SecretPattern {
   name: string;
@@ -19,6 +22,12 @@ export interface SecretPattern {
   // Return false to suppress a match (false positive filter)
   validate?: (match: string) => boolean;
   /**
+   * Set for patterns that recognise a value by the NAME it is assigned to (password, secret, apiKey)
+   * rather than by a vendor's token format. In a third party's script that name is the vendor's own
+   * widget code, so the match says nothing about the scanned site and is not attributed to it.
+   */
+  firstPartyOnly?: boolean;
+  /**
    * Set for patterns whose match is not a vendor token and has its own way of telling real from
    * template (JWTs are judged by their payload, PEM keys by their body). Every other pattern also
    * has its match checked by isPlaceholderToken in scanContent, so xxxxxxxx and 00000000 filler
@@ -27,46 +36,15 @@ export interface SecretPattern {
   skipPlaceholderCheck?: boolean;
 }
 
-/** Three dot-separated base64url segments, the shape of a JWT. */
-const JWT_PATTERN = /eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/;
-
 /**
- * Claims that make a token speak for someone. A JWT carrying any of these
- * authenticates a principal; one carrying none identifies an account.
+ * UI text or an i18n key that a password-named property holds, not a password:
+ * "Enter your password here please", "Must contain 8 characters and a symbol", "auth.form.password".
+ * Entropy cannot tell these from a secret, since English text scores as high as a passphrase.
  */
-const PRINCIPAL_CLAIMS = [
-  "sub", "user_id", "userId", "uid", "email", "username", "name",
-  "role", "roles", "scope", "scp", "permissions", "groups", "admin",
-  "actor", "act", "client_id", "azp",
-];
-
-/**
- * Classifies a JWT-shaped string:
- *   "credential"  — carries an identity or authorization claim
- *   "publishable" — parses, but claims only account-level identifiers
- *   "not-a-jwt"   — too short, or the payload is not base64url JSON
- */
-function jwtClass(match: string): "credential" | "publishable" | "not-a-jwt" {
-  if (match.length <= 60) return "not-a-jwt";
-  let payload: Record<string, unknown>;
-  try {
-    const [, payloadB64] = match.split(".");
-    if (!payloadB64) return "not-a-jwt";
-    const padded = payloadB64
-      .replace(/-/g, "+").replace(/_/g, "/")
-      .padEnd(payloadB64.length + (4 - (payloadB64.length % 4)) % 4, "=");
-    payload = JSON.parse(Buffer.from(padded, "base64").toString("utf8")) as Record<string, unknown>;
-  } catch {
-    return "not-a-jwt";
-  }
-  if (typeof payload !== "object" || payload === null) return "not-a-jwt";
-  // Supabase anon keys are published deliberately; service_role has its own
-  // dedicated CVSS-10 check, so neither belongs in either bucket here.
-  if (payload.role === "anon" || payload.role === "service_role") return "not-a-jwt";
-  const hasPrincipal = PRINCIPAL_CLAIMS.some(
-    (c) => payload[c] !== undefined && payload[c] !== null && payload[c] !== "",
-  );
-  return hasPrincipal ? "credential" : "publishable";
+function looksLikeInterfaceText(value: string): boolean {
+  const tokens = value.trim().split(/\s+/);
+  if (tokens.length >= 2 && tokens.filter((t) => /^[A-Za-z]{2,}[.,!?:;]*$/.test(t)).length >= 2) return true;
+  return /^[A-Za-z]+(?:\.[A-Za-z]+)+$/.test(value.trim()) || looksLikeAName(value);
 }
 
 /**
@@ -88,20 +66,30 @@ function isRealSecretValue(match: string): boolean {
 export const SECRET_PATTERNS: SecretPattern[] = [
   // ── AWS ───────────────────────────────────────────────────────────────────
   {
-    name: "AWS Access Key ID Exposed",
+    name: "AWS Access Key ID Found in Client Code",
     pattern: /\bAKIA[0-9A-Z]{16}\b/,
-    severity: "critical", cvssScore: 9.8, cweId: "CWE-798",
-    description: "A live AWS Access Key ID was found in client-side JavaScript. Combined with the Secret Access Key (often nearby in the same file), this allows full AWS account access — exfiltrating S3 data, spinning up EC2 instances, accessing RDS databases, and incurring massive costs.",
-    solution: "Immediately revoke this key in the AWS IAM console. Never hardcode AWS credentials in frontend code. Use IAM roles for server-side access. For client-side AWS use, use AWS Cognito Identity Pools with least-privilege scoped temporary credentials.",
+    // An access key ID is an identifier: it cannot sign a request without its Secret Access Key.
+    // The secret half is a separate pattern below, and is Critical when it is found.
+    severity: "low", cvssScore: 3.7, cweId: "CWE-200",
+    description: "An AWS Access Key ID (AKIA…) was found in client-side JavaScript. On its own an access key ID is an identifier, not a credential: requests cannot be signed without the matching Secret Access Key, and none was matched beside this one. It does name the AWS account's IAM user, and if the secret half is also present in this code (search for it) the pair gives API access to whatever that user may do.",
+    solution: "Check whether the matching Secret Access Key is reachable from the browser too, and if this ID belongs to a real IAM user rotate it in the IAM console. Never hardcode AWS credentials in frontend code. Use IAM roles for server-side access; for client-side AWS use, use Cognito Identity Pools with least-privilege temporary credentials.",
     validate: (m) => !/(EXAMPLE|SAMPLE|FAKE|TEST|DEMO|PLACEHOLDER|REDACTED|XXXX)/i.test(m),
   },
   {
     name: "AWS Secret Access Key Exposed",
-    pattern: /(?:aws_secret_access_key|AWS_SECRET_ACCESS_KEY|secretAccessKey|secret_key)\s*[=:]\s*["']?([A-Za-z0-9/+=]{40})["']?/i,
+    // An explicit AWS name, or the generic `secret_key` only with an access key ID in the same
+    // breath: `secret_key` alone also names CSRF, session and signing secrets, and any 40-character
+    // string (a SHA-1) fits the value shape.
+    pattern: /(?:aws_secret_access_key|secretAccessKey)\s*[=:]\s*["']?[A-Za-z0-9/+=]{40}(?![A-Za-z0-9/+=])|A[KS]IA[0-9A-Z]{16}[\s\S]{0,200}?secret_?key\s*[=:]\s*["'][A-Za-z0-9/+=]{40}(?![A-Za-z0-9/+=])|secret_?key\s*[=:]\s*["'][A-Za-z0-9/+=]{40}["'][\s\S]{0,200}?A[KS]IA[0-9A-Z]{16}/i,
     severity: "critical", cvssScore: 9.8, cweId: "CWE-798",
-    description: "An AWS Secret Access Key was found in client-side JavaScript. This grants API-level access to AWS services.",
+    description: "A value in the shape of an AWS Secret Access Key was found in client-side JavaScript, assigned to a secret-key name (an AWS-specific one, or `secret_key` beside an AWS access key ID). If it is real, it grants API-level access to AWS services as its IAM user.",
     solution: "Immediately revoke this key. Move AWS calls to a backend proxy that uses IAM roles. Never include AWS secrets in frontend bundles.",
-    validate: (m) => !/EXAMPLE|SAMPLE|FAKE|TEST|PLACEHOLDER/i.test(m),
+    validate: (m) => {
+      if (/EXAMPLE|SAMPLE|FAKE|TEST|PLACEHOLDER/i.test(m)) return false;
+      const value = [...m.matchAll(/[=:]\s*["']?([A-Za-z0-9/+=]{40})(?![A-Za-z0-9/+=])/g)].pop()?.[1] ?? "";
+      // Never a hex digest, and random base64 (about 5 bits per character), not repetition or words.
+      return value !== "" && !/^[0-9a-f]{40}$/i.test(value) && shannonEntropy(value) >= 4.0;
+    },
   },
 
   // ── Google ────────────────────────────────────────────────────────────────
@@ -139,11 +127,11 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     validate: (m) => !/(test|EXAMPLE)/i.test(m),
   },
   {
-    name: "Stripe Test Secret Key in Production",
+    name: "Stripe Test-Mode Secret Key in Client Code",
     pattern: /\bsk_test_[0-9a-zA-Z]{24,}\b/,
     severity: "medium", cvssScore: 5.3, cweId: "CWE-798",
-    description: "A Stripe test mode secret key was found in client-side JavaScript. While it cannot charge real cards, its presence indicates that secret keys are being improperly included in frontend bundles — suggesting the production secret key may also be exposed elsewhere.",
-    solution: "Remove all secret keys from frontend code. Even test keys should not be exposed as they reveal your key pattern and confirm you're using Stripe.",
+    description: "A Stripe test-mode secret key (sk_test_…) was found in client-side JavaScript. It cannot charge real cards, and whether this is a production site or a staging or preview build cannot be told from the page. A secret key of any mode does not belong in browser code: it shows secret keys are being included in the frontend bundle, and it grants full test-mode API access to the account.",
+    solution: "Remove all secret keys from frontend code and roll this test key in the Stripe Dashboard. Check the build for a live-mode secret key (sk_live_…) shipped the same way. Use only the publishable key (pk_…) in the browser.",
   },
   {
     name: "Stripe Webhook Secret Exposed",
@@ -189,11 +177,21 @@ export const SECRET_PATTERNS: SecretPattern[] = [
 
   // ── Twilio ────────────────────────────────────────────────────────────────
   {
-    name: "Twilio API Key Exposed",
-    pattern: /SK[0-9a-fA-F]{32}/,
+    // The SID (SK…) is an identifier, like an AWS access key ID: requests are signed with the secret
+    // half, which is 32 plain characters with no prefix and so can only be recognised by its name.
+    name: "Twilio API Key SID and Secret Exposed",
+    pattern: /\bSK[0-9a-fA-F]{32}\b[\s\S]{0,160}?(?:[Ss]ecret|SECRET)\w*["']?\s*[:=,]\s*["']?[0-9A-Za-z]{32}\b|(?:[Ss]ecret|SECRET)\w*["']?\s*[:=,]\s*["']?[0-9A-Za-z]{32}["']?[\s\S]{0,160}?\bSK[0-9a-fA-F]{32}\b/,
     severity: "high", cvssScore: 8.1, cweId: "CWE-798",
-    description: "A Twilio API key was found in client-side JavaScript. This can be used to send SMS messages (billing abuse), make phone calls, access conversation data, and more.",
+    description: "A Twilio API Key SID (SK…) was found in client-side JavaScript next to a 32-character value assigned to a secret-named property. Together they are the credential pair that signs Twilio API requests: sending SMS (billing abuse), making calls, and reading conversation data.",
     solution: "Revoke this key in the Twilio console. Move all Twilio API calls to a backend service. Never include API keys in frontend JavaScript.",
+    validate: (m) => !/SKXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX/.test(m),
+  },
+  {
+    name: "Twilio API Key SID Found in Client Code",
+    pattern: /\bSK[0-9a-fA-F]{32}\b/,
+    severity: "info", cvssScore: 0, cweId: "CWE-200",
+    description: "A Twilio API Key SID (SK…) was found in client-side JavaScript. A SID only identifies a key: it cannot be used to call Twilio without the API secret, and no secret was matched beside it. This is a prompt to confirm the secret is not also shipped to the browser, not a confirmed exposure.",
+    solution: "Confirm the API secret paired with this SID is only used server-side. Twilio Voice and Video SDKs use short-lived access tokens minted by your backend rather than a key in the page.",
     validate: (m) => !/SKXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX/.test(m),
   },
 
@@ -298,51 +296,20 @@ export const SECRET_PATTERNS: SecretPattern[] = [
 
   // ── Firebase ─────────────────────────────────────────────────────────────
   {
-    name: "Firebase API Key with Open Security Rules",
+    name: "Firebase Configuration Found in Client Code",
     skipPlaceholderCheck: true,
     pattern: /firebaseConfig\s*=\s*\{[^}]*apiKey:\s*["'][^"']+["'][^}]*\}/,
     severity: "info", cvssScore: 3.1, cweId: "CWE-798",
-    description: "A Firebase configuration block was found in client-side JavaScript. Firebase API keys are semi-public (they identify your project), but if your Firestore/Realtime Database security rules are too permissive, attackers can read or write data using these credentials.",
+    description: "A Firebase configuration block (firebaseConfig with an apiKey) was found in client-side JavaScript. Firebase web API keys are public by design: they identify your project, and shipping one is how the SDK works. This match cannot tell whether the project's Firestore or Realtime Database security rules are open or properly restrictive, so it is a prompt to check them, not a finding that they are permissive.",
     solution: "Review your Firestore and Realtime Database security rules to ensure they enforce proper authentication and authorization. Enable App Check to prevent abuse. The API key itself is not a secret but permissive rules are the real risk.",
   },
 
-  // ── JSON Web Tokens ───────────────────────────────────────────────────────
-  //
-  // Two entries share one regex and split on a single question: does the token
-  // identify a PRINCIPAL, or only a TENANT?
-  //
-  // A JWT carrying sub / user_id / email / role / scope authenticates someone,
-  // and finding one in client source is a real credential leak. A JWT carrying
-  // nothing but an account id and an issued-at is an identifier that a vendor
-  // SDK is meant to ship publicly — the same category as a Stripe publishable
-  // key or a Supabase anon key, both already excluded here.
-  //
-  // Without the split, nytimes.com was reported HIGH for a "hardcoded JWT" that
-  // was an Iterate survey widget's apiKey inside Google Tag Manager, payload
-  // {"company_id":"…","iat":…}. Publishing that as a credential leak would have
-  // been a false accusation about a named third party.
-  {
-    name: "Hardcoded JWT Token in Source",
-    skipPlaceholderCheck: true,
-    pattern: JWT_PATTERN,
-    severity: "high", cvssScore: 8.1, cweId: "CWE-798",
-    description: "A JWT (JSON Web Token) carrying an identity or authorization claim was found hardcoded in JavaScript source code. If this is a long-lived or non-expiring token, anyone who views this code is authenticated as the associated user or service account.",
-    solution: "Immediately invalidate this token (rotate the JWT signing secret, or if using a token allowlist, remove this token). Never hardcode JWTs in source code. Tokens should be dynamically obtained at runtime and stored in memory, not in code.",
-    validate: (m) => jwtClass(m) === "credential",
-  },
-  {
-    name: "JWT-Shaped Publishable Key in Client Code (verify it is not a credential)",
-    skipPlaceholderCheck: true,
-    pattern: JWT_PATTERN,
-    severity: "info", cvssScore: 0, cweId: "CWE-798",
-    description: "A JWT-shaped value was found in client-side code, but its payload carries no identity or authorization claim — no subject, user, email, role or scope, only account-level identifiers. Vendor SDKs ship exactly this kind of token publicly to identify which account a widget belongs to, so on its own it is not a credential leak. It is reported so you can confirm that is what it is.",
-    solution: "Confirm this token is your vendor's publishable or client-side key rather than a server credential that was pasted into the bundle. If it grants any access beyond identifying the account, rotate it and move it server-side.",
-    validate: (m) => jwtClass(m) === "publishable",
-  },
+  ...JWT_PATTERNS,
 
   // ── Generic Secrets ───────────────────────────────────────────────────────
   {
     name: "Hardcoded Password in Source Code",
+    firstPartyOnly: true,
     // Excludes HTML attribute contexts (placeholder="", type="password") and
     // JSON schema / documentation patterns (description, label, hint).
     pattern: /(?:^|[,{;\n])\s*(?:password|passwd|pwd)\s*[:=]\s*["'][^"']{8,}["']/im,
@@ -358,6 +325,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
       if (!valMatch) return false;
       const val = valMatch[1];
       if (/EXAMPLE|PLACEHOLDER|YOUR_|<|>|\*{3,}|\.{3,}|xxx|yyy|zzz/i.test(val)) return false;
+      if (looksLikeInterfaceText(val)) return false;
       // Require reasonable entropy — real passwords aren't all-same-char repeating strings
       return shannonEntropy(val) >= 2.5;
     },
@@ -375,6 +343,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
   // finding is "verify this", not "you leaked a secret".
   {
     name: "Hardcoded Secret or Auth Token in Source",
+    firstPartyOnly: true,
     pattern: /(?:secret|auth_token|access_token)\s*[:=]\s*["']([a-zA-Z0-9\-_+/]{16,})["']/i,
     severity: "medium", cvssScore: 6.5, cweId: "CWE-798",
     description: "A hardcoded secret or authentication token was found in client-side JavaScript. Unlike a publishable API key, a value named as a secret or an auth token is not meant to reach the browser at all — anyone who visits the site can read it.",
@@ -383,6 +352,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
   },
   {
     name: "API Key in Client Code (verify restrictions)",
+    firstPartyOnly: true,
     pattern: /(?:api_key|apikey)\s*[:=]\s*["']([a-zA-Z0-9\-_+/]{16,})["']/i,
     severity: "info", cvssScore: 0, cweId: "CWE-798",
     description: "An API key was found in client-side JavaScript. Client-side SDKs — search, maps, analytics, error reporting — are designed to ship a key to the browser, so its presence is expected rather than a leak. The risk is a key left without origin, referrer or scope restrictions, which cannot be determined from the page. This is a prompt to verify, not a confirmed exposure.",
@@ -407,54 +377,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     },
   },
 
-  // ── OpenAI ────────────────────────────────────────────────────────────────
-  {
-    name: "OpenAI API Key Exposed",
-    // New project-scoped format: sk-proj-... (55+ chars)
-    // Legacy format: sk-[20 random chars]T3BlbkFJ[48 chars]
-    pattern: /\bsk-(?:proj-[a-zA-Z0-9_-]{50,}|[a-zA-Z0-9]{20}T3BlbkFJ[a-zA-Z0-9_-]{40,})\b/,
-    severity: "critical", cvssScore: 9.8, cweId: "CWE-798",
-    description: "An OpenAI API key was found in client-side JavaScript. This is the #1 secret leaked in AI-generated (vibe-coded) apps. Anyone who visits the page can copy this key and make API calls billed to your account — running up unlimited charges, accessing uploaded files, and completely bypassing your application logic.",
-    solution: "IMMEDIATELY revoke this key at platform.openai.com/api-keys. Never put OpenAI keys in frontend code or prefix them with VITE_/REACT_APP_. Move all AI API calls to a backend server route (e.g. /api/chat) where the key stays in a server-side environment variable, unreachable by browsers.",
-    validate: (m) => !/(EXAMPLE|YOUR.KEY|sk-xxxx|placeholder)/i.test(m),
-  },
-
-  // ── Anthropic ─────────────────────────────────────────────────────────────
-  {
-    name: "Anthropic (Claude) API Key Exposed",
-    pattern: /\bsk-ant-(?:api03|admin|[a-zA-Z0-9]{4})-[a-zA-Z0-9_-]{90,}\b/,
-    severity: "critical", cvssScore: 9.8, cweId: "CWE-798",
-    description: "An Anthropic (Claude) API key was found in client-side JavaScript. This grants full API access — any visitor to your site can make Claude requests billed to your account, access your usage data, and potentially reach organization-level settings.",
-    solution: "Immediately revoke this key at console.anthropic.com/settings/keys. Move all Claude API calls to a backend function. Never expose Anthropic keys in frontend code or VITE_/REACT_APP_ environment variables.",
-  },
-
-  // ── Resend ────────────────────────────────────────────────────────────────
-  {
-    name: "Resend API Key Exposed",
-    pattern: /\bre_[a-zA-Z0-9]{32,}\b/,
-    severity: "high", cvssScore: 8.1, cweId: "CWE-798",
-    description: "A Resend API key was found in client-side JavaScript. This allows anyone to send emails from your verified domain — enabling phishing campaigns, spam, and permanent damage to your sending reputation.",
-    solution: "Revoke this key at resend.com/api-keys. Move all email sending to a backend API route. Resend keys must never appear in frontend bundles.",
-    validate: (m) => !/(EXAMPLE|YOUR.KEY|re_xxxx|test)/i.test(m) && m.length > 10,
-  },
-
-  // ── Replicate ─────────────────────────────────────────────────────────────
-  {
-    name: "Replicate API Token Exposed",
-    pattern: /\br8_[a-zA-Z0-9]{40}\b/,
-    severity: "high", cvssScore: 8.1, cweId: "CWE-798",
-    description: "A Replicate API token was found in client-side JavaScript. Anyone can run AI models billed to your account — enabling cost exhaustion attacks and unauthorized use of any model you have access to.",
-    solution: "Revoke this token at replicate.com/account/api-tokens. Move Replicate calls to a backend proxy endpoint. Never include API tokens in frontend JavaScript.",
-  },
-
-  // ── ElevenLabs ───────────────────────────────────────────────────────────
-  {
-    name: "ElevenLabs API Key Exposed",
-    pattern: /(?:ELEVENLABS(?:_API)?_KEY|xi[_-]api[_-]key)\s*[:=]\s*["'`]?([a-f0-9]{32})["'`]?/i,
-    severity: "high", cvssScore: 8.1, cweId: "CWE-798",
-    description: "An ElevenLabs API key was found in client-side JavaScript. This grants access to voice synthesis billed per character — attackers can exhaust your credit and use cloned voices associated with your account.",
-    solution: "Revoke this key in ElevenLabs profile settings. Move all TTS/voice synthesis calls to a backend proxy. API keys must never appear in frontend code.",
-  },
+  ...AI_VENDOR_PATTERNS,
 
   // ── Vite / Create React App / Next.js env var leaks ──────────────────────
   {
@@ -470,6 +393,10 @@ export const SECRET_PATTERNS: SecretPattern[] = [
       const valMatch = /:\s*["'`]([^"'`\s]+)["'`]/.exec(m);
       if (!valMatch) return false;
       const val = valMatch[1] ?? "";
+      // A key the vendor publishes for the browser is what these prefixes are FOR (Stripe pk_live_,
+      // Supabase anon, Firebase AIza, Mapbox pk., PostHog phc_): judge the value, not the name.
+      const name = /["'`]((?:VITE|REACT_APP|NEXT_PUBLIC)_\w+)["'`]/.exec(m)?.[1] ?? "";
+      if (isPublicByDesignValue(val, name) || isPublicByDesignName(name.toLowerCase().replace(/_/g, ""))) return false;
       if (/PLACEHOLDER|YOUR[_-]|EXAMPLE|xxx|yyy|zzz|<|>|\*{3}/i.test(val)) return false;
       // The value must be key material, not the NAME of the variable it stands in for
       // ("VITE_DEEPSEEK_API_KEY": "MY_DEEPSEEK_API_KEY"), nor a reference to one (process.env.X, ${X}, %X%).

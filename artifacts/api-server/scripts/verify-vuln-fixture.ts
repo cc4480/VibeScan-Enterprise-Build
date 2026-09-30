@@ -105,7 +105,7 @@ const EXPECTED: Array<{ module: string; label: string; match: RegExp }> = [
   { module: "probes-data.ts", label: "backup archive exposed", match: /Backup Archive Exposed/i },
 
   // ── secret-pattern-data.ts (jsScanner) — a sample ───────────────────────
-  { module: "jsScanner", label: "AWS access key in JS", match: /AWS Access Key ID Exposed/i },
+  { module: "jsScanner", label: "AWS access key in JS", match: /AWS Access Key ID Found in Client Code/i },
   { module: "jsScanner", label: "Stripe live key in JS", match: /Stripe Live Secret Key Exposed/i },
   { module: "jsScanner", label: "GitHub PAT in JS", match: /GitHub Personal Access Token Exposed/i },
   { module: "jsScanner", label: "DB connection string in JS", match: /Database Connection URL with Credentials/i },

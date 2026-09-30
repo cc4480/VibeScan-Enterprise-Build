@@ -32,7 +32,7 @@ describe("secret evidence is masked in full", () => {
     const vulns = await scanJavaScriptForSecrets(html, "https://example.test/");
     // All three must be found, or the redaction assertions below cover only some of them.
     expect(vulns.map((v) => v.name).sort()).toEqual([
-      "AWS Access Key ID Exposed",
+      "AWS Access Key ID Found in Client Code",
       "AWS Secret Access Key Exposed",
       "Stripe Live Secret Key Exposed",
     ]);
@@ -128,5 +128,25 @@ describe("a scan downloads each script once, however many checks read it", () =>
     await runWithScanHttp({ targetUrl: base }, () => collectJavaScript(html, base));
     await runWithScanHttp({ targetUrl: base }, () => collectJavaScript(html, base));
     expect(hits).toBe(2);
+  });
+});
+
+describe("name-matched secrets are not attributed to a vendor's script", () => {
+  const VENDOR_JS = `var w={password:"Xk9#mP2$vL8@qR4z",apiKey:"Zq3XkL8vN2mYtRzWc9aBdE0f"};var s="${STRIPE}";`;
+
+  it("reports a vendor-format token from a third-party script but not its password or apiKey properties", async () => {
+    const vendorPort = await serveJs("127.0.0.2", (_req, res) => {
+      res.writeHead(200, { "content-type": "application/javascript" }).end(VENDOR_JS);
+    });
+    const base = "http://127.0.0.1:9/";
+    const html = `<html><script src="http://127.0.0.2:${vendorPort}/widget.js"></script></html>`;
+    const vulns = await runWithScanHttp({ targetUrl: base }, () => scanJavaScriptForSecrets(html, base));
+    expect(vulns.map((v) => v.name)).toEqual(["Stripe Live Secret Key Exposed"]);
+  });
+
+  it("still reports the same properties in the site's own inline script", async () => {
+    const html = `<html><script>${VENDOR_JS}</script></html>`;
+    const vulns = await scanJavaScriptForSecrets(html, "http://127.0.0.1:9/");
+    expect(vulns.map((v) => v.name)).toContain("Hardcoded Password in Source Code");
   });
 });
