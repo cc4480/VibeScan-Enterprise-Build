@@ -180,3 +180,16 @@ export function spreadLiterals(obj, file, src) {
   }
   return found.join("\n");
 }
+
+/** Port definitions in recon-data carry their finding on a `dangerous` block. */
+export function parseReconData(text) {
+  const re = /\{\s*port:\s*(\d+),\s*service:\s*"([^"]+)",\s*dangerous:\s*\{\s*severity:\s*"(critical|high|medium)"[\s\S]{0,900}?cweId:\s*"([^"]+)",\s*cvssScore:\s*([\d.]+)/g;
+  return [...text.matchAll(re)].map((m) => ({
+    name: `${m[2]} Exposed on Port ${m[1]}`,
+    sev: m[3],
+    cat: "Exposed Service",
+    cwe: m[4],
+    cvss: Number(m[5]),
+    wstg: null,
+  }));
+}
