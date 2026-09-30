@@ -82,8 +82,42 @@ function sourceCount(body: string): number {
   }
 }
 
+/** True only when the map actually embeds source text, not just the key (or null placeholders). */
 function hasSourceContent(body: string): boolean {
-  return /"sourcesContent"/.test(body);
+  try {
+    const content = (JSON.parse(body) as Record<string, unknown>)["sourcesContent"];
+    return Array.isArray(content) && content.some((c) => typeof c === "string" && c.trim().length > 0);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * With sourcesContent the original code is downloadable (High); with only a
+ * sources list an attacker learns file names and layout but not the code (Low),
+ * so the title and severity say which was observed.
+ */
+function mapFinding(opts: { mapUrl: string; body: string; linkedFrom?: string }): ScanVulnerability {
+  const { mapUrl, body, linkedFrom } = opts;
+  const n = sourceCount(body);
+  const hasContent = hasSourceContent(body);
+  const path = (u: string) => { try { return new URL(u).pathname; } catch { return u; } };
+  const how = linkedFrom ? "is linked from the production bundle and " : "";
+  return vuln({
+    name: hasContent
+      ? "JavaScript Source Map Exposed — Full Source Code Accessible"
+      : "JavaScript Source Map Exposed — Source File Names Only",
+    severity: hasContent ? "high" : "low",
+    category: "Source Code Exposure",
+    description: hasContent
+      ? `A JavaScript source map ${how}is publicly accessible at ${path(mapUrl)}. It embeds the original source text (sourcesContent), so anyone can reconstruct the application's source: comments, variable names, file paths, internal endpoints and any secrets present at build time.`
+      : `A JavaScript source map ${how}is publicly accessible at ${path(mapUrl)}. It lists ${n} source file names but does not embed their contents, so it discloses project structure and dependency paths rather than the code itself.`,
+    evidence: `${linkedFrom ? `Linked from: ${path(linkedFrom)}\n` : ""}Source map URL: ${mapUrl}\nSource files mapped: ${n}${hasContent ? "\nFull sourcesContent included." : "\nNo sourcesContent (file names only)."}`,
+    solution: "Disable source map generation in production builds. Webpack: set devtool: false or devtool: 'hidden-source-map' (generates maps but does not link them from the bundle). Vite: set build.sourcemap: false. If you need source maps for error tracking, upload them directly to your error tracker (Sentry, Datadog) and keep them off the public server.",
+    cweId: "CWE-540",
+    cvssScore: hasContent ? 7.5 : 3.7,
+    wstgId: "WSTG-CONF-04",
+  });
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
@@ -101,20 +135,7 @@ export async function checkSourceMaps(
       const directMapUrl = jsUrl + ".map";
       const direct = await tryFetch(directMapUrl);
       if (direct && isValidSourceMap(direct.body)) {
-        const n = sourceCount(direct.body);
-        const hasContent = hasSourceContent(direct.body);
-        const mapPath = (() => { try { return new URL(directMapUrl).pathname; } catch { return directMapUrl; } })();
-        return vuln({
-          name: "JavaScript Source Map Exposed — Full Source Code Accessible",
-          severity: "high",
-          category: "Source Code Exposure",
-          description: `A JavaScript source map file is publicly accessible at ${mapPath}. Source maps contain the complete original source code before minification or bundling — including comments, variable names, file paths, and any secrets that existed in the source at build time. Anyone can reconstruct your full application source code by downloading this file.`,
-          evidence: `Source map URL: ${directMapUrl}\nSource files mapped: ${n}${hasContent ? "\nFull source content (sourcesContent) included." : ""}`,
-          solution: "Disable source map generation in production builds. Webpack: set devtool: false or devtool: 'hidden-source-map' (generates maps but does not link them from the bundle). Vite: set build.sourcemap: false. If you need source maps for error tracking, upload them directly to your error tracker (Sentry, Datadog) and keep them off the public server.",
-          cweId: "CWE-540",
-          cvssScore: 7.5,
-          wstgId: "WSTG-CONF-04",
-        });
+        return mapFinding({ mapUrl: directMapUrl, body: direct.body });
       }
 
       // 2. Fetch the last TRAILER_BYTES of the JS file to find sourceMappingURL comment
@@ -140,20 +161,7 @@ export async function checkSourceMaps(
       const linked = await tryFetch(mapUrl);
       if (!linked || !isValidSourceMap(linked.body)) return null;
 
-      const n = sourceCount(linked.body);
-      const hasContent = hasSourceContent(linked.body);
-      const mapPath = (() => { try { return new URL(mapUrl).pathname; } catch { return mapUrl; } })();
-      return vuln({
-        name: "JavaScript Source Map Exposed — Full Source Code Accessible",
-        severity: "high",
-        category: "Source Code Exposure",
-        description: `A JavaScript source map is linked from the production bundle and publicly accessible at ${mapPath}. Source maps reconstruct your complete original source code, including all business logic, internal endpoints, and any secrets present at build time.`,
-        evidence: `Linked from: ${(() => { try { return new URL(jsUrl).pathname; } catch { return jsUrl; } })()}\nSource map URL: ${mapUrl}\nSource files mapped: ${n}${hasContent ? "\nFull sourcesContent included." : ""}`,
-        solution: "Set devtool: false (webpack) or build.sourcemap: false (Vite) in production. Upload maps to your error tracker instead of serving them publicly.",
-        cweId: "CWE-540",
-        cvssScore: 7.5,
-        wstgId: "WSTG-CONF-04",
-      });
+      return mapFinding({ mapUrl, body: linked.body, linkedFrom: jsUrl });
     }),
   );
 

@@ -167,6 +167,28 @@ describe("checkSourceMaps — evidence matches what was actually found", () => {
     const vulns = await checkSourceMaps(page("/assets/app.js"), "https://example.com/");
     expect(vulns).toHaveLength(1);
     expect(vulns[0]!.evidence).toMatch(/Source files mapped: 2/);
-    expect(vulns[0]!.evidence).not.toMatch(/sourcesContent/);
+    expect(vulns[0]!.evidence).not.toMatch(/Full sourcesContent|Full source content/);
+  });
+
+  it("titles and rates a names-only map as file names exposed, not full source", async () => {
+    serve({ "https://example.com/assets/app.js.map": { body: mapWithoutContent } });
+    const [v] = await checkSourceMaps(page("/assets/app.js"), "https://example.com/");
+    expect(v!.name).toMatch(/Source File Names Only/);
+    expect(v!.name).not.toMatch(/Full Source Code/);
+    expect(v!.severity).toBe("low");
+  });
+
+  it("treats null or empty sourcesContent placeholders as names-only", async () => {
+    const body = JSON.stringify({ version: 3, sources: ["a.ts"], sourcesContent: [null], mappings: "AAAA" });
+    serve({ "https://example.com/assets/app.js.map": { body } });
+    const [v] = await checkSourceMaps(page("/assets/app.js"), "https://example.com/");
+    expect(v!.severity).toBe("low");
+  });
+
+  it("keeps High and the full-source title when sourcesContent is embedded", async () => {
+    serve({ "https://example.com/assets/app.js.map": { body: realMap } });
+    const [v] = await checkSourceMaps(page("/assets/app.js"), "https://example.com/");
+    expect(v!.name).toMatch(/Full Source Code Accessible/);
+    expect(v!.severity).toBe("high");
   });
 });
