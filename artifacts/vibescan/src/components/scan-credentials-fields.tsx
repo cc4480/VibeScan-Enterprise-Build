@@ -22,7 +22,7 @@ export interface ScanCredentialsValue {
   password: string;
 }
 
-export { emptySecondAccount, secondAccountReady, type SecondAccountValue } from "@/components/second-account";
+export { emptySecondAccount, secondAccountReady, autoAccountRequested, type SecondAccountValue } from "@/components/second-account";
 
 export const emptyCredentials: ScanCredentialsValue = {
   mode: "session",

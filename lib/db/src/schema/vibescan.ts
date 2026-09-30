@@ -56,6 +56,10 @@ export const scansTable = pgTable("scans", {
   // normalised https://github.com/owner/repo URL. Not a secret (the repository is public),
   // so unlike the credentials it stays after the scan and the report can say what was read.
   githubRepoUrl: text("github_repo_url"),
+  // The requester's explicit opt-in to let the scan create a disposable second account through the
+  // target's public signup form (autoSecondAccount.ts). Off unless asked for, and only meaningful
+  // when credentials were supplied, since the test compares them with the new account.
+  autoSecondAccount: boolean("auto_second_account").notNull().default(false),
 }, (table) => [
   index("idx_scans_user_id").on(table.userId),
   index("idx_scans_status").on(table.status),

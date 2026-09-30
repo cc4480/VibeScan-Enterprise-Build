@@ -8,6 +8,7 @@ import {
   credentialsReady,
   emptySecondAccount,
   secondAccountReady,
+  autoAccountRequested,
   type ScanCredentialsValue,
   type SecondAccountValue,
 } from "@/components/scan-credentials-fields";
@@ -300,6 +301,7 @@ export default function ScanFormPage() {
           targetUrl,
           ...(creds ? { credentials: creds } : {}),
           ...(secondCreds ? { secondaryCredentials: secondCreds } : {}),
+          ...(creds && !secondCreds && autoAccountRequested(secondAccount) ? { autoSecondAccount: true } : {}),
           ...(githubRepo.trim() ? { githubRepoUrl: githubRepo.trim() } : {}),
         },
       },

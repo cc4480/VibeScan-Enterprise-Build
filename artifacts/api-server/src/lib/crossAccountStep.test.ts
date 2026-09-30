@@ -26,6 +26,8 @@ function harness(over: {
   const unrun: string[] = [];
   const base = {
     allowActiveProbes: true,
+    // The scan asked for an automatic account; the opt-in tests below turn it off.
+    allowAutoAccount: true as boolean | undefined,
     primary: PRIMARY as { cookie?: string; headers?: Record<string, string> } | undefined,
     secondary: undefined as typeof OWN_SECOND | undefined,
     finalUrl: "https://shop.example/",
@@ -35,6 +37,31 @@ function harness(over: {
   };
   return { attempt, probe, ledger, unrun, base, deps: { attempt: attempt as never, probe: probe as never } };
 }
+
+describe("runCrossAccountStep: the automatic account is opt-in", () => {
+  for (const [label, value] of [["not asked for (the default)", undefined], ["explicitly off", false]] as const) {
+    it(`submits no signup form when it was ${label}, and says why in the coverage list`, async () => {
+      const h = harness();
+      h.base.allowAutoAccount = value;
+      const out = await runCrossAccountStep(h.base, h.deps);
+      expect(h.attempt).not.toHaveBeenCalled();
+      expect(h.probe).not.toHaveBeenCalled();
+      expect(out).toEqual([]);
+      const rec = h.ledger.records.find((r) => r.name === "cross-account access control (IDOR)");
+      expect(rec?.status).toBe("skipped");
+      expect(rec?.reason).toMatch(/not requested for this scan.*opt-in.*signup form/);
+    });
+  }
+
+  it("still runs the comparison with a supplied second account when the option is off", async () => {
+    const h = harness();
+    h.base.allowAutoAccount = false;
+    h.base.secondary = OWN_SECOND;
+    await runCrossAccountStep(h.base, h.deps);
+    expect(h.attempt).not.toHaveBeenCalled();
+    expect(h.probe).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("runCrossAccountStep: gating", () => {
   it("skips with the standard reason, and touches nothing, on an unverified domain", async () => {

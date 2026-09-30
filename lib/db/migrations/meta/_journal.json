@@ -169,6 +169,13 @@
       "when": 1790730437480,
       "tag": "0023_huge_makkari",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790734702942,
+      "tag": "0024_amused_sir_ram",
+      "breakpoints": true
     }
   ]
 }

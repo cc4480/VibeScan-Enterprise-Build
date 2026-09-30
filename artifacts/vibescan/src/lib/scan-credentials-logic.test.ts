@@ -3,6 +3,7 @@ import {
   credentialsReady,
   credentialsTouched,
   secondAccountReady,
+  autoAccountRequested,
   emptyCredentials,
   emptySecondAccount,
 } from "@/components/scan-credentials-fields";
@@ -107,5 +108,22 @@ describe("second account signing in with a form", () => {
   it("session mode still sends only the cookie and token", () => {
     const s = { ...emptySecondAccount, enabled: true, cookie: " sid=other ", bearerToken: "" };
     expect(secondCredentialsPayload(s)).toEqual({ mode: "session", authorized: true, cookie: "sid=other", bearerToken: null });
+  });
+});
+
+describe("letting the scan create the second account", () => {
+  it("is off in a fresh form, and off when the second-account box is unticked even if chosen before", () => {
+    expect(autoAccountRequested(emptySecondAccount)).toBe(false);
+    expect(autoAccountRequested({ ...emptySecondAccount, autoCreate: true })).toBe(false);
+  });
+
+  it("is requested only when the box is ticked and the option chosen", () => {
+    expect(autoAccountRequested({ ...emptySecondAccount, enabled: true, autoCreate: true })).toBe(true);
+    expect(autoAccountRequested({ ...emptySecondAccount, enabled: true })).toBe(false);
+  });
+
+  it("never counts as a supplied second account, so no credentials are sent for it", () => {
+    // Stale text left in the fields from an earlier choice must not be sent as a login.
+    expect(secondAccountReady({ ...emptySecondAccount, enabled: true, autoCreate: true, cookie: "sid=stale" })).toBe(false);
   });
 });

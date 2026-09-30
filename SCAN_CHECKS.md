@@ -45,16 +45,16 @@ module does. `none` — neither, so no test exercises it at all.
 | `injectionExtra.ts` | 2 | 140 | 9 | direct |
 | `injectionProbe.ts` | 2 | 250 | 10 | direct |
 | `sourceMaps.ts` | 2 | 172 | 11 | direct |
-| `worker.ts` | 2 | 1075 | 3 | direct |
+| `worker.ts` | 2 | 1082 | 3 | direct |
 | `apiDocsProbe.ts` | 1 | 300 | 9 | direct |
-| `crossAccountStep.ts` | 1 | 159 | 14 | direct |
+| `crossAccountStep.ts` | 1 | 172 | 16 | direct |
 | `deserializationProbe.ts` | 1 | 105 | 9 | direct |
 | `healthEndpointProbe.ts` | 1 | 114 | 10 | direct |
 | `pathTraversal.ts` | 1 | 195 | 4 | direct |
 | `promptInjectionProbe.ts` | 1 | 214 | 26 | direct |
 | `raceConditionProbe.ts` | 1 | 177 | 20 | direct |
 | `ssrfProbe.ts` | 1 | 192 | 6 | direct |
-| `scanner.ts` | 32 | 1533 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, grading.test.ts, scoring.test.ts |
+| `scanner.ts` | 32 | 1540 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, grading.test.ts, scoring.test.ts |
 | `subdomain-service-data.ts` | 19 | 152 | — | indirect, via subdomainTakeover.test.ts |
 | `accessControlFindings.ts` | 3 | 129 | — | indirect, via accessControlProbe.test.ts |
 | `githubFindings.ts` | 1 | 60 | — | indirect, via githubSourceProbe.test.ts |
@@ -152,7 +152,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `crossAccountStep.ts`
 
-*1 findings · 159 lines · 14 tests.*
+*1 findings · 172 lines · 16 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -449,7 +449,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `scanner.ts`
 
-*32 findings · 1533 lines · no test file.*
+*32 findings · 1540 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -612,7 +612,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `worker.ts`
 
-*2 findings · 1075 lines · 3 tests.*
+*2 findings · 1082 lines · 3 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|

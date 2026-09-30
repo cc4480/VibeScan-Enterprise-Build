@@ -166,6 +166,15 @@ export async function createScanHandler(req: Request, res: Response): Promise<vo
   }
   const githubRepoUrl = repoInput.url;
 
+  // The automatic second account tests a login against a new account, so it means nothing without
+  // one. Said plainly rather than silently dropped: an API caller who set it expects it to happen.
+  // (A supplied second account makes it unnecessary, so it is simply not used in that case.)
+  if (parsed.data.autoSecondAccount === true && !credentials) {
+    res.status(400).json({ error: "autoSecondAccount needs credentials: it creates the second account to compare with the first." });
+    return;
+  }
+  const autoSecondAccount = parsed.data.autoSecondAccount === true && !secondaryCredentials;
+
   // Free scans first, then paid credits. Spending a credit while free scans
   // remain would charge someone for something they already had.
   //
@@ -339,6 +348,7 @@ export async function createScanHandler(req: Request, res: Response): Promise<vo
       secondaryCredentialsEncrypted,
       credentialsAuthorizedAt,
       githubRepoUrl,
+      autoSecondAccount,
       // Recorded so a scan that fails later is refunded to the same place.
       paidWith,
     })

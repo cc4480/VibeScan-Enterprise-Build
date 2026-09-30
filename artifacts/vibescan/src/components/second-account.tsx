@@ -10,6 +10,8 @@ import type { CredentialMode, ScanCredentialsValue } from "@/components/scan-cre
 
 export interface SecondAccountValue {
   enabled: boolean;
+  /** Let the scan create the second account itself through the site's signup form. Off unless chosen. */
+  autoCreate: boolean;
   mode: CredentialMode;
   cookie: string;
   bearerToken: string;
@@ -20,6 +22,7 @@ export interface SecondAccountValue {
 
 export const emptySecondAccount: SecondAccountValue = {
   enabled: false,
+  autoCreate: false,
   mode: "session",
   cookie: "",
   bearerToken: "",
@@ -35,9 +38,14 @@ export function secondLoginUrl(v: SecondAccountValue, primary?: ScanCredentialsV
 
 /** A second account is usable once it can prove who it is: a session, or a sign-in. */
 export function secondAccountReady(v: SecondAccountValue, primary?: ScanCredentialsValue): boolean {
-  if (!v.enabled) return false;
+  if (!v.enabled || v.autoCreate) return false;
   if (v.mode === "session") return v.cookie.trim() !== "" || v.bearerToken.trim() !== "";
   return v.username.trim() !== "" && v.password !== "" && secondLoginUrl(v, primary) !== "";
+}
+
+/** True when the person chose to let the scan create the second account itself. */
+export function autoAccountRequested(v: SecondAccountValue): boolean {
+  return v.enabled && v.autoCreate;
 }
 
 /** What is sent to the server for the second account; the caller has checked it is ready. */
@@ -95,14 +103,14 @@ export function SecondAccountFields({
       {value.enabled ? (
         <div className="flex flex-col gap-3 pl-6">
           <div className="flex gap-2">
-            {([{ id: "session", label: "I have a session" }, { id: "form", label: "Sign in for me" }] as const).map((m) => (
+            {([{ id: "session", label: "I have a session" }, { id: "form", label: "Sign in for me" }, { id: "auto", label: "Create one for me" }] as const).map((m) => (
               <button
                 key={m.id}
                 type="button"
-                onClick={() => set("mode", m.id)}
+                onClick={() => (m.id === "auto" ? onChange({ ...value, autoCreate: true }) : onChange({ ...value, autoCreate: false, mode: m.id }))}
                 className={
                   "px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors " +
-                  (value.mode === m.id ? "border-primary/60 bg-primary/10 text-foreground" : "border-white/10 text-muted-foreground hover:text-foreground")
+                  ((m.id === "auto" ? value.autoCreate : !value.autoCreate && value.mode === m.id) ? "border-primary/60 bg-primary/10 text-foreground" : "border-white/10 text-muted-foreground hover:text-foreground")
                 }
               >
                 {m.label}
@@ -110,7 +118,20 @@ export function SecondAccountFields({
             ))}
           </div>
 
-          {value.mode === "session" ? (
+          {value.autoCreate ? (
+            <div className="flex flex-col gap-2 text-xs text-muted-foreground leading-relaxed">
+              <p>
+                The scan submits your site's public signup form <strong className="text-foreground">once</strong>, with a made-up
+                address at example.com (a domain reserved so it never delivers mail), and uses the new account only for the
+                comparison.
+              </p>
+              <p>
+                It works only if signing up gives a signed-in session straight away. If your site asks for email confirmation, or
+                the form can't be found, nothing is used and the report says so. If an account is created, the report names it so
+                you can delete it. Only choose this for a site you own.
+              </p>
+            </div>
+          ) : value.mode === "session" ? (
             <>
               <label className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium">Second account cookie</span>

@@ -217,6 +217,7 @@ export async function processScanJob(job: ScanJob): Promise<void> {
         blob: scansTable.credentialsEncrypted,
         secondBlob: scansTable.secondaryCredentialsEncrypted,
         githubRepoUrl: scansTable.githubRepoUrl,
+        autoSecondAccount: scansTable.autoSecondAccount,
       })
       .from(scansTable)
       .where(eq(scansTable.id, scanId));
@@ -273,9 +274,15 @@ export async function processScanJob(job: ScanJob): Promise<void> {
         // callbacks correlate back to this scan.
         scanId,
         live.add,
-        // A public repository the requester named, read for committed secrets. Null for
-        // scans that did not ask for one, including every monitor rescan.
-        scanRow?.githubRepoUrl ? { githubRepoUrl: scanRow.githubRepoUrl } : undefined,
+        // Per-scan opt-ins the requester made: a public repository to read for committed secrets, and
+        // permission to create a second account through the target's signup form. Absent for scans that
+        // asked for neither, including every monitor rescan.
+        scanRow?.githubRepoUrl || scanRow?.autoSecondAccount
+          ? {
+              ...(scanRow.githubRepoUrl ? { githubRepoUrl: scanRow.githubRepoUrl } : {}),
+              ...(scanRow.autoSecondAccount ? { autoSecondAccount: true } : {}),
+            }
+          : undefined,
       ),
       scanTimeout,
     ]);

@@ -415,6 +415,12 @@ export interface RunScanExtras {
    * false/omitted, meaning the probe never runs unless a caller sets this.
    */
   raceConditionTesting?: boolean;
+  /**
+   * Explicit, scan-by-scan opt-in for creating a disposable second account through the target's public
+   * signup form, so the cross-account (IDOR) test can run with only one login supplied. Off unless a
+   * caller sets it, because it submits a form on the customer's system (see autoSecondAccount.ts).
+   */
+  autoSecondAccount?: boolean;
 }
 
 export async function runScan(
@@ -1410,6 +1416,7 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
   vulnerabilities.push(
     ...(await runCrossAccountStep({
       allowActiveProbes,
+      allowAutoAccount: extra?.autoSecondAccount === true,
       primary: auth?.credentials,
       secondary: auth?.secondary,
       finalUrl,

@@ -144,6 +144,8 @@ export const CreateScanHeader = zod.object({
     .describe("Opaque session token — `Bearer <sid>`."),
 });
 
+export const createScanBodyAutoSecondAccountDefault = false;
+
 export const CreateScanBody = zod.object({
   targetUrl: zod.string(),
   tier: zod.enum(["deep"]).optional(),
@@ -211,6 +213,12 @@ export const CreateScanBody = zod.object({
     .optional()
     .describe(
       "A second, separate account. Supplying one enables broken access control testing: the scan asks for the same records as both accounts and as an anonymous visitor, and reports when the second account is served the first account's data. Use two ordinary accounts that own different data, not an admin and a user.",
+    ),
+  autoSecondAccount: zod
+    .boolean()
+    .default(createScanBodyAutoSecondAccountDefault)
+    .describe(
+      "Opt in to letting the scan create a disposable second account through the target's public signup form, so the broken access control test can run with only one login supplied. It submits that form once with a made-up address at example.com, and works only when signup gives a signed-in session immediately (no email confirmation). The report names the account so it can be deleted. Requires `credentials`, and is ignored when `secondaryCredentials` is supplied.",
     ),
   githubRepoUrl: zod
     .string()

@@ -30,6 +30,11 @@ export interface CrossAccountStepInput {
   primary?: ScanCredentials | undefined;
   /** A second identity the user supplied, if any. */
   secondary?: ScanCredentials | undefined;
+  /**
+   * Whether this scan may create a second account itself, through the target's public signup form.
+   * Opt-in per scan: it submits a form on the customer's system, so it never happens unasked.
+   */
+  allowAutoAccount?: boolean;
   finalUrl: string;
   /** Pages the authenticated crawl reached. */
   pagesVisited: string[];
@@ -62,8 +67,8 @@ function accountNotice(email: string, usable: boolean): ScanVulnerability {
       `Signup form submitted once as ${email}\n` +
       "The address is at example.com, a domain reserved so that it never delivers mail to anyone.",
     solution:
-      `Delete the account registered as ${email} from your user records. To stop the scan creating an account, supply a ` +
-      "second test account of your own on the scan, which it then uses instead.",
+      `Delete the account registered as ${email} from your user records. This happened because "Create one for me" was chosen ` +
+      "for this scan; to avoid it, supply a second test account of your own instead, or leave that option off.",
     confidence: 95,
   };
 }
@@ -109,6 +114,14 @@ export async function runCrossAccountStep(
   let autoCreated = false;
 
   if (!secondary) {
+    if (!input.allowAutoAccount) {
+      ledger.skip(
+        "active",
+        NAME,
+        "no second test account was supplied, and creating one automatically was not requested for this scan (opt-in only, because it submits the target's signup form)",
+      );
+      return [];
+    }
     if (!primary.cookie) {
       ledger.skip(
         "active",
