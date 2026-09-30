@@ -85,6 +85,35 @@ export function validateCredentials(input: ScanCredentialInput): CredentialValid
   return { ok: true };
 }
 
+/** Cookie header as a sorted set of `name=value` pairs, so ordering and spacing cannot hide a match. */
+function cookieSet(cookie: string | null | undefined): string {
+  return (cookie ?? "")
+    .split(";")
+    .map((c) => c.trim())
+    .filter(Boolean)
+    .sort()
+    .join(";");
+}
+
+/**
+ * Do two credential inputs sign in as the SAME account? Access-control testing compares two
+ * accounts; given one account twice, both "users" see the same records because they are the same
+ * user, which reads exactly like broken authorisation. Compared on what identifies the account:
+ * the cookie set or bearer token for a session, the username (case-insensitive: sign-in names are
+ * treated that way almost everywhere) for a form login. Different modes cannot be compared here;
+ * the probe repeats the check on the resolved sessions.
+ */
+export function sameAccountInput(a: ScanCredentialInput, b: ScanCredentialInput): boolean {
+  if (a.mode !== b.mode) return false;
+  if (a.mode === "form") {
+    const ua = a.username?.trim().toLowerCase();
+    return !!ua && ua === b.username?.trim().toLowerCase();
+  }
+  const ca = cookieSet(a.cookie);
+  const ta = a.bearerToken?.trim();
+  return (!!ca && ca === cookieSet(b.cookie)) || (!!ta && ta === b.bearerToken?.trim());
+}
+
 export function encryptCredentials(input: ScanCredentialInput): string {
   return encryptSecret(JSON.stringify(input));
 }

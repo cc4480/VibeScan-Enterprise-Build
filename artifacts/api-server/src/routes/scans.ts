@@ -8,7 +8,7 @@ import {
 } from "@workspace/api-zod";
 import { normaliseGithubRepoInput } from "../lib/githubRepoInput";
 import { enqueueScan } from "../lib/queue";
-import { validateCredentials, encryptCredentials } from "../lib/scanCredentials";
+import { validateCredentials, encryptCredentials, sameAccountInput } from "../lib/scanCredentials";
 import { checkScanTarget } from "../lib/ssrfGuard";
 import { rateLimitMiddleware, scanRateLimitRules, scanNetworkRateLimitRules } from "../lib/rateLimit";
 import { TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE } from "../lib/freeTrial";
@@ -302,6 +302,15 @@ export async function createScanHandler(req: Request, res: Response): Promise<vo
       if (!secondCheck.ok) {
         await refundIfCharged();
         res.status(400).json({ error: `Second account: ${secondCheck.error}` });
+        return;
+      }
+      if (sameAccountInput(credentials, secondaryCredentials)) {
+        await refundIfCharged();
+        res.status(400).json({
+          error:
+            "Second account: this is the same account as the first. Two sign-ins for one user would " +
+            "always see the same records, so the comparison could prove nothing. Supply a different account.",
+        });
         return;
       }
       secondaryCredentialsEncrypted = encryptCredentials(secondaryCredentials);

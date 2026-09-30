@@ -9,6 +9,7 @@ beforeAll(() => {
 
 const {
   validateCredentials,
+  sameAccountInput,
   encryptCredentials,
   decryptCredentials,
   toScanHttpCredentials,
@@ -165,5 +166,27 @@ describe("looksSignedOut", () => {
   it("requires a path segment, not a substring, to count as an auth route", () => {
     expect(looksSignedOut("<html></html>", "https://app.example/loginality", "https://app.example/x"))
       .toBe(false);
+  });
+});
+
+describe("sameAccountInput", () => {
+  const session = (cookie: string, bearerToken?: string) => ({ ...base, mode: "session" as const, cookie, ...(bearerToken ? { bearerToken } : {}) });
+  const form = (username: string, password = "pw") => ({ ...base, mode: "form" as const, loginUrl: "https://x.example/login", username, password });
+
+  it("sees one cookie session given twice, whatever the ordering and spacing", () => {
+    expect(sameAccountInput(session("a=1; b=2"), session(" b=2;a=1 "))).toBe(true);
+  });
+  it("sees one bearer token given twice", () => {
+    expect(sameAccountInput({ ...base, mode: "session", bearerToken: "tok" }, { ...base, mode: "session", bearerToken: " tok" })).toBe(true);
+  });
+  it("sees one form login given twice, ignoring case and spacing in the username", () => {
+    expect(sameAccountInput(form("Ada@Example.com"), form(" ada@example.com "))).toBe(true);
+  });
+  it("treats two different sessions and two different usernames as two accounts", () => {
+    expect(sameAccountInput(session("sid=a"), session("sid=b"))).toBe(false);
+    expect(sameAccountInput(form("ada"), form("grace"))).toBe(false);
+  });
+  it("cannot compare across modes, and leaves that to the probe", () => {
+    expect(sameAccountInput(session("sid=a"), form("ada"))).toBe(false);
   });
 });

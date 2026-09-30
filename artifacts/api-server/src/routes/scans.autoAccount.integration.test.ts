@@ -11,6 +11,8 @@ const URL_ = process.env["GHWIRE_TEST_DATABASE_URL"];
 const suite = URL_ ? describe : describe.skip;
 if (URL_) {
   process.env["DATABASE_URL"] = URL_;
+  // Each accepted scan spends one free trial scan; the suite creates more than the default three.
+  process.env["FREE_TRIAL_SCAN_LIMIT"] = "50";
   process.env["ENCRYPTION_KEY"] = Buffer.alloc(32, 7).toString("base64");
 }
 
@@ -77,5 +79,24 @@ suite("scan creation: automatic second account opt-in (real Postgres)", () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/needs credentials/);
     expect(await flagFor("https://nocreds.example")).toBeUndefined();
+  });
+
+  it("is refused with a 400 when the same session is given as both accounts", async () => {
+    const res = await request(app).post("/scans").send({ targetUrl: "https://same.example", credentials: SESSION, secondaryCredentials: { ...SESSION, cookie: " sid=abc " } });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/same account as the first/i);
+    expect(await flagFor("https://same.example")).toBeUndefined();
+  });
+
+  it("is refused when the same form login is given twice", async () => {
+    const form = { mode: "form", authorized: true, loginUrl: "https://x.example/login", username: "ada@example.com", password: "pw" } as const;
+    const res = await request(app).post("/scans").send({ targetUrl: "https://sameform.example", credentials: form, secondaryCredentials: { ...form, username: "ADA@example.com" } });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/same account/i);
+  });
+
+  it("still accepts two different sessions", async () => {
+    const res = await request(app).post("/scans").send({ targetUrl: "https://diff.example", credentials: SESSION, secondaryCredentials: OTHER });
+    expect(res.status).toBe(201);
   });
 });
