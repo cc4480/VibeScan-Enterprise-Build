@@ -5,6 +5,28 @@ import { type ScanVulnerability } from "./scanner";
 import { formatTestLine, formatTestSummary, NOT_VERIFIED, type TestRecord } from "./testLedger";
 import { randomUUID } from "node:crypto";
 
+/**
+ * Why the TLS grade is below A, as an informational finding, so the cover's grade always has its
+ * reason beside it. States only what SSL Labs reported; says so when it reported nothing specific.
+ */
+export function tlsGradeNote(r: NonNullable<SslLabsResult>): ScanVulnerability {
+  const known = r.reasons.length > 0;
+  return {
+    id: randomUUID(),
+    name: "TLS Grade Below A (SSL Labs)",
+    severity: "info",
+    category: "Transport Security",
+    description: known
+      ? `SSL Labs graded this site's TLS configuration ${r.grade}, not A. What held it back: ${r.reasons.join(" ")}`
+      : `SSL Labs graded this site's TLS configuration ${r.grade}, not A. Its response did not name a specific cause, so none is guessed here. The full SSL Labs report lists the exact reason.`,
+    evidence: [`SSL Labs grade: ${r.grade}`, ...r.reasons, r.reportUrl ? `Full report: ${r.reportUrl}` : null].filter(Boolean).join("\n"),
+    solution: "Disable TLS 1.0 and 1.1, keep TLS 1.2 and 1.3 with forward-secret cipher suites, and re-run the SSL Labs test to confirm. Mozilla's SSL Configuration Generator gives settings per server.",
+    cweId: "CWE-326",
+    cvssScore: 0,
+    confidence: 90,
+  } satisfies ScanVulnerability;
+}
+
 /** Folds the SSL Labs grade into the scan: overrides the basic TLS grade and adds a weak-TLS finding. */
 export function mergeSslLabs(scanResult: ScanResult, sslLabsResult: SslLabsResult, log: Log): void {
   if (sslLabsResult) {
@@ -20,11 +42,16 @@ export function mergeSslLabs(scanResult: ScanResult, sslLabsResult: SslLabsResul
         severity: sslLabsResult.grade === "F" ? "critical" : sslLabsResult.grade === "D" ? "high" : "medium",
         category: "Transport Security",
         description: `SSL Labs graded your TLS configuration as ${sslLabsResult.grade}. This indicates weak cipher suites, outdated protocol support, or certificate issues that could expose users to downgrade attacks.`,
-        evidence: sslLabsResult.issues.join("; ") || null,
+        evidence: [...sslLabsResult.issues, ...sslLabsResult.reasons].join("; ") || null,
         solution: "Use a modern TLS configuration: TLS 1.2 minimum, TLS 1.3 preferred, disable RC4/3DES/CBC-mode cipher suites, and enable HSTS. Use Mozilla's SSL Configuration Generator for server-specific settings.",
         cweId: "CWE-326",
         cvssScore: sslLabsResult.grade === "F" ? 9.1 : sslLabsResult.grade === "D" ? 7.5 : 5.3,
       } satisfies ScanVulnerability);
+    }
+
+    // A B or A- is not a defect to fix, but a grade with no explanation is a claim with no basis.
+    if (sslLabsResult.grade && /^A-$|^B$/.test(sslLabsResult.grade)) {
+      scanResult.vulnerabilities.push(tlsGradeNote(sslLabsResult));
     }
   } else {
     log.warn("SSL Labs assessment not available — using basic TLS detection");
@@ -69,7 +96,7 @@ export async function recordSideTests(input: {
   const sideMs = Date.now() - parallelStartedAt;
   tests.push(
     sslLabsResult
-      ? { group: "transport", name: `SSL Labs TLS grade (${sslLabsResult.grade ?? "no grade"})`, status: "ran", findings: sslLabsResult.grade && /^[C-F]$/.test(sslLabsResult.grade) ? 1 : 0, durationMs: sideMs }
+      ? { group: "transport", name: `SSL Labs TLS grade (${sslLabsResult.grade ?? "no grade"})`, status: "ran", findings: sslLabsResult.grade && /^(?:[C-F]|A-|B)$/.test(sslLabsResult.grade) ? 1 : 0, durationMs: sideMs }
       : { group: "transport", name: "SSL Labs TLS grade", status: "failed", findings: 0, durationMs: sideMs, reason: "assessment unavailable (basic TLS detection used)" },
   );
   if (reconRunResult) {

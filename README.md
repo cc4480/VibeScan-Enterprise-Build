@@ -34,7 +34,7 @@ side projects that quietly went to production.
 
 ## What it checks
 
-**143 distinct checks, on every scan** (itemised in `lib/checkCatalog.ts`; `checkCatalog.test.ts` pins the count). There are no tiers — `routes/scans.ts`
+**144 distinct checks, on every scan** (itemised in `lib/checkCatalog.ts`; `checkCatalog.test.ts` pins the count). There are no tiers — `routes/scans.ts`
 pins every run to the full suite (`const tier = "deep" as const`) and the
 OpenAPI `ScanRequestTier` enum has a single member. `basic` survives only so
 scans recorded before the tier was retired stay readable.

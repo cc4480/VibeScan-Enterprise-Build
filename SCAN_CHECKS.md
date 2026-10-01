@@ -7,7 +7,7 @@ Every finding the scanner can emit, read out of `artifacts/api-server/src/lib`. 
 complete list; [SCAN_COVERAGE.md](SCAN_COVERAGE.md) is the readable one, grouped by module with
 the Basic/Deep tier and the methodology behind each group.
 
-**314 findings across 59 modules**, in 38 categories. 85 critical, 73 high, 55 medium, 32 low, 69 info.
+**315 findings across 60 modules**, in 38 categories. 85 critical, 73 high, 55 medium, 32 low, 70 info.
 
 A finding is a distinct name the scanner can put in a report, which is not the same as a check
 type: the data-table modules below define many findings from one piece of detection logic —
@@ -80,6 +80,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `bannerRules.ts` | 1 | 112 | — | indirect, via cveCheckLocal.test.ts, cveCheckVersions.test.ts |
 | `githubFindings.ts` | 1 | 60 | — | indirect, via githubSourceProbe.test.ts |
 | `probesSri.ts` | 1 | 79 | — | indirect, via probes.test.ts (split from probes) |
+| `workerSideChecks.ts` | 1 | 125 | — | indirect, via worker.test.ts (split from worker) |
 
 ## Findings by module
 
@@ -809,6 +810,14 @@ module does. `none` — neither, so no test exercises it at all.
 |---|---|---|---:|---|---|
 | AI analysis could not be completed for this scan | Info | Scan Coverage | — | — | — |
 | Written analysis is turned off in your settings | Info | Scan Coverage | — | — | — |
+
+### `workerSideChecks.ts`
+
+*1 findings · 125 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| TLS Grade Below A (SSL Labs) | Info | Transport Security | 0 | CWE-326 | — |
 
 ## How this was read
 

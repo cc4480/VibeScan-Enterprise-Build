@@ -116,6 +116,7 @@ export const CATALOG_SURFACE: CatalogTest[] = [
   ]),
   test("SSL Labs TLS grade", "Transport Security", "worker.ts", [
     ["varies", "Weak TLS Configuration (SSL Labs grade C or below)", "Weak TLS Configuration (SSL Labs Grade"],
+    ["info", "TLS Grade Below A (SSL Labs)", "TLS Grade Below A (SSL Labs)", "workerSideChecks.ts"],
   ]),
   test("GitHub source code secrets", "Credential Exposure", "githubSourceProbe.ts", [
     ["varies", "Credential found in a public GitHub repository's source (34 secret patterns)", "(in source repository)"],

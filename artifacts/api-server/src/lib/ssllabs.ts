@@ -21,6 +21,32 @@ export interface SslLabsResult {
   hasWarnings: boolean;
   isExceptional: boolean;
   issues: string[];
+  /**
+   * What held the grade down, read from the assessment's own details (protocols, forward secrecy,
+   * ciphers, known attacks). Empty when SSL Labs did not return enough detail to say.
+   */
+  reasons: string[];
+  /** The full public SSL Labs report for the host, so a reader can check the grade themselves. */
+  reportUrl: string | null;
+}
+
+/** The parts of an SSL Labs endpoint's `details` this module reads. Every field may be absent. */
+interface SslLabsDetails {
+  protocols?: Array<{ name?: string; version?: string }>;
+  /** Bit mask: 0 none, 1 some suites, 2 with modern browsers, 4 with most browsers. */
+  forwardSecrecy?: number;
+  supportsRc4?: boolean;
+  vulnBeast?: boolean;
+  heartbleed?: boolean;
+  poodle?: boolean;
+  /** 2 means vulnerable. */
+  poodleTls?: number;
+  freak?: boolean;
+  logjam?: boolean;
+  drownVulnerable?: boolean;
+  /** 2 or 3 means vulnerable. */
+  openSslCcs?: number;
+  hstsPolicy?: { status?: string };
 }
 
 interface SslLabsEndpoint {
@@ -28,6 +54,7 @@ interface SslLabsEndpoint {
   gradeTrustIgnored?: string;
   hasWarnings?: boolean;
   isExceptional?: boolean;
+  details?: SslLabsDetails;
   statusMessage?: string;
   statusDetails?: string;
   statusDetailsMessage?: string;
@@ -63,6 +90,38 @@ async function fetchAnalysis(host: string, startNew: boolean): Promise<SslLabsRe
   }
 }
 
+/**
+ * Plain-language reasons an assessment is below A, from what SSL Labs reported about the server.
+ * Only states what the response says; a field it did not return produces no reason, so an empty
+ * list means "SSL Labs did not say", never "nothing is wrong".
+ */
+export function explainGrade(endpoint: SslLabsEndpoint | undefined): string[] {
+  const d = endpoint?.details;
+  if (!d) return [];
+  const out: string[] = [];
+
+  const legacy = (d.protocols ?? [])
+    .filter((p) => (p.name === "SSL") || (p.name === "TLS" && (p.version === "1.0" || p.version === "1.1")))
+    .map((p) => `${p.name} ${p.version}`);
+  if (legacy.length > 0) out.push(`The server still accepts ${legacy.join(" and ")}, which are obsolete. SSL Labs caps the grade while they are enabled.`);
+
+  if (typeof d.forwardSecrecy === "number" && d.forwardSecrecy < 2) {
+    out.push(d.forwardSecrecy === 0
+      ? "No forward secrecy: a stolen server key would decrypt past traffic."
+      : "Forward secrecy is not used with modern browsers.");
+  }
+  if (d.supportsRc4) out.push("RC4 cipher suites are enabled; RC4 is broken.");
+  if (d.vulnBeast) out.push("Vulnerable to the BEAST attack (TLS 1.0 CBC suites).");
+  if (d.heartbleed) out.push("Vulnerable to Heartbleed.");
+  if (d.poodle || d.poodleTls === 2) out.push("Vulnerable to POODLE.");
+  if (d.freak) out.push("Vulnerable to FREAK (export-grade RSA).");
+  if (d.logjam) out.push("Vulnerable to Logjam (weak Diffie-Hellman parameters).");
+  if (d.drownVulnerable) out.push("Vulnerable to DROWN (SSLv2 exposure).");
+  if (d.openSslCcs === 2 || d.openSslCcs === 3) out.push("Vulnerable to the OpenSSL CCS injection flaw.");
+  if (endpoint?.hasWarnings && out.length === 0) out.push("SSL Labs flagged configuration warnings on this endpoint.");
+  return out;
+}
+
 function extractResult(data: SslLabsResponse): SslLabsResult {
   const endpoint = data.endpoints?.[0];
   const grade = endpoint?.grade ?? null;
@@ -78,6 +137,8 @@ function extractResult(data: SslLabsResponse): SslLabsResult {
     hasWarnings:   endpoint?.hasWarnings   ?? false,
     isExceptional: endpoint?.isExceptional ?? false,
     issues,
+    reasons: explainGrade(endpoint),
+    reportUrl: data.host ? `https://www.ssllabs.com/ssltest/analyze.html?d=${encodeURIComponent(data.host)}` : null,
   };
 }
 
