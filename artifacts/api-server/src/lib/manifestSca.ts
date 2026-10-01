@@ -222,10 +222,20 @@ export async function scaFromManifest(
  * an HTML document is not JSON, JSON.parse fails, and the result is no
  * packages and no findings.
  */
-export async function scaFromExposedManifest(origin: string): Promise<ScanVulnerability[]> {
+export async function scaFromExposedManifest(
+  origin: string,
+  /** Told why, when there was nothing here to test (recorded as "not tested", not "ran"). */
+  notTested?: (reason: string) => void,
+): Promise<ScanVulnerability[]> {
   const res = await scanFetch(`${origin}/package.json`, { timeoutMs: 8_000 }).catch(() => null);
-  if (!res || res.status !== 200 || !res.body) return [];
+  if (!res || res.status !== 200 || !res.body) {
+    notTested?.("the site does not serve a package.json, so there was no dependency list to check (this is the expected, safe answer)");
+    return [];
+  }
   const packages = parsePackageJson(res.body);
-  if (packages.length === 0) return [];
+  if (packages.length === 0) {
+    notTested?.("/package.json answered, but not with a dependency list (often the site's catch-all page)");
+    return [];
+  }
   return scaFromManifest(packages, "/package.json");
 }

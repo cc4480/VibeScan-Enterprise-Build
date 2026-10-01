@@ -9,6 +9,24 @@ export function certDaysRemaining(expiresAt: Date | null, now: Date = new Date()
   return Math.ceil((expiresAt.getTime() - now.getTime()) / 86_400_000);
 }
 
+/**
+ * Certificates this short-lived are issued by ACME services (Let's Encrypt, ZeroSSL, Google
+ * Trust Services) and renewed automatically, normally when about a third of the lifetime is left:
+ * 30 days for a 90-day certificate. A 30-day warning on one of those fires on every cycle, hours
+ * before the renewal that makes it moot, and teaches people to ignore the alert. The 14 and 7 day
+ * warnings stay: a short-lived certificate still unrenewed at 14 days means the renewal failed.
+ */
+export const SHORT_LIVED_CERT_DAYS = 100;
+
+/** Days before expiry at which to warn, given what is known about the certificate's lifetime. */
+export function certAlertThresholds(issuedAt: Date | null | undefined, expiresAt: Date): readonly number[] {
+  if (issuedAt && !Number.isNaN(issuedAt.getTime())) {
+    const lifetimeDays = (expiresAt.getTime() - issuedAt.getTime()) / 86_400_000;
+    if (lifetimeDays > 0 && lifetimeDays <= SHORT_LIVED_CERT_DAYS) return [14, 7];
+  }
+  return [30, 14, 7];
+}
+
 // ── The probe itself ──────────────────────────────────────────────────────────
 
 export const PULSE_TIMEOUT_MS = 10_000;
@@ -21,13 +39,18 @@ export const PULSE_TIMEOUT_MS = 10_000;
  * handshake would turn the finding into a null.
  */
 export async function probeCertExpiry(rawUrl: string): Promise<Date | null> {
+  return (await probeCertDates(rawUrl))?.expiresAt ?? null;
+}
+
+/** Expiry plus issue date, so the alert can tell an auto-renewing certificate from a yearly one. */
+export async function probeCertDates(rawUrl: string): Promise<{ expiresAt: Date; issuedAt: Date | null } | null> {
   try {
     const url = new URL(rawUrl);
     if (url.protocol !== "https:") return null;
     const host = url.hostname;
     const port = parseInt(url.port || "443", 10);
 
-    return await new Promise<Date | null>((resolve) => {
+    return await new Promise<{ expiresAt: Date; issuedAt: Date | null } | null>((resolve) => {
       const socket = tls.connect(
         { host, port, servername: host, rejectUnauthorized: false },
         () => {
@@ -37,8 +60,13 @@ export async function probeCertExpiry(rawUrl: string): Promise<Date | null> {
             resolve(null);
             return;
           }
-          const parsed = new Date(cert.valid_to);
-          resolve(Number.isNaN(parsed.getTime()) ? null : parsed);
+          const expiresAt = new Date(cert.valid_to);
+          const issuedAt = cert.valid_from ? new Date(cert.valid_from) : null;
+          resolve(
+            Number.isNaN(expiresAt.getTime())
+              ? null
+              : { expiresAt, issuedAt: issuedAt && !Number.isNaN(issuedAt.getTime()) ? issuedAt : null },
+          );
         },
       );
       socket.on("error", () => resolve(null));

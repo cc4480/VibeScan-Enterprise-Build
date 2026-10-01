@@ -15,9 +15,13 @@ import { headerFindings } from "./scannerHeaderChecks";
 import { pageFindings } from "./scannerPageChecks";
 import { analyzeCookies } from "./scannerCookies";
 import { technologiesWithVersions } from "./scannerTech";
-import { sessionLostFinding, interceptedFinding, activeProbesSkippedFinding, withholdInterceptedFindings } from "./scannerCoverage";
+import {
+  sessionLostFinding, interceptedFinding, activeProbesSkippedFinding, splitInterceptedFindings, withheldEntry,
+  platformGateFinding, rootErrorFinding, landedElsewhereFinding, type WithheldFinding,
+} from "./scannerCoverage";
 import { activeProbesStillAllowed } from "./activeScopeGuard";
 import { detectChallengePage } from "./challengePage.js";
+import { detectPlatformGate, landedElsewhere } from "./platformGate";
 import { runWithScanHttp, scanFetch, scanFetchOrThrow, sessionWasLost } from "./http";
 import { TestLedger, type TestRecord } from "./testLedger";
 import { runCrossAccountStep } from "./crossAccountStep";
@@ -112,9 +116,22 @@ async function runScanInner(
   // HTTP security headers stay from the raw fetch above — they're identical.
   let renderedWithBrowser = false;
   let observedRequests: ObservedRequest[] = [];
+  let renderRejected: string | undefined;
   if (isSpa(html)) {
     const rendered = await renderPage(finalUrl).catch(() => null);
-    if (rendered) {
+    // The browser can be answered differently from the plain fetch: a proxy error page, or a bot
+    // challenge served only to headless Chrome. Analysing that page would replace the site's own
+    // content, silently dropping every finding that reads it, so a render that failed where the
+    // plain fetch did not is set aside and said so.
+    // A challenge can also come back as HTTP 200 (Cloudflare's managed challenge to some clients,
+    // Vercel's checkpoint), so the rendered page is checked for one as well as for its status.
+    const renderedChallenge = rendered ? detectChallengePage(rendered.status, rendered.html, rendered.headers) : null;
+    const initialChallenge = detectChallengePage(initial.status, html, rawHeaders);
+    if (rendered && rendered.status >= 400 && rendered.status !== initial.status) {
+      renderRejected = `the headless browser was answered with HTTP ${rendered.status} where the plain request got HTTP ${initial.status}`;
+    } else if (rendered && renderedChallenge?.isChallenge && !initialChallenge.isChallenge) {
+      renderRejected = `the headless browser was shown a bot-protection challenge (${renderedChallenge.signal}) that the plain request was not`;
+    } else if (rendered) {
       html = rendered.html;
       finalUrl = rendered.finalUrl || finalUrl;
       renderedWithBrowser = true;
@@ -163,6 +180,12 @@ async function runScanInner(
   // several checks downstream are only meaningful if the document is the
   // target's own.
   const challengeVerdict = detectChallengePage(initial.status, html, rawHeaders);
+  // Or a hosting platform or identity provider answered instead of the app: a sign-in wall in front
+  // of the whole site, or the platform's "nothing running here" page. Same treatment as a challenge.
+  const gateVerdict = challengeVerdict.isChallenge
+    ? null
+    : detectPlatformGate(targetUrl, finalUrl, initial.status, html, rawHeaders);
+  const intercepted = challengeVerdict.isChallenge || gateVerdict?.isGate === true;
 
   // ── Run all parallel probes ───────────────────────────────────────────
   // All checks run concurrently — active HTTP probes, DNS checks, site crawl,
@@ -176,9 +199,22 @@ async function runScanInner(
   // never as run when a bot-protection page answered instead of the site (their
   // findings are withheld below, so nothing was actually checked).
   ledger.records.push(
-    challengeVerdict.isChallenge
-      ? { group: "passive", name: "response headers and cookies", status: "skipped", findings: 0, durationMs: 0, reason: "a bot-protection page answered instead of the site" }
-      : { group: "passive", name: "response headers and cookies", status: "ran", findings: vulnerabilities.filter((v) => v.category !== "Scan Coverage").length, durationMs: 0 },
+    intercepted
+      ? {
+          group: "passive", name: "response headers and cookies", status: "skipped", findings: 0, durationMs: 0,
+          reason: challengeVerdict.isChallenge
+            ? "a bot-protection page answered instead of the site"
+            : gateVerdict?.kind === "sign-in wall"
+              ? "a sign-in page answered instead of the app"
+              : "the hosting platform answered instead of the app",
+        }
+      : (() => {
+          const found = vulnerabilities.filter((v) => v.category !== "Scan Coverage");
+          return {
+            group: "passive", name: "response headers and cookies", status: "ran" as const, findings: found.length, durationMs: 0,
+            ...(found.length > 0 ? { found: found.slice(0, 40).map((v) => v.name) } : {}),
+          };
+        })(),
   );
 
   const probes = await runProbeStage({
@@ -223,6 +259,21 @@ async function runScanInner(
     })),
   );
 
+  if (renderRejected) {
+    vulnerabilities.push(vuln({
+      name: "Browser Rendering Was Not Used",
+      severity: "info",
+      category: "Scan Coverage",
+      description:
+        "This page looks like a JavaScript app, so the scan tried to load it in a headless browser, but " +
+        `${renderRejected}. The scan used the page as the plain request received it instead. This is not a finding about your site. ` +
+        "Anything that only appears after the page's scripts run (bundled secrets, calls the page makes at runtime) may not have been seen, so re-run before treating a clean result there as meaningful.",
+      evidence: renderRejected,
+      solution: "If a bot-protection rule treats headless browsers differently, allow the scanner's User-Agent, then re-run the scan.",
+      confidence: 100,
+    }));
+  }
+
   if (unrunFamilies.length > 0) {
     vulnerabilities.push(vuln({
       name: `${unrunFamilies.length} check group${unrunFamilies.length > 1 ? "s" : ""} could not be completed`,
@@ -248,8 +299,13 @@ async function runScanInner(
   const hasBehaviouralRateLimitFinding = vulnerabilities.some(
     (v) => v.name === "No Rate Limiting Observed on Sensitive API Endpoints",
   );
+  const withheld: WithheldFinding[] = [];
   const rateLimitDeduped = hasBehaviouralRateLimitFinding
-    ? vulnerabilities.filter((v) => v.name !== "Rate Limiting Not Advertised in Response Headers")
+    ? vulnerabilities.filter((v) => {
+        if (v.name !== "Rate Limiting Not Advertised in Response Headers") return true;
+        withheld.push(withheldEntry(v, "covered by the rate-limit test that sent real requests, which is reported instead"));
+        return false;
+      })
     : vulnerabilities;
 
   // When an edge answered instead of the origin, every check that read the
@@ -266,7 +322,20 @@ async function runScanInner(
   // coverage notes. Anything else is dropped, because over-suppressing behind
   // an aggressive WAF costs a finding, while under-suppressing attributes
   // another company's error page to the customer.
-  const deduped = withholdInterceptedFindings(rateLimitDeduped, challengeVerdict.isChallenge);
+  const { kept: deduped, dropped } = splitInterceptedFindings(rateLimitDeduped, intercepted);
+  const droppedReason = challengeVerdict.isChallenge
+    ? `read from ${challengeVerdict.vendor ? `${challengeVerdict.vendor}'s` : "a"} bot-protection page, not from this site`
+    : gateVerdict?.kind === "sign-in wall"
+      ? `read from ${gateVerdict.vendor ?? "a"} sign-in page, not from the app`
+      : `read from ${gateVerdict?.vendor ?? "the hosting platform"}'s own page, not from the app`;
+  for (const v of dropped) withheld.push(withheldEntry(v, droppedReason));
+
+  // Not intercepted, but the reader still needs to know what the findings were read from.
+  const contextNotes: ScanVulnerability[] = [];
+  if (!intercepted) {
+    if (initial.status >= 400) contextNotes.push(rootErrorFinding(initial.status, finalUrl));
+    if (landedElsewhere(targetUrl, finalUrl)) contextNotes.push(landedElsewhereFinding(targetUrl, finalUrl));
+  }
 
   return {
     targetUrl,
@@ -283,6 +352,10 @@ async function runScanInner(
         ...(challengeVerdict.isChallenge
           ? [interceptedFinding(challengeVerdict.vendor, challengeVerdict.signal ?? "")]
           : []),
+        ...(gateVerdict?.isGate && gateVerdict.kind
+          ? [platformGateFinding(gateVerdict.kind, gateVerdict.vendor, gateVerdict.signal ?? "")]
+          : []),
+        ...contextNotes,
       ],
       technologies,
     ),
@@ -291,7 +364,13 @@ async function runScanInner(
     pagesScanned: crawlResult.pagesVisited,
     probedNotFound: crawlResult.probedNotFound,
     renderedWithBrowser,
-    intercepted: challengeVerdict.isChallenge,
+    intercepted,
+    ...(challengeVerdict.isChallenge
+      ? { interception: { kind: "bot challenge" as const, vendor: challengeVerdict.vendor, signal: challengeVerdict.signal ?? "" } }
+      : gateVerdict?.isGate && gateVerdict.kind
+        ? { interception: { kind: gateVerdict.kind, vendor: gateVerdict.vendor, signal: gateVerdict.signal ?? "" } }
+        : {}),
+    withheld,
     tests: ledger.records,
   };
 }

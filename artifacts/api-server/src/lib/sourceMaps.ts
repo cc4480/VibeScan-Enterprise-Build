@@ -176,9 +176,14 @@ function mapFinding(opts: { mapUrl: string; body: string; linkedFrom?: string })
 export async function checkSourceMaps(
   html: string,
   baseUrl: string,
+  /** Told why, when there was nothing here to test (recorded as "not tested", not "ran"). */
+  notTested?: (reason: string) => void,
 ): Promise<ScanVulnerability[]> {
   const jsUrls = extractJsUrls(html, baseUrl);
-  if (jsUrls.length === 0) return [];
+  if (jsUrls.length === 0) {
+    notTested?.("the page loads no JavaScript files of its own to look for source maps beside");
+    return [];
+  }
 
   const results = await Promise.allSettled(
     jsUrls.map(async (jsUrl): Promise<ScanVulnerability | null> => {

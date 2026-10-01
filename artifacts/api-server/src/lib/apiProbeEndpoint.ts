@@ -1,4 +1,4 @@
-import { concreteUrl, TIMEOUT_MS, looksLikeData, isRefusal, sameShape, PUBLIC_COLLECTION_PATTERN, PERSONAL_DATA_RE, exposedSensitiveFields, RATE_LIMIT_SENSITIVE_PATTERN, RATE_LIMIT_EXEMPT_PATTERN, RATE_LIMIT_BURST, IMPLAUSIBLE_ID, isHandlerReached, privilegeFieldsAccepted, MAX_PARAMS_PER_ENDPOINT } from "./apiProbeHelpers";
+import { concreteUrl, TIMEOUT_MS, looksLikeData, isRefusal, sameShape, PUBLIC_COLLECTION_PATTERN, PERSONAL_DATA_RE, exposedSensitiveFields, RATE_LIMIT_SENSITIVE_PATTERN, RATE_LIMIT_EXEMPT_PATTERN, RATE_LIMIT_BURST, IMPLAUSIBLE_ID, isHandlerReached, isNotFoundBody, isHtmlDocument, MAX_PARAMS_PER_ENDPOINT } from "./apiProbeHelpers";
 import { requestWith } from "./apiProbeSurface";
 import type { ApiEndpoint } from "./apiSurface";
 import type { ApiProbeInput } from "./apiProbeHelpers";
@@ -26,7 +26,7 @@ export async function testEndpoint(
   secondary: ScanCredentials | undefined,
   hits: ApiProbeHits,
 ): Promise<void> {
-  const { unauthenticated, injectable, overExposed, unratelimited, crossAccount, massAssignable, unauthorizedWrites } = hits;
+  const { unauthenticated, injectable, overExposed, unratelimited, crossAccount, unauthorizedWrites } = hits;
   const url = concreteUrl(endpoint);
   let anonymousBody: string | null = null;
 
@@ -44,6 +44,8 @@ export async function testEndpoint(
       anon &&
       looksLikeData(authed.status, authed.body) &&
       looksLikeData(anon.status, anon.body) &&
+      // An HTML document answering an API path is the host's app shell, not the API.
+      !isHtmlDocument(anon.body) &&
       !isRefusal(anon.status, anon.body, anon) &&
       sameShape(authed.body, anon.body)
     ) {
@@ -102,6 +104,9 @@ export async function testEndpoint(
     endpoint.method === "GET" &&
     unratelimited.length < 3 &&
     RATE_LIMIT_SENSITIVE_PATTERN.test(new URL(url).pathname) &&
+    // Reads of the current session sit under /auth/ but are not where anyone guesses a password:
+    // NextAuth's /api/auth/session answers {} to everyone, and twelve of those prove nothing.
+    !SESSION_STATE_SEGMENT.test(lastSegment(new URL(url).pathname)) &&
     !RATE_LIMIT_EXEMPT_PATTERN.test(new URL(url).pathname)
   ) {
     const burst = await Promise.all(
@@ -114,7 +119,11 @@ export async function testEndpoint(
     );
     const answered = burst.filter((r) => r !== null);
     const throttled = answered.some((r) => r!.status === 429);
-    if (!throttled && answered.length === RATE_LIMIT_BURST && answered.every((r) => r!.status < 400)) {
+    // A limiter that announces itself (RateLimit-* / Retry-After) is a limiter, and a burst answered
+    // only by a catch-all's shell or "not found" body never reached a sign-in route at all.
+    const announced = answered.some((r) => Object.keys(r!.headers).some((h) => /^(x-)?ratelimit|^retry-after$/i.test(h)));
+    const reachedNothing = answered.every((r) => isNotFoundBody(r!.body) || isHtmlDocument(r!.body));
+    if (!throttled && !announced && !reachedNothing && answered.length === RATE_LIMIT_BURST && answered.every((r) => r!.status < 400)) {
       unratelimited.push(`${endpoint.method} ${new URL(url).pathname}`);
     }
   }
@@ -145,15 +154,7 @@ export async function testEndpoint(
   }
 
   // ── 1f. Mass assignment ─────────────────────────────────────────────────
-  // Read from the declared contract rather than probed: sending a role field
-  // to find out whether it sticks means granting somebody a role.
-  const privileged = privilegeFieldsAccepted(endpoint);
-  if (privileged.length > 0) {
-    massAssignable.push({
-      endpoint: `${endpoint.method} ${new URL(url).pathname}`,
-      fields: privileged,
-    });
-  }
+  // Read from the declared contract in runApiProbes, for every endpoint rather than only these.
 
   // ── 2. SQL injection ────────────────────────────────────────────────────
   const params = endpoint.params.slice(0, MAX_PARAMS_PER_ENDPOINT);
@@ -183,4 +184,11 @@ export async function testEndpoint(
       }
     }
   }
+}
+
+const SESSION_STATE_SEGMENT = /^(sessions?|csrf(-token)?|me|user|whoami|providers|logout|log-out|signout|sign-out|callback)$/i;
+
+function lastSegment(pathname: string): string {
+  const parts = pathname.split("/").filter(Boolean);
+  return parts[parts.length - 1] ?? "";
 }

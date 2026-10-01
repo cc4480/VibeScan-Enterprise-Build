@@ -34,7 +34,8 @@
 
 import type { ScanVulnerability } from "./scanner";
 import { runSupabaseProbes } from "./supabase-probes";
-import { runFirebaseProbes } from "./firebase-probes";
+import { runFirebaseProbes, extractFirebaseConfig } from "./firebase-probes";
+import { extractSupabaseConfig } from "./supabase-probes-config";
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -45,8 +46,13 @@ export async function checkVibeStackSecurity(
   html: string,
   _baseUrl: string,
   tier: string,
+  /** Told why, when there was nothing here to test (recorded as "not tested", not "ran"). */
+  notTested?: (reason: string) => void,
 ): Promise<ScanVulnerability[]> {
   const findings: ScanVulnerability[] = [];
+  if (!extractSupabaseConfig(html) && !extractFirebaseConfig(html)) {
+    notTested?.("no Supabase or Firebase project configuration was found in the page");
+  }
 
   // Run Supabase and Firebase probes in parallel
   const tasks: Promise<void>[] = [

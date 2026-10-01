@@ -30,7 +30,7 @@ export const CATALOG_HTTP: CatalogTest[] = [
     ["info", "X-Powered-By Header Discloses Technology Stack", "X-Powered-By Header Discloses Technology Stack", undefined, "Information Disclosure"],
     ["high", "Session Cookie Missing Secure Flag", "Session Cookie Missing Secure Flag", undefined, "Session Management"],
     ["medium", "Session Cookie Missing HttpOnly Flag", "Session Cookie Missing HttpOnly Flag", undefined, "Session Management"],
-    ["medium", "Session Cookie Missing SameSite Attribute", "Session Cookie Missing SameSite Attribute", undefined, "Session Management"],
+    ["low", "Session Cookie Missing SameSite Attribute", "Session Cookie Missing SameSite Attribute", undefined, "Session Management"],
     ["low", "Non-Session Cookie Missing Secure Flag", "Non-Session Cookie Missing Secure Flag", undefined, "Session Management"],
     ["info", "Non-Session Cookie Readable by JavaScript", "Non-Session Cookie Readable by JavaScript", undefined, "Session Management"],
     ["info", "Non-Session Cookie Missing SameSite Attribute", "Non-Session Cookie Missing SameSite Attribute", undefined, "Session Management"],

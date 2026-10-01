@@ -121,10 +121,15 @@ const SENSITIVE_KEYS = new Set([
 export async function analyzeJwts(
   headers: Record<string, string>,
   html: string,
+  /** Told why, when there was nothing here to test (recorded as "not tested", not "ran"). */
+  notTested?: (reason: string) => void,
 ): Promise<ScanVulnerability[]> {
   const sources: string[] = [html, ...Object.values(headers)];
   const tokens = extractJwts(sources);
-  if (tokens.length === 0) return [];
+  if (tokens.length === 0) {
+    notTested?.("no JSON Web Token appeared in the page or its response headers");
+    return [];
+  }
 
   const vulns: ScanVulnerability[] = [];
   const reported = new Set<string>();

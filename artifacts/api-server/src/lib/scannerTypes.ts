@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import type { VerifyHost } from "./activeScopeGuard";
 import type { ScanCredentials as ScanHttpCredentials } from "./http";
 import type { TestRecord } from "./testLedger";
+import type { WithheldFinding } from "./scannerCoverage";
 
 export interface ScanVulnerability {
   id: string;
@@ -48,6 +49,16 @@ export interface ScanResult {
    * of not being let in, not evidence the site is clean. See interceptedFinding.
    */
   intercepted: boolean;
+  /**
+   * What answered instead of the app, when intercepted: a bot challenge, a sign-in wall in front of
+   * the whole site, or a platform page saying no app is running. Absent on scans that reached the app.
+   */
+  interception?: { kind: "bot challenge" | "sign-in wall" | "app not running"; vendor: string | null; signal: string };
+  /**
+   * Findings the scan produced and chose not to report, each with the reason. Listed in the report
+   * so nothing is dropped silently (see scannerCoverage.ts).
+   */
+  withheld?: WithheldFinding[];
   /**
    * Every test the scan was meant to run and its outcome — ran, skipped (with
    * the reason) or failed — with its time and finding count. See testLedger.ts.

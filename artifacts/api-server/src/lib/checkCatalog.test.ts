@@ -47,7 +47,9 @@ describe("every test the scanner records is accounted for", () => {
   // Names as the ledger records them, read from the source that records them.
   // The "HTTP probes (…)" family is a bundle the scanner does not record itself: its
   // thirteen inner tests are recorded one by one (httpProbes below).
-  const families = [...scanner.matchAll(/family:\s*"([^"]+)"/g)].map((m) => m[1]).filter((n) => !n.startsWith("HTTP probes"));
+  // A family is declared either as { family: "…" } or through outcome("…", …), the form for
+  // probes that can say they had nothing to test.
+  const families = [...scanner.matchAll(/(?:family:\s*|outcome\()"([^"]+)"/g)].map((m) => m[1]).filter((n) => !n.startsWith("HTTP probes"));
   const httpProbes = [...probes.matchAll(/\["([^"]+)",\s*(?:check|run)\w+\(/g)].map((m) => m[1]);
   const named = [
     "response headers and cookies",

@@ -7,7 +7,7 @@ Every finding the scanner can emit, read out of `artifacts/api-server/src/lib`. 
 complete list; [SCAN_COVERAGE.md](SCAN_COVERAGE.md) is the readable one, grouped by module with
 the Basic/Deep tier and the methodology behind each group.
 
-**310 findings across 59 modules**, in 38 categories. 85 critical, 73 high, 56 medium, 31 low, 65 info.
+**314 findings across 59 modules**, in 38 categories. 85 critical, 73 high, 55 medium, 32 low, 69 info.
 
 A finding is a distinct name the scanner can put in a report, which is not the same as a check
 type: the data-table modules below define many findings from one piece of detection logic —
@@ -22,24 +22,26 @@ module does. `none` — neither, so no test exercises it at all.
 | Module | Findings | Lines | Tests | Coverage |
 |---|---:|---:|---:|---|
 | `recon-data.ts` | 14 | 178 | 12 | direct |
-| `nextjsProbe.ts` | 9 | 248 | 7 | direct |
+| `nextjsProbe.ts` | 9 | 256 | 7 | direct |
 | `structuredData.ts` | 9 | 285 | 36 | direct |
 | `crawler-data.ts` | 8 | 181 | 35 | direct |
 | `scannerCspChecks.ts` | 7 | 155 | 10 | direct |
 | `scannerHeaderChecks.ts` | 7 | 142 | 3 | direct |
-| `jwtAnalysis.ts` | 6 | 262 | 9 | direct |
-| `storageProbe.ts` | 5 | 251 | 11 | direct |
+| `jwtAnalysis.ts` | 6 | 267 | 9 | direct |
+| `storageProbe.ts` | 5 | 254 | 11 | direct |
 | `firebase-probes.ts` | 4 | 301 | 8 | direct |
 | `baasDepth.ts` | 3 | 148 | 11 | direct |
 | `isolationHeaders.ts` | 3 | 77 | 4 | direct |
 | `mailTls.ts` | 3 | 139 | 13 | direct |
+| `probesSupabase.ts` | 3 | 164 | 1 | direct |
 | `aiFeatureProbe.ts` | 2 | 152 | 21 | direct |
-| `baasProbes.ts` | 2 | 161 | 11 | direct |
+| `baasProbes.ts` | 2 | 166 | 11 | direct |
 | `graphqlExtra.ts` | 2 | 105 | 8 | direct |
 | `graphqlProbe.ts` | 2 | 256 | 12 | direct |
 | `injectionExtra.ts` | 2 | 140 | 9 | direct |
-| `injectionProbe.ts` | 2 | 280 | 13 | direct |
-| `sourceMaps.ts` | 2 | 231 | 19 | direct |
+| `injectionProbe.ts` | 2 | 283 | 13 | direct |
+| `scanner.ts` | 2 | 377 | 6 | direct |
+| `sourceMaps.ts` | 2 | 236 | 19 | direct |
 | `supabase-probes.ts` | 2 | 104 | 7 | direct |
 | `apiDocsProbe.ts` | 1 | 129 | 9 | direct |
 | `crossAccountStep.ts` | 1 | 172 | 16 | direct |
@@ -61,25 +63,23 @@ module does. `none` — neither, so no test exercises it at all.
 | `probesHttp.ts` | 7 | 218 | — | indirect, via probes.test.ts (split from probes) |
 | `secret-pattern-generic.ts` | 7 | 144 | — | indirect, via secret-pattern-data.test.ts (split from secret-pattern-data) |
 | `supabase-probes-report.ts` | 7 | 234 | — | indirect, via supabase-probes.test.ts (split from supabase-probes) |
-| `scannerCookies.ts` | 6 | 202 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts (split from scanner) |
+| `scannerCookies.ts` | 6 | 205 | — | indirect, via scanner.test.ts (split from scanner) |
+| `scannerCoverage.ts` | 6 | 188 | — | indirect, via scanner.test.ts (split from scanner) |
 | `crawlerHeaders.ts` | 5 | 202 | — | indirect, via crawler.test.ts (split from crawler) |
 | `cveCheckLocal.ts` | 5 | 225 | — | indirect, via cveCheck.test.ts (split from cveCheck) |
 | `secret-pattern-ai.ts` | 5 | 61 | — | indirect, via secret-pattern-generic.test.ts |
 | `accessControlFindings.ts` | 3 | 129 | — | indirect, via accessControlProbe.test.ts |
-| `probesFiles.ts` | 3 | 261 | — | indirect, via probes.test.ts (split from probes) |
+| `probesFiles.ts` | 3 | 266 | — | indirect, via probes.test.ts (split from probes) |
 | `probesPage.ts` | 3 | 244 | — | indirect, via probes.test.ts (split from probes) |
-| `probesSupabase.ts` | 3 | 154 | — | indirect, via probes.test.ts (split from probes) |
-| `scannerCoverage.ts` | 3 | 103 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts (split from scanner) |
-| `scannerTransportChecks.ts` | 3 | 70 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts (split from scanner) |
+| `scannerTransportChecks.ts` | 3 | 70 | — | indirect, via scanner.test.ts (split from scanner) |
 | `baasProbesPocketbase.ts` | 2 | 133 | — | indirect, via baasProbes.test.ts (split from baasProbes) |
 | `crawlerCookies.ts` | 2 | 178 | — | indirect, via crawler.test.ts (split from crawler) |
-| `scannerPageChecks.ts` | 2 | 56 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts (split from scanner) |
+| `scannerPageChecks.ts` | 2 | 56 | — | indirect, via scanner.test.ts (split from scanner) |
 | `secret-pattern-jwt.ts` | 2 | 81 | — | indirect, via secret-pattern-generic.test.ts |
 | `workerAi.ts` | 2 | 100 | — | indirect, via worker.test.ts (split from worker) |
 | `bannerRules.ts` | 1 | 112 | — | indirect, via cveCheckLocal.test.ts, cveCheckVersions.test.ts |
 | `githubFindings.ts` | 1 | 60 | — | indirect, via githubSourceProbe.test.ts |
 | `probesSri.ts` | 1 | 79 | — | indirect, via probes.test.ts (split from probes) |
-| `scanner.ts` | 1 | 298 | — | indirect, via baasDepth.test.ts, challengePage.realsites.test.ts, challengePage.test.ts, firebase-probes.test.ts, fixPromptFallback.test.ts, grading.test.ts, scoring.test.ts |
 
 ## Findings by module
 
@@ -136,7 +136,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `baasProbes.ts`
 
-*2 findings · 161 lines · 11 tests.*
+*2 findings · 166 lines · 11 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -303,7 +303,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `injectionProbe.ts`
 
-*2 findings · 280 lines · 13 tests.*
+*2 findings · 283 lines · 13 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -322,7 +322,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `jwtAnalysis.ts`
 
-*6 findings · 262 lines · 9 tests.*
+*6 findings · 267 lines · 9 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -345,7 +345,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `nextjsProbe.ts`
 
-*9 findings · 248 lines · 7 tests.*
+*9 findings · 256 lines · 7 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -475,7 +475,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `probesFiles.ts`
 
-*3 findings · 261 lines · no test file.*
+*3 findings · 266 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -517,7 +517,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `probesSupabase.ts`
 
-*3 findings · 154 lines · no test file.*
+*3 findings · 164 lines · 1 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -564,33 +564,37 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `scanner.ts`
 
-*1 findings · 298 lines · no test file.*
+*2 findings · 377 lines · 6 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
 | ${unrunFamilies.length} check group${unrunFamilies.length > 1 ? "s" : ""} could not be completed | Info | Scan Coverage | — | — | — |
+| Browser Rendering Was Not Used | Info | Scan Coverage | — | — | — |
 
 ### `scannerCookies.ts`
 
-*6 findings · 202 lines · no test file.*
+*6 findings · 205 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
 | Session Cookie Missing Secure Flag | High | Session Management | 6.5 | CWE-614 | WSTG-SESS-02 |
 | Session Cookie Missing HttpOnly Flag | Medium | Session Management | 5.3 | CWE-1004 | WSTG-SESS-02 |
-| Session Cookie Missing SameSite Attribute | Medium | CSRF Protection | 4.3 | CWE-352 | WSTG-SESS-02 |
 | Non-Session Cookie Missing Secure Flag | Low | Session Management | 3.1 | CWE-614 | WSTG-SESS-02 |
+| Session Cookie Missing SameSite Attribute | Low | CSRF Protection | 3.1 | CWE-352 | WSTG-SESS-02 |
 | Non-Session Cookie Missing SameSite Attribute | Info | CSRF Protection | 2.1 | CWE-352 | WSTG-SESS-02 |
 | Non-Session Cookie Readable by JavaScript | Info | Session Management | 2.6 | CWE-1004 | WSTG-SESS-02 |
 
 ### `scannerCoverage.ts`
 
-*3 findings · 103 lines · no test file.*
+*6 findings · 188 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
 | Active security testing was skipped for this scan | Info | Scan Coverage | — | — | — |
+| Scan followed a redirect to a different site | Info | Scan Coverage | — | — | — |
+| Scan reached a sign-in page, not the app / The hosting platform answered, not the app | Info | Scan Coverage | — | — | — |
 | Scan session expired before the scan finished | Info | Scan Coverage | — | — | — |
+| Scan started from an error response | Info | Scan Coverage | — | — | — |
 | Scan was intercepted by a bot-protection challenge | Info | Scan Coverage | — | — | — |
 
 ### `scannerCspChecks.ts`
@@ -705,7 +709,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `sourceMaps.ts`
 
-*2 findings · 231 lines · 19 tests.*
+*2 findings · 236 lines · 19 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -722,7 +726,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `storageProbe.ts`
 
-*5 findings · 251 lines · 11 tests.*
+*5 findings · 254 lines · 11 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|

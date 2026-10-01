@@ -111,6 +111,11 @@ const EXPECTED: Array<{ module: string; label: string; match: RegExp }> = [
   { module: "jsScanner", label: "DB connection string in JS", match: /Database Connection URL with Credentials/i },
   { module: "jsScanner", label: "hardcoded JWT in JS", match: /Hardcoded JWT Token in Source/i },
   { module: "jsScanner", label: "private key in JS", match: /Private Key Exposed in JavaScript/i },
+  { module: "jsScanner", label: "Slack bot token in JS", match: /Slack Bot\/OAuth Token Exposed/i },
+  { module: "jsScanner", label: "Supabase sb_secret_ key in JS", match: /Supabase Service Role Key Exposed \(sb_secret_\)/i },
+  { module: "jsScanner", label: "Supabase service_role key in JS", match: /Supabase Service Role Key Exposed in JavaScript/i },
+  { module: "jsScanner", label: "Twilio SID and secret in JS", match: /Twilio API Key SID and Secret Exposed/i },
+  { module: "jsScanner", label: "JWT naming an account but no principal", match: /JWT-Shaped Publishable Key in Client Code/i },
 
   // ── nextjsProbe.ts ───────────────────────────────────────────────────────
   { module: "nextjsProbe.ts", label: "Stripe key in __NEXT_DATA__", match: /Stripe Live Secret Key in __NEXT_DATA__/i },
@@ -164,17 +169,9 @@ const EXPECTED: Array<{ module: string; label: string; match: RegExp }> = [
   { module: "apiProbe.ts", label: "API served without authentication", match: /API Endpoints Served Without Authentication/i },
   { module: "apiProbe.ts", label: "Sensitive fields returned by API", match: /Sensitive Fields Returned by the API/i },
   { module: "apiProbe.ts", label: "Write endpoint reachable without auth (BFLA)", match: /Write Endpoints Reachable Without Authentication/i },
-  // NOT expected: privilegeFieldsAccepted() correctly identifies "role" as
-  // privileged on POST /api/users from the spec alone (confirmed directly,
-  // not through a full scan), but runApiProbes only evaluates endpoints
-  // matching isReadShaped (search/query/filter/lookup/find/list/report/
-  // graphql/validate/preview/check in the path) — by design, since it also
-  // gates body-injection testing, and a POST that changes data must not be
-  // probed by sending it a body. That filter runs before the privilege-field
-  // check too, even though the latter never sends a request. An ordinary
-  // signup/create endpoint is exactly where a mass-assignment bug usually
-  // lives, and it is exactly the shape excluded — a real scanner gap, not a
-  // fixture bug. See README "Known limitations".
+  // POST /api/users declares a "role" body field in the fixture's spec. Read from the contract,
+  // never sent; this used to be missed because the check ran only on read-shaped endpoints.
+  { module: "apiProbe.ts", label: "Mass assignment (privilege field on create)", match: /Privilege Fields Accepted in Request Bodies/i },
   { module: "apiProbe.ts", label: "SQL injection in API parameter", match: /SQL Injection in API Parameters/i },
   { module: "apiProbe.ts", label: "API records readable by another account", match: /API Records Readable by Another Account/i },
 

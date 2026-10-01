@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Vulnerability } from "@workspace/api-client-react";
 import { APP_ORIGIN } from "@/lib/origin";
 import { coverageMarkdown, type CoverageTest } from "./shared-report-components";
+import { withheldMarkdown, type Interception } from "./report-viewer-provenance";
 import { SEVERITY_EMOJI, type ComplianceData } from "./report-viewer-data";
 
 // ─── Copy report as markdown (for AI agents / no-code tools) ─────────────────
@@ -20,6 +21,8 @@ export interface ReportCopyData {
   aiAnalysis?: { overallRisk: string; topPriorities: string[]; quickWins: string[]; complianceNotes?: string | null } | null;
   compliance?: ComplianceData | null;
   tests?: CoverageTest[] | null;
+  withheld?: unknown;
+  interception?: Interception | null;
 }
 
 export function formatReportMarkdown(d: ReportCopyData): string {
@@ -54,6 +57,7 @@ export function formatReportMarkdown(d: ReportCopyData): string {
     d.summary.executiveSummary,
     ``,
     ...coverageMarkdown(d.tests),
+    ...withheldMarkdown(d.withheld, d.interception),
   ];
 
   if (d.confirmedVulns.length > 0) {

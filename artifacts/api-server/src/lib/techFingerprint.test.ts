@@ -36,8 +36,10 @@ describe("detectTechnologies — CDN / infra headers", () => {
     expect(detectTechnologies({ "x-render-origin-server": "Render" }, "")).toContain("Render"));
   it("detects AWS CloudFront from x-amz-cf-id", () =>
     expect(detectTechnologies({ "x-amz-cf-id": "abc" }, "")).toContain("AWS CloudFront"));
-  it("detects GitHub Pages from x-github-request-id", () =>
-    expect(detectTechnologies({ "x-github-request-id": "abc" }, "")).toContain("GitHub Pages"));
+  it("detects GitHub Pages from x-github-request-id with x-proxy-cache", () =>
+    expect(detectTechnologies({ "x-github-request-id": "abc", "x-proxy-cache": "HIT" }, "")).toContain("GitHub Pages"));
+  it("does not tag github.com itself as GitHub Pages (x-github-request-id alone)", () =>
+    expect(detectTechnologies({ "x-github-request-id": "abc" }, "")).not.toContain("GitHub Pages"));
 });
 
 describe("detectTechnologies — X-Powered-By header", () => {
@@ -111,7 +113,11 @@ describe("detectTechnologies — HTML: JS frameworks", () => {
 
 describe("detectTechnologies — HTML: analytics", () => {
   it("detects Google Analytics from gtag(", () =>
-    expect(detectTechnologies({}, `gtag('config', 'G-ABC')`)).toContain("Google Analytics"));
+    expect(detectTechnologies({}, `<script>gtag('config', 'G-ABC')</script>`)).toContain("Google Analytics"));
+  it("detects Google Analytics from the gtag.js loader", () =>
+    expect(detectTechnologies({}, `<script async src="https://www.googletagmanager.com/gtag/js?id=G-ABC"></script>`)).toContain("Google Analytics"));
+  it("does not tag Google Analytics from prose about gtag()", () =>
+    expect(detectTechnologies({}, `<p>Call gtag('config', id) to set it up, or read google-analytics.com docs.</p>`)).not.toContain("Google Analytics"));
   it("detects Sentry from Sentry.init", () =>
     expect(detectTechnologies({}, `<script>Sentry.init({ dsn: "https://abc@sentry.io" })</script>`)).toContain("Sentry"));
   it("detects Stripe from js.stripe.com", () =>
@@ -127,8 +133,10 @@ describe("detectTechnologies — HTML: Ruby on Rails", () => {
     expect(detectTechnologies({}, `<meta name="csrf-param" content="authenticity_token">`)).toContain("Ruby on Rails"));
   it("detects Rails from Rack:: middleware namespace in error output", () =>
     expect(detectTechnologies({}, `Rack::Timeout::Error`)).toContain("Ruby on Rails"));
-  it("detects Rails from literal 'Ruby on Rails'", () =>
-    expect(detectTechnologies({}, `<address>Ruby on Rails 7.1</address>`)).toContain("Ruby on Rails"));
+  it("detects Rails from a generator meta tag", () =>
+    expect(detectTechnologies({}, `<meta name="generator" content="Ruby on Rails 7.1">`)).toContain("Ruby on Rails"));
+  it("does NOT flag Rails on a page that merely mentions Ruby on Rails", () =>
+    expect(detectTechnologies({}, `<p>We wrote this tutorial about Ruby on Rails 7.1.</p>`)).not.toContain("Ruby on Rails"));
   it("does NOT flag Rails on Tailwind tracking-* utility classes", () =>
     expect(detectTechnologies({}, `<h1 class="text-2xl font-bold tracking-tight tracking-wider">Dashboard</h1>`)).not.toContain("Ruby on Rails"));
   it("does NOT flag Rails on incidental words containing 'rack'", () =>
@@ -257,4 +265,23 @@ describe("detectTechnologies — still detects the real thing", () => {
 
   it("detects Bulma from a real column class", () =>
     expect(detectTechnologies({}, '<div class="column is-half">x</div>')).toContain("Bulma"));
+});
+
+describe("detectTechnologies — JS libraries need the library, not its name", () => {
+  it.each([
+    ["jQuery", `<script src="/js/jquery-3.7.1.min.js"></script>`],
+    ["jQuery", `<script>jQuery.fn.extend({})</script>`],
+    ["Lodash", `<script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>`],
+    ["Alpine.js", `<div x-data="{ open: false }"></div>`],
+    ["Alpine.js", `<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>`],
+    ["HTMX", `<button hx-post="/clicked">Go</button>`],
+    ["HTMX", `<script src="https://unpkg.com/htmx.org@1.9.10"></script>`],
+  ])("detects %s from %s", (tech, html) => expect(detectTechnologies({}, html)).toContain(tech));
+
+  it.each([
+    ["jQuery", `<p>We moved off jquery-3 last year; jQuery.fn is gone.</p>`],
+    ["Lodash", `<p>Check _.version and lodash.min in your bundle.</p>`],
+    ["Alpine.js", `<pre>Add x-data= and x-show= to your markup</pre>`],
+    ["HTMX", `<p>See htmx.org: use hx-get and hx-post attributes.</p>`],
+  ])("does not tag %s from prose", (tech, html) => expect(detectTechnologies({}, html)).not.toContain(tech));
 });

@@ -21,10 +21,17 @@ import { vuln, safeGet } from "./probesCore";
  * CVE-2025-48757 (Lovable breach) was caused by exactly this pattern — ~10% of all
  * Lovable-hosted apps had fully open tables leaking plaintext credentials.
  */
-export async function checkSupabaseRLS(html: string): Promise<ScanVulnerability[]> {
+export async function checkSupabaseRLS(
+  html: string,
+  /** Told why nothing was tested, so the report says "not tested" rather than "ran, 0 findings". */
+  notTested?: (reason: string) => void,
+): Promise<ScanVulnerability[]> {
   // 1. Find Supabase project URL
   const projectMatch = /https:\/\/([a-z0-9]{20})\.supabase\.co/.exec(html);
-  if (!projectMatch) return [];
+  if (!projectMatch) {
+    notTested?.("No Supabase project was found in the page, so there was no database to test.");
+    return [];
+  }
 
   const projectRef = projectMatch[1];
   const supabaseOrigin = `https://${projectRef}.supabase.co`;
@@ -75,7 +82,10 @@ export async function checkSupabaseRLS(html: string): Promise<ScanVulnerability[
 
   // 3. Get table names from the OpenAPI schema endpoint
   const schemaRes = await safeGet(restBase, { headers: authHeaders });
-  if (!schemaRes || schemaRes.status !== 200) return [];
+  if (!schemaRes || schemaRes.status !== 200) {
+    notTested?.(`The Supabase table list could not be read with the public key (${schemaRes ? `HTTP ${schemaRes.status}` : "no response"}), so no table was queried.`);
+    return [];
+  }
 
   let tableNames: string[] = [];
   try {

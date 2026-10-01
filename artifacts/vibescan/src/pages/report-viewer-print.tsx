@@ -5,6 +5,7 @@ import { APP_ORIGIN } from "@/lib/origin";
 import { PrintCoverage, type CoverageTest } from "./shared-report-components";
 import { getCategoryMeta, type ComplianceData } from "./report-viewer-data";
 import { PrintGradeRing, PrintVulnCard } from "./report-viewer-print-parts";
+import { PrintWithheld, type Interception } from "./report-viewer-provenance";
 export { PrintGradeRing, PrintVulnCard } from "./report-viewer-print-parts";
 
 export { DownloadPDFButton } from "./report-viewer-pdf";
@@ -14,6 +15,7 @@ export { DownloadPDFButton } from "./report-viewer-pdf";
 export function PrintableReport({
   targetUrl, scannedAt, summary, confirmedVulns, unverifiedVulns,
   technologies, server, tlsGrade, aiAnalysis, compliance, categoryCounts, pagesScanned, tests,
+  withheld, interception,
 }: {
   targetUrl: string;
   scannedAt: string | Date;
@@ -28,6 +30,8 @@ export function PrintableReport({
   categoryCounts: Record<string, number>;
   pagesScanned?: string[];
   tests?: CoverageTest[] | null;
+  withheld?: unknown;
+  interception?: Interception | null;
 }) {
   const dateStr = new Date(scannedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
@@ -83,6 +87,7 @@ export function PrintableReport({
 
       {/* What was tested, and what was not — a PDF is what gets forwarded, so it carries this. */}
       <PrintCoverage tests={tests} />
+      <PrintWithheld withheld={withheld} interception={interception} />
 
       {/* Pages Scanned */}
       {((): React.ReactNode => {
@@ -232,4 +237,6 @@ export interface PrintableReportData {
   categoryCounts: Record<string, number>;
   pagesScanned?: string[];
   tests?: CoverageTest[] | null;
+  withheld?: unknown;
+  interception?: Interception | null;
 }

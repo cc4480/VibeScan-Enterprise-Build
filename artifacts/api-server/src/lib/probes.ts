@@ -67,13 +67,17 @@ export async function runAllProbes(
     ["security.txt", checkSecurityTxt(targetUrl)],
   ];
 
+  // Checks that can say they had nothing to test; read once the check settles.
+  const supabaseNotTested: { value?: string } = {};
+  const notTestedReasons = new Map([["Supabase RLS", supabaseNotTested]]);
+
   const active: Array<[string, Promise<ScanVulnerability[]>]> = allowActive
     ? [
         ["HTTP methods", checkHttpMethods(targetUrl)],
         ["active CORS", checkActiveCors(targetUrl)],
         ["open redirect", checkOpenRedirect(targetUrl)],
         // Reads rows out of the target's Supabase instance.
-        ["Supabase RLS", checkSupabaseRLS(html)],
+        ["Supabase RLS", checkSupabaseRLS(html, (r) => { supabaseNotTested.value = r; })],
       ]
     : [];
 
@@ -84,7 +88,13 @@ export async function runAllProbes(
     }
   }
   const settled = await Promise.allSettled(
-    all.map(([name, p]) => (ledger ? ledger.track("HTTP probes", name, p) : p)),
+    all.map(([name, p]) => {
+      if (!ledger) return p;
+      const reason = notTestedReasons.get(name);
+      return reason
+        ? ledger.trackOutcome("HTTP probes", name, p.then((findings) => ({ findings, notTested: reason.value })))
+        : ledger.track("HTTP probes", name, p);
+    }),
   );
 
   const findings: ScanVulnerability[] = [];

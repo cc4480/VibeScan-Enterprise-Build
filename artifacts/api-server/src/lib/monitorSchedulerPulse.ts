@@ -174,7 +174,7 @@ export async function pulseOne(sub: ActiveSub, appOrigin: string): Promise<Pulse
   // certificate as it is right now, which is the difference between warning
   // somebody at seven days and warning them after it already expired.
   if (result.certExpiresAt) {
-    await maybeAlertCertExpiry(sub, result.certExpiresAt, checkedAt, appOrigin, log);
+    await maybeAlertCertExpiry(sub, result.certExpiresAt, checkedAt, appOrigin, log, result.certIssuedAt);
   }
 
   return outcome;

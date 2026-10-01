@@ -57,5 +57,19 @@ export function isCsrfTokenCookie(name: string): boolean {
  * than each re-deriving it from the two predicates above.
  */
 export function requiresHttpOnly(name: string): boolean {
-  return !isCsrfTokenCookie(name);
+  return !isCsrfTokenCookie(name) && !isClientPreferenceCookie(name);
+}
+
+/**
+ * Cookies whose whole purpose is to be read by the page: the chosen language, theme or time zone,
+ * and the cookie-consent banner's record of the visitor's choice. `lang=en` without HttpOnly is
+ * the design, not a defect, and a finding for it was the most common piece of noise in reports.
+ * Exempt from HttpOnly only, like a CSRF token; Secure and SameSite still apply. A name that also
+ * looks like a session cookie is not exempt.
+ */
+const CLIENT_PREFERENCE_COOKIE =
+  /^(?:next_locale|lang|language|locale|i18n(?:[_-]?\w+)?|[\w-]*[_-](?:lang|language|locale)|theme|color[_-]?(?:scheme|mode)|dark[_-]?mode|tz|timezone|currency|cookie[_-]?consent(?:[_-]status)?|cookieconsent(?:_status)?|cc_cookie|cookieyes-consent|optanonconsent|optanonalertboxclosed|cookielawinfo[\w-]*)$/i;
+
+export function isClientPreferenceCookie(name: string): boolean {
+  return CLIENT_PREFERENCE_COOKIE.test(name) && !isLikelySessionCookie(name);
 }

@@ -4,6 +4,7 @@ import { chunkPrompt } from "@/lib/promptChunks";
 import { APP_ORIGIN } from "@/lib/origin";
 import { ComplianceCard, SeverityLegend, type CoverageTest, type SharedReportData } from "@/pages/shared-report-components";
 import { Finding, Owasp, Coverage, PdfGrade } from "./pdf-report-sections";
+import { WithheldCard, type Interception } from "@/pages/report-viewer-provenance";
 
 /**
  * The report as a PDF: the app's own dark look, laid out for a fixed 794px page width.
@@ -61,6 +62,9 @@ export interface PdfReportData {
   compliance?: SharedReportData["data"]["compliance"];
   pagesScanned?: string[];
   tests?: CoverageTest[] | null;
+  /** Findings the scan produced and did not report, with the reason. */
+  withheld?: unknown;
+  interception?: Interception | null;
 }
 const PAGES_LIMIT = 25;
 
@@ -117,6 +121,13 @@ export function PdfReport(d: PdfReportData) {
       <Owasp vulns={everything} tests={d.tests} />
 
       <Coverage tests={d.tests} part="list" />
+
+      {/* What the scan found and did not report, and why: a forwarded PDF must not hide it. */}
+      {(d.interception || (Array.isArray(d.withheld) && d.withheld.length > 0)) && (
+        <div data-pdf-block className="mb-6">
+          <WithheldCard withheld={d.withheld} interception={d.interception} />
+        </div>
+      )}
 
       {/* Findings. The section heading rides inside the first card's block so it can never be left alone at the foot of a page. */}
       {d.confirmedVulns.length === 0 && d.unverifiedVulns.length === 0 && (

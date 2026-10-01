@@ -80,7 +80,9 @@ export function detectTechnologies(headers: Record<string, string>, html: string
   if (headerVal(headers, "x-amz-cf-id") || headerVal(headers, "x-amz-request-id")) techs.add("AWS CloudFront");
   if (headerVal(headers, "x-azure-ref"))          techs.add("Azure");
   if (headerVal(headers, "x-ms-request-id"))      techs.add("Azure");
-  if (headerVal(headers, "x-github-request-id"))  techs.add("GitHub Pages");
+  // x-github-request-id is sent by github.com and api.github.com too, so on its own it
+  // tagged GitHub's own site as a Pages site. Pages also adds x-proxy-cache.
+  if (headerVal(headers, "x-github-request-id") && headerVal(headers, "x-proxy-cache")) techs.add("GitHub Pages");
   if (headerVal(headers, "x-fastly-request-id"))  techs.add("Fastly");
   if (headerVal(headers, "fly-request-id"))       techs.add("Fly.io");
   if (headerVal(headers, "x-railway-request-id")) techs.add("Railway");
@@ -226,13 +228,20 @@ export function detectTechnologies(headers: Record<string, string>, html: string
   if (/bulma(?:\.min)?\.css/i.test(s) || /\bcolumn\s+is-[a-z0-9-]+/i.test(s)) techs.add("Bulma");
 
   // JS libraries
-  if (/jquery[.-][0-9]|jquery\.min\.js|jQuery\.fn/i.test(s))                                     techs.add("jQuery");
-  if (/lodash\.js|lodash\.min|_\.version/i.test(s))                                               techs.add("Lodash");
-  if (/alpinejs|x-data=|x-show=/i.test(s))                                                        techs.add("Alpine.js");
-  if (/htmx\.org|hx-get|hx-post/i.test(s))                                                        techs.add("HTMX");
+  // Same rule as above: the library's file or its own global in executable script, never the
+  // name in prose. `x-data=` in a tutorial or `_.version` in a blog post is not Alpine or Lodash,
+  // and these names feed CVE matching.
+  if (assetPath(/jquery(?:[.-]\d[\w.-]*)?(?:\.slim)?(?:\.min)?\.js|\/jquery@\d|ajax\.googleapis\.com\/ajax\/libs\/jquery\//i) || /\bjQuery\.fn\b/.test(js)) techs.add("jQuery");
+  if (assetPath(/lodash(?:\.core)?(?:\.min)?\.js|\/lodash@\d|\/lodash\.js\//i) || /\b_\.VERSION\b|lodash\.templateSettings/.test(js)) techs.add("Lodash");
+  if (assetPath(/alpinejs|\/alpine(?:\.min)?\.js/i) || /<[a-z][\w-]*\b[^>]*\sx-data(?:\s*=|[\s>])/i.test(s) || /\bAlpine\.start\(/.test(js)) techs.add("Alpine.js");
+  if (assetPath(/htmx(?:\.org)?(?:@[\d.]+)?(?:\/dist)?(?:\/htmx)?(?:\.min)?\.js|\/htmx\.org/i) || /<[a-z][\w-]*\b[^>]*\shx-(?:get|post|put|patch|delete)\s*=/i.test(s)) techs.add("HTMX");
 
   // Analytics & tracking
-  if (/google-analytics\.com|gtag\(|ga\.js|GoogleAnalyticsObject/i.test(s))                      techs.add("Google Analytics");
+  if (
+    loadsFromHost(assets, "google-analytics.com") ||
+    assetPath(/googletagmanager\.com\/gtag\/js/i) ||
+    /\bgtag\(\s*["']config["']|GoogleAnalyticsObject|\bga\(\s*["']create["']/.test(js)
+  ) techs.add("Google Analytics");
   if (/googletagmanager\.com\/gtm/i.test(s))                                                      techs.add("Google Tag Manager");
   // A vendor link or mention is not a vendor script: require the script it
   // serves (or its init call in executable content), never `<a href>` or prose.
@@ -262,7 +271,7 @@ export function detectTechnologies(headers: Record<string, string>, html: string
   // the authenticity_token CSRF field/meta, the csrf-param meta, or the
   // capitalised Rack:: middleware namespace as it appears in Rack error pages.
   if (
-    /ruby on rails/i.test(s) ||
+    generatedBy(/ruby on rails/i) ||
     /name=["']authenticity_token["']/i.test(s) ||
     /name=["']csrf-param["']/i.test(s) ||
     /\bRack::[A-Z]/.test(s)

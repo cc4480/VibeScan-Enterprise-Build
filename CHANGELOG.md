@@ -3,6 +3,73 @@
 Notable changes to the SecScan engine. Commit messages carry the full reasoning
 for each change; this collects what shipped and why it mattered.
 
+## 2026-10-01
+
+Scans of real apps came back looking alike because, in several common setups, the
+scanner was not reading the app at all. This release makes it say so, and makes
+every report show its work.
+
+### Fixed
+
+- **Hosting-platform and sign-in pages graded as the app** (`platformGate.ts`).
+  Vercel Deployment Protection, Cloudflare Access, a redirect to Google, Microsoft,
+  Auth0, Clerk, Okta, GitHub or Replit sign-in, and platform "no app running" pages
+  (Vercel `x-vercel-error: DEPLOYMENT_*`, Railway fallback, Render, Heroku, GitHub
+  Pages) were scanned as if they were the customer's app, so every app behind one
+  got the same 11 to 13 findings. They are now withheld like a bot challenge, the
+  scan is not graded, and the report names what answered.
+- **Browser identified itself under an old name.** The headless browser sent
+  `VibeScan-Security-Bot` while every other request and the `/bot` page say
+  `SecScan-Security-Bot`, so a site that allowed the documented name challenged the
+  browser. It now uses `SCANNER_USER_AGENT`.
+- **Headless-only challenges served with HTTP 200** replaced the real page. A
+  render that meets a challenge the plain request did not is now set aside with a
+  "Browser Rendering Was Not Used" note (the HTTP >= 400 case came with the
+  catch-all fixes below). Vercel's Security Checkpoint is recognised as a challenge.
+- **Rate-limit burst on session reads.** `GET /api/auth/session` (NextAuth) was
+  burst-tested and reported as unthrottled; session, CSRF and logout endpoints are
+  no longer treated as sign-in routes.
+- **Mass assignment on create endpoints was never checked.** Privilege fields
+  declared in a published spec are now read on every endpoint, not only
+  read-shaped ones. The vuln fixture now verifies 88 of 88.
+- **security.txt evidence on catch-all hosts** says the site answered with its app
+  shell instead of implying a file exists.
+- Merged from the 2026-10-01 audit branches: catch-all hosts no longer produce the
+  BFLA, unauthenticated-API, rate-limit, XML-RPC and VS Code false positives; the XSS
+  evidence names the path that reflected; a failed browser render no longer replaces
+  the page; GitHub Pages and Rails technology tags need real markers; scan evidence
+  keeps 4,000 characters; CI installs Chromium; four secret patterns have real plants.
+- **Technology tags from loose matches.** jQuery, Lodash, Alpine.js, HTMX and
+  Google Analytics were tagged when their name appeared in page text; they now need
+  a script path or an API call that only the library makes.
+- **Certificate expiry alert on auto-renewing certificates.** A 90-day certificate
+  (Let's Encrypt and other ACME issuers) renews itself at about 30 days left, so the
+  30-day warning fired on every cycle for nothing. Certificates of 100 days or less
+  now warn at 14 and 7 days only; yearly certificates keep the 30-day warning.
+- **Language, theme and consent cookies** (`lang=en`, `NEXT_LOCALE`, `theme`,
+  `cookieconsent_status` and similar) are meant to be read by the page and no longer
+  draw a "readable by JavaScript" finding. Secure and SameSite still apply.
+- **A session cookie without SameSite is Low, not Medium.** Chrome and Edge already
+  treat it as SameSite=Lax; the finding now says the gap is Firefox and Safari and
+  that it is a missing safety net, not a demonstrated CSRF.
+
+### Added
+
+- **"Withheld from this report"**: every finding the scan produced and did not
+  report, with the reason, and what answered instead of the app when something did.
+- **"How this was found"** on every finding: the check that raised it, whether it
+  only observed or sent test requests, the requests the evidence records, and what
+  the confidence number means. The main report now shows the "See it yourself"
+  command the shared report already had.
+- **"Not tested" instead of "ran, 0 findings"** for checks with nothing to test
+  (no JWT, no Next.js data, no Supabase/Firebase config, no bucket, no manifest, no
+  scripts), each with the reason.
+- A scan whose start page answered an error, or that was redirected to another
+  site, says so in the report.
+- The PDF download and the printed report carry the withheld list too.
+- The Supabase RLS probe says "not tested" when the page has no Supabase project.
+- CI runs the 114 database tests against a real Postgres instead of skipping them.
+
 ## 2026-09-07
 
 Seventeen changes, and the theme of nearly all of them is the same: the scanner

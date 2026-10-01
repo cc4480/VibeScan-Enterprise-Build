@@ -28,6 +28,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
+    # The 114 tests that need a real database (billing, signup, OAuth, health, the GitHub wiring)
+    # skipped on every CI run because nothing provided one. Each suite migrates and truncates its
+    # own database, so they get four throwaway databases on this one service.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -56,10 +71,30 @@ jobs:
       - name: Typecheck
         run: pnpm run typecheck
 
+      # browserGuard.test.ts drives a real Chromium; the runner image does not
+      # have the Playwright build this repo pins, so install it.
+      - name: Install Playwright Chromium
+        run: pnpm --filter @workspace/api-server exec playwright install --with-deps chromium
+
       # -r so a package that gains a test script is picked up automatically
       # rather than needing this file edited to notice.
       - name: Test
         run: pnpm -r --if-present run test
+
+      # One file at a time: the billing suites share a database, and run side by side they
+      # reset each other's rows mid-test.
+      - name: Test against real Postgres
+        env:
+          PGPASSWORD: test
+          BILLING_TEST_DATABASE_URL: postgresql://postgres:test@127.0.0.1:5432/billing
+          GHWIRE_TEST_DATABASE_URL: postgresql://postgres:test@127.0.0.1:5432/ghwire
+          HEALTH_TEST_DATABASE_URL: postgresql://postgres:test@127.0.0.1:5432/health
+          SIGNUP_TEST_DATABASE_URL: postgresql://postgres:test@127.0.0.1:5432/signup
+        run: |
+          for db in billing ghwire health signup; do
+            psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE $db"
+          done
+          pnpm --filter @workspace/api-server exec vitest run --no-file-parallelism integration billing
 
       # SCAN_CHECKS.md is generated from the finding literals, and the whole
       # point of generating it is that it cannot quietly fall behind the code.

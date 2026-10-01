@@ -77,11 +77,45 @@ export function isReadShaped(endpoint: ApiEndpoint): boolean {
   }
 }
 
+const NOT_FOUND_TEXT =
+  /\b(not found|no such (route|endpoint|resource|page)|unknown (route|endpoint)|route .{0,80} not found|cannot (get|post|patch|put|delete))\b/i;
+
+/** A full HTML document, as opposed to an API answer. */
+export function isHtmlDocument(body: string): boolean {
+  return /^\s*<(!doctype\s+html|html[\s>])/i.test(body.slice(0, 1_000));
+}
+
+/**
+ * A "not found" answer sent with a success status: the signature of a host that answers 200 for
+ * paths it never routed. `{"error":"not found","path":"/x","status":404}`, a "Page not found"
+ * document, or a bare "404". Such a body is a router's refusal, not data and not a handler.
+ */
+export function isNotFoundBody(body: string): boolean {
+  const head = body.slice(0, 2_000);
+  try {
+    const j: unknown = JSON.parse(body);
+    if (j && typeof j === "object" && !Array.isArray(j)) {
+      const o = j as Record<string, unknown>;
+      const code = o["status"] ?? o["statusCode"] ?? o["code"];
+      if (code === 404 || code === "404" || code === 410) return true;
+      const msg = o["error"] ?? o["message"];
+      if (typeof msg === "string" && NOT_FOUND_TEXT.test(msg) && Object.keys(o).length <= 6) return true;
+      return false;
+    }
+    if (Array.isArray(j)) return false;
+  } catch { /* not JSON */ }
+  if (isHtmlDocument(head)) {
+    return /<title[^>]*>[^<]*(not found|404)[^<]*<\/title>/i.test(head) || /<h1[^>]*>\s*(page )?not found/i.test(head);
+  }
+  return /^\s*(404\b|not found\b|cannot (get|post|patch|put|delete) )/i.test(head);
+}
+
 /** Does this response carry data, as opposed to a refusal or an empty shell? */
 export function looksLikeData(status: number, body: string): boolean {
   if (status < 200 || status >= 300) return false;
   const trimmed = body.trim();
   if (trimmed.length < 20) return false;
+  if (isNotFoundBody(trimmed)) return false;
   // An empty collection is a successful answer, not an exposure.
   if (/^\[\s*\]$/.test(trimmed)) return false;
   if (/^\{\s*("?(data|items|results|rows)"?\s*:\s*\[\s*\]\s*)\}$/.test(trimmed)) return false;
@@ -149,7 +183,11 @@ export const PRIVILEGE_FIELD_RE =
  */
 export function isHandlerReached(status: number, body: string): boolean {
   if (/\bCannot (DELETE|PATCH|PUT|POST|GET)\b/i.test(body.slice(0, 500))) return false;
-  if (status >= 200 && status < 300) return true;
+  if (status >= 200 && status < 300) {
+    // A catch-all host answers an unrouted verb with 200 and its shell or a "not found" body.
+    // Neither is a handler accepting the write.
+    return !isNotFoundBody(body) && !isHtmlDocument(body);
+  }
   if (status === 400 || status === 422) {
     // A malformed-JSON 400 comes from the body parser, before any handler.
     return /\b(validation|required|must be|is invalid|invalid (field|value|input|body|payload)|missing (field|param))/i.test(body.slice(0, 1_000)) &&

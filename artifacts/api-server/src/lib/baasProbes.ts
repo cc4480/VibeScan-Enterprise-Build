@@ -132,6 +132,8 @@ async function probeAppwrite(cfg: AppwriteConfig): Promise<ScanVulnerability[]> 
 export async function runBaasProbes(
   targetUrl: string,
   html: string,
+  /** Told why, when there was nothing here to test (recorded as "not tested", not "ran"). */
+  notTested?: (reason: string) => void,
 ): Promise<ScanVulnerability[]> {
   const inlineJs = extractInlineJs(html);
   const searchContent = inlineJs + "\n" + html;
@@ -154,7 +156,10 @@ export async function runBaasProbes(
   const appwriteCfg = detectAppwrite(searchContent);
   if (appwriteCfg) tasks.push(probeAppwrite(appwriteCfg).catch(() => []));
 
-  if (tasks.length === 0) return [];
+  if (tasks.length === 0) {
+    notTested?.("no PocketBase or Appwrite backend is referenced in the page");
+    return [];
+  }
 
   const settled = await Promise.allSettled(tasks);
   return settled.flatMap((r) => (r.status === "fulfilled" ? r.value : []));

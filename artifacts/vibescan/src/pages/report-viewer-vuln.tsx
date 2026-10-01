@@ -5,6 +5,8 @@ import { VerifyFixButton } from "@/components/verify-fix-button";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useContext } from "react";
 import type { Vulnerability } from "@workspace/api-client-react";
+import { ReproSteps } from "@/components/repro-steps";
+import { FindingProvenance } from "./report-viewer-provenance";
 import { DismissalsContext, vulnUniqueKey, getCategoryMeta, parseTechVersion, extractInnerPageSource, getVerificationNote, wstgCategoryPath } from "./report-viewer-data";
 
 // ─── Vuln card ────────────────────────────────────────────────────────────────
@@ -128,12 +130,14 @@ export function VulnCard({
                   </div>
                   {vuln.evidence && (
                     <div>
-                      <h5 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Evidence</h5>
+                      <h5 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Evidence: what the scanner saw</h5>
                       <div className="bg-background border border-white/10 rounded-lg p-3 text-xs font-mono text-muted-foreground overflow-x-auto whitespace-pre-wrap">
                         {vuln.evidence}
                       </div>
                     </div>
                   )}
+                  <ReproSteps evidence={vuln.evidence} dark />
+                  <FindingProvenance vuln={vuln} />
                 </div>
                 <div>
                   <h5 className="text-xs font-bold text-primary uppercase tracking-wider mb-2 flex items-center gap-2">

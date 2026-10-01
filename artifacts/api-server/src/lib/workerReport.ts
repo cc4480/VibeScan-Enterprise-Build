@@ -5,32 +5,7 @@ import { computeRiskScore, gradeForResult } from "./scanner";
 import { type TestRecord } from "./testLedger";
 import { analyseFindings } from "./aiAnalysis";
 import { summariseCompliance, COMPLIANCE_DISCLAIMER } from "./compliance";
-import * as tls from "node:tls";
-
-/** Probe the TLS certificate expiry date for an https:// URL. Returns null for HTTP or on error. */
-async function getCertExpiry(url: string): Promise<Date | null> {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "https:") return null;
-    const host = parsed.hostname;
-    const port = parseInt(parsed.port || "443", 10);
-    return await new Promise<Date | null>((resolve) => {
-      const socket = tls.connect(
-        { host, port, servername: host, rejectUnauthorized: false },
-        () => {
-          const cert = socket.getPeerCertificate();
-          socket.destroy();
-          if (!cert || !cert.valid_to) { resolve(null); return; }
-          resolve(new Date(cert.valid_to));
-        },
-      );
-      socket.on("error", () => resolve(null));
-      socket.setTimeout(8_000, () => { socket.destroy(); resolve(null); });
-    });
-  } catch {
-    return null;
-  }
-}
+import { probeCertDates } from "./monitorPulseCert";
 
 function buildExecutiveSummary(
   grade: string,
@@ -89,13 +64,22 @@ export async function buildReport(input: {
     {} as Record<string, number>,
   );
 
+  const interceptionKind = scanResult.interception?.kind ?? "bot challenge";
   const executiveSummary = intercepted
     ? `The scan of ${(() => { try { return new URL(targetUrl).hostname; } catch { return targetUrl; } })()} ` +
-      `was answered by a bot-protection layer rather than the site itself, so no grade could be assigned. ` +
+      (interceptionKind === "sign-in wall"
+        ? `reached a sign-in page${scanResult.interception?.vendor ? ` run by ${scanResult.interception.vendor}` : ""} rather than the app, so no grade could be assigned. `
+        : interceptionKind === "app not running"
+          ? `was answered by ${scanResult.interception?.vendor ?? "the hosting platform"}'s own page rather than a running app, so no grade could be assigned. `
+          : `was answered by a bot-protection layer rather than the site itself, so no grade could be assigned. `) +
       `Only the checks that do not read the page response — DNS, email authentication and mail transport — ` +
-      `are reported below and are accurate; everything else was withheld. This is an incomplete result, not a ` +
-      `clean one. To grade the site, allow the scanner through the challenge (by source IP or User-Agent) or ` +
-      `verify domain ownership, then re-scan.`
+      `are reported below and are accurate; everything else was withheld and is listed as withheld. This is an incomplete result, not a ` +
+      `clean one. ` +
+      (interceptionKind === "sign-in wall"
+        ? `To grade the app, scan an address that serves it without signing in, or supply a login for the scan.`
+        : interceptionKind === "app not running"
+          ? `Check that the app is deployed and running at this address, then re-scan.`
+          : `To grade the site, allow the scanner through the challenge (by source IP or User-Agent) or verify domain ownership, then re-scan.`)
     : buildExecutiveSummary(
         grade,
         riskScore,
@@ -105,7 +89,7 @@ export async function buildReport(input: {
       );
 
   // Probe TLS cert expiry for https:// targets (non-blocking, failures are soft)
-  const certExpiry = await getCertExpiry(scanResult.finalUrl || targetUrl).catch(() => null);
+  const cert = await probeCertDates(scanResult.finalUrl || targetUrl).catch(() => null);
 
   const reportData = {
     targetUrl: scanResult.finalUrl || targetUrl,
@@ -113,12 +97,18 @@ export async function buildReport(input: {
     technologies: scanResult.technologies,
     server: scanResult.server,
     tlsGrade: scanResult.tlsGrade,
-    certExpiry: certExpiry ? certExpiry.toISOString() : null,
+    certExpiry: cert ? cert.expiresAt.toISOString() : null,
+    // Lets the expiry alert skip its 30-day warning for an auto-renewing (short-lived) certificate.
+    certIssuedAt: cert?.issuedAt ? cert.issuedAt.toISOString() : null,
     pagesScanned: scanResult.pagesScanned,
     probedNotFound: scanResult.probedNotFound,
     // What ran, what was skipped and why — so the report can show coverage,
     // not just findings. See testLedger.ts.
     tests,
+    // Findings the scan produced and did not report, with the reason, and what answered instead of
+    // the app when something did. Shown in the report so nothing is dropped out of sight.
+    withheld: scanResult.withheld && scanResult.withheld.length > 0 ? scanResult.withheld : undefined,
+    interception: scanResult.interception ?? undefined,
     summary: {
       totalVulnerabilities: scanResult.vulnerabilities.length,
       critical: severityCounts["critical"] ?? 0,

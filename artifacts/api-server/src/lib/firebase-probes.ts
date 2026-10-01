@@ -52,7 +52,7 @@ interface FirebaseConfig {
   databaseURL?: string;
 }
 
-function extractFirebaseConfig(content: string): FirebaseConfig | null {
+export function extractFirebaseConfig(content: string): FirebaseConfig | null {
   const apiKeyPatterns = [
     /apiKey\s*:\s*["'](AIza[0-9A-Za-z\-_]{35})["']/,
     /(?:VITE_FIREBASE_API_KEY|REACT_APP_FIREBASE_API_KEY|NEXT_PUBLIC_FIREBASE_API_KEY)\s*[:=]\s*["'](AIza[0-9A-Za-z\-_]{35})["']/i,
