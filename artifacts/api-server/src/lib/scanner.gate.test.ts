@@ -48,6 +48,12 @@ describe("runScan when something other than the app answers", () => {
     expect(names).not.toContain("Missing Content-Security-Policy (CSP)");
     expect(r.withheld?.map((w) => w.name)).toContain("Missing Content-Security-Policy (CSP)");
     expect(r.withheld?.every((w) => /sign-in page/.test(w.reason))).toBe(true);
+    // Nothing that read the sign-in page may claim to have tested the app.
+    const ranOnPage = (r.tests ?? []).filter(
+      (t) => t.status === "ran" && !["DNS and email authentication", "mail transport security (STARTTLS, MX certificate)", "subdomain takeover", "GitHub source code secrets"].includes(t.name),
+    );
+    expect(ranOnPage.map((t) => t.name)).toEqual([]);
+    expect(r.tests?.find((t) => t.name === "security.txt")).toMatchObject({ status: "skipped", reason: expect.stringMatching(/not tested on the app: a sign-in page answered/) });
   }, 60_000);
 
   it("sets aside a render that met a challenge served with HTTP 200 only to the browser", async () => {

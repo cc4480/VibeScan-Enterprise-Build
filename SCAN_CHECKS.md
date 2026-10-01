@@ -28,6 +28,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `scannerCspChecks.ts` | 7 | 155 | 10 | direct |
 | `scannerHeaderChecks.ts` | 7 | 142 | 3 | direct |
 | `jwtAnalysis.ts` | 6 | 267 | 9 | direct |
+| `scannerCoverage.ts` | 6 | 216 | 1 | direct |
 | `storageProbe.ts` | 5 | 254 | 11 | direct |
 | `firebase-probes.ts` | 4 | 301 | 8 | direct |
 | `baasDepth.ts` | 3 | 148 | 11 | direct |
@@ -40,7 +41,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `graphqlProbe.ts` | 2 | 256 | 12 | direct |
 | `injectionExtra.ts` | 2 | 140 | 9 | direct |
 | `injectionProbe.ts` | 2 | 283 | 13 | direct |
-| `scanner.ts` | 2 | 377 | 6 | direct |
+| `scanner.ts` | 2 | 388 | 6 | direct |
 | `sourceMaps.ts` | 2 | 236 | 19 | direct |
 | `supabase-probes.ts` | 2 | 104 | 7 | direct |
 | `apiDocsProbe.ts` | 1 | 129 | 9 | direct |
@@ -64,7 +65,6 @@ module does. `none` — neither, so no test exercises it at all.
 | `secret-pattern-generic.ts` | 7 | 144 | — | indirect, via secret-pattern-data.test.ts (split from secret-pattern-data) |
 | `supabase-probes-report.ts` | 7 | 234 | — | indirect, via supabase-probes.test.ts (split from supabase-probes) |
 | `scannerCookies.ts` | 6 | 205 | — | indirect, via scanner.test.ts (split from scanner) |
-| `scannerCoverage.ts` | 6 | 188 | — | indirect, via scanner.test.ts (split from scanner) |
 | `crawlerHeaders.ts` | 5 | 202 | — | indirect, via crawler.test.ts (split from crawler) |
 | `cveCheckLocal.ts` | 5 | 225 | — | indirect, via cveCheck.test.ts (split from cveCheck) |
 | `secret-pattern-ai.ts` | 5 | 61 | — | indirect, via secret-pattern-generic.test.ts |
@@ -564,7 +564,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `scanner.ts`
 
-*2 findings · 377 lines · 6 tests.*
+*2 findings · 388 lines · 6 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -586,7 +586,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `scannerCoverage.ts`
 
-*6 findings · 188 lines · no test file.*
+*6 findings · 216 lines · 1 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
