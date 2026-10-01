@@ -56,6 +56,11 @@ jobs:
       - name: Typecheck
         run: pnpm run typecheck
 
+      # browserGuard.test.ts drives a real Chromium; the runner image does not
+      # have the Playwright build this repo pins, so install it.
+      - name: Install Playwright Chromium
+        run: pnpm --filter @workspace/api-server exec playwright install --with-deps chromium
+
       # -r so a package that gains a test script is picked up automatically
       # rather than needing this file edited to notice.
       - name: Test
