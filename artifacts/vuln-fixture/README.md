@@ -29,7 +29,7 @@ DATABASE_URL=postgres://localhost/whatever \
 ```
 
 Runs the real scanner — active probing on, two credentialed accounts — against
-the fixture and reports which of the 73 tracked findings were detected,
+the fixture and reports which of the tracked findings were detected,
 the same shape as `detection-check.ts` and `live-scan.ts`. Exit code is
 non-zero on any miss. `--list` prints every finding actually returned.
 
@@ -59,7 +59,7 @@ just "should, based on reading the code":
 | `probes.ts` | Active-CORS credentials-from-arbitrary-origin, TRACE/CONNECT/write methods advertised, open redirect (on the scan target URL itself — see note below), sensitive `robots.txt` disclosure, missing SRI, the Werkzeug debugger fingerprint, directory listing, missing `security.txt`, no rate-limit headers |
 | `crawler.ts` / `crawler-data.ts` | An inner route (`/app/dashboard`) missing a header the root has, plus `.env`/git/config/API-docs/debug-log/GraphQL exposure nested under it |
 | `probes-data.ts` | All 78 sensitive paths, each serving content shaped to pass that path's own `validate()` (verified: `sensitive-paths.ts` diffs to an exact match against the source list) |
-| `secret-pattern-data.ts` (jsScanner) | All 34 secret patterns, in an external JS file so the non-inline path is exercised too |
+| `secret-pattern-data.ts` (jsScanner) | All 35 secret patterns, in an external JS file so the non-inline path is exercised too |
 | `nextjsProbe.ts` | All 9 `__NEXT_DATA__` secret patterns |
 | `jwtAnalysis.ts` | `alg:none`, no-expiry, HS256-without-expiry, excessive lifetime (10 years), sensitive payload fields |
 | `sourceMaps.ts` | An exposed `.js.map` with `sourcesContent` containing a secret |

@@ -1,4 +1,4 @@
-import { concreteUrl, TIMEOUT_MS, looksLikeData, isRefusal, sameShape, PUBLIC_COLLECTION_PATTERN, PERSONAL_DATA_RE, exposedSensitiveFields, RATE_LIMIT_SENSITIVE_PATTERN, RATE_LIMIT_EXEMPT_PATTERN, RATE_LIMIT_BURST, IMPLAUSIBLE_ID, isHandlerReached, privilegeFieldsAccepted, MAX_PARAMS_PER_ENDPOINT } from "./apiProbeHelpers";
+import { concreteUrl, TIMEOUT_MS, looksLikeData, isRefusal, sameShape, PUBLIC_COLLECTION_PATTERN, PERSONAL_DATA_RE, exposedSensitiveFields, RATE_LIMIT_SENSITIVE_PATTERN, RATE_LIMIT_EXEMPT_PATTERN, RATE_LIMIT_BURST, IMPLAUSIBLE_ID, isHandlerReached, isNotFoundBody, isHtmlDocument, privilegeFieldsAccepted, MAX_PARAMS_PER_ENDPOINT } from "./apiProbeHelpers";
 import { requestWith } from "./apiProbeSurface";
 import type { ApiEndpoint } from "./apiSurface";
 import type { ApiProbeInput } from "./apiProbeHelpers";
@@ -44,6 +44,8 @@ export async function testEndpoint(
       anon &&
       looksLikeData(authed.status, authed.body) &&
       looksLikeData(anon.status, anon.body) &&
+      // An HTML document answering an API path is the host's app shell, not the API.
+      !isHtmlDocument(anon.body) &&
       !isRefusal(anon.status, anon.body, anon) &&
       sameShape(authed.body, anon.body)
     ) {
@@ -114,7 +116,11 @@ export async function testEndpoint(
     );
     const answered = burst.filter((r) => r !== null);
     const throttled = answered.some((r) => r!.status === 429);
-    if (!throttled && answered.length === RATE_LIMIT_BURST && answered.every((r) => r!.status < 400)) {
+    // A limiter that announces itself (RateLimit-* / Retry-After) is a limiter, and a burst answered
+    // only by a catch-all's shell or "not found" body never reached a sign-in route at all.
+    const announced = answered.some((r) => Object.keys(r!.headers).some((h) => /^(x-)?ratelimit|^retry-after$/i.test(h)));
+    const reachedNothing = answered.every((r) => isNotFoundBody(r!.body) || isHtmlDocument(r!.body));
+    if (!throttled && !announced && !reachedNothing && answered.length === RATE_LIMIT_BURST && answered.every((r) => r!.status < 400)) {
       unratelimited.push(`${endpoint.method} ${new URL(url).pathname}`);
     }
   }
