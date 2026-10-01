@@ -62,6 +62,11 @@ every report show its work.
   and no findings says "No findings were reported" and points at the notes, not a green
   all-clear. The totals the server computes (Total Findings, the severity counts under
   the grade, the shared report's footer) still count the notes.
+- **"How this was found" listed no requests for several active tests.** The panel read
+  only lines that begin with a method and an address, and the injection, path-traversal
+  and LLM tests write `Endpoint: /search?q=<payload>` or `Request: POST https://...`. It
+  reads both now, and for an active test whose evidence has no request line it says so
+  instead of staying silent.
 - **"Which check raised this was not recorded" on findings from a busy test.** A test
   record kept the names of its first 40 findings. The sensitive-file test raises 78 on
   the vuln fixture, so 38 findings (8 of them Critical) showed no check. It keeps up
