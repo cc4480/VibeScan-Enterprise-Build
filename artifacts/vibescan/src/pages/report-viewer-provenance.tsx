@@ -106,7 +106,38 @@ export function WithheldCard({ withheld, interception }: { withheld?: unknown; i
   );
 }
 
-/** Plain-text form for the Markdown copy and the PDF. */
+/** Print (Ctrl+P) version: light-on-white, like PrintCoverage. */
+export function PrintWithheld({ withheld, interception }: { withheld?: unknown; interception?: Interception | null }) {
+  const list = Array.isArray(withheld) ? withheld.filter(isWithheld) : [];
+  if (list.length === 0 && !interception) return null;
+  return (
+    <div className="mb-8 pt-6 border-t-2 border-gray-200">
+      <h2 className="text-lg font-bold mb-2 text-gray-900">Withheld from this report</h2>
+      {interception && (
+        <p className="text-gray-700 mb-2">
+          <strong>
+            {INTERCEPTION_TITLE[interception.kind]}
+            {interception.vendor ? ` (${interception.vendor})` : ""}
+          </strong>
+          <span className="block text-xs text-gray-500 break-all">{interception.signal}</span>
+        </p>
+      )}
+      {list.length > 0 ? (
+        <ul className="space-y-1">
+          {list.map((w, i) => (
+            <li key={`${w.name}-${i}`} className="text-gray-700 text-sm">
+              <strong>{w.name}</strong> <span className="text-gray-500">({w.severity}) {w.reason}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-gray-700 text-sm">Nothing that reads the page was reported, because what answered was not your app.</p>
+      )}
+    </div>
+  );
+}
+
+/** Plain-text form for the Markdown copy. */
 export function withheldMarkdown(withheld?: unknown, interception?: Interception | null): string[] {
   const list = Array.isArray(withheld) ? withheld.filter(isWithheld) : [];
   if (list.length === 0 && !interception) return [];

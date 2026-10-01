@@ -3,6 +3,7 @@ import {
   isLikelySessionCookie,
   isCsrfTokenCookie,
   requiresHttpOnly,
+  isClientPreferenceCookie,
 } from "./cookieClassification.js";
 
 describe("session cookie classification", () => {
@@ -46,8 +47,25 @@ describe("a CSRF token must stay readable by JavaScript", () => {
   });
 
   it("requires HttpOnly on everything else", () => {
-    for (const n of ["sessionid", "auth_token", "theme", "_ga"]) {
+    for (const n of ["sessionid", "auth_token", "prefs", "_ga"]) {
       expect(requiresHttpOnly(n), n).toBe(true);
     }
   });
+});
+
+describe("isClientPreferenceCookie", () => {
+  it.each(["lang", "NEXT_LOCALE", "locale", "pll_language", "site-lang", "theme", "color_scheme", "timezone", "cookieconsent_status", "OptanonConsent", "cc_cookie"])(
+    "%s is meant to be read by the page, so HttpOnly is not required",
+    (name) => {
+      expect(isClientPreferenceCookie(name)).toBe(true);
+      expect(requiresHttpOnly(name)).toBe(false);
+    },
+  );
+
+  it.each(["session_lang", "auth_locale_token", "language_session", "uid", "prefs", "_ga", "language-pack"])(
+    "%s still needs HttpOnly",
+    (name) => {
+      expect(isClientPreferenceCookie(name)).toBe(false);
+    },
+  );
 });

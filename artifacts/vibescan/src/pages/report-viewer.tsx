@@ -123,6 +123,8 @@ export default function ReportViewer() {
     categoryCounts,
     pagesScanned: pagesScanned ?? [],
     tests: coverageTests,
+    withheld,
+    interception,
   };
 
   return (
@@ -153,6 +155,8 @@ export default function ReportViewer() {
           categoryCounts={categoryCounts}
           pagesScanned={pagesScanned ?? []}
           tests={coverageTests}
+          withheld={withheld}
+          interception={interception}
         />
       </div>
 

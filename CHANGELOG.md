@@ -39,6 +39,19 @@ every report show its work.
   evidence names the path that reflected; a failed browser render no longer replaces
   the page; GitHub Pages and Rails technology tags need real markers; scan evidence
   keeps 4,000 characters; CI installs Chromium; four secret patterns have real plants.
+- **Technology tags from loose matches.** jQuery, Lodash, Alpine.js, HTMX and
+  Google Analytics were tagged when their name appeared in page text; they now need
+  a script path or an API call that only the library makes.
+- **Certificate expiry alert on auto-renewing certificates.** A 90-day certificate
+  (Let's Encrypt and other ACME issuers) renews itself at about 30 days left, so the
+  30-day warning fired on every cycle for nothing. Certificates of 100 days or less
+  now warn at 14 and 7 days only; yearly certificates keep the 30-day warning.
+- **Language, theme and consent cookies** (`lang=en`, `NEXT_LOCALE`, `theme`,
+  `cookieconsent_status` and similar) are meant to be read by the page and no longer
+  draw a "readable by JavaScript" finding. Secure and SameSite still apply.
+- **A session cookie without SameSite is Low, not Medium.** Chrome and Edge already
+  treat it as SameSite=Lax; the finding now says the gap is Firefox and Safari and
+  that it is a missing safety net, not a demonstrated CSRF.
 
 ### Added
 
@@ -53,6 +66,9 @@ every report show its work.
   scripts), each with the reason.
 - A scan whose start page answered an error, or that was redirected to another
   site, says so in the report.
+- The PDF download and the printed report carry the withheld list too.
+- The Supabase RLS probe says "not tested" when the page has no Supabase project.
+- CI runs the 114 database tests against a real Postgres instead of skipping them.
 
 ## 2026-09-07
 

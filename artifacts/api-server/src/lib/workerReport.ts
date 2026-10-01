@@ -5,32 +5,7 @@ import { computeRiskScore, gradeForResult } from "./scanner";
 import { type TestRecord } from "./testLedger";
 import { analyseFindings } from "./aiAnalysis";
 import { summariseCompliance, COMPLIANCE_DISCLAIMER } from "./compliance";
-import * as tls from "node:tls";
-
-/** Probe the TLS certificate expiry date for an https:// URL. Returns null for HTTP or on error. */
-async function getCertExpiry(url: string): Promise<Date | null> {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "https:") return null;
-    const host = parsed.hostname;
-    const port = parseInt(parsed.port || "443", 10);
-    return await new Promise<Date | null>((resolve) => {
-      const socket = tls.connect(
-        { host, port, servername: host, rejectUnauthorized: false },
-        () => {
-          const cert = socket.getPeerCertificate();
-          socket.destroy();
-          if (!cert || !cert.valid_to) { resolve(null); return; }
-          resolve(new Date(cert.valid_to));
-        },
-      );
-      socket.on("error", () => resolve(null));
-      socket.setTimeout(8_000, () => { socket.destroy(); resolve(null); });
-    });
-  } catch {
-    return null;
-  }
-}
+import { probeCertDates } from "./monitorPulseCert";
 
 function buildExecutiveSummary(
   grade: string,
@@ -114,7 +89,7 @@ export async function buildReport(input: {
       );
 
   // Probe TLS cert expiry for https:// targets (non-blocking, failures are soft)
-  const certExpiry = await getCertExpiry(scanResult.finalUrl || targetUrl).catch(() => null);
+  const cert = await probeCertDates(scanResult.finalUrl || targetUrl).catch(() => null);
 
   const reportData = {
     targetUrl: scanResult.finalUrl || targetUrl,
@@ -122,7 +97,9 @@ export async function buildReport(input: {
     technologies: scanResult.technologies,
     server: scanResult.server,
     tlsGrade: scanResult.tlsGrade,
-    certExpiry: certExpiry ? certExpiry.toISOString() : null,
+    certExpiry: cert ? cert.expiresAt.toISOString() : null,
+    // Lets the expiry alert skip its 30-day warning for an auto-renewing (short-lived) certificate.
+    certIssuedAt: cert?.issuedAt ? cert.issuedAt.toISOString() : null,
     pagesScanned: scanResult.pagesScanned,
     probedNotFound: scanResult.probedNotFound,
     // What ran, what was skipped and why — so the report can show coverage,

@@ -113,7 +113,11 @@ describe("detectTechnologies — HTML: JS frameworks", () => {
 
 describe("detectTechnologies — HTML: analytics", () => {
   it("detects Google Analytics from gtag(", () =>
-    expect(detectTechnologies({}, `gtag('config', 'G-ABC')`)).toContain("Google Analytics"));
+    expect(detectTechnologies({}, `<script>gtag('config', 'G-ABC')</script>`)).toContain("Google Analytics"));
+  it("detects Google Analytics from the gtag.js loader", () =>
+    expect(detectTechnologies({}, `<script async src="https://www.googletagmanager.com/gtag/js?id=G-ABC"></script>`)).toContain("Google Analytics"));
+  it("does not tag Google Analytics from prose about gtag()", () =>
+    expect(detectTechnologies({}, `<p>Call gtag('config', id) to set it up, or read google-analytics.com docs.</p>`)).not.toContain("Google Analytics"));
   it("detects Sentry from Sentry.init", () =>
     expect(detectTechnologies({}, `<script>Sentry.init({ dsn: "https://abc@sentry.io" })</script>`)).toContain("Sentry"));
   it("detects Stripe from js.stripe.com", () =>
@@ -261,4 +265,23 @@ describe("detectTechnologies — still detects the real thing", () => {
 
   it("detects Bulma from a real column class", () =>
     expect(detectTechnologies({}, '<div class="column is-half">x</div>')).toContain("Bulma"));
+});
+
+describe("detectTechnologies — JS libraries need the library, not its name", () => {
+  it.each([
+    ["jQuery", `<script src="/js/jquery-3.7.1.min.js"></script>`],
+    ["jQuery", `<script>jQuery.fn.extend({})</script>`],
+    ["Lodash", `<script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>`],
+    ["Alpine.js", `<div x-data="{ open: false }"></div>`],
+    ["Alpine.js", `<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>`],
+    ["HTMX", `<button hx-post="/clicked">Go</button>`],
+    ["HTMX", `<script src="https://unpkg.com/htmx.org@1.9.10"></script>`],
+  ])("detects %s from %s", (tech, html) => expect(detectTechnologies({}, html)).toContain(tech));
+
+  it.each([
+    ["jQuery", `<p>We moved off jquery-3 last year; jQuery.fn is gone.</p>`],
+    ["Lodash", `<p>Check _.version and lodash.min in your bundle.</p>`],
+    ["Alpine.js", `<pre>Add x-data= and x-show= to your markup</pre>`],
+    ["HTMX", `<p>See htmx.org: use hx-get and hx-post attributes.</p>`],
+  ])("does not tag %s from prose", (tech, html) => expect(detectTechnologies({}, html)).not.toContain(tech));
 });

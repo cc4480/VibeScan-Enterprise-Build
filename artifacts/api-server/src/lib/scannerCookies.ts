@@ -168,13 +168,16 @@ export function analyzeCookies(setCookies: string[], flattenedFallback?: string)
     const plural = noSameSite.length > 1;
     findings.push(vuln({
       name: "Session Cookie Missing SameSite Attribute",
-      severity: "medium",
+      // Low, not Medium: Chrome and Edge treat a cookie with no SameSite as Lax, which already
+      // blocks it on cross-site POSTs, so the gap is Firefox and Safari plus any state-changing
+      // GET. A missing attribute is not a CSRF; the active CSRF checks report the real thing.
+      severity: "low",
       category: "CSRF Protection",
-      description: `${noSameSite.length} likely session/auth cookie${plural ? "s lack" : " lacks"} the SameSite attribute (${list}), making the application potentially vulnerable to Cross-Site Request Forgery (CSRF) attacks.`,
+      description: `${noSameSite.length} likely session/auth cookie${plural ? "s lack" : " lacks"} the SameSite attribute (${list}). Chrome and Edge treat such a cookie as SameSite=Lax, which stops it being sent on cross-site form posts; Firefox and Safari do not, so in those browsers the application relies entirely on its own CSRF defences. This is a missing safety net, not a demonstrated CSRF.`,
       evidence: `Affected cookie${plural ? "s" : ""}: ${list}`,
       solution: "Set SameSite=Lax or SameSite=Strict on all session cookies: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax",
       cweId: "CWE-352",
-      cvssScore: 4.3,
+      cvssScore: 3.1,
       wstgId: "WSTG-SESS-02",
     }));
   }

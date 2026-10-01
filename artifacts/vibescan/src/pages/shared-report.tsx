@@ -243,6 +243,8 @@ export default function SharedReport() {
             aiAnalysis={aiAnalysis ?? null}
             compliance={compliance ?? null}
             tests={data.tests ?? null}
+            withheld={(data as { withheld?: unknown }).withheld}
+            interception={(data as { interception?: Interception | null }).interception ?? null}
           />
         </div>
       )}

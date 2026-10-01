@@ -7,7 +7,7 @@ Every finding the scanner can emit, read out of `artifacts/api-server/src/lib`. 
 complete list; [SCAN_COVERAGE.md](SCAN_COVERAGE.md) is the readable one, grouped by module with
 the Basic/Deep tier and the methodology behind each group.
 
-**314 findings across 59 modules**, in 38 categories. 85 critical, 73 high, 56 medium, 31 low, 69 info.
+**314 findings across 59 modules**, in 38 categories. 85 critical, 73 high, 55 medium, 32 low, 69 info.
 
 A finding is a distinct name the scanner can put in a report, which is not the same as a check
 type: the data-table modules below define many findings from one piece of detection logic —
@@ -33,6 +33,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `baasDepth.ts` | 3 | 148 | 11 | direct |
 | `isolationHeaders.ts` | 3 | 77 | 4 | direct |
 | `mailTls.ts` | 3 | 139 | 13 | direct |
+| `probesSupabase.ts` | 3 | 164 | 1 | direct |
 | `aiFeatureProbe.ts` | 2 | 152 | 21 | direct |
 | `baasProbes.ts` | 2 | 166 | 11 | direct |
 | `graphqlExtra.ts` | 2 | 105 | 8 | direct |
@@ -62,7 +63,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `probesHttp.ts` | 7 | 218 | — | indirect, via probes.test.ts (split from probes) |
 | `secret-pattern-generic.ts` | 7 | 144 | — | indirect, via secret-pattern-data.test.ts (split from secret-pattern-data) |
 | `supabase-probes-report.ts` | 7 | 234 | — | indirect, via supabase-probes.test.ts (split from supabase-probes) |
-| `scannerCookies.ts` | 6 | 202 | — | indirect, via scanner.test.ts (split from scanner) |
+| `scannerCookies.ts` | 6 | 205 | — | indirect, via scanner.test.ts (split from scanner) |
 | `scannerCoverage.ts` | 6 | 188 | — | indirect, via scanner.test.ts (split from scanner) |
 | `crawlerHeaders.ts` | 5 | 202 | — | indirect, via crawler.test.ts (split from crawler) |
 | `cveCheckLocal.ts` | 5 | 225 | — | indirect, via cveCheck.test.ts (split from cveCheck) |
@@ -70,7 +71,6 @@ module does. `none` — neither, so no test exercises it at all.
 | `accessControlFindings.ts` | 3 | 129 | — | indirect, via accessControlProbe.test.ts |
 | `probesFiles.ts` | 3 | 266 | — | indirect, via probes.test.ts (split from probes) |
 | `probesPage.ts` | 3 | 244 | — | indirect, via probes.test.ts (split from probes) |
-| `probesSupabase.ts` | 3 | 154 | — | indirect, via probes.test.ts (split from probes) |
 | `scannerTransportChecks.ts` | 3 | 70 | — | indirect, via scanner.test.ts (split from scanner) |
 | `baasProbesPocketbase.ts` | 2 | 133 | — | indirect, via baasProbes.test.ts (split from baasProbes) |
 | `crawlerCookies.ts` | 2 | 178 | — | indirect, via crawler.test.ts (split from crawler) |
@@ -517,7 +517,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `probesSupabase.ts`
 
-*3 findings · 154 lines · no test file.*
+*3 findings · 164 lines · 1 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -573,14 +573,14 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `scannerCookies.ts`
 
-*6 findings · 202 lines · no test file.*
+*6 findings · 205 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
 | Session Cookie Missing Secure Flag | High | Session Management | 6.5 | CWE-614 | WSTG-SESS-02 |
 | Session Cookie Missing HttpOnly Flag | Medium | Session Management | 5.3 | CWE-1004 | WSTG-SESS-02 |
-| Session Cookie Missing SameSite Attribute | Medium | CSRF Protection | 4.3 | CWE-352 | WSTG-SESS-02 |
 | Non-Session Cookie Missing Secure Flag | Low | Session Management | 3.1 | CWE-614 | WSTG-SESS-02 |
+| Session Cookie Missing SameSite Attribute | Low | CSRF Protection | 3.1 | CWE-352 | WSTG-SESS-02 |
 | Non-Session Cookie Missing SameSite Attribute | Info | CSRF Protection | 2.1 | CWE-352 | WSTG-SESS-02 |
 | Non-Session Cookie Readable by JavaScript | Info | Session Management | 2.6 | CWE-1004 | WSTG-SESS-02 |
 

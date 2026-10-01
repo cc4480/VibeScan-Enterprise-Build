@@ -6,12 +6,17 @@ import { sendCertExpiryEmail } from "./mailer";
 import { fireWebhook } from "./webhook";
 import { APP_ORIGIN } from "./appOrigin";
 import { activeEntitledSubscriptions, type ActiveSub } from "./monitorSchedulerSweep";
+import { certAlertThresholds } from "./monitorPulseCert";
 
 export const CERT_QUEUE       = "monitor-cert-expiry";
 
 // ─── 4. Certificate expiry ────────────────────────────────────────────────────
 
+/** The widest set. A short-lived, auto-renewing certificate skips 30; see certAlertThresholds. */
 export const CERT_THRESHOLDS = [30, 14, 7] as const;
+
+/** A pulse reading newer than this has already been through maybeAlertCertExpiry. */
+const RECENT_PULSE_MS = 3 * 3_600_000;
 
 /**
  * Alert on a certificate that is about to expire, at most once per threshold
@@ -29,13 +34,15 @@ export async function maybeAlertCertExpiry(
   now: Date,
   appOrigin: string,
   log: typeof logger,
+  issuedAt: Date | null = null,
 ): Promise<void> {
   if (Number.isNaN(expiryDate.getTime())) return;
 
+  const thresholds = certAlertThresholds(issuedAt, expiryDate);
   const daysRemaining = Math.ceil((expiryDate.getTime() - now.getTime()) / 86_400_000);
-  if (daysRemaining <= 0 || daysRemaining > 30) return;
+  if (daysRemaining <= 0 || daysRemaining > thresholds[0]!) return;
 
-  for (const threshold of CERT_THRESHOLDS) {
+  for (const threshold of thresholds) {
     if (daysRemaining > threshold) continue;
 
     // Already alerted at this threshold for this certificate cycle? The expiry
@@ -122,10 +129,11 @@ export async function runCertExpiryCheck(): Promise<void> {
   for (const sub of subs) {
     try {
       let expiryDate: Date | null = null;
+      let issuedAt: Date | null = null;
 
-      // Newest live reading first — it is at most an hour old.
+      // Newest live reading first.
       const [livePulse] = await db
-        .select({ certExpiresAt: monitorPulseChecksTable.certExpiresAt })
+        .select({ certExpiresAt: monitorPulseChecksTable.certExpiresAt, checkedAt: monitorPulseChecksTable.checkedAt })
         .from(monitorPulseChecksTable)
         .where(
           and(
@@ -136,7 +144,13 @@ export async function runCertExpiryCheck(): Promise<void> {
         .orderBy(desc(monitorPulseChecksTable.checkedAt))
         .limit(1);
 
-      if (livePulse?.certExpiresAt) {
+      if (livePulse?.certExpiresAt && now.getTime() - livePulse.checkedAt.getTime() < RECENT_PULSE_MS) {
+        // The pulse evaluated this certificate within the last few hours, with its issue date,
+        // which is not stored. Alerting again here without that date would bring back the 30-day
+        // warning the pulse deliberately skips for an auto-renewing certificate.
+        continue;
+      } else if (livePulse?.certExpiresAt) {
+        // The pulse has not reached the site for a while; warn from the last reading it took.
         expiryDate = livePulse.certExpiresAt;
       } else {
         // Fall back to the scan report. This value can be as old as the scan
@@ -159,16 +173,18 @@ export async function runCertExpiryCheck(): Promise<void> {
         const reportData = latestReport.data as {
           tlsGrade?: string;
           certExpiry?: string | null;
+          certIssuedAt?: string | null;
           rawData?: { certExpiry?: string | null };
         };
 
         const certExpiryRaw = reportData.certExpiry ?? reportData.rawData?.certExpiry ?? null;
         if (!certExpiryRaw) continue;
         expiryDate = new Date(certExpiryRaw);
+        issuedAt = reportData.certIssuedAt ? new Date(reportData.certIssuedAt) : null;
       }
 
       if (!expiryDate) continue;
-      await maybeAlertCertExpiry(sub, expiryDate, now, appOrigin, log);
+      await maybeAlertCertExpiry(sub, expiryDate, now, appOrigin, log, issuedAt);
     } catch (err) {
       log.error({ err, subscriptionId: sub.id }, "Cert expiry check failed for subscription");
     }

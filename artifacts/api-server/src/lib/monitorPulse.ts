@@ -24,9 +24,9 @@ import { logger } from "./logger";
 import { SCANNER_USER_AGENT } from "./http";
 import { checkScanTarget } from "./ssrfGuard";
 import { type HeaderSnapshot, snapshotHeaders } from "./monitorPulseHeaders";
-import { PULSE_TIMEOUT_MS, probeCertExpiry } from "./monitorPulseCert";
+import { PULSE_TIMEOUT_MS, probeCertDates } from "./monitorPulseCert";
 export { TRACKED_HEADERS, hstsBucket, snapshotHeaders, evaluateDrift } from "./monitorPulseHeaders";
-export { certDaysRemaining, probeCertExpiry } from "./monitorPulseCert";
+export { certDaysRemaining, probeCertExpiry, certAlertThresholds } from "./monitorPulseCert";
 export type { TrackedHeader, HstsBucket, HeaderSnapshot, DriftFinding } from "./monitorPulseHeaders";
 
 /** How long pulse rows are kept. They are a rolling window, not a record. */
@@ -128,6 +128,8 @@ export interface PulseResult {
   finalUrl: string;
   snapshot: HeaderSnapshot | null;
   certExpiresAt: Date | null;
+  /** The certificate's notBefore. Not stored; used to tell auto-renewing certificates apart. */
+  certIssuedAt?: Date | null;
   failureReason: string | null;
 }
 
@@ -220,7 +222,7 @@ export async function runPulse(targetUrl: string): Promise<PulseResult> {
     // Drain rather than leave the socket half-read.
     void res.arrayBuffer().catch(() => undefined);
 
-    const certExpiresAt = await probeCertExpiry(currentUrl);
+    const cert = await probeCertDates(currentUrl);
 
     return {
       // A 404 means the server is answering; a 500 or 503 means it is not
@@ -231,7 +233,8 @@ export async function runPulse(targetUrl: string): Promise<PulseResult> {
       responseTimeMs,
       finalUrl: currentUrl,
       snapshot: snapshotHeaders(res.headers),
-      certExpiresAt,
+      certExpiresAt: cert?.expiresAt ?? null,
+      certIssuedAt: cert?.issuedAt ?? null,
       failureReason: res.status >= 500 ? `HTTP ${res.status}` : null,
     };
   } catch (err) {
