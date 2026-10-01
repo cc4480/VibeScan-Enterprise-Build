@@ -3,6 +3,7 @@ import { Copy, Check } from "lucide-react";
 import { useState } from "react";
 import type { Vulnerability } from "@workspace/api-client-react";
 import { APP_ORIGIN } from "@/lib/origin";
+import { scanNotesMarkdown } from "@/lib/scan-notes";
 import { coverageMarkdown, type CoverageTest } from "./shared-report-components";
 import { withheldMarkdown, type Interception } from "./report-viewer-provenance";
 import { SEVERITY_EMOJI, type ComplianceData } from "./report-viewer-data";
@@ -15,6 +16,8 @@ export interface ReportCopyData {
   summary: { grade: string; riskScore: number; executiveSummary: string; critical: number; high: number; medium: number; low: number; info: number; totalVulnerabilities: number };
   confirmedVulns: Vulnerability[];
   unverifiedVulns: Vulnerability[];
+  /** The scan's notes about itself, which are not findings (see lib/scan-notes.ts). */
+  scanNotes?: Vulnerability[];
   technologies: string[];
   server?: string | null;
   tlsGrade?: string | null;
@@ -70,6 +73,8 @@ export function formatReportMarkdown(d: ReportCopyData): string {
     lines.push(`> These findings used heuristic detection — verify manually before acting.`, ``);
     d.unverifiedVulns.forEach((v, i) => { lines.push(fmtVuln(v, i + 1), ``); });
   }
+
+  lines.push(...scanNotesMarkdown(d.scanNotes ?? [], d.confirmedVulns.length + d.unverifiedVulns.length > 0, fmtVuln));
 
   if (d.aiAnalysis) {
     lines.push(`## 🤖 AI Analysis`, ``);

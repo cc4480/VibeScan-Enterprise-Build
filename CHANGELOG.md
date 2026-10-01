@@ -52,6 +52,16 @@ every report show its work.
 - **A session cookie without SameSite is Low, not Medium.** Chrome and Edge already
   treat it as SameSite=Lax; the finding now says the gap is Firefox and Safari and
   that it is a missing safety net, not a demonstrated CSRF.
+- **Scan notes listed as confirmed findings.** The scan's own remarks about itself
+  ("Active security testing was skipped for this scan", "Scan reached a sign-in page,
+  not the app") are recorded as Info findings in the category "Scan Coverage", and every
+  report listed them under "Confirmed findings, act on these" and counted them in
+  "N confirmed" and "100% high-confidence". They now sit apart under "About this scan"
+  on the report, the shared report, the printed report, the PDF and the Markdown copy,
+  and the finding counts in their headings and lists leave them out. A scan with notes
+  and no findings says "No findings were reported" and points at the notes, not a green
+  all-clear. The totals the server computes (Total Findings, the severity counts under
+  the grade, the shared report's footer) still count the notes.
 - **"Which check raised this was not recorded" on findings from a busy test.** A test
   record kept the names of its first 40 findings. The sensitive-file test raises 78 on
   the vuln fixture, so 38 findings (8 of them Critical) showed no check. It keeps up
