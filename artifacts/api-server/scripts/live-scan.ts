@@ -192,7 +192,7 @@ async function main(): Promise<void> {
           cvssScore: v.cvssScore ?? null,
           wstgId: v.wstgId ?? null,
           confidence: v.confidence ?? null,
-          evidence: v.evidence ? String(v.evidence).slice(0, 600) : null,
+          evidence: v.evidence ? String(v.evidence).slice(0, 4000) : null,
         })),
       });
       console.log(`=== ${url} === ${r.vulnerabilities.length} findings, ${actionable.length} actionable`);

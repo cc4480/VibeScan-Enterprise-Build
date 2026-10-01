@@ -80,7 +80,9 @@ export function detectTechnologies(headers: Record<string, string>, html: string
   if (headerVal(headers, "x-amz-cf-id") || headerVal(headers, "x-amz-request-id")) techs.add("AWS CloudFront");
   if (headerVal(headers, "x-azure-ref"))          techs.add("Azure");
   if (headerVal(headers, "x-ms-request-id"))      techs.add("Azure");
-  if (headerVal(headers, "x-github-request-id"))  techs.add("GitHub Pages");
+  // x-github-request-id is sent by github.com and api.github.com too, so on its own it
+  // tagged GitHub's own site as a Pages site. Pages also adds x-proxy-cache.
+  if (headerVal(headers, "x-github-request-id") && headerVal(headers, "x-proxy-cache")) techs.add("GitHub Pages");
   if (headerVal(headers, "x-fastly-request-id"))  techs.add("Fastly");
   if (headerVal(headers, "fly-request-id"))       techs.add("Fly.io");
   if (headerVal(headers, "x-railway-request-id")) techs.add("Railway");
@@ -262,7 +264,7 @@ export function detectTechnologies(headers: Record<string, string>, html: string
   // the authenticity_token CSRF field/meta, the csrf-param meta, or the
   // capitalised Rack:: middleware namespace as it appears in Rack error pages.
   if (
-    /ruby on rails/i.test(s) ||
+    generatedBy(/ruby on rails/i) ||
     /name=["']authenticity_token["']/i.test(s) ||
     /name=["']csrf-param["']/i.test(s) ||
     /\bRack::[A-Z]/.test(s)

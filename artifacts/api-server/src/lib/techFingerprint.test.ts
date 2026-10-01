@@ -36,8 +36,10 @@ describe("detectTechnologies — CDN / infra headers", () => {
     expect(detectTechnologies({ "x-render-origin-server": "Render" }, "")).toContain("Render"));
   it("detects AWS CloudFront from x-amz-cf-id", () =>
     expect(detectTechnologies({ "x-amz-cf-id": "abc" }, "")).toContain("AWS CloudFront"));
-  it("detects GitHub Pages from x-github-request-id", () =>
-    expect(detectTechnologies({ "x-github-request-id": "abc" }, "")).toContain("GitHub Pages"));
+  it("detects GitHub Pages from x-github-request-id with x-proxy-cache", () =>
+    expect(detectTechnologies({ "x-github-request-id": "abc", "x-proxy-cache": "HIT" }, "")).toContain("GitHub Pages"));
+  it("does not tag github.com itself as GitHub Pages (x-github-request-id alone)", () =>
+    expect(detectTechnologies({ "x-github-request-id": "abc" }, "")).not.toContain("GitHub Pages"));
 });
 
 describe("detectTechnologies — X-Powered-By header", () => {
@@ -127,8 +129,10 @@ describe("detectTechnologies — HTML: Ruby on Rails", () => {
     expect(detectTechnologies({}, `<meta name="csrf-param" content="authenticity_token">`)).toContain("Ruby on Rails"));
   it("detects Rails from Rack:: middleware namespace in error output", () =>
     expect(detectTechnologies({}, `Rack::Timeout::Error`)).toContain("Ruby on Rails"));
-  it("detects Rails from literal 'Ruby on Rails'", () =>
-    expect(detectTechnologies({}, `<address>Ruby on Rails 7.1</address>`)).toContain("Ruby on Rails"));
+  it("detects Rails from a generator meta tag", () =>
+    expect(detectTechnologies({}, `<meta name="generator" content="Ruby on Rails 7.1">`)).toContain("Ruby on Rails"));
+  it("does NOT flag Rails on a page that merely mentions Ruby on Rails", () =>
+    expect(detectTechnologies({}, `<p>We wrote this tutorial about Ruby on Rails 7.1.</p>`)).not.toContain("Ruby on Rails"));
   it("does NOT flag Rails on Tailwind tracking-* utility classes", () =>
     expect(detectTechnologies({}, `<h1 class="text-2xl font-bold tracking-tight tracking-wider">Dashboard</h1>`)).not.toContain("Ruby on Rails"));
   it("does NOT flag Rails on incidental words containing 'rack'", () =>
