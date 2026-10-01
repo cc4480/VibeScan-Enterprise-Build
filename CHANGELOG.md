@@ -72,6 +72,9 @@ every report show its work.
   check that read that page shows "not tested on the app" with the reason; DNS,
   mail transport, subdomain takeover and GitHub checks, which never read it, stay
   as they were.
+- An informational note no longer marks an OWASP category red. A lone "COEP header
+  not set" (info) made Security Misconfiguration read "1 flagged" on an A-graded
+  report; it now shows as a grey info note and the category is judged by its tests.
 - The Supabase RLS probe says "not tested" when the page has no Supabase project.
 - CI runs the 114 database tests against a real Postgres instead of skipping them.
 

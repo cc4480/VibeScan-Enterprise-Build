@@ -1,7 +1,7 @@
 /** The building blocks of the PDF report: findings, OWASP table, coverage and the grade badge. */
 import { CheckCircle2, MinusCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CATEGORY_TO_OWASP, OWASP_CATEGORIES, owaspCoverage } from "@/lib/owaspCoverage";
+import { OWASP_CATEGORIES, owaspCoverage, owaspFindingCounts } from "@/lib/owaspCoverage";
 import { SEV_COLORS, type CoverageTest } from "@/pages/shared-report-components";
 import { type PdfVuln } from "./pdf-report";
 
@@ -66,9 +66,11 @@ export const STATE_LABEL = { partial: "partly tested", untested: "not tested", u
 
 /** Static OWASP summary. The interactive card uses recharts; a PDF wants plain markup. */
 export function Owasp({ vulns, tests }: { vulns: PdfVuln[]; tests?: CoverageTest[] | null }) {
-  const counts: Record<string, number> = {};
-  for (const v of vulns) for (const code of CATEGORY_TO_OWASP[v.category] ?? []) counts[code] = (counts[code] ?? 0) + 1;
-  const rows = OWASP_CATEGORIES.map((c) => ({ ...c, ...owaspCoverage(c.code, counts[c.code] ?? 0, tests), count: counts[c.code] ?? 0 }));
+  const counts = owaspFindingCounts(vulns);
+  const rows = OWASP_CATEGORIES.map((c) => {
+    const n = counts[c.code] ?? { actionable: 0, info: 0 };
+    return { ...c, ...owaspCoverage(c.code, n.actionable, tests), count: n.actionable, info: n.info };
+  });
   const clear = rows.filter((r) => r.state === "clear").length;
   const flagged = rows.filter((r) => r.state === "flagged").length;
   const notFull = rows.length - clear - flagged;
@@ -94,6 +96,9 @@ export function Owasp({ vulns, tests }: { vulns: PdfVuln[]; tests?: CoverageTest
               <span className="flex items-center gap-1 text-[11px] text-green-400/80"><CheckCircle2 className="w-3.5 h-3.5" /> tested, none</span>
             ) : (
               <span className="flex items-center gap-1 text-[11px] text-amber-400/80"><MinusCircle className="w-3.5 h-3.5" /> {STATE_LABEL[r.state as keyof typeof STATE_LABEL]}</span>
+            )}
+            {r.state !== "flagged" && r.info > 0 && (
+              <span className="text-[11px] text-zinc-400">· {r.info} info note{r.info === 1 ? "" : "s"}</span>
             )}
           </div>
         ))}

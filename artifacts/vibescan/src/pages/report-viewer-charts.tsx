@@ -3,7 +3,7 @@ import { CheckCircle2, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useMemo } from "react";
 import type { Vulnerability } from "@workspace/api-client-react";
-import { owaspCoverage, CATEGORY_TO_OWASP, OWASP_CATEGORIES, type OwaspState } from "@/lib/owaspCoverage";
+import { owaspCoverage, owaspFindingCounts, CATEGORY_TO_OWASP, OWASP_CATEGORIES, type OwaspState } from "@/lib/owaspCoverage";
 import { SEVERITY_HEX, type CoverageTest } from "./shared-report-components";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Cell, RadialBarChart, RadialBar, PolarAngleAxis } from "recharts";
 import { SEVERITY_ORDER, getCategoryMeta } from "./report-viewer-data";
@@ -149,10 +149,12 @@ export function OwaspBreakdown({ vulnerabilities, tests }: { vulnerabilities: Vu
     info:     "text-zinc-400",
   };
 
+  // Informational notes do not flag a category; see owaspFindingCounts.
+  const actionable = useMemo(() => owaspFindingCounts(vulnerabilities), [vulnerabilities]);
   // "No findings" is not "passed": a category nothing tested has no findings either. Each row
   // is judged by whether the tests that cover it ran (see lib/owaspCoverage.ts).
   const coverage = Object.fromEntries(
-    OWASP_CATEGORIES.map((c) => [c.code, owaspCoverage(c.code, owaspMap[c.code]?.count ?? 0, tests)]),
+    OWASP_CATEGORIES.map((c) => [c.code, owaspCoverage(c.code, actionable[c.code]?.actionable ?? 0, tests)]),
   ) as Record<string, ReturnType<typeof owaspCoverage>>;
   const countOf = (s: OwaspState) => OWASP_CATEGORIES.filter((c) => coverage[c.code]!.state === s).length;
   const failing = countOf("flagged");
