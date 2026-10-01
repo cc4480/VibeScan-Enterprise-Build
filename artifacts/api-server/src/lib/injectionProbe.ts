@@ -190,6 +190,8 @@ export async function runInjectionProbes(
 
   const xssParams: string[] = [];
   const xssHow: string[] = [];
+  // The path each parameter reflected on: the scan's start path is only where the form was found.
+  const xssPaths: string[] = [];
   const sqliFindings: Array<{ param: string; path: string; signature: string }> = [];
 
   for (const { path, param } of cases) {
@@ -212,6 +214,7 @@ export async function runInjectionProbes(
       if (how && !xssParams.includes(param)) {
         xssParams.push(param);
         xssHow.push(how);
+        xssPaths.push(path);
       }
     }
 
@@ -246,7 +249,7 @@ export async function runInjectionProbes(
       severity: "high",
       category: "Injection",
       description: `${xssParams.length} parameter${plural ? "s" : ""} (${list}) reflect${plural ? "" : "s"} input into the HTML response without output encoding — the injected '<...>' markers came back with their angle brackets intact. An attacker can craft a link that runs arbitrary JavaScript in a victim's browser, stealing session tokens or performing actions as the victim.`,
-      evidence: `Endpoint: ${targetPath}?${xssParams[0]}=<payload>\nInjected: "'><random-token>\nResponse ${xssHow[0]}.`,
+      evidence: `Endpoint: ${xssPaths[0]}?${xssParams[0]}=<payload>\nInjected: "'><random-token>\nResponse ${xssHow[0]}.`,
       solution:
         "Context-aware output encoding is the fix: HTML-encode user input before rendering it into the page (<, >, \", ', & → entities). Use your framework's auto-escaping (React/Vue/Angular escape by default — avoid dangerouslySetInnerHTML / v-html / bypassSecurityTrust). Add a strict Content-Security-Policy (script-src 'self') as defence in depth.",
       cweId: "CWE-79",

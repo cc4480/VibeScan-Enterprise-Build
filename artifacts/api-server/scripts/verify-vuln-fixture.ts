@@ -111,6 +111,11 @@ const EXPECTED: Array<{ module: string; label: string; match: RegExp }> = [
   { module: "jsScanner", label: "DB connection string in JS", match: /Database Connection URL with Credentials/i },
   { module: "jsScanner", label: "hardcoded JWT in JS", match: /Hardcoded JWT Token in Source/i },
   { module: "jsScanner", label: "private key in JS", match: /Private Key Exposed in JavaScript/i },
+  { module: "jsScanner", label: "Slack bot token in JS", match: /Slack Bot\/OAuth Token Exposed/i },
+  { module: "jsScanner", label: "Supabase sb_secret_ key in JS", match: /Supabase Service Role Key Exposed \(sb_secret_\)/i },
+  { module: "jsScanner", label: "Supabase service_role key in JS", match: /Supabase Service Role Key Exposed in JavaScript/i },
+  { module: "jsScanner", label: "Twilio SID and secret in JS", match: /Twilio API Key SID and Secret Exposed/i },
+  { module: "jsScanner", label: "JWT naming an account but no principal", match: /JWT-Shaped Publishable Key in Client Code/i },
 
   // ── nextjsProbe.ts ───────────────────────────────────────────────────────
   { module: "nextjsProbe.ts", label: "Stripe key in __NEXT_DATA__", match: /Stripe Live Secret Key in __NEXT_DATA__/i },

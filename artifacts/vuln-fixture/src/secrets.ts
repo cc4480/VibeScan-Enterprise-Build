@@ -90,9 +90,14 @@ const stripeTestKey = "sk_test_51" + tok(30, ALNUM, 20);
 const stripeWebhookSecret = "whsec_" + tok(40, ALNUM, 21);
 const stripeFrontendLeak = "sk_live_51" + tok(30, ALNUM, 22);
 export const STRIPE_SOURCEMAP_KEY = "sk_live_51SourceMapFakeNotReal" + "0".repeat(15);
-const slackToken = "xoxb-" + "0".repeat(11) + "-" + "1".repeat(11) + "-" + "2".repeat(24);
-const supabaseSecretKey = "sb_secret_" + "0".repeat(24);
-const supabaseServiceRoleKey = "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0." + "0".repeat(48);
+// Not zero-filled: the scanner (rightly) drops a run of one character as a template, so these four
+// planted values used to be ignored and the patterns they exist to exercise went unverified.
+const slackToken = "xoxb-" + tok(11, "0123456789", 31) + "-" + tok(11, "0123456789", 32) + "-" + tok(24, ALNUM, 33);
+const supabaseSecretKey = "sb_secret_" + tok(24, ALNUM, 34);
+const supabaseServiceRoleKey = `${b64url({ alg: "HS256", typ: "JWT" })}.${b64url({ role: "service_role" })}.${tok(43, ALNUM, 35)}`;
+const twilioSecret = tok(32, ALNUM, 36);
+// A JWT that names an account but no principal: what a vendor widget ships publicly.
+const publishableJwt = `${b64url({ alg: "HS256", typ: "JWT" })}.${b64url({ iss: "widget-sdk", aid: "acct_8f3k2m9x", iat: now })}.${tok(43, ALNUM, 37)}`;
 const mailchimpApiKey = "0123456789abcdef".repeat(2) + "-us14";
 const privateKeyPemBody = "-----BEGIN PRIVATE KEY-----\\n" + "M".repeat(60) + "\\n-----END PRIVATE KEY-----";
 const firebaseApiKey = "AIza" + "0".repeat(35);
@@ -125,10 +130,12 @@ const SLACK_WEBHOOK = "${slackWebhook}";
 
 // ── Twilio ───────────────────────────────────────────────────────────────────
 const TWILIO_KEY = "${twilioKey}";
+const TWILIO_SECRET = "${twilioSecret}";
 
 // ── Supabase ─────────────────────────────────────────────────────────────────
 const SUPABASE_SECRET = "${supabaseSecretKey}";
 const serviceRoleKey = "${supabaseServiceRoleKey}";
+const WIDGET_PUBLIC_KEY = "${publishableJwt}";
 
 // ── Sentry ───────────────────────────────────────────────────────────────────
 const SENTRY_TOKEN = "${sentryModern}";

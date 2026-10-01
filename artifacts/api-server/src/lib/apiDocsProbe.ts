@@ -61,7 +61,7 @@ export async function runApiDocsProbe(targetUrl: string): Promise<ScanVulnerabil
       if (!r || r.status !== 200) return null;
 
       // Suppress if response is the SPA catch-all shell — not a real doc endpoint
-      if (matchesCatchAll(r.body, catchAll)) return null;
+      if (matchesCatchAll(r.body, catchAll, url)) return null;
 
       if (!validate(r.body, r.ct)) return null;
 

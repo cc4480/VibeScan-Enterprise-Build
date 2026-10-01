@@ -18,8 +18,25 @@ import { scanFetch } from "./http";
 const NONCE_TIMEOUT_MS = 8_000;
 
 export interface CatchAllFingerprint {
+  /** Length of the baseline body with every echo of the requested path removed. */
   bodyLength: number;
   title: string;
+}
+
+/**
+ * A body with every copy of the requested path taken out. Catch-alls that say
+ * "could not find /x" or answer {"error":"not found","path":"/x"} change length
+ * with each path, so comparing raw lengths reads each one as different content.
+ * JSON encoders that escape "/" as "\/" are covered too.
+ */
+function withoutEcho(body: string, path: string | undefined): string {
+  if (!path || path === "/") return body;
+  return body.split(path).join("").split(path.replace(/\//g, "\\/")).join("");
+}
+
+function pathOf(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try { return new URL(url).pathname; } catch { return undefined; }
 }
 
 async function safeGetForFingerprint(
@@ -37,11 +54,12 @@ async function safeGetForFingerprint(
  */
 export async function detectCatchAll(origin: string): Promise<CatchAllFingerprint | null> {
   const nonce = `vibescan-spacheck-${Math.random().toString(36).slice(2, 10)}-notfound`;
-  const r = await safeGetForFingerprint(`${origin}/${nonce}`);
+  const url = `${origin}/${nonce}`;
+  const r = await safeGetForFingerprint(url);
   if (!r || r.status !== 200) return null;
   const titleMatch = /<title[^>]*>([^<]{1,200})<\/title>/i.exec(r.body);
   return {
-    bodyLength: r.body.length,
+    bodyLength: withoutEcho(r.body, pathOf(url)).length,
     title: titleMatch?.[1]?.trim() ?? "",
   };
 }
@@ -50,12 +68,14 @@ export async function detectCatchAll(origin: string): Promise<CatchAllFingerprin
  * Returns true when a probe response looks like the catch-all shell rather
  * than genuine content at that path. Two independent signals — body size
  * within 3% of the baseline, or an exact <title> match — either is
- * sufficient, since catch-all shells are byte-for-byte consistent.
+ * sufficient, since catch-all shells are byte-for-byte consistent. Pass the
+ * probed URL so a shell that echoes the requested path is still recognised.
  */
-export function matchesCatchAll(body: string, catchAll: CatchAllFingerprint | null): boolean {
+export function matchesCatchAll(body: string, catchAll: CatchAllFingerprint | null, probedUrl?: string): boolean {
   if (!catchAll || catchAll.bodyLength === 0) return false;
 
-  const diff = Math.abs(body.length - catchAll.bodyLength) / catchAll.bodyLength;
+  const length = withoutEcho(body, pathOf(probedUrl)).length;
+  const diff = Math.abs(length - catchAll.bodyLength) / catchAll.bodyLength;
   if (diff < 0.03) return true;
 
   if (catchAll.title.length > 3) {

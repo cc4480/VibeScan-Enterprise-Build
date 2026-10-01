@@ -37,7 +37,7 @@ export async function checkSensitiveFiles(baseUrl: string): Promise<ScanVulnerab
       }
 
       // Suppress if the response is just the catch-all shell, not real content
-      if (matchesCatchAll(result.body, catchAll)) return null;
+      if (matchesCatchAll(result.body, catchAll, url)) return null;
 
       const ct = result.headers["content-type"] ?? "";
 

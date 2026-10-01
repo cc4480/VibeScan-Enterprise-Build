@@ -87,7 +87,7 @@ export async function probePathSensitiveFiles(
         return;
       }
 
-      if (matchesCatchAll(result.body, catchAll)) return;
+      if (matchesCatchAll(result.body, catchAll, probeUrl)) return;
       // A file that comes back as a full HTML document is the app shell, not the file.
       if (!probe.servesHtml && looksLikeHtmlDocument(result.body)) return;
 

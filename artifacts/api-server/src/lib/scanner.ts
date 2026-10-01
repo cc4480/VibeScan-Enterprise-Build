@@ -112,9 +112,16 @@ async function runScanInner(
   // HTTP security headers stay from the raw fetch above — they're identical.
   let renderedWithBrowser = false;
   let observedRequests: ObservedRequest[] = [];
+  let renderRejected: string | undefined;
   if (isSpa(html)) {
     const rendered = await renderPage(finalUrl).catch(() => null);
-    if (rendered) {
+    // The browser can be answered differently from the plain fetch: a proxy error page, or a bot
+    // challenge served only to headless Chrome. Analysing that page would replace the site's own
+    // content, silently dropping every finding that reads it, so a render that failed where the
+    // plain fetch did not is set aside and said so.
+    if (rendered && rendered.status >= 400 && rendered.status !== initial.status) {
+      renderRejected = `the headless browser was answered with HTTP ${rendered.status} where the plain request got HTTP ${initial.status}`;
+    } else if (rendered) {
       html = rendered.html;
       finalUrl = rendered.finalUrl || finalUrl;
       renderedWithBrowser = true;
@@ -222,6 +229,21 @@ async function runScanInner(
       unrunFamilies,
     })),
   );
+
+  if (renderRejected) {
+    vulnerabilities.push(vuln({
+      name: "Browser Rendering Was Not Used",
+      severity: "info",
+      category: "Scan Coverage",
+      description:
+        "This page looks like a JavaScript app, so the scan tried to load it in a headless browser, but " +
+        `${renderRejected}. The scan used the page as the plain request received it instead. This is not a finding about your site. ` +
+        "Anything that only appears after the page's scripts run (bundled secrets, calls the page makes at runtime) may not have been seen, so re-run before treating a clean result there as meaningful.",
+      evidence: renderRejected,
+      solution: "If a bot-protection rule treats headless browsers differently, allow the scanner's User-Agent, then re-run the scan.",
+      confidence: 100,
+    }));
+  }
 
   if (unrunFamilies.length > 0) {
     vulnerabilities.push(vuln({
