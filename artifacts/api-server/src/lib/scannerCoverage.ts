@@ -1,4 +1,5 @@
 import { vuln, type ScanVulnerability } from "./scannerTypes";
+import type { TestRecord } from "./testLedger";
 
 /**
  * Finding raised when the scan's session expired partway through.
@@ -105,6 +106,33 @@ export function splitInterceptedFindings(
   const dropped: ScanVulnerability[] = [];
   for (const v of findings) (SOURCES_NOT_READING_THE_RESPONSE.has(v.category) ? kept : dropped).push(v);
   return { kept, dropped };
+}
+
+/**
+ * Tests that never read the intercepted response: they ask DNS, the mail servers or a code
+ * repository, so a sign-in wall or bot challenge in front of the site does not change what they saw.
+ */
+const TESTS_NOT_READING_THE_RESPONSE = new Set([
+  "DNS and email authentication",
+  "mail transport security (STARTTLS, MX certificate)",
+  "subdomain takeover",
+  "GitHub source code secrets",
+]);
+
+/**
+ * On an intercepted scan, every other test that "ran" ran against the page that answered instead
+ * of the app, and its findings are withheld. Left as "ran, 0 findings" it would tell the reader the
+ * app was checked and came back clean, which is the opposite of what happened. Rewritten in place
+ * to "skipped" with the reason, so the coverage list matches the withheld list.
+ */
+export function markInterceptedTestsNotRun(records: TestRecord[], reason: string): void {
+  for (const r of records) {
+    if (r.status !== "ran" || TESTS_NOT_READING_THE_RESPONSE.has(r.name)) continue;
+    r.status = "skipped";
+    r.reason = `not tested on the app: ${reason}`;
+    r.findings = 0;
+    delete r.found;
+  }
 }
 
 export function withheldEntry(v: ScanVulnerability, reason: string): WithheldFinding {

@@ -17,6 +17,7 @@ import { analyzeCookies } from "./scannerCookies";
 import { technologiesWithVersions } from "./scannerTech";
 import {
   sessionLostFinding, interceptedFinding, activeProbesSkippedFinding, splitInterceptedFindings, withheldEntry,
+  markInterceptedTestsNotRun,
   platformGateFinding, rootErrorFinding, landedElsewhereFinding, type WithheldFinding,
 } from "./scannerCoverage";
 import { activeProbesStillAllowed } from "./activeScopeGuard";
@@ -329,6 +330,16 @@ async function runScanInner(
       ? `read from ${gateVerdict.vendor ?? "a"} sign-in page, not from the app`
       : `read from ${gateVerdict?.vendor ?? "the hosting platform"}'s own page, not from the app`;
   for (const v of dropped) withheld.push(withheldEntry(v, droppedReason));
+  if (intercepted) {
+    markInterceptedTestsNotRun(
+      ledger.records,
+      challengeVerdict.isChallenge
+        ? "a bot-protection page answered instead of the site"
+        : gateVerdict?.kind === "sign-in wall"
+          ? "a sign-in page answered instead of the app"
+          : "the hosting platform answered instead of the app",
+    );
+  }
 
   // Not intercepted, but the reader still needs to know what the findings were read from.
   const contextNotes: ScanVulnerability[] = [];

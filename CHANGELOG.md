@@ -67,6 +67,11 @@ every report show its work.
 - A scan whose start page answered an error, or that was redirected to another
   site, says so in the report.
 - The PDF download and the printed report carry the withheld list too.
+- On a scan where a sign-in wall, platform page or bot challenge answered, the
+  "What this scan tested" list no longer says checks "ran" against the app. Every
+  check that read that page shows "not tested on the app" with the reason; DNS,
+  mail transport, subdomain takeover and GitHub checks, which never read it, stay
+  as they were.
 - The Supabase RLS probe says "not tested" when the page has no Supabase project.
 - CI runs the 114 database tests against a real Postgres instead of skipping them.
 
