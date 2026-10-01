@@ -52,6 +52,10 @@ every report show its work.
 - **A session cookie without SameSite is Low, not Medium.** Chrome and Edge already
   treat it as SameSite=Lax; the finding now says the gap is Firefox and Safari and
   that it is a missing safety net, not a demonstrated CSRF.
+- **"Which check raised this was not recorded" on findings from a busy test.** A test
+  record kept the names of its first 40 findings. The sensitive-file test raises 78 on
+  the vuln fixture, so 38 findings (8 of them Critical) showed no check. It keeps up
+  to 500.
 
 ### Added
 

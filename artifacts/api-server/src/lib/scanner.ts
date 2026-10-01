@@ -24,7 +24,7 @@ import { activeProbesStillAllowed } from "./activeScopeGuard";
 import { detectChallengePage } from "./challengePage.js";
 import { detectPlatformGate, landedElsewhere } from "./platformGate";
 import { runWithScanHttp, scanFetch, scanFetchOrThrow, sessionWasLost } from "./http";
-import { TestLedger, type TestRecord } from "./testLedger";
+import { TestLedger, foundNames, type TestRecord } from "./testLedger";
 import { runCrossAccountStep } from "./crossAccountStep";
 import { autoEnrichConfidence } from "./scoring";
 import { isSpa, renderPage } from "./browser";
@@ -213,7 +213,7 @@ async function runScanInner(
           const found = vulnerabilities.filter((v) => v.category !== "Scan Coverage");
           return {
             group: "passive", name: "response headers and cookies", status: "ran" as const, findings: found.length, durationMs: 0,
-            ...(found.length > 0 ? { found: found.slice(0, 40).map((v) => v.name) } : {}),
+            ...(found.length > 0 ? { found: foundNames(found) } : {}),
           };
         })(),
   );
