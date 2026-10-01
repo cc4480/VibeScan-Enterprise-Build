@@ -1,6 +1,6 @@
 import { vuln, type ScanVulnerability } from "./scannerTypes";
 import { runAllProbes } from "./probes";
-import { TestLedger, NOT_VERIFIED } from "./testLedger";
+import { TestLedger, NOT_VERIFIED, type ProbeOutcome } from "./testLedger";
 import { checkDnsSecurity } from "./dnsChecks";
 import { scanJavaScriptForSecrets } from "./jsScanner";
 import { parseGithubRepoRef, scanGithubRepo, githubProbeOutcome } from "./githubSourceProbe";
@@ -53,6 +53,7 @@ export async function runProbeStage({
       ledger.records.push({
         group: "crawl", name: `site crawl (${r.pagesVisited.length} inner pages)`, status: "ran",
         findings: r.vulnerabilities.length, durationMs: Date.now() - crawlStarted,
+        ...(r.vulnerabilities.length > 0 ? { found: r.vulnerabilities.slice(0, 40).map((v) => v.name) } : {}),
       });
       return { ...r, failed: false };
     })
@@ -85,6 +86,14 @@ export async function runProbeStage({
   // rejections, so a single failed check inside it would not surface as a
   // failure of the family. It reports them individually through this callback.
   const innerProbeFailures: string[] = [];
+
+  // A probe that can tell "nothing here to test" from "tested, found nothing" says which, so the
+  // report shows "not tested: <why>" instead of "ran, 0 findings" for a check that had no subject.
+  const outcome = (family: string, group: "passive" | "active", start: (notTested: (reason: string) => void) => Promise<ScanVulnerability[]>) => {
+    let reason: string | undefined;
+    const run: Promise<ProbeOutcome> = start((r) => { reason = r; }).then((findings) => ({ findings, ...(reason ? { notTested: reason } : {}) }));
+    return { family, tracked: true, run: ledger.trackOutcome(group, family, run) };
+  };
 
   const namedProbes: Array<{ family: string; run: Promise<ScanVulnerability[]>; tracked?: boolean }> = [
     {
@@ -120,16 +129,16 @@ export async function runProbeStage({
     },
     { family: "known-CVE and end-of-life versions", run: checkForKnownVulnerabilities(html, rawHeaders) },
     // Passive JWT analysis — no extra HTTP requests
-    { family: "JWT analysis", run: analyzeJwts(rawHeaders, html) },
+    outcome("JWT analysis", "passive", (nt) => analyzeJwts(rawHeaders, html, nt)),
     // Subdomain takeover — 1-2 DNS + HTTP checks
     { family: "subdomain takeover", run: checkSubdomainTakeover(finalUrl) },
     // Source map exposure — checks JS bundles for .map files
-    { family: "source map exposure", run: checkSourceMaps(html, finalUrl) },
+    outcome("source map exposure", "passive", (nt) => checkSourceMaps(html, finalUrl, nt)),
     // Exposed API docs: Swagger/OpenAPI/ReDoc — fetching published doc paths
     { family: "exposed API documentation", run: runApiDocsProbe(finalUrl) },
     { family: "health endpoint disclosure", run: runHealthEndpointProbe(finalUrl) },
     // Next.js __NEXT_DATA__ prop leaks — read from the page already fetched
-    { family: "Next.js __NEXT_DATA__ secrets", run: runNextjsProbe(finalUrl, html) },
+    outcome("Next.js __NEXT_DATA__ secrets", "passive", (nt) => runNextjsProbe(finalUrl, html, nt)),
   ];
 
   // Everything below reads data out of a backend the target owns, or fuzzes an
@@ -149,24 +158,21 @@ export async function runProbeStage({
   if (allowActiveProbes) {
     namedProbes.push(
       // Vibe-stack database security — Supabase RLS + Firebase rules (both tiers)
-      { family: "Supabase RLS and Firebase rules", run: checkVibeStackSecurity(html, finalUrl, tier) },
+      outcome("Supabase RLS and Firebase rules", "active", (nt) => checkVibeStackSecurity(html, finalUrl, tier, nt)),
       // BaaS open-data checks not covered above: PocketBase, Appwrite
-      { family: "BaaS open data (PocketBase, Appwrite)", run: runBaasProbes(finalUrl, html) },
+      outcome("BaaS open data (PocketBase, Appwrite)", "active", (nt) => runBaasProbes(finalUrl, html, nt)),
       // GraphQL introspection + field suggestions
       { family: "GraphQL introspection", run: runGraphqlProbe(finalUrl, html) },
       // Public cloud storage listing: S3, GCS, Azure Blob
-      { family: "public cloud storage buckets", run: runStorageProbe(finalUrl, html) },
+      outcome("public cloud storage buckets", "active", (nt) => runStorageProbe(finalUrl, html, nt)),
       // Real SCA, when the target publishes its own manifest. The path probe
       // already reports that /package.json is exposed; this reads the
       // dependency tree inside it and matches it against OSV, which is the
       // thing that finding tells the customer an attacker would do.
-      {
-        family: "dependency CVEs from an exposed manifest",
-        run: (async () => {
-          const { scaFromExposedManifest } = await import("./manifestSca.js");
-          return scaFromExposedManifest(new URL(finalUrl).origin);
-        })(),
-      },
+      outcome("dependency CVEs from an exposed manifest", "active", async (nt) => {
+        const { scaFromExposedManifest } = await import("./manifestSca.js");
+        return scaFromExposedManifest(new URL(finalUrl).origin, nt);
+      }),
     );
   }
 

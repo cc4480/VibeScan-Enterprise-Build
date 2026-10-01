@@ -204,11 +204,19 @@ function redactSecret(text: string): string {
 export async function runNextjsProbe(
   _targetUrl: string,
   html: string,
+  /** Told why, when there was nothing here to test (recorded as "not tested", not "ran"). */
+  notTested?: (reason: string) => void,
 ): Promise<ScanVulnerability[]> {
-  if (!isNextJsPage(html)) return [];
+  if (!isNextJsPage(html)) {
+    notTested?.("the page is not a Next.js page, so there is no __NEXT_DATA__ block to read");
+    return [];
+  }
 
   const nextDataRaw = extractNextData(html);
-  if (!nextDataRaw) return [];
+  if (!nextDataRaw) {
+    notTested?.("this Next.js page has no __NEXT_DATA__ block (App Router pages do not ship one)");
+    return [];
+  }
 
   // Parse to confirm it's valid JSON (fail-soft if it's not)
   let nextDataStr: string;

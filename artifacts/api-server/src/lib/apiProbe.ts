@@ -54,7 +54,18 @@ export async function runApiProbes(input: ApiProbeInput): Promise<ScanVulnerabil
     .filter(isReadShaped)
     .slice(0, MAX_ENDPOINTS_TESTED);
 
-  if (testable.length === 0) return [];
+  // Mass assignment is read from the declared contract and sends nothing, so it is not limited to
+  // read-shaped endpoints: the create and signup endpoints isReadShaped leaves out are exactly where
+  // a "role" field gets bound onto a new record.
+  // Outside the read-shaped set, only a published spec counts: a field the app's own front end sends
+  // (user_id on a comment, plan on a checkout) is not a declaration that the server binds it.
+  const massAssignable = input.endpoints
+    .filter((e) => e.source === "spec" || isReadShaped(e))
+    .slice(0, MAX_ENDPOINTS_TESTED * 4)
+    .map((e) => ({ endpoint: `${e.method} ${new URL(concreteUrl(e)).pathname}`, fields: privilegeFieldsAccepted(e) }))
+    .filter((m) => m.fields.length > 0);
+
+  if (testable.length === 0) return buildApiFindings({ ...emptyHits(), massAssignable });
   const unauthorizedWrites: string[] = [];
 
   // One account presented twice is not two accounts: every "shared" record would be the same
@@ -64,10 +75,12 @@ export async function runApiProbes(input: ApiProbeInput): Promise<ScanVulnerabil
       ? undefined
       : input.secondary;
 
-  const hits: ApiProbeHits = {
-    unauthenticated: [], injectable: [], overExposed: [], unratelimited: [], crossAccount: [], massAssignable: [], unauthorizedWrites: [],
-  };
+  const hits: ApiProbeHits = { ...emptyHits(), massAssignable };
   for (const endpoint of testable) await testEndpoint(endpoint, input, secondary, hits);
 
   return buildApiFindings(hits);
+}
+
+function emptyHits(): ApiProbeHits {
+  return { unauthenticated: [], injectable: [], overExposed: [], unratelimited: [], crossAccount: [], massAssignable: [], unauthorizedWrites: [] };
 }

@@ -116,6 +116,7 @@ const TITLE_SIGNALS: { vendor: string; re: RegExp; anySize?: true }[] = [
   { vendor: "Cloudflare", re: /^just a moment\.{0,3}$/i },
   { vendor: "Cloudflare", re: /^attention required!/i },
   { vendor: "Cloudflare", re: /^access denied \| .*cloudflare/i },
+  { vendor: "Vercel", re: /^vercel security checkpoint$/i },
   { vendor: "generic WAF", re: /^(checking your browser|please wait\.{0,3}|one more step|security check)$/i },
   { vendor: "generic WAF", re: /^(403 forbidden|access denied|request blocked|blocked)$/i },
   // Akamai's block page as microsoft.com's edge serves it (2026-09-29): HTTP 200, 201 KB, the
@@ -138,6 +139,8 @@ const HEADER_SIGNALS: { vendor: string; header: string; re: RegExp; label: strin
   { vendor: "Cloudflare", header: "cf-mitigated", re: /challenge|block/i, label: "cf-mitigated response header" },
   { vendor: "DataDome", header: "x-datadome", re: /block|challenge|captcha/i, label: "x-datadome response header" },
   { vendor: "AWS WAF", header: "x-amzn-waf-action", re: /block|challenge|captcha/i, label: "x-amzn-waf-action response header" },
+  // Vercel's Attack Challenge Mode / Firewall challenge ("Vercel Security Checkpoint").
+  { vendor: "Vercel", header: "x-vercel-mitigated", re: /challenge|deny|block/i, label: "x-vercel-mitigated response header" },
 ];
 
 function titleOf(html: string): string | null {

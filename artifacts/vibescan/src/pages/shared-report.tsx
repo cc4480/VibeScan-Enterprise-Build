@@ -7,6 +7,7 @@ import { cn, getGradeColor } from "@/lib/utils";
 import { APP_ORIGIN } from "@/lib/origin";
 import { PdfReport } from "@/components/pdf-report";
 import { GradeRing, VulnRow, ComplianceCard, CoverageCard, SeverityLegend, SEV_ORDER, VERIFICATION_THRESHOLD } from "./shared-report-components";
+import { WithheldCard, type Interception } from "./report-viewer-provenance";
 
 export default function SharedReport() {
   const [, params] = useRoute("/share/:token");
@@ -192,6 +193,10 @@ export default function SharedReport() {
           the room. Renders nothing when no findings map to a framework. */}
       <div className="mt-10 space-y-8">
         <CoverageCard tests={data.tests ?? null} />
+        <WithheldCard
+          withheld={(data as { withheld?: unknown }).withheld}
+          interception={(data as { interception?: Interception | null }).interception ?? null}
+        />
         <ComplianceCard compliance={compliance} />
       </div>
 

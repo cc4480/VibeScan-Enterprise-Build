@@ -81,8 +81,93 @@ export function withholdInterceptedFindings(
   findings: ScanVulnerability[],
   isChallenge: boolean,
 ): ScanVulnerability[] {
-  if (!isChallenge) return findings;
-  return findings.filter((v) => SOURCES_NOT_READING_THE_RESPONSE.has(v.category));
+  return splitInterceptedFindings(findings, isChallenge).kept;
+}
+
+/** A finding the scan produced and chose not to report, with the reason. Shown in the report. */
+export interface WithheldFinding {
+  name: string;
+  severity: ScanVulnerability["severity"];
+  category: string;
+  reason: string;
+}
+
+/**
+ * withholdInterceptedFindings, keeping what it dropped so the report can list it. A withheld
+ * finding is not deleted silently: the reader sees its name and why it was not reported.
+ */
+export function splitInterceptedFindings(
+  findings: ScanVulnerability[],
+  isChallenge: boolean,
+): { kept: ScanVulnerability[]; dropped: ScanVulnerability[] } {
+  if (!isChallenge) return { kept: findings, dropped: [] };
+  const kept: ScanVulnerability[] = [];
+  const dropped: ScanVulnerability[] = [];
+  for (const v of findings) (SOURCES_NOT_READING_THE_RESPONSE.has(v.category) ? kept : dropped).push(v);
+  return { kept, dropped };
+}
+
+export function withheldEntry(v: ScanVulnerability, reason: string): WithheldFinding {
+  return { name: v.name, severity: v.severity, category: v.category, reason };
+}
+
+/**
+ * Emitted when the scan reached a hosting platform's or identity provider's page instead of the app
+ * (see platformGate.ts). Same treatment as a bot challenge: what was analysed is not the app, so
+ * every finding read from it is withheld and the scan is not graded.
+ */
+export function platformGateFinding(kind: "sign-in wall" | "app not running", vendor: string | null, signal: string): ScanVulnerability {
+  const who = vendor ?? "the hosting platform";
+  const signIn = kind === "sign-in wall";
+  return vuln({
+    name: signIn ? "Scan reached a sign-in page, not the app" : "The hosting platform answered, not the app",
+    severity: "info",
+    category: "Scan Coverage",
+    description:
+      (signIn
+        ? `Every request for this address was sent to a sign-in page run by ${who}, so the scan never saw the app behind it. `
+        : `This address was answered by ${who}'s own page saying no app is running here (not found, paused, suspended or failing to start), so the scan never saw the app. `) +
+      "That page looks the same for every site on the platform, so every check that reads the response (security headers, cookies, Content-Security-Policy, CORS, page content, exposed files, API tests) would have described it rather than your app. " +
+      "Those findings have been withheld and listed under \"Withheld from this report\" instead. What remains is what does not depend on the page: DNS and email records. This is an incomplete result, not a clean one.",
+    evidence: signal,
+    solution: signIn
+      ? "Scan an address that serves the app without signing in, or supply a login for the scan (Scan credentials). For Vercel Deployment Protection, scan the production domain or use a protection-bypass token."
+      : "Check that the app is deployed and running at this address, then scan again.",
+    confidence: 95,
+  });
+}
+
+/** The address answered an error status, so what was analysed is an error response, not a page. */
+export function rootErrorFinding(status: number, url: string): ScanVulnerability {
+  return vuln({
+    name: "Scan started from an error response",
+    severity: "info",
+    category: "Scan Coverage",
+    description:
+      `The page this scan started from answered HTTP ${status}${status >= 500 ? " (a server error)" : status === 401 || status === 403 ? " (sign-in or permission required)" : status === 404 ? " (not found)" : ""}. ` +
+      "Header, cookie and page findings below describe that response, which may not be what visitors to the working app receive. " +
+      "This is not a finding about your site on its own; it is here so a report built from an error page is not mistaken for one built from the app.",
+    evidence: `GET ${url} → HTTP ${status}`,
+    solution: status >= 500
+      ? "Check the app is up, then scan again."
+      : "Scan the address visitors actually land on, or supply a login (Scan credentials) if the app requires one.",
+    confidence: 100,
+  });
+}
+
+/** The scan followed redirects onto a different site. Findings are kept; the reader is told whose they are. */
+export function landedElsewhereFinding(requestedUrl: string, finalUrl: string): ScanVulnerability {
+  return vuln({
+    name: "Scan followed a redirect to a different site",
+    severity: "info",
+    category: "Scan Coverage",
+    description:
+      `${requestedUrl} redirected to ${finalUrl}. Header, cookie and page findings in this report were read from that site's response. ` +
+      "If it is yours (another domain you own), they apply to you; if it is not, scan the address that serves your app instead.",
+    evidence: `${requestedUrl} → ${finalUrl}`,
+    solution: "Scan the address your app is actually served from.",
+    confidence: 100,
+  });
 }
 
 export function activeProbesSkippedFinding(redirectedTo?: string): ScanVulnerability {

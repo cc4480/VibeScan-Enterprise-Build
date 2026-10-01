@@ -16,6 +16,7 @@
 
 import { guardBrowser } from "./browserGuard";
 import { logger } from "./logger";
+import { SCANNER_USER_AGENT } from "./appOrigin";
 import { CHROMIUM_ARGS } from "./browserArgs";
 import { getScanHttpContext } from "./http";
 import { jsonBodyKeys, type ObservedRequest } from "./apiRuntime";
@@ -125,8 +126,10 @@ export async function renderPage(url: string): Promise<RenderedPage | null> {
         javaScriptEnabled: boolean;
       }): Promise<unknown>;
     }).newContext({
-      userAgent:
-        "Mozilla/5.0 (compatible; VibeScan-Security-Bot/1.0; +https://secscan.us/bot)",
+      // The same User-Agent as every other scan request. This was a separate, older string
+      // ("VibeScan-Security-Bot"), so a site that allowed the scanner by the name /bot documents
+      // ("SecScan-Security-Bot") let the plain requests through and challenged the browser.
+      userAgent: SCANNER_USER_AGENT,
       ignoreHTTPSErrors: false,
       javaScriptEnabled: true,
     });

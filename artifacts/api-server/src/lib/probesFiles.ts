@@ -237,8 +237,13 @@ export async function checkSecurityTxt(
     if (res.status === 401 || res.status === 403 || res.status === 429 || res.status >= 500) couldNotTell = true;
     if (res.status >= 200 && res.status < 300) {
       if (/Contact:|Expires:|Policy:/i.test(res.body)) return [];
+      // A catch-all host answers 200 with its app shell for any path; say so, or the reader goes
+      // looking for a security.txt file that was never there.
+      const isPage = /^\s*<(!doctype\s+html|html[\s>])/i.test(res.body.slice(0, 1_000));
       observed.push(
-        `GET ${origin}${p} → HTTP ${res.status}, but no RFC 9116 fields (Contact:/Expires:/Policy:) in the body`,
+        isPage
+          ? `GET ${origin}${p} → HTTP ${res.status} with an HTML page (the site's catch-all answer for unknown paths), not a security.txt file`
+          : `GET ${origin}${p} → HTTP ${res.status}, but no RFC 9116 fields (Contact:/Expires:/Policy:) in the body`,
       );
       continue;
     }

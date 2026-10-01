@@ -13,6 +13,7 @@ import type { ScanChanges } from "@/lib/report-changes";
 import { useState } from "react";
 import { useSeo } from "@/lib/seo";
 import { ComplianceCard, CoverageCard, type CoverageTest } from "./shared-report-components";
+import { ReportTestsContext, WithheldCard, type Interception } from "./report-viewer-provenance";
 import { type ComplianceData, DismissalsContext } from "./report-viewer-data";
 import { OwaspBreakdown } from "./report-viewer-charts";
 import { ReconCard } from "./report-viewer-recon";
@@ -68,6 +69,9 @@ export default function ReportViewer() {
   const compliance = (report.data as { compliance?: ComplianceData | null }).compliance ?? null;
   // What ran and what was skipped; absent on reports from before test records.
   const coverageTests = (report.data as { tests?: CoverageTest[] | null }).tests ?? null;
+  // Findings the scan produced and did not report, and what answered instead of the app (if anything).
+  const withheld = (report.data as { withheld?: unknown }).withheld;
+  const interception = (report.data as { interception?: Interception | null }).interception ?? null;
   // What changed since the last scan of this site (computed by the server; absent for a first scan).
   const changes = (report.data as { changes?: ScanChanges | null }).changes ?? null;
 
@@ -101,6 +105,8 @@ export default function ReportViewer() {
     aiAnalysis: aiAnalysis ?? null,
     compliance,
     tests: coverageTests,
+    withheld,
+    interception,
   };
 
   const pdfData: PrintableReportData = {
@@ -129,6 +135,7 @@ export default function ReportViewer() {
         undismiss: undismissFinding,
       }}
     >
+    <ReportTestsContext.Provider value={coverageTests}>
     <>
       {/* Print-only view — hidden on screen, shown only when printing */}
       <div className="hidden print:block">
@@ -220,6 +227,9 @@ export default function ReportViewer() {
               clean result is not read as full coverage. */}
           <CoverageCard tests={coverageTests} />
 
+          {/* What the scan found and did not report, and why — nothing dropped out of sight. */}
+          <WithheldCard withheld={withheld} interception={interception} />
+
           {/* Fix with your AI agent */}
           {aiAnalysis?.agentFixPrompt && (
             <AgentFixPromptCard prompt={aiAnalysis.agentFixPrompt} fromTemplate={aiAnalysis.source === "template"} />
@@ -247,6 +257,7 @@ export default function ReportViewer() {
 
       <UndoToast undoToast={undoToast} undoToastTimerRef={undoToastTimerRef} setUndoToast={setUndoToast} undismissFinding={undismissFinding} />
     </>
+    </ReportTestsContext.Provider>
     </DismissalsContext.Provider>
   );
 }

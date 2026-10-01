@@ -217,6 +217,8 @@ async function checkAzureBlob(blob: AzureBlob, host: string): Promise<ScanVulner
 export async function runStorageProbe(
   targetUrl: string,
   html: string,
+  /** Told why, when there was nothing here to test (recorded as "not tested", not "ran"). */
+  notTested?: (reason: string) => void,
 ): Promise<ScanVulnerability[]> {
   let host: string;
   try { host = new URL(targetUrl).hostname; } catch { return []; }
@@ -234,6 +236,7 @@ export async function runStorageProbe(
   const azureBlobs = extractAzureBlobs(content);
 
   if (s3Buckets.length === 0 && gcsBuckets.length === 0 && azureBlobs.length === 0) {
+    notTested?.("no S3, Google Cloud Storage or Azure Blob bucket is referenced in the page");
     return [];
   }
 

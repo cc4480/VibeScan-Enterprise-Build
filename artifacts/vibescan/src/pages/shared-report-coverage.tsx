@@ -9,6 +9,8 @@ export interface CoverageTest {
   findings: number;
   durationMs: number;
   reason?: string;
+  /** Names of the findings this test raised. */
+  found?: string[];
 }
 
 export const isCoverageTest = (t: unknown): t is CoverageTest => {

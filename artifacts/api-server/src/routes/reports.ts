@@ -42,7 +42,7 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     // were kept" and the OWASP card said "no record" for every row, on scans that
     // had recorded a full ledger. The share page and the MCP read the stored data
     // directly and were never affected. Carried through from the stored row.
-    const stored = report.data as { tests?: unknown; compliance?: unknown };
+    const stored = report.data as { tests?: unknown; compliance?: unknown; withheld?: unknown; interception?: unknown };
     // What changed since the last scan of this site (lib/scanDiff.ts). A failure here must never
     // cost someone their report, so it degrades to "no comparison".
     const changes = await changesForReport(req.user.id, { scanId: report.scanId, targetUrl: report.targetUrl, scannedAt: report.scannedAt, data: report.data }).catch((err) => {
@@ -55,6 +55,9 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
         ...parsed.data,
         ...(stored.tests !== undefined ? { tests: stored.tests } : {}),
         ...(stored.compliance !== undefined ? { compliance: stored.compliance } : {}),
+        // Same reason: what the scan withheld and why, and what answered instead of the app.
+        ...(stored.withheld !== undefined ? { withheld: stored.withheld } : {}),
+        ...(stored.interception !== undefined ? { interception: stored.interception } : {}),
         ...(changes ? { changes } : {}),
       },
     });
