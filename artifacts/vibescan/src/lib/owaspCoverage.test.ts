@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { owaspCoverage, type TestLike } from "./owaspCoverage";
+import { owaspCoverage, owaspFindingCounts, type TestLike } from "./owaspCoverage";
 
 const ran = (name: string): TestLike => ({ name, status: "ran" });
 const skipped = (name: string): TestLike => ({ name, status: "skipped" });
@@ -71,5 +71,17 @@ describe("owaspCoverage: a category with no findings is not automatically 'passe
   it("treats a failed test like a skipped one", () => {
     const r = owaspCoverage("A06", 0, [{ name: "known-CVE and end-of-life versions", status: "failed" }]);
     expect(r.state).toBe("untested");
+  });
+});
+
+describe("owaspFindingCounts", () => {
+  it("does not let an informational note flag a category", () => {
+    const counts = owaspFindingCounts([
+      { category: "Browser Feature Control", severity: "info" },
+      { category: "Transport Security", severity: "medium" },
+    ]);
+    expect(counts.A05).toEqual({ actionable: 0, info: 1 });
+    expect(counts.A02).toEqual({ actionable: 1, info: 0 });
+    expect(owaspCoverage("A05", counts.A05!.actionable, [{ name: "HTTP probes", status: "ran" }]).state).toBe("clear");
   });
 });

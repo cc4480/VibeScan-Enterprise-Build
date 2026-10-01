@@ -61,6 +61,26 @@ export function owaspCoverage(code: string, findings: number, tests?: TestLike[]
   return { state: notRun.length > 0 ? "partial" : "clear", notRun };
 }
 
+/**
+ * Findings per OWASP code, split into those that need action and informational notes. Only the
+ * first flag a category: a lone "COEP header not set" (info) marked Security Misconfiguration red
+ * on an otherwise clean, A-graded report, which told the reader there was a problem the finding
+ * itself says there is not.
+ */
+export function owaspFindingCounts(
+  vulns: { category: string; severity: string }[],
+): Record<string, { actionable: number; info: number }> {
+  const out: Record<string, { actionable: number; info: number }> = {};
+  for (const v of vulns) {
+    for (const code of CATEGORY_TO_OWASP[v.category] ?? []) {
+      const c = (out[code] ??= { actionable: 0, info: 0 });
+      if (v.severity === "info") c.info += 1;
+      else c.actionable += 1;
+    }
+  }
+  return out;
+}
+
 /** Which OWASP Top 10 codes a finding category speaks to. */
 export const CATEGORY_TO_OWASP: Record<string, string[]> = {
   "Transport Security":             ["A02"],

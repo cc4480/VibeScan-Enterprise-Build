@@ -15,8 +15,9 @@ describe("the catalog matches the scanner's source", () => {
   it("carries the number of checks the site claims, itemised", () => {
     // Deliberate: changing the count is a public-claim change, so it must be edited here too.
     // 140 → 143: GitHub source-code secret scanning, LLM prompt-injection extraction,
-    // and the active race-condition probe.
-    expect(TOTAL_CHECKS).toBe(143);
+    // and the active race-condition probe. 143 → 144: the TLS grade note that says why a grade
+    // is below A.
+    expect(TOTAL_CHECKS).toBe(144);
     expect(CATALOG.flatMap((t) => t.checks)).toHaveLength(TOTAL_CHECKS);
   });
 

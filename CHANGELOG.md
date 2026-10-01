@@ -72,8 +72,17 @@ every report show its work.
   check that read that page shows "not tested on the app" with the reason; DNS,
   mail transport, subdomain takeover and GitHub checks, which never read it, stay
   as they were.
+- An informational note no longer marks an OWASP category red. A lone "COEP header
+  not set" (info) made Security Misconfiguration read "1 flagged" on an A-graded
+  report; it now shows as a grey info note and the category is judged by its tests.
 - The Supabase RLS probe says "not tested" when the page has no Supabase project.
 - CI runs the 114 database tests against a real Postgres instead of skipping them.
+- **A TLS grade below A says why.** A B or A- from SSL Labs came with no reason
+  anywhere in the report. A new informational finding, "TLS Grade Below A (SSL Labs)",
+  lists what SSL Labs reported (obsolete protocols still accepted, no forward secrecy,
+  RC4, known attacks) and links the full SSL Labs report. When SSL Labs names no
+  cause, it says so rather than guess. C and below keep their own finding, which now
+  carries the same reasons. The check count is now 144.
 
 ## 2026-09-07
 
