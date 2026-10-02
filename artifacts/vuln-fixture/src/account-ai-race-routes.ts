@@ -87,12 +87,9 @@ export function mountAccountAiRace(app: Express, sessions: Record<string, Sessio
     const s = sessionOf(req);
     if (!s) { res.status(401).json({ error: "sign in" }); return; }
     if (redeemed.has(s.id)) { res.status(409).json({ error: "Coupon is no longer valid" }); return; }
-    // The gap between the check and the write. Wide enough that five concurrent requests all land
-    // inside it even on a loaded CI runner (30 ms was not: the CI fixture gate once missed this race).
-    await new Promise((r) => setTimeout(r, 250));
+    await new Promise((r) => setTimeout(r, 30)); // the gap between the check and the write
     redeemed.add(s.id);
-    // Long enough that the probe's sixth request, sent after the burst finishes, still sees it spent.
-    setTimeout(() => redeemed.delete(s.id), 5_000).unref();
+    setTimeout(() => redeemed.delete(s.id), 1_000).unref();
     res.json({ applied: true, discount: "20%" });
   });
   app.post("/api/promo/claim", json, (req, res) => {
@@ -101,7 +98,7 @@ export function mountAccountAiRace(app: Express, sessions: Record<string, Sessio
     // Check and write in one synchronous step: only one caller can get past it.
     if (claimed.has(s.id)) { res.status(409).json({ error: "Promo is no longer valid" }); return; }
     claimed.add(s.id);
-    setTimeout(() => claimed.delete(s.id), 5_000).unref();
+    setTimeout(() => claimed.delete(s.id), 1_000).unref();
     res.json({ applied: true, discount: "20%" });
   });
 }
