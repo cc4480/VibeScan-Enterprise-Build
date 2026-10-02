@@ -28,8 +28,15 @@ type Session = { id: string; email: string };
 export const SUPPORT_JS = `
 // front end for the support assistant and the rewards page: every endpoint is a literal here
 fetch("/api/assistant/ask", { method: "POST", body: JSON.stringify({ message: "hi" }) });
-fetch("/api/coupon/redeem", { method: "POST", body: "{}" });
-fetch("/api/promo/claim", { method: "POST", body: "{}" });
+// Both calls sit behind a click, as on a real page. They used to fire on page load, so the scanner's own
+// headless browser spent alice's coupon about a second before the race probe ran; when the coupon's 1 s
+// expiry had not yet passed (a fast CI runner) the probe saw it already spent and recorded "nothing was tested".
+function applyCoupon() { return fetch("/api/coupon/redeem", { method: "POST", body: "{}" }); }
+function claimPromo() { return fetch("/api/promo/claim", { method: "POST", body: "{}" }); }
+document.addEventListener("click", (e) => {
+  if (e.target && e.target.id === "apply-coupon") applyCoupon();
+  if (e.target && e.target.id === "claim-promo") claimPromo();
+});
 `;
 
 const OVERRIDE = /ignore (all )?(previous|prior) instructions/i;
