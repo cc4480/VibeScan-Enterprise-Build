@@ -60,8 +60,11 @@ every report show its work.
   on the report, the shared report, the printed report, the PDF and the Markdown copy,
   and the finding counts in their headings and lists leave them out. A scan with notes
   and no findings says "No findings were reported" and points at the notes, not a green
-  all-clear. The totals the server computes (Total Findings, the severity counts under
-  the grade, the shared report's footer) still count the notes.
+  all-clear. The totals the server computes leave them out too: Total Findings, the
+  severity counts under the grade, the shared report's footer and the executive summary
+  (for scans from now on; a saved report keeps the totals stored with it), and the
+  report email, the monitor history count, the API scan summary (`scanNotes` carries
+  their number) and the MCP report text, which lists the notes apart from the findings.
 - **"How this was found" listed no requests for several active tests.** The panel read
   only lines that begin with a method and an address, and the injection, path-traversal
   and LLM tests write `Endpoint: /search?q=<payload>` or `Request: POST https://...`. It

@@ -6,6 +6,7 @@ import { summariseChanges } from "./scanDiff";
 import { countTests, type TestRecord } from "./testLedger";
 import { sendReportReadyEmail } from "./mailer";
 import { APP_ORIGIN } from "./appOrigin";
+import { splitScanNotes } from "./scanNotes";
 
 /** Emails the owner that their report is ready (not for ownership-verification scans). */
 export async function sendReportReadyNotification(input: {
@@ -62,7 +63,8 @@ export async function sendReportReadyNotification(input: {
         targetUrl: scanResult.finalUrl || targetUrl,
         grade,
         riskScore,
-        totalVulns: scanResult.vulnerabilities.length,
+        // The "Findings" tile counts findings about the site, as the report does; the scan's notes are not among them.
+        totalVulns: splitScanNotes(scanResult.vulnerabilities).findings.length,
         reportUrl,
         tier,
         coverage: countTests(tests),
