@@ -99,6 +99,9 @@ every report show its work.
   report; it now shows as a grey info note and the category is judged by its tests.
 - The Supabase RLS probe says "not tested" when the page has no Supabase project.
 - CI runs the 114 database tests against a real Postgres instead of skipping them.
+- CI runs the fixture gate: the real scanner, active tests and two accounts included, against
+  the vulnerable fixture, and fails the build when a planted finding is missed. It runs in
+  about ten seconds on a developer machine and had not run in CI before.
 - **A TLS grade below A says why.** A B or A- from SSL Labs came with no reason
   anywhere in the report. A new informational finding, "TLS Grade Below A (SSL Labs)",
   lists what SSL Labs reported (obsolete protocols still accepted, no forward secrecy,
