@@ -14,6 +14,15 @@ for each change; this collects what shipped and why it mattered.
   list currently shows. CVE-2026-42533 now starts at nginx 0.9.6, as the CVE record
   does, and says a restart is the base impact (code execution needs ASLR off or
   bypassed). Not covered: nginx 1.31.2, which a single ceiling cannot express.
+- **Technology, secret and challenge rules checked against public rule sets**
+  (webappanalyzer, TruffleHog, wafw00f). `x-amz-request-id` no longer names
+  CloudFront (it is AWS in general; `x-amz-cf-id` is CloudFront's). WordPress,
+  Joomla, Angular and Google Tag Manager need an asset or attribute, not the words
+  in prose. Express and Next.js `X-Powered-By` matches are anchored. Replit,
+  Railway, Netlify and Base44 are named from the signals webappanalyzer lists. The
+  two-part Resend key must be base58 (8 + 24), as TruffleHog's detector has it.
+  Sucuri's block page is recognised by its title or stylesheet, not the product
+  name; PerimeterX and Vercel gain the block text and path wafw00f lists.
 
 ## 2026-10-01
 

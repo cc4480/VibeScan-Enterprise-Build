@@ -250,3 +250,17 @@ describe("vendor sensor tags are not interstitials", () => {
     expect(detectChallengePage(403, `<html><body><div id="px-captcha"></div>${"<i></i>".repeat(500)}</body></html>`).isChallenge).toBe(true);
   });
 });
+
+describe("detectChallengePage — signals checked against wafw00f (2026-10-02)", () => {
+  it("a page that only names Sucuri's firewall is not a block page", () => {
+    expect(detectChallengePage(200, "<html><body><p>We protect sites with Sucuri WebSite Firewall.</p></body></html>").isChallenge).toBe(false);
+  });
+  it("Sucuri's own block page is", () => {
+    const v = detectChallengePage(403, "<html><head><title>Sucuri WebSite Firewall - Access Denied</title></head><body>x</body></html>");
+    expect(v.vendor).toBe("Sucuri");
+  });
+  it("PerimeterX's block text and Vercel's checkpoint path are", () => {
+    expect(detectChallengePage(403, "<html><body><p>Request blocked: denied because we believe you are using automation tools</p></body></html>").vendor).toBe("PerimeterX");
+    expect(detectChallengePage(429, `<html><body><script src="/vercel/security/static/challenge.js"></script></body></html>`).vendor).toBe("Vercel");
+  });
+});

@@ -285,3 +285,37 @@ describe("detectTechnologies — JS libraries need the library, not its name", (
     ["HTMX", `<p>See htmx.org: use hx-get and hx-post attributes.</p>`],
   ])("does not tag %s from prose", (tech, html) => expect(detectTechnologies({}, html)).not.toContain(tech));
 });
+
+// Rules checked against webappanalyzer (2026-10-02): a header or tag its data supports, not a phrase in prose.
+describe("detectTechnologies — rules aligned with webappanalyzer", () => {
+  it("x-amz-request-id is AWS, not CloudFront; x-amz-cf-id is CloudFront", () => {
+    const s3 = detectTechnologies({ "x-amz-request-id": "ABC" }, "");
+    expect(s3).toContain("AWS");
+    expect(s3).not.toContain("AWS CloudFront");
+    expect(detectTechnologies({ "x-amz-cf-id": "abc" }, "")).toContain("AWS CloudFront");
+  });
+
+  it("does not call prose about WordPress, Angular, Joomla or GTM a detection", () => {
+    const prose = "<p>Upload to wp-content, then add ng-app and angular.js, /media/jui/ and googletagmanager.com/gtm.js to the page.</p>";
+    const found = detectTechnologies({}, prose);
+    for (const t of ["WordPress", "Angular", "Joomla", "Google Tag Manager"]) expect(found).not.toContain(t);
+  });
+
+  it("detects them from the asset or attribute they actually emit", () => {
+    expect(detectTechnologies({}, `<script src="/wp-includes/js/jquery.js"></script>`)).toContain("WordPress");
+    expect(detectTechnologies({}, `<div ng-app="x"></div>`)).toContain("Angular");
+    expect(detectTechnologies({}, `<script src="https://www.googletagmanager.com/gtm.js?id=GTM-X"></script>`)).toContain("Google Tag Manager");
+  });
+
+  it("anchors the X-Powered-By matches", () => {
+    expect(detectTechnologies({ "x-powered-by": "Express" }, "")).toContain("Express.js");
+    expect(detectTechnologies({ "x-powered-by": "Unexpressed" }, "")).not.toContain("Express.js");
+  });
+
+  it("names Replit, Railway, Netlify and Base44 from the signals webappanalyzer lists", () => {
+    expect(detectTechnologies({ "replit-cluster": "global" }, "")).toContain("Replit");
+    expect(detectTechnologies({ server: "railway" }, "")).toContain("Railway");
+    expect(detectTechnologies({ "x-nf-request-id": "01H" }, "")).toContain("Netlify");
+    expect(detectTechnologies({}, `<meta name="apple-mobile-web-app-title" content="base44">`)).toContain("Base44");
+  });
+});
