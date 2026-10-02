@@ -2,6 +2,7 @@
 
 import type { Vulnerability } from "@workspace/api-client-react";
 import { APP_ORIGIN } from "@/lib/origin";
+import { NO_FINDINGS_WITH_NOTES, SCAN_NOTES_BLURB, SCAN_NOTES_TITLE } from "@/lib/scan-notes";
 import { PrintCoverage, type CoverageTest } from "./shared-report-components";
 import { getCategoryMeta, type ComplianceData } from "./report-viewer-data";
 import { PrintGradeRing, PrintVulnCard } from "./report-viewer-print-parts";
@@ -13,7 +14,7 @@ export { DownloadPDFButton } from "./report-viewer-pdf";
 // ─── Full printable report (screen: hidden; print: visible) ───────────────────
 
 export function PrintableReport({
-  targetUrl, scannedAt, summary, confirmedVulns, unverifiedVulns,
+  targetUrl, scannedAt, summary, confirmedVulns, unverifiedVulns, scanNotes,
   technologies, server, tlsGrade, aiAnalysis, compliance, categoryCounts, pagesScanned, tests,
   withheld, interception,
 }: {
@@ -22,6 +23,8 @@ export function PrintableReport({
   summary: { grade: string; riskScore: number; executiveSummary: string; critical: number; high: number; medium: number; low: number; info: number; totalVulnerabilities: number };
   confirmedVulns: Vulnerability[];
   unverifiedVulns: Vulnerability[];
+  /** The scan's notes about itself, which are not findings (see lib/scan-notes.ts). */
+  scanNotes?: Vulnerability[];
   technologies: string[];
   server?: string | null;
   tlsGrade?: string | null;
@@ -131,6 +134,25 @@ export function PrintableReport({
         </div>
       )}
 
+      {/* No findings, but the scan left notes about itself: not a clean result. */}
+      {confirmedVulns.length === 0 && unverifiedVulns.length === 0 && (scanNotes?.length ?? 0) > 0 && (
+        <div className="mb-8 mt-8 pt-6 border-t-2 border-gray-200">
+          <h2 className="text-lg font-bold mb-2 text-gray-700">{NO_FINDINGS_WITH_NOTES.title}</h2>
+          <p className="text-sm text-gray-500">{NO_FINDINGS_WITH_NOTES.body}</p>
+        </div>
+      )}
+
+      {/* About this scan: the scan's own notes, kept apart from the findings. */}
+      {scanNotes && scanNotes.length > 0 && (
+        <div className="mb-8 mt-8 pt-6 border-t-2 border-gray-200">
+          <h2 className="text-lg font-bold mb-2 text-gray-700">ℹ️ {SCAN_NOTES_TITLE} ({scanNotes.length})</h2>
+          <p className="text-sm text-gray-500 mb-4">{SCAN_NOTES_BLURB}</p>
+          <div className="space-y-4">
+            {scanNotes.map((v, i) => <PrintVulnCard key={v.id} vuln={v} index={i + 1} />)}
+          </div>
+        </div>
+      )}
+
       {/* AI Analysis */}
       {aiAnalysis && (
         <div className="mb-8 mt-8 pt-6 border-t-2 border-gray-200">
@@ -229,6 +251,8 @@ export interface PrintableReportData {
   };
   confirmedVulns: Vulnerability[];
   unverifiedVulns: Vulnerability[];
+  /** The scan's notes about itself, which are not findings (see lib/scan-notes.ts). */
+  scanNotes?: Vulnerability[];
   technologies: string[];
   server?: string | null;
   tlsGrade?: string | null;

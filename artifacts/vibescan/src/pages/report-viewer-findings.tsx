@@ -1,7 +1,8 @@
 import type { ViewMode } from "./report-viewer-types";
 import { Vulnerability } from "@workspace/api-client-react";
-import { CheckCircle2, HelpCircle } from "lucide-react";
+import { CheckCircle2, HelpCircle, Info } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
+import { NO_FINDINGS_WITH_NOTES, SCAN_NOTES_BLURB, SCAN_NOTES_TITLE, scanNotesCount } from "@/lib/scan-notes";
 import { VulnCard } from "./report-viewer-vuln";
 import { CategorySection } from "./report-viewer-categories";
 
@@ -93,11 +94,41 @@ export function UnverifiedFindings({ unverifiedVulns, viewMode, groupedUnverifie
   );
 }
 
-/** Shown when a filter matches nothing, or when the scan found nothing at all. */
-export function EmptyFindings({ filteredVulns, activeCategory, vulnerabilities }: {
+/**
+ * The scan's own notes about itself: what it could not check, and why. They are not findings, so they
+ * sit apart from the lists above and say so.
+ */
+export function ScanNotes({ scanNotes, rootUrl }: { scanNotes: Vulnerability[]; rootUrl: string }) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-secondary/40 border border-white/10">
+        <Info className="w-4 h-4 text-muted-foreground shrink-0" />
+        <div className="min-w-0">
+          <span className="text-sm font-bold text-foreground">{SCAN_NOTES_TITLE}</span>
+          <span className="text-xs text-muted-foreground ml-2 font-medium hidden sm:inline">— {SCAN_NOTES_BLURB}</span>
+        </div>
+        <span className="ml-auto text-xs text-muted-foreground font-medium shrink-0">{scanNotesCount(scanNotes.length)}</span>
+      </div>
+      <div className="space-y-2">
+        {scanNotes.map((v, i) => (
+          <VulnCard key={v.id} vuln={v} index={i} rootUrl={rootUrl} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Shown when a filter matches nothing, or when the scan reported no findings at all. `vulnerabilities`
+ * is the findings, without the scan's notes; `scanNotes` is the notes still shown. A scan that reported
+ * no findings but left notes (it was stopped by a sign-in page, or skipped its active tests) has not
+ * earned a green "clean", so it gets a neutral card that points at the notes.
+ */
+export function EmptyFindings({ filteredVulns, activeCategory, vulnerabilities, scanNotes }: {
   filteredVulns: Vulnerability[];
   activeCategory: string | null;
   vulnerabilities: Vulnerability[];
+  scanNotes: Vulnerability[];
 }) {
   return (
     <>
@@ -107,7 +138,7 @@ export function EmptyFindings({ filteredVulns, activeCategory, vulnerabilities }
         </div>
       )}
 
-      {vulnerabilities.length === 0 && (
+      {vulnerabilities.length === 0 && scanNotes.length === 0 && (
         <div className="text-center py-12 glass-card rounded-xl">
           <CheckCircle2 className="w-12 h-12 text-green-400 mx-auto mb-4" />
           <h3 className="text-xl font-bold mb-2">No findings from the tests that ran</h3>
@@ -115,6 +146,14 @@ export function EmptyFindings({ filteredVulns, activeCategory, vulnerabilities }
             Nothing to fix from what this scan checked. A clean result says nothing about the areas listed under
             &ldquo;What this scan tested&rdquo; as not tested.
           </p>
+        </div>
+      )}
+
+      {vulnerabilities.length === 0 && scanNotes.length > 0 && (
+        <div className="text-center py-12 glass-card rounded-xl">
+          <Info className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+          <h3 className="text-xl font-bold mb-2">{NO_FINDINGS_WITH_NOTES.title}</h3>
+          <p className="text-muted-foreground">{NO_FINDINGS_WITH_NOTES.body}</p>
         </div>
       )}
     </>

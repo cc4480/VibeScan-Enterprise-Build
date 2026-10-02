@@ -51,7 +51,8 @@ export const API_V1_SPEC = {
       get: {
         summary: "Status and a short summary of a scan",
         description:
-          "Once complete: grade, risk score, finding counts by severity, and coverage (tests that ran, were skipped or failed). " +
+          "Once complete: grade, risk score, finding counts by severity, scanNotes (the scan's own remarks about itself, such as a skipped test " +
+          "or a sign-in page that answered instead of the app, which are not findings and are not in the counts), and coverage (tests that ran, were skipped or failed). " +
           "With wait (seconds, max 60) the call holds until the scan finishes.",
         parameters: [
           { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },

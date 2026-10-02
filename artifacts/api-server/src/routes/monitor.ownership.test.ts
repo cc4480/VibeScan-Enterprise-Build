@@ -93,4 +93,23 @@ describe("GET /monitor/subscriptions/:id/history — trend data", () => {
     expect(body[0]?.grade).toBe("B");
     expect(body[0]?.vulnCount).toBe(7);
   });
+
+  it("counts from the list without the scan's notes when the report has one", async () => {
+    queuedResults.push([{ id: "sub-1" }]);
+    queuedResults.push([
+      {
+        id: "report-1", scanId: "scan-1", scannedAt: new Date("2026-09-01T00:00:00.000Z"), tier: "deep",
+        // Saved before notes were left out of the total: it says 4, the list holds 3 findings and a note.
+        data: {
+          summary: { grade: "B", riskScore: 22, totalVulnerabilities: 4 },
+          vulnerabilities: [{ category: "a" }, { category: "b" }, { category: "c" }, { category: "Scan Coverage" }],
+        },
+      },
+    ]);
+    const routes = await idRoutes();
+    const history = routes.find((r) => r.label.includes("/history"));
+    const res = makeRes();
+    await history!.handle(makeReq(), res);
+    expect((res.body as Array<{ vulnCount: number | null }>)[0]?.vulnCount).toBe(3);
+  });
 });

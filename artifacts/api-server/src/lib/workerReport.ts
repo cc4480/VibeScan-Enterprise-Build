@@ -6,6 +6,7 @@ import { type TestRecord } from "./testLedger";
 import { analyseFindings } from "./aiAnalysis";
 import { summariseCompliance, COMPLIANCE_DISCLAIMER } from "./compliance";
 import { probeCertDates } from "./monitorPulseCert";
+import { splitScanNotes } from "./scanNotes";
 
 function buildExecutiveSummary(
   grade: string,
@@ -56,7 +57,11 @@ export async function buildReport(input: {
   const intercepted = scanResult.intercepted;
   const grade = gradeForResult(riskScore, intercepted);
 
-  const severityCounts = scanResult.vulnerabilities.reduce(
+  // The scan's own notes stay in the stored list, so they travel with the report, but they are not
+  // findings about the site: none of the counts below includes them (see scanNotes.ts). They are Info,
+  // which carries no weight in the score, so the score above does not need telling them apart.
+  const { findings } = splitScanNotes(scanResult.vulnerabilities);
+  const severityCounts = findings.reduce(
     (acc, v) => {
       acc[v.severity] = (acc[v.severity] ?? 0) + 1;
       return acc;
@@ -84,7 +89,7 @@ export async function buildReport(input: {
         grade,
         riskScore,
         targetUrl,
-        scanResult.vulnerabilities.length,
+        findings.length,
         severityCounts,
       );
 
@@ -110,7 +115,7 @@ export async function buildReport(input: {
     withheld: scanResult.withheld && scanResult.withheld.length > 0 ? scanResult.withheld : undefined,
     interception: scanResult.interception ?? undefined,
     summary: {
-      totalVulnerabilities: scanResult.vulnerabilities.length,
+      totalVulnerabilities: findings.length,
       critical: severityCounts["critical"] ?? 0,
       high: severityCounts["high"] ?? 0,
       medium: severityCounts["medium"] ?? 0,

@@ -36,6 +36,18 @@ export interface TestRecord {
 }
 
 /**
+ * How many finding names one test record keeps. The names are how a report says which check raised
+ * a finding, and a finding whose name was cut off reads "which check raised this was not recorded".
+ * The finding is stored in full beside the record, so a name costs a few dozen bytes and this limit
+ * is only a ceiling for a test that raises an unbounded number. checkOutcomes reads a record with
+ * fewer names than findings as "names incomplete" and says so, so reaching it is honest, not silent.
+ */
+export const MAX_FOUND_NAMES = 500;
+
+/** The names of what a test raised, for TestRecord.found. */
+export const foundNames = (found: readonly { name: string }[]): string[] => found.slice(0, MAX_FOUND_NAMES).map((v) => v.name);
+
+/**
  * A list of records that tells a listener about each one as it is added, however
  * it is added: the scanner records some tests through track() and pushes others
  * straight onto the list. Species is plain Array so filter()/map() on it do not
@@ -73,7 +85,7 @@ export class TestLedger {
       (found) => {
         this.records.push({
           group, name, status: "ran", findings: found.length, durationMs: Date.now() - started,
-          ...(found.length > 0 ? { found: found.slice(0, 40).map((v) => v.name) } : {}),
+          ...(found.length > 0 ? { found: foundNames(found) } : {}),
         });
         return found;
       },
@@ -108,7 +120,7 @@ export class TestLedger {
         }
         this.records.push({
           group, name, status: "ran", findings: findings.length, durationMs: Date.now() - started,
-          ...(findings.length > 0 ? { found: findings.slice(0, 40).map((v) => v.name) } : {}),
+          ...(findings.length > 0 ? { found: foundNames(findings) } : {}),
         });
         return findings;
       },

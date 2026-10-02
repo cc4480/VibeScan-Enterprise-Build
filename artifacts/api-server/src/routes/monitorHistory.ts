@@ -1,6 +1,7 @@
 import { type IRouter } from "express";
 import { db, monitorSubscriptionsTable, cveAlertsTable, reportsTable, monitorScoreHistoryTable, monitorRegressionsTable } from "@workspace/db";
 import { eq, and, desc, count, sql } from "drizzle-orm";
+import { splitScanNotes } from "../lib/scanNotes";
 
 /** Per-subscription history: scans, alerts, score history and regressions. */
 
@@ -53,6 +54,7 @@ export function registerMonitorHistory(router: IRouter): void {
     const history = reports.map((r) => {
       const data = r.data as {
         summary?: { grade?: string; riskScore?: number; totalVulnerabilities?: number };
+        vulnerabilities?: unknown[];
       };
       return {
         id: r.id,
@@ -64,7 +66,11 @@ export function registerMonitorHistory(router: IRouter): void {
         // The stored field is totalVulnerabilities (see worker.ts's reportData) —
         // this read `vulnCount`, a name that has never existed on a report, so
         // every history entry ever returned this null regardless of the real count.
-        vulnCount: data.summary?.totalVulnerabilities ?? null,
+        // Counted from the list when there is one, without the scan's notes, so a scan saved before
+        // notes were left out of its stored total sits on the same scale as one saved after.
+        vulnCount: Array.isArray(data.vulnerabilities)
+          ? splitScanNotes(data.vulnerabilities).findings.length
+          : (data.summary?.totalVulnerabilities ?? null),
       };
     });
 

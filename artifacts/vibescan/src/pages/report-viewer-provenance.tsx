@@ -1,7 +1,7 @@
 /** Transparency: how each finding was found, and what the scan withheld and why. */
 import { createContext, useContext } from "react";
 import { EyeOff, ShieldAlert } from "lucide-react";
-import { findingProvenance, confidenceText, PROVENANCE_KIND_TEXT, type ProvenanceTest } from "@/lib/provenance";
+import { findingProvenance, confidenceText, ACTIVE_NO_REQUESTS_TEXT, PROVENANCE_KIND_TEXT, type ProvenanceTest } from "@/lib/provenance";
 
 /** The report's test records, so every finding card can name the check that raised it. */
 export const ReportTestsContext = createContext<ProvenanceTest[] | null>(null);
@@ -40,6 +40,7 @@ export function FindingProvenance({ vuln }: { vuln: { name: string; category: st
           </p>
         )}
         <p>{PROVENANCE_KIND_TEXT[p.kind]}</p>
+        {p.kind === "active" && p.requests.length === 0 && <p>{ACTIVE_NO_REQUESTS_TEXT}</p>}
         {p.requests.length > 0 && (
           <div>
             <p className="mb-1">Requests the scanner made:</p>

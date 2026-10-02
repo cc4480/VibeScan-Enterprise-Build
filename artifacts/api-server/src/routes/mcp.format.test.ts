@@ -106,3 +106,33 @@ describe("formatReport shows what the scan tested", () => {
     expect(second).not.toContain("What this scan tested");
   });
 });
+
+describe("formatReport keeps the scan's own notes apart from the findings", () => {
+  const note = (name: string) => ({ id: name, name, severity: "info", category: "Scan Coverage", description: `About ${name}.`, solution: "", evidence: "" });
+  const finding = (name: string, severity: string) => ({ id: name, name, severity, category: "x", description: "d", solution: "s", evidence: "" });
+  const rep = (vulnerabilities: unknown[], summary: Record<string, unknown> = {}) => ({
+    id: "r1", targetUrl: "https://example.com", scannedAt: new Date("2026-09-22T00:00:00Z"),
+    data: { summary: { grade: "B", riskScore: 15, ...summary }, vulnerabilities },
+  });
+
+  it("lists them under About this scan, on the first page, and not among the findings", () => {
+    const t = formatReport(rep([finding("Real", "high"), note("Active testing skipped"), note("No browser")]));
+    expect(t).toContain("Findings 1–1 of 1");
+    expect(count(t)).toBe(1);
+    expect(t).toContain("About this scan (2 notes)");
+    expect(t).toContain("- Active testing skipped: About Active testing skipped.");
+    expect(formatReport(rep([finding("Real", "high"), note("n")]), { offset: 1 })).not.toContain("About this scan");
+  });
+
+  it("counts the line from the list, so a summary that counted a note does not show", () => {
+    const t = formatReport(rep([finding("Real", "low"), note("n")], { low: 1, info: 1 }));
+    expect(t).toContain("0 high, 0 medium, 1 low, 0 info");
+  });
+
+  it("does not call a report with only notes clean", () => {
+    const t = formatReport(rep([note("n")]));
+    expect(t).toContain("No findings were reported. Read the notes under");
+    expect(t).not.toContain("No findings.");
+    expect(formatReport(rep([note("n")]), { minSeverity: "high" })).toContain("No findings at high or above.");
+  });
+});

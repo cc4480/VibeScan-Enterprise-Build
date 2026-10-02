@@ -1,6 +1,7 @@
 import { APP_ORIGIN } from "../lib/appOrigin";
 import { coverageLines } from "../lib/testLedger";
 import { and } from "drizzle-orm";
+import { splitScanNotes } from "../lib/scanNotes";
 
 /** Formatting and limits shared by the MCP tools: report/account/monitor text, the tool-result shape and the server instructions. */
 
@@ -76,7 +77,11 @@ export function formatReport(
 ): string {
   const d = report.data ?? {};
   const s = d.summary ?? {};
-  const vulns: any[] = Array.isArray(d.vulnerabilities) ? d.vulnerabilities : [];
+  const listed = Array.isArray(d.vulnerabilities);
+  // The scan's own notes are listed apart from the findings and are in none of the counts (lib/scanNotes.ts).
+  const { findings: vulns, notes }: { findings: any[]; notes: any[] } = splitScanNotes<any>(listed ? d.vulnerabilities : []);
+  // Counted from the list, so the line and the list agree on a report saved before notes were left out of its summary.
+  const n = (sev: Severity): number => (listed ? vulns.filter((v) => v.severity === sev).length : (s[sev] ?? 0));
   const floor = SEVERITY_ORDER.indexOf(page.minSeverity ?? "info");
   const sorted = vulns
     .filter((v) => {
@@ -91,7 +96,7 @@ export function formatReport(
 
   const lines: string[] = [
     `SecScan report for ${report.targetUrl} (scanned ${report.scannedAt.toISOString()})`,
-    `Grade ${s.grade ?? "?"} · risk score ${s.riskScore ?? "?"}/100 · ${s.critical ?? 0} critical, ${s.high ?? 0} high, ${s.medium ?? 0} medium, ${s.low ?? 0} low, ${s.info ?? 0} info`,
+    `Grade ${s.grade ?? "?"} · risk score ${s.riskScore ?? "?"}/100 · ${n("critical")} critical, ${n("high")} high, ${n("medium")} medium, ${n("low")} low, ${n("info")} info`,
     `Full report: ${APP_ORIGIN}/report/${report.id}`,
     "",
   ];
@@ -112,7 +117,11 @@ export function formatReport(
 
   const filterNote = page.minSeverity && page.minSeverity !== "info" ? ` at ${page.minSeverity} or above` : "";
   if (sorted.length === 0) {
-    lines.push(`No findings${filterNote}.`);
+    lines.push(
+      notes.length > 0 && !filterNote
+        ? "No findings were reported. Read the notes under “About this scan” below before treating that as a clean result: they say what the scan could not check."
+        : `No findings${filterNote}.`,
+    );
   } else if (shown.length === 0) {
     lines.push(`No findings at offset ${offset} — there are ${sorted.length}${filterNote}.`);
   } else {
@@ -133,6 +142,13 @@ export function formatReport(
       "",
       `${sorted.length - next} more. Call get_report with offset ${next}` +
         `${page.minSeverity ? ` and min_severity "${page.minSeverity}"` : ""} to continue.`,
+    );
+  }
+  if (firstPage && notes.length > 0) {
+    lines.push(
+      "",
+      `About this scan (${notes.length} note${notes.length === 1 ? "" : "s"}): what the scan could and could not check. They describe the scan, not the site.`,
+      ...notes.map((v) => `- ${v.name}: ${clip(v.description, MAX_TEXT_CHARS)}`),
     );
   }
   if (firstPage && d.compliance?.disclaimer) lines.push("", `Compliance mapping note: ${d.compliance.disclaimer}`);

@@ -1,7 +1,8 @@
-import { CheckCircle2, Globe, Search, Terminal } from "lucide-react";
+import { CheckCircle2, Globe, Info, Search, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { chunkPrompt } from "@/lib/promptChunks";
 import { APP_ORIGIN } from "@/lib/origin";
+import { NO_FINDINGS_WITH_NOTES, SCAN_NOTES_BLURB, SCAN_NOTES_TITLE } from "@/lib/scan-notes";
 import { ComplianceCard, SeverityLegend, type CoverageTest, type SharedReportData } from "@/pages/shared-report-components";
 import { Finding, Owasp, Coverage, PdfGrade } from "./pdf-report-sections";
 import { WithheldCard, type Interception } from "@/pages/report-viewer-provenance";
@@ -47,6 +48,8 @@ export interface PdfReportData {
   };
   confirmedVulns: PdfVuln[];
   unverifiedVulns: PdfVuln[];
+  /** The scan's notes about itself, which are not findings (see lib/scan-notes.ts). */
+  scanNotes?: PdfVuln[];
   technologies: string[];
   server?: string | null;
   tlsGrade?: string | null;
@@ -89,6 +92,7 @@ export function PdfReport(d: PdfReportData) {
   const s = d.summary;
   const counts = { critical: s.critical, high: s.high, medium: s.medium, low: s.low, info: s.info };
   const everything = [...d.confirmedVulns, ...d.unverifiedVulns];
+  const scanNotes = d.scanNotes ?? [];
   const pages = Array.from(new Set(d.pagesScanned ?? []));
 
   return (
@@ -130,13 +134,20 @@ export function PdfReport(d: PdfReportData) {
       )}
 
       {/* Findings. The section heading rides inside the first card's block so it can never be left alone at the foot of a page. */}
-      {d.confirmedVulns.length === 0 && d.unverifiedVulns.length === 0 && (
+      {d.confirmedVulns.length === 0 && d.unverifiedVulns.length === 0 && scanNotes.length === 0 && (
         <div data-pdf-block className="glass-card rounded-2xl p-6 mb-6 text-center">
           <CheckCircle2 className="w-8 h-8 text-green-400 mx-auto mb-2" />
           <h3 className="text-base font-bold mb-1">No findings from the tests that ran</h3>
           <p className="text-xs text-muted-foreground">
             A clean result says nothing about the areas listed under &ldquo;What this scan tested&rdquo; as not tested.
           </p>
+        </div>
+      )}
+      {d.confirmedVulns.length === 0 && d.unverifiedVulns.length === 0 && scanNotes.length > 0 && (
+        <div data-pdf-block className="glass-card rounded-2xl p-6 mb-6 text-center">
+          <Info className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+          <h3 className="text-base font-bold mb-1">{NO_FINDINGS_WITH_NOTES.title}</h3>
+          <p className="text-xs text-muted-foreground">{NO_FINDINGS_WITH_NOTES.body}</p>
         </div>
       )}
       {d.confirmedVulns.map((v, i) => (
@@ -159,6 +170,22 @@ export function PdfReport(d: PdfReportData) {
                 <p className="text-xs text-muted-foreground mt-1">
                   These findings were detected with heuristics. Verify manually before prioritising remediation.
                 </p>
+              </div>
+            ) : undefined
+          }
+        />
+      ))}
+
+      {scanNotes.map((v, i) => (
+        <Finding
+          key={v.id}
+          v={v}
+          index={i + 1}
+          heading={
+            i === 0 ? (
+              <div className="mb-3 mt-4">
+                <h2 className="text-lg font-bold">{SCAN_NOTES_TITLE} ({scanNotes.length})</h2>
+                <p className="text-xs text-muted-foreground mt-1">{SCAN_NOTES_BLURB}</p>
               </div>
             ) : undefined
           }

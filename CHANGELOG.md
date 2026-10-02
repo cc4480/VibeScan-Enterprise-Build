@@ -52,6 +52,28 @@ every report show its work.
 - **A session cookie without SameSite is Low, not Medium.** Chrome and Edge already
   treat it as SameSite=Lax; the finding now says the gap is Firefox and Safari and
   that it is a missing safety net, not a demonstrated CSRF.
+- **Scan notes listed as confirmed findings.** The scan's own remarks about itself
+  ("Active security testing was skipped for this scan", "Scan reached a sign-in page,
+  not the app") are recorded as Info findings in the category "Scan Coverage", and every
+  report listed them under "Confirmed findings, act on these" and counted them in
+  "N confirmed" and "100% high-confidence". They now sit apart under "About this scan"
+  on the report, the shared report, the printed report, the PDF and the Markdown copy,
+  and the finding counts in their headings and lists leave them out. A scan with notes
+  and no findings says "No findings were reported" and points at the notes, not a green
+  all-clear. The totals the server computes leave them out too: Total Findings, the
+  severity counts under the grade, the shared report's footer and the executive summary
+  (for scans from now on; a saved report keeps the totals stored with it), and the
+  report email, the monitor history count, the API scan summary (`scanNotes` carries
+  their number) and the MCP report text, which lists the notes apart from the findings.
+- **"How this was found" listed no requests for several active tests.** The panel read
+  only lines that begin with a method and an address, and the injection, path-traversal
+  and LLM tests write `Endpoint: /search?q=<payload>` or `Request: POST https://...`. It
+  reads both now, and for an active test whose evidence has no request line it says so
+  instead of staying silent.
+- **"Which check raised this was not recorded" on findings from a busy test.** A test
+  record kept the names of its first 40 findings. The sensitive-file test raises 78 on
+  the vuln fixture, so 38 findings (8 of them Critical) showed no check. It keeps up
+  to 500.
 
 ### Added
 
@@ -77,6 +99,9 @@ every report show its work.
   report; it now shows as a grey info note and the category is judged by its tests.
 - The Supabase RLS probe says "not tested" when the page has no Supabase project.
 - CI runs the 114 database tests against a real Postgres instead of skipping them.
+- CI runs the fixture gate: the real scanner, active tests and two accounts included, against
+  the vulnerable fixture, and fails the build when a planted finding is missed. It runs in
+  about ten seconds on a developer machine and had not run in CI before.
 - **A TLS grade below A says why.** A B or A- from SSL Labs came with no reason
   anywhere in the report. A new informational finding, "TLS Grade Below A (SSL Labs)",
   lists what SSL Labs reported (obsolete protocols still accepted, no forward secrecy,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TestLedger, formatTestLine, formatTestSummary, NOT_VERIFIED, coverageLines, newlyRunTests } from "./testLedger";
+import { TestLedger, formatTestLine, formatTestSummary, NOT_VERIFIED, coverageLines, newlyRunTests, foundNames, MAX_FOUND_NAMES } from "./testLedger";
 
 const finding = { id: "1", name: "x", severity: "low", category: "c", description: "d", solution: "s" } as const;
 
@@ -21,6 +21,49 @@ describe("TestLedger", () => {
     const ledger = new TestLedger();
     ledger.skip("active", "path traversal", NOT_VERIFIED);
     expect(ledger.summary()).toEqual({ ran: 0, skipped: 1, failed: 0, total: 1 });
+  });
+});
+
+describe("the finding names a record keeps", () => {
+  const named = (n: number) => Array.from({ length: n }, (_, i) => ({ ...finding, id: String(i), name: `Finding ${i}` }));
+
+  it("keeps every name of a test that raised many findings, in order, so none reads 'which check raised this was not recorded'", async () => {
+    // The vulnerable fixture raises 78 from its sensitive-file test; the old limit of 40 left 38 of them unnamed.
+    const ledger = new TestLedger();
+    await ledger.track("HTTP probes", "sensitive file exposure", Promise.resolve(named(78)));
+    const rec = ledger.records[0]!;
+    expect(rec.findings).toBe(78);
+    expect(rec.found).toHaveLength(78);
+    expect(rec.found?.[0]).toBe("Finding 0");
+    expect(rec.found?.[77]).toBe("Finding 77");
+  });
+
+  it("keeps every name for a probe recorded through trackOutcome too", async () => {
+    const ledger = new TestLedger();
+    await ledger.trackOutcome("active", "API endpoint testing", Promise.resolve({ findings: named(78) }));
+    expect(ledger.records[0]?.found).toHaveLength(78);
+  });
+
+  it("keeps no list for a test that found nothing", async () => {
+    const ledger = new TestLedger();
+    await ledger.track("active", "SSRF", Promise.resolve([]));
+    expect(ledger.records[0]).not.toHaveProperty("found");
+  });
+
+  it("stops at MAX_FOUND_NAMES, and the count still says how many were raised", async () => {
+    const ledger = new TestLedger();
+    await ledger.track("active", "everything", Promise.resolve(named(MAX_FOUND_NAMES + 25)));
+    const rec = ledger.records[0]!;
+    expect(rec.found).toHaveLength(MAX_FOUND_NAMES);
+    expect(rec.findings).toBe(MAX_FOUND_NAMES + 25);
+    // checkOutcomes treats fewer names than findings as "names incomplete", which is how the cut shows.
+    expect(rec.found!.length).toBeLessThan(rec.findings);
+  });
+
+  it("foundNames is the same list for the sites that write a record without the ledger's methods", () => {
+    expect(foundNames(named(3))).toEqual(["Finding 0", "Finding 1", "Finding 2"]);
+    expect(foundNames(named(MAX_FOUND_NAMES + 1))).toHaveLength(MAX_FOUND_NAMES);
+    expect(foundNames([])).toEqual([]);
   });
 });
 

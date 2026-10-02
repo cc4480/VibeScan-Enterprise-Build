@@ -3,6 +3,7 @@ import { Vulnerability } from "@workspace/api-client-react";
 import { getAuthHeaders } from "@/lib/auth-token";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { type DismissalEntry, computeVulnFp, vulnUniqueKey, VERIFICATION_THRESHOLD, SEVERITY_ORDER } from "./report-viewer-data";
+import { splitScanNotes } from "@/lib/scan-notes";
 
 /** Dismiss / undismiss state for one report: what the owner has marked as a false positive, with an undo toast. */
 export function useReportDismissals(targetUrl: string | null | undefined, vulnerabilities: Vulnerability[]) {
@@ -113,7 +114,26 @@ export function useReportDismissals(targetUrl: string | null | undefined, vulner
   return { dismissedFps, vulnFpMap, optimisticDismissKeys, undoToast, setUndoToast, undoToastTimerRef, dismissFinding, undismissFinding };
 }
 
-/** Everything derived from the findings: sorted, filtered, split by confidence, grouped by category, counted. */
+const sortVulns = (list: Vulnerability[], sortBy: SortBy): Vulnerability[] =>
+  [...list].sort((a, b) => {
+    if (sortBy === "severity") {
+      const sd = (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99);
+      if (sd !== 0) return sd;
+      return (b.cvssScore ?? 0) - (a.cvssScore ?? 0);
+    }
+    const cd = a.category.localeCompare(b.category);
+    if (cd !== 0) return cd;
+    return (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99);
+  });
+
+/**
+ * Everything derived from the findings: sorted, filtered, split by confidence, grouped by category, counted.
+ *
+ * The scan's own notes (category "Scan Coverage") are not findings and are kept out of every list and
+ * count here. They come back on their own as `scanNotes`, sorted and with dismissals applied, for the
+ * "About this scan" section (see lib/scan-notes.ts). A category filter does not hide them: they describe
+ * the scan, not a category of your site.
+ */
 export function useVulnGroups(input: {
   vulnerabilities: Vulnerability[];
   sortBy: SortBy;
@@ -123,43 +143,33 @@ export function useVulnGroups(input: {
   optimisticDismissKeys: Set<string>;
 }) {
   const { vulnerabilities, sortBy, activeCategory, dismissedFps, vulnFpMap, optimisticDismissKeys } = input;
-  const sortedVulns = useMemo(() => {
-    return [...vulnerabilities].sort((a, b) => {
-      if (sortBy === "severity") {
-        const sd = (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99);
-        if (sd !== 0) return sd;
-        return (b.cvssScore ?? 0) - (a.cvssScore ?? 0);
-      }
-      const cd = a.category.localeCompare(b.category);
-      if (cd !== 0) return cd;
-      return (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99);
-    });
-  }, [vulnerabilities, sortBy]);
+  const { findings, notes } = useMemo(() => splitScanNotes(vulnerabilities), [vulnerabilities]);
+  const sortedVulns = useMemo(() => sortVulns(findings, sortBy), [findings, sortBy]);
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const v of vulnerabilities) {
+    for (const v of findings) {
       counts[v.category] = (counts[v.category] ?? 0) + 1;
     }
     return counts;
-  }, [vulnerabilities]);
+  }, [findings]);
 
   const sortedCategories = useMemo(
     () => Object.entries(categoryCounts).sort((a, b) => b[1] - a[1]).map(([c]) => c),
     [categoryCounts],
   );
 
-  const visibleVulns = useMemo(
-    () => sortedVulns.filter((v) => {
-      const vKey = vulnUniqueKey(v);
-      if (optimisticDismissKeys.has(vKey)) return false;
-      const fp = vulnFpMap.get(vKey);
-      return !fp || !dismissedFps.has(fp);
-    }),
-    [sortedVulns, dismissedFps, vulnFpMap, optimisticDismissKeys],
-  );
+  const isShown = useCallback((v: Vulnerability) => {
+    const vKey = vulnUniqueKey(v);
+    if (optimisticDismissKeys.has(vKey)) return false;
+    const fp = vulnFpMap.get(vKey);
+    return !fp || !dismissedFps.has(fp);
+  }, [dismissedFps, vulnFpMap, optimisticDismissKeys]);
 
-  const dismissedCount = sortedVulns.length - visibleVulns.length;
+  const visibleVulns = useMemo(() => sortedVulns.filter(isShown), [sortedVulns, isShown]);
+  const scanNotes = useMemo(() => sortVulns(notes, sortBy).filter(isShown), [notes, sortBy, isShown]);
+
+  const dismissedCount = sortedVulns.length - visibleVulns.length + (notes.length - scanNotes.length);
 
   const filteredVulns = useMemo(
     () => activeCategory ? visibleVulns.filter((v) => v.category === activeCategory) : visibleVulns,
@@ -219,7 +229,7 @@ export function useVulnGroups(input: {
   }, [allUnverifiedVulns]);
 
   return {
-    sortedVulns, categoryCounts, sortedCategories, visibleVulns, dismissedCount, filteredVulns, confirmedVulns,
+    findings, scanNotes, sortedVulns, categoryCounts, sortedCategories, visibleVulns, dismissedCount, filteredVulns, confirmedVulns,
     unverifiedVulns, groupedConfirmedVulns, groupedUnverifiedVulns, allConfirmedVulns, allUnverifiedVulns,
     confirmedSeverityCounts, unverifiedSeverityCounts,
   };

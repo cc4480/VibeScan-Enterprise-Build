@@ -102,6 +102,18 @@ jobs:
       - name: Check the check index is current
         run: node artifacts/api-server/scripts/check-index.mjs --check
 
+      # The real scanner, active tests and two accounts included, against artifacts/vuln-fixture, whose
+      # planted faults are known exactly. Exits non-zero when a planted finding is missed, so a change
+      # that quietly stops a check firing fails here instead of in a customer's report. The fixture is
+      # test infrastructure and is only ever served on this runner's loopback address.
+      - name: Fixture gate (scanner against the vulnerable fixture)
+        env:
+          DATABASE_URL: postgres://localhost/verify-vuln-fixture
+        run: |
+          pnpm --filter @workspace/vuln-fixture run start > fixture.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:4100/ > /dev/null && break; sleep 1; done
+          artifacts/vuln-fixture/node_modules/.bin/tsx artifacts/api-server/scripts/verify-vuln-fixture.ts
+
       # The frontend build is the step most likely to break on a change that
       # typechecks: bundling resolves imports the compiler is happy to leave
       # unresolved.
