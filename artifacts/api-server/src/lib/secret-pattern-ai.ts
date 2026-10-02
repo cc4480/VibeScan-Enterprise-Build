@@ -30,10 +30,11 @@ export const AI_VENDOR_PATTERNS: SecretPattern[] = [
   // ── Resend ────────────────────────────────────────────────────────────────
   {
     name: "Resend API Key Exposed",
-    // Resend keys are `re_` plus 8 characters, `_`, and a 24+ character body (older ones a single run
-    // of 32+). The prefix alone is two letters and an underscore, so it must also follow a key-ish
+    // Resend keys are `re_` plus 8 base58 characters, `_`, and 24 base58 characters (TruffleHog's Resend
+    // detector, checked 2026-10-02; base58 has no 0, O, I or l). The single run of 32+ is an older form
+    // that no public detector lists, so it stays but is unverified. The prefix alone is two letters and an underscore, so it must also follow a key-ish
     // word: a bare `re_…` identifier in a bundle is not evidence of a Resend key.
-    pattern: /(?<=(?:resend|api[_-]?key|bearer|authorization|token|secret)[^\n]{0,40})\bre_(?:[A-Za-z0-9]{8}_[A-Za-z0-9]{24,}|[A-Za-z0-9]{32,})\b/i,
+    pattern: /(?<=(?:resend|api[_-]?key|bearer|authorization|token|secret)[^\n]{0,40})\bre_(?:[1-9A-HJ-NP-Za-km-z]{8}_[1-9A-HJ-NP-Za-km-z]{24}|[A-Za-z0-9]{32,})\b/i,
     severity: "high", cvssScore: 8.1, cweId: "CWE-798",
     description: "A value in Resend's API key format (re_…), next to a key or token name, was found in client-side JavaScript. If it is a live key it allows anyone to send emails from your verified domain — enabling phishing campaigns, spam, and permanent damage to your sending reputation.",
     solution: "Revoke this key at resend.com/api-keys. Move all email sending to a backend API route. Resend keys must never appear in frontend bundles.",

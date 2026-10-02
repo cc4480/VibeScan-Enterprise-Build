@@ -22,7 +22,7 @@ module does. `none` — neither, so no test exercises it at all.
 | Module | Findings | Lines | Tests | Coverage |
 |---|---:|---:|---:|---|
 | `recon-data.ts` | 14 | 178 | 12 | direct |
-| `nextjsProbe.ts` | 9 | 256 | 7 | direct |
+| `nextjsProbe.ts` | 9 | 255 | 8 | direct |
 | `structuredData.ts` | 9 | 285 | 36 | direct |
 | `crawler-data.ts` | 8 | 181 | 35 | direct |
 | `scannerCspChecks.ts` | 7 | 155 | 10 | direct |
@@ -56,7 +56,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `probes-data-vcs.ts` | 24 | 244 | — | indirect, via probes-data.test.ts (split from probes-data) |
 | `probes-data-config.ts` | 23 | 273 | — | indirect, via probes-data.test.ts (split from probes-data) |
 | `secret-pattern-vendors.ts` | 21 | 247 | — | indirect, via secret-pattern-data.test.ts (split from secret-pattern-data) |
-| `subdomain-service-data.ts` | 19 | 165 | — | indirect, via subdomainTakeover.test.ts |
+| `subdomain-service-data.ts` | 19 | 172 | — | indirect, via subdomainTakeover.test.ts |
 | `probes-data-server.ts` | 17 | 177 | — | indirect, via probes-data.test.ts (split from probes-data) |
 | `probes-data-infra.ts` | 14 | 148 | — | indirect, via probes-data.test.ts (split from probes-data) |
 | `dnsChecksMail.ts` | 8 | 205 | — | indirect, via dnsChecks.test.ts (split from dnsChecks) |
@@ -67,7 +67,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `scannerCookies.ts` | 6 | 205 | — | indirect, via scanner.test.ts (split from scanner) |
 | `crawlerHeaders.ts` | 5 | 202 | — | indirect, via crawler.test.ts (split from crawler) |
 | `cveCheckLocal.ts` | 5 | 225 | — | indirect, via cveCheck.test.ts (split from cveCheck) |
-| `secret-pattern-ai.ts` | 5 | 61 | — | indirect, via secret-pattern-generic.test.ts |
+| `secret-pattern-ai.ts` | 5 | 62 | — | indirect, via secret-pattern-generic.test.ts |
 | `accessControlFindings.ts` | 3 | 129 | — | indirect, via accessControlProbe.test.ts |
 | `probesFiles.ts` | 3 | 266 | — | indirect, via probes.test.ts (split from probes) |
 | `probesPage.ts` | 3 | 244 | — | indirect, via probes.test.ts (split from probes) |
@@ -346,7 +346,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `nextjsProbe.ts`
 
-*9 findings · 256 lines · 7 tests.*
+*9 findings · 255 lines · 8 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -647,7 +647,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `secret-pattern-ai.ts`
 
-*5 findings · 61 lines · no test file.*
+*5 findings · 62 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -755,7 +755,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `subdomain-service-data.ts`
 
-*19 findings · 165 lines · no test file · emitted by `subdomainTakeover.ts`.*
+*19 findings · 172 lines · no test file · emitted by `subdomainTakeover.ts`.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|

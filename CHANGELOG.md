@@ -3,6 +3,32 @@
 Notable changes to the SecScan engine. Commit messages carry the full reasoning
 for each change; this collects what shipped and why it mattered.
 
+## 2026-10-02
+
+### Fixed
+
+- **Takeover signatures and the nginx floor checked against their sources.**
+  Fastly, Squarespace and WP Engine are listed "Not vulnerable" by
+  can-i-take-over-xyz, so their not-found pages are now reported only as unverified
+  candidates (medium, low confidence). Ghost and Readme.io also match the pages that
+  list currently shows. CVE-2026-42533 now starts at nginx 0.9.6, as the CVE record
+  does, and says a restart is the base impact (code execution needs ASLR off or
+  bypassed). Not covered: nginx 1.31.2, which a single ceiling cannot express.
+- **Technology, secret and challenge rules checked against public rule sets**
+  (webappanalyzer, TruffleHog, wafw00f). `x-amz-request-id` no longer names
+  CloudFront (it is AWS in general; `x-amz-cf-id` is CloudFront's). WordPress,
+  Joomla, Angular and Google Tag Manager need an asset or attribute, not the words
+  in prose. Express and Next.js `X-Powered-By` matches are anchored. Replit,
+  Railway, Netlify and Base44 are named from the signals webappanalyzer lists. The
+  two-part Resend key must be base58 (8 + 24), as TruffleHog's detector has it.
+  Sucuri's block page is recognised by its title or stylesheet, not the product
+  name; PerimeterX and Vercel gain the block text and path wafw00f lists.
+- **A page that only talks about Next.js is no longer called "this Next.js page".**
+  Found in a secscan.us PDF (2026-10-02): the Next.js probe took the words
+  "Next.js" in page copy for a Next.js page, so a Vite app got the skip reason
+  "this Next.js page has no __NEXT_DATA__ block". It now needs the `__NEXT_DATA__`
+  script, a `/_next/static/` asset or the `#__next` element.
+
 ## 2026-10-01
 
 Scans of real apps came back looking alike because, in several common setups, the

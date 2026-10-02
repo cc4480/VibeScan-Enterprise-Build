@@ -41,7 +41,9 @@ describe("checkSubdomainTakeover — Host-routing false positive", () => {
     const findings = await checkSubdomainTakeover("https://abandoned.example.com");
     expect(findings.length).toBe(1);
     expect(findings[0]!.name).toMatch(/Subdomain Takeover/);
-    expect(findings[0]!.severity).toBe("critical");
+    // Fastly is "Not vulnerable" in can-i-take-over-xyz: reported only as an unverified candidate.
+    expect(findings[0]!.name).toContain("Unverified");
+    expect(findings[0]!.severity).toBe("medium");
   });
 
   it("fetches the hostname, never the raw CNAME target", async () => {
@@ -102,6 +104,8 @@ describe("checkSubdomainTakeover — real unclaimed-resource pages are still det
     ["Ghost Pro", "x.ghost.io", 404, "<h1>Site unavailable</h1><p>The thing you were looking for is no longer here, or never was</p>", "high"],
     ["Tumblr", "x.tumblr.com", 404, "Whatever you were looking for doesn't currently exist at this address.", "medium"],
     ["Readme.io", "x.readme.io", 404, "<h1>Project doesnt exist... yet!</h1>", "high"],
+    ["Readme.io", "x.readme.io", 404, "<p>The creators of this project are still working on making everything perfect!</p>", "high"],
+    ["Ghost Pro", "x.ghost.io", 404, "<h1>Site unavailable.</h1><p>Failed to resolve DNS path for this host</p>", "high"],
     ["Heroku", "x.herokuapp.com", 404, "<title>No such app</title>", "critical"],
     ["GitHub Pages", "x.github.io", 404, "<p>There isn't a GitHub Pages site here.</p>", "critical"],
   ];

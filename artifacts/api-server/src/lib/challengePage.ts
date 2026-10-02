@@ -60,11 +60,15 @@ const BODY_SIGNALS: { vendor: string; re?: RegExp; all?: RegExp[]; label: string
   // Amazon's own "Continue shopping" robot check, served to non-browser clients.
   // The form target is a path only that page posts to.
   { vendor: "Amazon", re: /\/errors(?:_page)?\/validateCaptcha/i, label: "Amazon robot-check form" },
-  { vendor: "Sucuri", re: /Sucuri WebSite Firewall|sucuri_cloudproxy/i, label: "Sucuri firewall page" },
+  // wafw00f's Sucuri plugin (checked 2026-10-02) keys on the block page's title and stylesheet, not on
+  // the product name, which a security blog or a Sucuri customer's own page also carries.
+  { vendor: "Sucuri", re: /<title>\s*Sucuri WebSite Firewall[^<]{0,30}Access Denied|cdn\.sucuri\.net\/sucuri[-_]firewall[-_]block\.css|Access Denied[^<]{0,12}Sucuri Website Firewall|sucuri_cloudproxy/i, label: "Sucuri firewall page" },
   // The vendors' challenge surfaces only. Their sensor tags (js.datadome.co, client.perimeterx.net,
   // /_Incapsula_Resource, *.awswaf.com/challenge.js) are on ordinary pages of every customer, so
   // they count only on a bare stub document; see SENSOR_SIGNALS.
-  { vendor: "PerimeterX", re: /px-captcha/i, label: "PerimeterX challenge" },
+  { vendor: "PerimeterX", re: /px-captcha|perimeterx\.(?:com|net)\/whywasiblocked|denied because we believe you are using automation tools/i, label: "PerimeterX challenge" },
+  // Vercel's checkpoint page also loads from /vercel/security/ (wafw00f, checked 2026-10-02).
+  { vendor: "Vercel", re: /\/vercel\/security\//i, label: "Vercel security checkpoint script" },
   { vendor: "DataDome", re: /geo\.captcha-delivery\.com/i, label: "DataDome challenge" },
   // Reddit's proof-of-work interstitial (server: snooserv): a ~8 KB page titled just "Reddit"
   // whose only content is a hidden GET form that a script fills in and submits. Its title and

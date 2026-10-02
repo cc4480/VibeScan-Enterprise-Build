@@ -129,7 +129,9 @@ describe("titles say only what was observed", () => {
 
   it("does not call a bare re_ identifier a Resend key, but reports one in a key context", () => {
     expect(names(`var x="re_AbCdEfGhIjKlMnOpQrStUvWxYz012345678901";`)).not.toContain("Resend API Key Exposed");
-    expect(names(`const resend = new Resend("re_AbCdEfGh_IjKlMnOpQrStUvWxYz012345");`)).toContain("Resend API Key Exposed");
+    expect(names(`const resend = new Resend("re_AbCdEfGh_JkMnPqRsTuVwXyZ12345678a");`)).toContain("Resend API Key Exposed");
+    // a body with characters outside base58 (0, O, I, l) is not the two-part format
+    expect(names(`const resend = new Resend("re_AbCdEfGh_IjKlMnOpQrStUvWxYz012345");`)).not.toContain("Resend API Key Exposed");
     expect(names(`headers:{Authorization:"Bearer re_Zq3XkL8vN2mYtRzWc9aBdE0fGhIjKlMnOp"}`)).toContain("Resend API Key Exposed");
   });
 });

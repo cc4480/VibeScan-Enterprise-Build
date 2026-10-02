@@ -186,10 +186,9 @@ function extractNextData(html: string): string | null {
 }
 
 function isNextJsPage(html: string): boolean {
-  return (
-    /__NEXT_DATA__|__next|_next\/static/i.test(html) ||
-    /next\.js|"buildId"/i.test(html)
-  );
+  // Structural markers only, as in techFingerprint.ts. The words "Next.js" or "buildId" in prose (a
+  // page about Next.js, a Vite app's own copy) made a non-Next.js site read as "this Next.js page".
+  return /<script\b[^>]*\bid=["']__NEXT_DATA__["']|__NEXT_DATA__\s*=|\/_next\/static\/|\sid=["']__next["']/i.test(html);
 }
 
 function redactSecret(text: string): string {

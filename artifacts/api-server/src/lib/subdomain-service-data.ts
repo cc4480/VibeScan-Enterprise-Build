@@ -73,6 +73,9 @@ export const SERVICES: ServiceFingerprint[] = [
     name: "Fastly",
     cnamePattern: /\.fastly\.net$/i,
     bodyFingerprints: [/Fastly error: unknown domain|Please check that this domain has been added/i],
+    // can-i-take-over-xyz lists Fastly as "Not vulnerable" (a service must prove
+    // it owns the domain), so this page alone is a candidate, not a takeover.
+    ambiguous: true,
     severity: "critical",
     cvssScore: 9.1,
   },
@@ -86,7 +89,7 @@ export const SERVICES: ServiceFingerprint[] = [
   {
     name: "Ghost Pro",
     cnamePattern: /\.ghost\.io$/i,
-    bodyFingerprints: [/The thing you were looking for is no longer here, or never was/i],
+    bodyFingerprints: [/The thing you were looking for is no longer here, or never was|Site unavailable\.|Failed to resolve DNS path for this host/i],
     severity: "high",
     cvssScore: 8.1,
   },
@@ -107,7 +110,7 @@ export const SERVICES: ServiceFingerprint[] = [
   {
     name: "Readme.io",
     cnamePattern: /\.readme\.io$|\.readmessl\.com$/i,
-    bodyFingerprints: [/Project doesnt exist/i],
+    bodyFingerprints: [/Project doesnt exist|The creators of this project are still working on making everything perfect/i],
     severity: "high",
     cvssScore: 8.1,
   },
@@ -122,6 +125,8 @@ export const SERVICES: ServiceFingerprint[] = [
     name: "Squarespace",
     cnamePattern: /\.squarespace\.com$/i,
     bodyFingerprints: [/No Such Account|you may have followed a broken link/i],
+    // Listed "Not vulnerable" in can-i-take-over-xyz.
+    ambiguous: true,
     severity: "high",
     cvssScore: 8.1,
   },
@@ -136,6 +141,8 @@ export const SERVICES: ServiceFingerprint[] = [
     name: "WP Engine",
     cnamePattern: /\.wpengine\.com$/i,
     bodyFingerprints: [/The site you were looking for couldn.t be found/i],
+    // Listed "Not vulnerable" in can-i-take-over-xyz.
+    ambiguous: true,
     severity: "high",
     cvssScore: 8.1,
   },

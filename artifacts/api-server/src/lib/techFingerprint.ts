@@ -65,6 +65,7 @@ export function detectTechnologies(headers: Record<string, string>, html: string
   if (/aws|amazon/i.test(server))                 techs.add("AWS");
   if (/envoy/i.test(server))                      techs.add("Envoy Proxy");
   if (/netlify/i.test(server))                    techs.add("Netlify");
+  if (/^railway$/i.test(server.trim()))           techs.add("Railway");
   if (/squarespace/i.test(server))                techs.add("Squarespace");
   // Word-bounded: "AkamaiGHost" is Akamai's edge server and contains "ghost", so
   // every Akamai-fronted site (amazon.co.uk among them) was listed as running the
@@ -76,8 +77,12 @@ export function detectTechnologies(headers: Record<string, string>, html: string
   if (headerVal(headers, "cf-ray"))               techs.add("Cloudflare");
   if (headerVal(headers, "cf-cache-status"))      techs.add("Cloudflare");
   if (headerVal(headers, "x-vercel-id"))          techs.add("Vercel");
-  if (headerVal(headers, "x-netlify"))            techs.add("Netlify");
-  if (headerVal(headers, "x-amz-cf-id") || headerVal(headers, "x-amz-request-id")) techs.add("AWS CloudFront");
+  if (headerVal(headers, "x-netlify") || headerVal(headers, "x-nf-request-id")) techs.add("Netlify");
+  if (headerVal(headers, "replit-cluster"))       techs.add("Replit");
+  // x-amz-cf-id is CloudFront's; x-amz-request-id is sent by S3 and other AWS APIs (webappanalyzer
+  // files it under Amazon Web Services, checked 2026-10-02), so it must not name CloudFront.
+  if (headerVal(headers, "x-amz-cf-id"))           techs.add("AWS CloudFront");
+  else if (headerVal(headers, "x-amz-request-id")) techs.add("AWS");
   if (headerVal(headers, "x-azure-ref"))          techs.add("Azure");
   if (headerVal(headers, "x-ms-request-id"))      techs.add("Azure");
   // x-github-request-id is sent by github.com and api.github.com too, so on its own it
@@ -102,9 +107,9 @@ export function detectTechnologies(headers: Record<string, string>, html: string
   // ── X-Powered-By ─────────────────────────────────────────────────────
   const powered = headerVal(headers, "x-powered-by") ?? "";
   if (/php/i.test(powered))                       techs.add("PHP");
-  if (/express/i.test(powered))                   techs.add("Express.js");
+  if (/^express(?:$|,)/i.test(powered.trim()))    techs.add("Express.js");
   if (/asp\.net/i.test(powered))                  techs.add("ASP.NET");
-  if (/next\.js/i.test(powered))                  techs.add("Next.js");
+  if (/^next\.js/i.test(powered.trim()))          techs.add("Next.js");
   if (/nuxt/i.test(powered))                      techs.add("Nuxt.js");
   if (/django/i.test(powered))                    techs.add("Django");
   if (/rails/i.test(powered))                     techs.add("Ruby on Rails");
@@ -152,9 +157,9 @@ export function detectTechnologies(headers: Record<string, string>, html: string
   const assetPath = (re: RegExp) => assets.some((u) => re.test(u));
 
   // CMS platforms
-  if (generatedBy(/wordpress/i) || /wp-content|wp-includes|wpemoji/i.test(s))                     techs.add("WordPress");
+  if (generatedBy(/wordpress/i) || assetPath(/\/wp-(?:content|includes)\//i))                     techs.add("WordPress");
   if (generatedBy(/drupal/i) || /drupal\.settings|Drupal\.behaviors/i.test(js))                   techs.add("Drupal");
-  if (generatedBy(/joomla/i) || /\/media\/jui\//i.test(s))                                        techs.add("Joomla");
+  if (generatedBy(/joomla/i) || assetPath(/\/media\/jui\/|(?:^|\/)(?:feed|components)\/com_/i))                                        techs.add("Joomla");
   if (generatedBy(/ghost/i))                                                                      techs.add("Ghost");
   if (loadsFromHost(assets, "cdn.shopify.com", "shopifycdn.com") || /Shopify\.theme/.test(js))    techs.add("Shopify");
   if (loadsFromHost(assets, "squarespace-cdn.com", "static1.squarespace.com") || /\sdata-squarespace/i.test(s) || generatedBy(/squarespace/i)) techs.add("Squarespace");
@@ -166,6 +171,8 @@ export function detectTechnologies(headers: Record<string, string>, html: string
   // other meta `content=` (SEO keywords, descriptions) is prose.
   const ogImages = [...s.matchAll(/<meta\b[^>]*\b(?:property|name)=["'](?:og|twitter):image["'][^>]*>/gi)]
     .map((m) => /\bcontent=["']([^"']*)/i.exec(m[0])?.[1] ?? "");
+  // Base44: webappanalyzer keys on this meta tag.
+  if (/<meta\b[^>]*\bname=["']apple-mobile-web-app-title["'][^>]*\bcontent=["']base44["']|<meta\b[^>]*\bcontent=["']base44["'][^>]*\bname=["']apple-mobile-web-app-title["']/i.test(s)) techs.add("Base44");
   if (loadsFromHost([...assets, ...ogImages], "lovable.app", "lovable.dev", "gptengineer.app"))   techs.add("Lovable");
   if (loadsFromHost(assets, "bolt.new", "stackblitz.io", "webcontainer.io"))                       techs.add("Bolt.new");
 
@@ -192,7 +199,9 @@ export function detectTechnologies(headers: Record<string, string>, html: string
   if (/\sid=["']___gatsby["']/i.test(s) || /___gatsby|__GATSBY/i.test(js) || generatedBy(/^gatsby/i)) techs.add("Gatsby");
   if (/\sdata-reactroot\b/i.test(s) || /ReactDOM|__react(?:Fiber|Container|Props)/.test(js) || assetPath(/react(?:-dom)?\.(?:development|production)/i)) techs.add("React");
   if (/__vue_app__/i.test(s) || /\sdata-v-[a-f0-9]{8}[\s=>]/.test(s) || /Vue\.version/.test(js) || assetPath(/vue(?:\.runtime)?(?:\.global)?\.(?:min\.)?js/i)) techs.add("Vue.js");
-  if (/ng-version|ng-app|angular\.js|angular\.min\.js|platformBrowserDynamic/i.test(s))           techs.add("Angular");
+  // An attribute or a loaded file, not the words: a tutorial that mentions ng-app or angular.js is not
+  // running Angular. (`ng-app` and angular.js are AngularJS, which webappanalyzer lists apart.)
+  if (/<[a-z][\w-]*\b[^>]*\sng-version\s*=/i.test(s) || /<(?:div|html|body)\b[^>]*\sng-app\b/i.test(s) || assetPath(/\bangular(?:[.-][\d.]*\d)?(?:\.min)?\.js|\/angular(?:\.min)?\.js/i) || /\bplatformBrowserDynamic\b/.test(js)) techs.add("Angular");
   // Svelte's scoped-CSS hash always carries a digit (`svelte-1abc2de`); a bare
   // `svelte-check` / `svelte-preprocess` is the tooling's name, not a class.
   if (/\bclass=["'][^"']*\bsvelte-(?=[a-z]*\d)[a-z0-9]{4,8}\b/i.test(s) || /__svelte|data-sveltekit-/i.test(s)) techs.add("Svelte");
@@ -242,7 +251,7 @@ export function detectTechnologies(headers: Record<string, string>, html: string
     assetPath(/googletagmanager\.com\/gtag\/js/i) ||
     /\bgtag\(\s*["']config["']|GoogleAnalyticsObject|\bga\(\s*["']create["']/.test(js)
   ) techs.add("Google Analytics");
-  if (/googletagmanager\.com\/gtm/i.test(s))                                                      techs.add("Google Tag Manager");
+  if (assetPath(/googletagmanager\.com\/gtm\.js/i) || /<iframe\b[^>]*\ssrc=["'][^"']*googletagmanager\.com\/ns\.html/i.test(s) || /<!-- (?:End )?Google Tag Manager -->/.test(s)) techs.add("Google Tag Manager");
   // A vendor link or mention is not a vendor script: require the script it
   // serves (or its init call in executable content), never `<a href>` or prose.
   if (loadsFromHost(assets, "plausible.io") || /<script\b[^>]*\bdata-domain=[^>]*plausible|<script\b[^>]*plausible[^>]*\bdata-domain=/i.test(s)) techs.add("Plausible Analytics");
