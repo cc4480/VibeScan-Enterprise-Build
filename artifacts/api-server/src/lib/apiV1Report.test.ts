@@ -12,6 +12,17 @@ describe("summariseReport", () => {
     expect(s.findings).toEqual({ critical: 1, high: 1, medium: 0, low: 1, info: 0, total: 4 });
   });
 
+  it("leaves the scan's own notes out of the counts and counts them apart", () => {
+    const s = summariseReport({ vulnerabilities: [
+      { severity: "high", category: "Security Headers" },
+      { severity: "info", category: "Security Headers" },
+      { severity: "info", category: "Scan Coverage" },
+      { severity: "info", category: "Scan Coverage" },
+    ] });
+    expect(s.findings).toEqual({ critical: 0, high: 1, medium: 0, low: 0, info: 1, total: 2 });
+    expect(s.scanNotes).toBe(2);
+  });
+
   it("reports what ran and what did not, never a bare grade", () => {
     const s = summariseReport({ tests: [
       { group: "g", name: "a", status: "ran", findings: 0, durationMs: 1 },

@@ -2,9 +2,10 @@ import { SharedReportLoading, SharedReportError } from "./shared-report-states";
 import { useSharedReportData, useSharedReportPdf } from "./shared-report-hooks";
 import { useRoute, Link } from "wouter";
 import { useSeo } from "@/lib/seo";
-import { Shield, Globe, Lock, Loader2, Download, Share2 } from "lucide-react";
+import { Shield, Globe, Lock, Loader2, Download, Share2, Info } from "lucide-react";
 import { cn, getGradeColor } from "@/lib/utils";
 import { APP_ORIGIN } from "@/lib/origin";
+import { NO_FINDINGS_WITH_NOTES, SCAN_NOTES_BLURB, SCAN_NOTES_TITLE, scanNotesCount, splitScanNotes } from "@/lib/scan-notes";
 import { PdfReport } from "@/components/pdf-report";
 import { GradeRing, VulnRow, ComplianceCard, CoverageCard, SeverityLegend, SEV_ORDER, VERIFICATION_THRESHOLD } from "./shared-report-components";
 import { WithheldCard, type Interception } from "./report-viewer-provenance";
@@ -33,9 +34,11 @@ export default function SharedReport() {
   const { data } = report;
   const { summary, vulnerabilities, technologies, server, tlsGrade, aiAnalysis, compliance } = data;
 
-  const sorted = [...vulnerabilities].sort(
-    (a, b) => (SEV_ORDER[a.severity] ?? 99) - (SEV_ORDER[b.severity] ?? 99),
-  );
+  // The scan's own notes are not findings: they are listed apart, under "About this scan".
+  const { findings, notes } = splitScanNotes(vulnerabilities);
+  const bySeverity = (a: { severity: string }, b: { severity: string }) => (SEV_ORDER[a.severity] ?? 99) - (SEV_ORDER[b.severity] ?? 99);
+  const sorted = [...findings].sort(bySeverity);
+  const scanNotes = [...notes].sort(bySeverity);
   const confirmed = sorted.filter((v) => (v.confidence ?? 100) >= VERIFICATION_THRESHOLD);
   const unverified = sorted.filter((v) => (v.confidence ?? 100) < VERIFICATION_THRESHOLD);
 
@@ -84,7 +87,7 @@ export default function SharedReport() {
         <div className="lg:col-span-2 space-y-6">
           <h2 className="text-xl font-bold border-b border-white/10 pb-4">
             Identified Vulnerabilities
-            <span className="bg-secondary text-foreground text-sm py-1 px-3 rounded-full ml-3">{vulnerabilities.length}</span>
+            <span className="bg-secondary text-foreground text-sm py-1 px-3 rounded-full ml-3">{findings.length}</span>
           </h2>
 
           {confirmed.length > 0 && (
@@ -107,13 +110,32 @@ export default function SharedReport() {
             </div>
           )}
 
-          {vulnerabilities.length === 0 && (
+          {findings.length === 0 && scanNotes.length === 0 && (
             <div className="text-center py-12 glass-card rounded-xl">
               <Shield className="w-10 h-10 text-green-400 mx-auto mb-3" />
               <h3 className="text-lg font-bold mb-1">No findings from the tests that ran</h3>
               <p className="text-muted-foreground text-sm">
                 A clean result says nothing about the areas listed under &ldquo;What this scan tested&rdquo; as not tested.
               </p>
+            </div>
+          )}
+
+          {findings.length === 0 && scanNotes.length > 0 && (
+            <div className="text-center py-12 glass-card rounded-xl">
+              <Info className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+              <h3 className="text-lg font-bold mb-1">{NO_FINDINGS_WITH_NOTES.title}</h3>
+              <p className="text-muted-foreground text-sm">{NO_FINDINGS_WITH_NOTES.body}</p>
+            </div>
+          )}
+
+          {scanNotes.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-secondary/40 border border-white/10 text-sm font-bold text-foreground">
+                ℹ {SCAN_NOTES_TITLE}
+                <span className="ml-auto text-xs text-muted-foreground font-medium">{scanNotesCount(scanNotes.length)}</span>
+              </div>
+              <p className="text-xs text-muted-foreground px-1">{SCAN_NOTES_BLURB}</p>
+              {scanNotes.map((v, i) => <VulnRow key={v.id} vuln={v} index={i} />)}
             </div>
           )}
         </div>
@@ -237,6 +259,7 @@ export default function SharedReport() {
             summary={summary}
             confirmedVulns={confirmed}
             unverifiedVulns={unverified}
+            scanNotes={scanNotes}
             technologies={technologies}
             server={server ?? null}
             tlsGrade={tlsGrade ?? null}

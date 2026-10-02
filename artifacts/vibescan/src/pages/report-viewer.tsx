@@ -3,7 +3,7 @@ import { useReportDismissals, useVulnGroups } from "./report-viewer-hooks";
 import { ReportLoading, ReportLoadFailure, UndoToast } from "./report-viewer-states";
 import { ReportCover, ReportActionButtons, MonitorCta, ScanAnotherCta } from "./report-viewer-cover";
 import { FindingsHeading, SeverityBadges, SortViewToggles, CategoryFilterPills, AccuracyBar } from "./report-viewer-filters";
-import { ConfirmedFindings, UnverifiedFindings, EmptyFindings } from "./report-viewer-findings";
+import { ConfirmedFindings, UnverifiedFindings, EmptyFindings, ScanNotes } from "./report-viewer-findings";
 import { CategoryBreakdownCard, AiAnalysisCard, TechProfileCard } from "./report-viewer-sidebar";
 import { useGetReport, getGetReportQueryKey, useGetCurrentAuthUser } from "@workspace/api-client-react";
 import { useRoute, Link } from "wouter";
@@ -53,9 +53,9 @@ export default function ReportViewer() {
 
   // All hooks must come before any early returns
   const {
-    categoryCounts, sortedCategories, visibleVulns, dismissedCount, filteredVulns, confirmedVulns, unverifiedVulns,
-    groupedConfirmedVulns, groupedUnverifiedVulns, allConfirmedVulns, allUnverifiedVulns, confirmedSeverityCounts,
-    unverifiedSeverityCounts,
+    findings, scanNotes, categoryCounts, sortedCategories, visibleVulns, dismissedCount, filteredVulns, confirmedVulns,
+    unverifiedVulns, groupedConfirmedVulns, groupedUnverifiedVulns, allConfirmedVulns, allUnverifiedVulns,
+    confirmedSeverityCounts, unverifiedSeverityCounts,
   } = useVulnGroups({ vulnerabilities, sortBy, activeCategory, dismissedFps, vulnFpMap, optimisticDismissKeys });
 
   if (isLoading) return <ReportLoading />;
@@ -99,6 +99,7 @@ export default function ReportViewer() {
     },
     confirmedVulns: allConfirmedVulns,
     unverifiedVulns: allUnverifiedVulns,
+    scanNotes,
     technologies: technologies ?? [],
     server: server ?? null,
     tlsGrade: tlsGrade ?? null,
@@ -115,6 +116,7 @@ export default function ReportViewer() {
     summary: copyData.summary,
     confirmedVulns: allConfirmedVulns,
     unverifiedVulns: allUnverifiedVulns,
+    scanNotes,
     technologies: technologies ?? [],
     server: server ?? null,
     tlsGrade: tlsGrade ?? null,
@@ -147,6 +149,7 @@ export default function ReportViewer() {
           summary={copyData.summary}
           confirmedVulns={allConfirmedVulns}
           unverifiedVulns={allUnverifiedVulns}
+          scanNotes={scanNotes}
           technologies={technologies ?? []}
           server={server}
           tlsGrade={tlsGrade}
@@ -200,7 +203,8 @@ export default function ReportViewer() {
           {unverifiedVulns.length > 0 && (
             <UnverifiedFindings unverifiedVulns={unverifiedVulns} viewMode={viewMode} groupedUnverifiedVulns={groupedUnverifiedVulns} rootUrl={report.targetUrl} />
           )}
-          <EmptyFindings filteredVulns={filteredVulns} activeCategory={activeCategory} vulnerabilities={vulnerabilities} />
+          <EmptyFindings filteredVulns={filteredVulns} activeCategory={activeCategory} vulnerabilities={findings} scanNotes={scanNotes} />
+          {scanNotes.length > 0 && <ScanNotes scanNotes={scanNotes} rootUrl={report.targetUrl} />}
         </div>
 
         {/* Right Col: OWASP + Category sidebar + AI + Tech */}
@@ -215,7 +219,7 @@ export default function ReportViewer() {
               visibleVulns={visibleVulns}
               activeCategory={activeCategory}
               setActiveCategory={setActiveCategory}
-              vulnerabilities={vulnerabilities}
+              vulnerabilities={findings}
             />
           )}
 

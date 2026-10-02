@@ -1,6 +1,6 @@
 import { vuln, type ScanVulnerability } from "./scannerTypes";
 import { runAllProbes } from "./probes";
-import { TestLedger, NOT_VERIFIED, type ProbeOutcome } from "./testLedger";
+import { TestLedger, NOT_VERIFIED, foundNames, type ProbeOutcome } from "./testLedger";
 import { checkDnsSecurity } from "./dnsChecks";
 import { scanJavaScriptForSecrets } from "./jsScanner";
 import { parseGithubRepoRef, scanGithubRepo, githubProbeOutcome } from "./githubSourceProbe";
@@ -53,7 +53,7 @@ export async function runProbeStage({
       ledger.records.push({
         group: "crawl", name: `site crawl (${r.pagesVisited.length} inner pages)`, status: "ran",
         findings: r.vulnerabilities.length, durationMs: Date.now() - crawlStarted,
-        ...(r.vulnerabilities.length > 0 ? { found: r.vulnerabilities.slice(0, 40).map((v) => v.name) } : {}),
+        ...(r.vulnerabilities.length > 0 ? { found: foundNames(r.vulnerabilities) } : {}),
       });
       return { ...r, failed: false };
     })
