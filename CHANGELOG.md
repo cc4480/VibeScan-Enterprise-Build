@@ -23,6 +23,11 @@ for each change; this collects what shipped and why it mattered.
   two-part Resend key must be base58 (8 + 24), as TruffleHog's detector has it.
   Sucuri's block page is recognised by its title or stylesheet, not the product
   name; PerimeterX and Vercel gain the block text and path wafw00f lists.
+- **A page that only talks about Next.js is no longer called "this Next.js page".**
+  Found in a secscan.us PDF (2026-10-02): the Next.js probe took the words
+  "Next.js" in page copy for a Next.js page, so a Vite app got the skip reason
+  "this Next.js page has no __NEXT_DATA__ block". It now needs the `__NEXT_DATA__`
+  script, a `/_next/static/` asset or the `#__next` element.
 
 ## 2026-10-01
 

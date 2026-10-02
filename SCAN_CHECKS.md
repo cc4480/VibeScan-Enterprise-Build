@@ -22,7 +22,7 @@ module does. `none` — neither, so no test exercises it at all.
 | Module | Findings | Lines | Tests | Coverage |
 |---|---:|---:|---:|---|
 | `recon-data.ts` | 14 | 178 | 12 | direct |
-| `nextjsProbe.ts` | 9 | 256 | 7 | direct |
+| `nextjsProbe.ts` | 9 | 255 | 8 | direct |
 | `structuredData.ts` | 9 | 285 | 36 | direct |
 | `crawler-data.ts` | 8 | 181 | 35 | direct |
 | `scannerCspChecks.ts` | 7 | 155 | 10 | direct |
@@ -346,7 +346,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `nextjsProbe.ts`
 
-*9 findings · 256 lines · 7 tests.*
+*9 findings · 255 lines · 8 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|

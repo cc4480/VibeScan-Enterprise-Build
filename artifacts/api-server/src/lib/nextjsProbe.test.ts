@@ -69,3 +69,12 @@ describe("runNextjsProbe — regression: placeholder values not flagged", () => 
     expect(findings).toEqual([]);
   });
 });
+
+describe("runNextjsProbe — a page that only talks about Next.js", () => {
+  it("is reported as not a Next.js page, not as 'this Next.js page'", async () => {
+    const reasons: string[] = [];
+    const out = await runNextjsProbe("https://x.test/", "<html><body><p>We scan Next.js apps. buildId, __next, anything.</p></body></html>", (r) => reasons.push(r));
+    expect(out).toEqual([]);
+    expect(reasons[0]).toMatch(/not a Next\.js page/);
+  });
+});
