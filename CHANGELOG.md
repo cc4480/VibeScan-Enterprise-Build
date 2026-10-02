@@ -3,6 +3,18 @@
 Notable changes to the SecScan engine. Commit messages carry the full reasoning
 for each change; this collects what shipped and why it mattered.
 
+## 2026-10-02
+
+### Fixed
+
+- **Takeover signatures and the nginx floor checked against their sources.**
+  Fastly, Squarespace and WP Engine are listed "Not vulnerable" by
+  can-i-take-over-xyz, so their not-found pages are now reported only as unverified
+  candidates (medium, low confidence). Ghost and Readme.io also match the pages that
+  list currently shows. CVE-2026-42533 now starts at nginx 0.9.6, as the CVE record
+  does, and says a restart is the base impact (code execution needs ASLR off or
+  bypassed). Not covered: nginx 1.31.2, which a single ceiling cannot express.
+
 ## 2026-10-01
 
 Scans of real apps came back looking alike because, in several common setups, the
