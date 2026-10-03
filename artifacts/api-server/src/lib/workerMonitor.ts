@@ -4,6 +4,7 @@ import { db, reportsTable, monitorSubscriptionsTable, monitorScoreHistoryTable, 
 import { eq, and, desc } from "drizzle-orm";
 import { computeNextScanAt } from "./monitorScheduler";
 import { sendRegressionAlertEmail } from "./mailer";
+import { findRegressions } from "./monitorRegressions";
 import { highestSeverity } from "./notificationPrefs";
 import { fireWebhook } from "./webhook";
 import { type ScanVulnerability } from "./scanner";
@@ -155,12 +156,7 @@ export async function recordMonitorScan(input: MonitorScanInput): Promise<void> 
               "More tests ran than on the previous scan — new findings are not treated as regressions",
             );
           }
-          const newRegressions =
-            newlyRun.length > 0
-              ? []
-              : scanResult.vulnerabilities.filter(
-                  (v) => !prevFingerprints.has(findingFingerprint(v.category, v.name, v.evidence)),
-                );
+          const newRegressions = newlyRun.length > 0 ? [] : findRegressions(scanResult.vulnerabilities, prevFingerprints);
 
           if (newRegressions.length > 0) {
             log.info(
