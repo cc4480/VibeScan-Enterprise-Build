@@ -3,6 +3,7 @@ import { db, reportsTable, reportSharesTable } from "@workspace/db";
 import { eq, and, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { createReportShare } from "../lib/reportShare";
+import { withNoteFreeTotals } from "../lib/reportTotals";
 
 const router: IRouter = Router();
 
@@ -197,7 +198,8 @@ router.get("/share/:token", async (req, res): Promise<void> => {
       scannedAt: report.scannedAt,
       duration: report.duration ?? null,
       createdAt: report.createdAt,
-      data: report.data,
+      // Totals saved before the notes left them are recounted here (lib/reportTotals.ts).
+      data: withNoteFreeTotals(report.data),
     });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch shared report");

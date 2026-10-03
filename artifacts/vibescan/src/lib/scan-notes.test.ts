@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isScanNote, splitScanNotes, scanNotesCount, scanNotesMarkdown, NO_FINDINGS_WITH_NOTES, SCAN_NOTES_BLURB, SCAN_NOTES_TITLE } from "./scan-notes";
+import { hasFindingActions, isScanNote, splitScanNotes, scanNotesCount, scanNotesMarkdown, NO_FINDINGS_WITH_NOTES, SCAN_NOTES_BLURB, SCAN_NOTES_TITLE } from "./scan-notes";
 
 const v = (id: string, category: string) => ({ id, category });
 
@@ -86,5 +86,12 @@ describe("scanNotesMarkdown", () => {
   it("is a list of lines that ends on a blank line, like the other sections, so the next heading is separated", () => {
     const lines = scanNotesMarkdown([note("a")], true, fmt);
     expect(lines[lines.length - 1]).toBe("");
+  });
+});
+
+describe("hasFindingActions", () => {
+  it("offers 'Check my fix' and 'Mark as false positive' on a finding and not on a scan note", () => {
+    expect(hasFindingActions({ category: "Security Headers" })).toBe(true);
+    expect(hasFindingActions({ category: "Scan Coverage" })).toBe(false);
   });
 });

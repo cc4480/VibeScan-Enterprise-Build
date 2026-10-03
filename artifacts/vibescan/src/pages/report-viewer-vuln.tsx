@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState, useContext } from "react";
 import type { Vulnerability } from "@workspace/api-client-react";
 import { ReproSteps } from "@/components/repro-steps";
+import { hasFindingActions } from "@/lib/scan-notes";
 import { FindingProvenance } from "./report-viewer-provenance";
 import { DismissalsContext, vulnUniqueKey, getCategoryMeta, parseTechVersion, extractInnerPageSource, getVerificationNote, wstgCategoryPath } from "./report-viewer-data";
 
@@ -146,7 +147,7 @@ export function VulnCard({
                   <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 text-sm text-foreground/90 leading-relaxed">
                     <div className="whitespace-pre-wrap">{vuln.solution}</div>
                   </div>
-                  <VerifyFixButton findingId={vuln.id} />
+                  {hasFindingActions(vuln) && <VerifyFixButton findingId={vuln.id} />}
 
                   {(vuln.cweId || vuln.cvssScore != null || vuln.wstgId || vuln.confidence != null) && (
                     <div className="mt-4 flex gap-3 flex-wrap">
@@ -199,7 +200,8 @@ export function VulnCard({
               </div>
             </div>
 
-            {/* False positive dismissal */}
+            {/* False positive dismissal. A scan note is not a finding, so it has none. */}
+            {hasFindingActions(vuln) && (
             <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
               <p className="text-xs text-muted-foreground">Not applicable to your setup?</p>
               {isDismissed ? (
@@ -233,6 +235,7 @@ export function VulnCard({
                 </button>
               )}
             </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
