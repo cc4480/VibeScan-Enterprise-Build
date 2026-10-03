@@ -22,6 +22,13 @@ export function splitScanNotes<T extends { category: string }>(items: readonly T
   return { findings, notes };
 }
 
+/**
+ * Whether a card offers the actions that belong to a finding: "Check my fix" and "Mark as false
+ * positive". A note is not a finding. The server refuses "Check my fix" on one ("That finding was not
+ * found in your report"), and there is nothing in the owner's site to mark as a false positive.
+ */
+export const hasFindingActions = (v: { category: string }): boolean => !isScanNote(v);
+
 export const SCAN_NOTES_TITLE = "About this scan";
 
 /** The line under the heading, for every surface that lists the notes. */

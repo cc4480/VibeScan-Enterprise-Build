@@ -3,6 +3,7 @@ import { db, reportsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { GetReportResponse } from "@workspace/api-zod";
 import { changesForReport } from "../lib/scanDiffLoader";
+import { withNoteFreeTotals } from "../lib/reportTotals";
 
 const router: IRouter = Router();
 
@@ -34,7 +35,8 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
       scannedAt: report.scannedAt,
       duration: report.duration ?? null,
       createdAt: report.createdAt,
-      data: report.data,
+      // Totals saved before the notes left them are recounted here (lib/reportTotals.ts).
+      data: withNoteFreeTotals(report.data),
     });
 
     // The schema is strict and does not list these two, so parse() drops them:
