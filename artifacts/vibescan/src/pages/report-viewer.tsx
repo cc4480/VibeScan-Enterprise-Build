@@ -2,6 +2,7 @@ import type { PrintableReportData } from "./report-viewer-print";
 import { useReportDismissals, useVulnGroups } from "./report-viewer-hooks";
 import { ReportLoading, ReportLoadFailure, UndoToast } from "./report-viewer-states";
 import { ReportCover, ReportActionButtons, MonitorCta, ScanAnotherCta } from "./report-viewer-cover";
+import { VerifyBanner } from "./report-viewer-verify";
 import { FindingsHeading, SeverityBadges, SortViewToggles, CategoryFilterPills, AccuracyBar } from "./report-viewer-filters";
 import { ConfirmedFindings, UnverifiedFindings, EmptyFindings, ScanNotes } from "./report-viewer-findings";
 import { CategoryBreakdownCard, AiAnalysisCard, TechProfileCard } from "./report-viewer-sidebar";
@@ -182,6 +183,10 @@ export default function ReportViewer() {
         categoryCounts={categoryCounts}
         allUnverifiedVulns={allUnverifiedVulns}
       />
+
+      {/* What is waiting on domain verification, directly under the grade: the coverage card
+          below is in the sidebar, which on a phone sits under every finding. */}
+      <VerifyBanner tests={coverageTests} targetUrl={report.targetUrl} />
 
       {changes ? <ReportChangesCard changes={changes} /> : null}
 

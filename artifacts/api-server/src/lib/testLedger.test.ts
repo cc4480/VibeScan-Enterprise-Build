@@ -215,3 +215,12 @@ describe("TestLedger.trackOutcome — a test that compared nothing is not a clea
     expect(lines.join("\n")).toContain("compared nothing");
   });
 });
+
+describe("NOT_VERIFIED", () => {
+  it("still starts with the text the report's verification banner looks for", () => {
+    // The front end (vibescan/src/lib/coverage-gap.ts, NOT_VERIFIED_PREFIX) finds the tests skipped
+    // for want of a verified domain by this prefix. Rewording it without updating that file would
+    // silently remove the banner from every report, so this fails first.
+    expect(NOT_VERIFIED.startsWith("domain not verified")).toBe(true);
+  });
+});

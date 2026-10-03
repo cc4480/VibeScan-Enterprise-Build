@@ -160,7 +160,10 @@ export default function DomainsPage() {
   useSeo({ title: "Verified domains — SecScan.us", noindex: true });
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [domainInput, setDomainInput] = useState("");
+  // The report's "Verify" button links here with the scanned site already filled in.
+  const [domainInput, setDomainInput] = useState(() =>
+    typeof window === "undefined" ? "" : (new URLSearchParams(window.location.search).get("domain") ?? "").slice(0, 253),
+  );
   const [adding, setAdding] = useState(false);
 
   const { data: verifications, isLoading, error } = useQuery({
