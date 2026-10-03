@@ -218,6 +218,30 @@ export const reportSharesTable = pgTable("report_shares", {
 
 export type ReportShare = typeof reportSharesTable.$inferSelect;
 
+/**
+ * A public grade badge for one report.
+ *
+ * Deliberately NOT a share token. A share token is a bearer credential for the whole
+ * report, findings included, so putting one in a README would hand every reader the
+ * report. A badge token opens exactly one thing, a small image showing the grade and
+ * the scan date, and nothing else; it can be revoked on its own without touching the
+ * report's share links. The grade is read from the report when the image is requested,
+ * so the table stores no copy of it.
+ */
+export const reportBadgesTable = pgTable("report_badges", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  reportId: uuid("report_id").notNull().references(() => reportsTable.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  token: text("token").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+}, (table) => [
+  uniqueIndex("uq_report_badges_token").on(table.token),
+  index("idx_report_badges_report_id").on(table.reportId),
+]);
+
+export type ReportBadge = typeof reportBadgesTable.$inferSelect;
+
 export const eolCacheTable = pgTable("eol_cache", {
   key: text("key").primaryKey(),
   payload: jsonb("payload").notNull(),

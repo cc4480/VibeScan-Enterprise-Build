@@ -106,6 +106,62 @@ describe("POST /monitor/subscriptions — plan limits", () => {
   });
 });
 
+describe("POST /monitor/subscriptions — the free site", () => {
+  // Once plans are enforced an account with no plan keeps one free site, so a
+  // person who tried the product has a reason to come back. Unenforced (today)
+  // nothing here applies; see the "enforcement is off" test above.
+  const post = async () => {
+    const handle = await handlerFor("post", "/monitor/subscriptions");
+    const res = makeRes();
+    await handle(makeReq({ body: { targetUrl: "https://example.com" }, params: {} }), res);
+    return res;
+  };
+
+  it("lets an account with no plan watch its first site", async () => {
+    process.env["MONITORING_REQUIRES_PLAN"] = "true";
+    delete process.env["FREE_MONITOR_SITES"];
+    queuedResults.push([]); // no billing row
+    queuedResults.push([{ value: 0 }]); // nothing monitored yet
+
+    const res = await post();
+
+    expect(res.statusCode).toBe(201);
+  });
+
+  it("refuses a second site, and tells a free account where to go next", async () => {
+    process.env["MONITORING_REQUIRES_PLAN"] = "true";
+    delete process.env["FREE_MONITOR_SITES"];
+    queuedResults.push([]);
+    queuedResults.push([{ value: 1 }]);
+
+    const res = await post();
+
+    expect(res.statusCode).toBe(403);
+    const body = res.body as { code: string; reason: string; error: string; urlLimit: number };
+    expect(body.code).toBe("monitor_url_limit");
+    // The UI keys on this to show the plans instead of "see your plan".
+    expect(body.reason).toBe("free");
+    expect(body.urlLimit).toBe(1);
+    expect(body.error).toContain("free account");
+    expect(inserted.find((v) => "targetUrl" in v && "expiresAt" in v)).toBeUndefined();
+  });
+
+  it("FREE_MONITOR_SITES=0 turns the free site off", async () => {
+    process.env["MONITORING_REQUIRES_PLAN"] = "true";
+    process.env["FREE_MONITOR_SITES"] = "0";
+    try {
+      queuedResults.push([]);
+
+      const res = await post();
+
+      expect(res.statusCode).toBe(403);
+      expect((res.body as { code: string }).code).toBe("monitor_plan_required");
+    } finally {
+      delete process.env["FREE_MONITOR_SITES"];
+    }
+  });
+});
+
 describe("POST /monitor/subscriptions — paying for the baseline scan", () => {
   // Adding a monitor runs a full deep scan straight away. Without a plan it is
   // charged like any other scan. It used to demand a free scan specifically,

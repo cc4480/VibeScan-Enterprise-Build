@@ -45,7 +45,11 @@ every coding session.
 
 ## Pricing
 
-Every account gets 3 free scans every month (renewing on the 1st, UTC), every check included.
+Every account gets 3 free scans every month (renewing on the 1st, UTC), every check included, with every
+finding and fix unlocked. Free accounts also get free re-tests to confirm a fix (10 a day, no scan used),
+their first site watched free (hourly uptime, certificate and header checks, with email alerts), a grade
+badge for a README that shows only the grade and the scan date, and scanning from AI editors over MCP or
+the REST API on the same free scans.
 
 - SecScan Starter — $19/month: up to 3 sites watched around the clock, plus 20 on-demand full
   scans every month (unused scans do not roll over). Cancel any time.

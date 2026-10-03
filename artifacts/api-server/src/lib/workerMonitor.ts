@@ -3,6 +3,8 @@ import type { Log } from "./workerTypes";
 import { db, reportsTable, monitorSubscriptionsTable, monitorScoreHistoryTable, monitorRegressionsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { computeNextScanAt } from "./monitorScheduler";
+import { enforcementEnabled, rescanFloorDays } from "./entitlements";
+import { hasLivePlan } from "./billing";
 import { sendRegressionAlertEmail } from "./mailer";
 import { highestSeverity } from "./notificationPrefs";
 import { fireWebhook } from "./webhook";
@@ -46,7 +48,19 @@ export async function recordMonitorScan(input: MonitorScanInput): Promise<void> 
         .where(eq(monitorSubscriptionsTable.id, monitorSubscriptionId))
         .limit(1);
 
-      const gradeCadenceAt = computeNextScanAt(grade, completedAt);
+      // A free account's site is held to weekly rescans once plans are enforced.
+      // Unenforced, nobody is on a "free plan", so nothing changes today. If the
+      // plan lookup fails the floor is skipped: one extra rescan costs less than a
+      // monitor that stops being scheduled.
+      let floorDays = 0;
+      if (enforcementEnabled()) {
+        try {
+          floorDays = rescanFloorDays({ enforced: true, hasLivePlan: await hasLivePlan(userId) });
+        } catch (err) {
+          log.warn({ err, monitorSubscriptionId }, "Could not read the plan; not applying the free-site rescan floor");
+        }
+      }
+      const gradeCadenceAt = computeNextScanAt(grade, completedAt, { minDays: floorDays });
       const nextScanAt = resolveNextScanAt(sub?.nextScanAt ?? null, gradeCadenceAt, completedAt);
 
       // .returning() so the log reflects what actually happened.

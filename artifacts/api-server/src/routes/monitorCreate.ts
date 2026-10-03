@@ -17,7 +17,7 @@ import { creditBalance } from "../lib/credits";
 export function registerMonitorCreate(router: IRouter): void {
   // ── POST /api/monitor/subscriptions ──────────────────────────────────────────
   // Create a new monitoring subscription for a URL.
-  // Free unless MONITORING_REQUIRES_PLAN is on; then it needs a Starter or Pro plan (see lib/entitlements.ts).
+  // Free unless MONITORING_REQUIRES_PLAN is on; then one site is free and more need a Starter or Pro plan (see lib/entitlements.ts).
 
 
   router.post("/monitor/subscriptions", requireMonitorAuth, monitorRateLimit, async (req, res): Promise<void> => {
@@ -75,9 +75,15 @@ export function registerMonitorCreate(router: IRouter): void {
       );
 
     if (Number(activeCount) >= entitlement.urlLimit) {
+      const sites = `${entitlement.urlLimit} monitored site${entitlement.urlLimit === 1 ? "" : "s"}`;
       res.status(403).json({
-        error: `Your plan covers ${entitlement.urlLimit} monitored site${entitlement.urlLimit === 1 ? "" : "s"}. Upgrade or stop monitoring one to add another.`,
+        // A free account is pointed at the paid plans; a paid one at its own limit.
+        error:
+          entitlement.reason === "free"
+            ? `A free account watches ${sites}. Subscribe to watch more, or stop monitoring one to add another.`
+            : `Your plan covers ${sites}. Upgrade or stop monitoring one to add another.`,
         code: "monitor_url_limit",
+        reason: entitlement.reason,
         urlLimit: entitlement.urlLimit,
         monitoring: Number(activeCount),
       });

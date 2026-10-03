@@ -28,7 +28,7 @@ describe("nextScanDelayDays", () => {
   it("gets worse-graded sites rescanned sooner, never later", () => {
     // The property that actually matters, independent of the exact numbers:
     // cadence must be monotonic in risk.
-    const order = ["A", "B", "C", "D", "F"].map(nextScanDelayDays);
+    const order = ["A", "B", "C", "D", "F"].map((g) => nextScanDelayDays(g));
     for (let i = 1; i < order.length; i++) {
       expect(order[i]!).toBeLessThanOrEqual(order[i - 1]!);
     }
@@ -208,5 +208,27 @@ describe("selectNewCveMatches — what makes an hourly CVE check safe", () => {
     const matches = [match("CVE-2026-0001"), match("CVE-2026-0002")];
     selectNewCveMatches(matches, ["CVE-2026-0001"]);
     expect(matches).toHaveLength(2);
+  });
+});
+
+describe("nextScanDelayDays — the free-site floor", () => {
+  it("holds a D or F grade to the floor instead of rescanning every 3 days", () => {
+    expect(nextScanDelayDays("F", { minDays: 7 })).toBe(7);
+    expect(nextScanDelayDays("D", { minDays: 7 })).toBe(7);
+  });
+
+  it("does not shorten a cadence that is already longer than the floor", () => {
+    expect(nextScanDelayDays("A", { minDays: 7 })).toBe(14);
+    expect(nextScanDelayDays("B", { minDays: 7 })).toBe(7);
+  });
+
+  it("changes nothing when no floor is passed, which is a paid plan", () => {
+    expect(["A", "B", "C", "D", "F"].map((g) => nextScanDelayDays(g))).toEqual([14, 7, 7, 3, 3]);
+  });
+
+  it("applies the floor to the date computeNextScanAt returns", () => {
+    const from = new Date("2026-10-03T00:00:00Z");
+    expect(computeNextScanAt("F", from, { minDays: 7 }).toISOString()).toBe("2026-10-10T00:00:00.000Z");
+    expect(computeNextScanAt("F", from).toISOString()).toBe("2026-10-06T00:00:00.000Z");
   });
 });

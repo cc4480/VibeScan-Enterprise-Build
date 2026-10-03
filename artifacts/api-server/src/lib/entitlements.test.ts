@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { resolveEntitlement, monitorExpiryApplies, type BillingRow } from "./entitlements";
+import { resolveEntitlement, monitorExpiryApplies, freeMonitorSites, FREE_MONITOR_MIN_DAYS, rescanFloorDays, type BillingRow } from "./entitlements";
 import { MONITOR_PLANS, DEFAULT_PLAN, SOLD_PLANS, planByKey, urlLimitForPlan, includedScansForPlan } from "./plans";
 import { PRICE_MAP, CREDITS_MAP } from "./stripe";
 
@@ -157,5 +157,94 @@ describe("monitorExpiryApplies — who ends a monitor", () => {
   it("the plan ends them once enforced, so a monthly subscriber is not cut off in month 12", () => {
     process.env["MONITORING_REQUIRES_PLAN"] = "true";
     expect(monitorExpiryApplies()).toBe(false);
+  });
+});
+
+describe("resolveEntitlement — the free site", () => {
+  const enforced = { enforced: true, freeSites: 1 };
+
+  it("lets an account with no billing row watch the free allowance", () => {
+    const e = resolveEntitlement(null, enforced);
+    expect(e.monitoringActive).toBe(true);
+    expect(e.urlLimit).toBe(1);
+    expect(e.reason).toBe("free");
+    expect(e.plan).toBeNull();
+  });
+
+  it("keeps the old answer when no free allowance is passed", () => {
+    // A caller that does not opt in must get "no plan, no monitoring" exactly as before.
+    const e = resolveEntitlement(null, { enforced: true });
+    expect(e.monitoringActive).toBe(false);
+    expect(e.reason).toBe("no_plan");
+  });
+
+  it("gives no free site when the allowance is 0", () => {
+    const e = resolveEntitlement(null, { enforced: true, freeSites: 0 });
+    expect(e.monitoringActive).toBe(false);
+    expect(e.reason).toBe("no_plan");
+  });
+
+  it("does not hand the free site to someone who cancelled or lapsed", () => {
+    // A cancelled or paused row is a decision someone made, or a payment that failed.
+    // It is not "never had a plan", and the free site is for people who never did.
+    for (const status of ["cancelled", "paused"]) {
+      const e = resolveEntitlement(row({ status }), enforced);
+      expect(e.monitoringActive, status).toBe(false);
+      expect(e.reason, status).toBe(status);
+    }
+  });
+
+  it("changes nothing for a paying or grandfathered account", () => {
+    expect(resolveEntitlement(row(), enforced).urlLimit).toBe(10);
+    expect(resolveEntitlement(row({ grandfathered: true, plan: "grandfathered", urlLimit: 2 }), enforced).urlLimit).toBe(2);
+  });
+
+  it("changes nothing while enforcement is off", () => {
+    const e = resolveEntitlement(null, { enforced: false, freeSites: 1 });
+    expect(e.reason).toBe("unenforced");
+    expect(e.urlLimit).toBe(Number.POSITIVE_INFINITY);
+  });
+});
+
+describe("freeMonitorSites", () => {
+  afterEach(() => { delete process.env["FREE_MONITOR_SITES"]; });
+
+  it("defaults to one site", () => {
+    delete process.env["FREE_MONITOR_SITES"];
+    expect(freeMonitorSites()).toBe(1);
+  });
+
+  it("reads the operator's setting, including 0 to turn the free site off", () => {
+    process.env["FREE_MONITOR_SITES"] = "0";
+    expect(freeMonitorSites()).toBe(0);
+    process.env["FREE_MONITOR_SITES"] = "2";
+    expect(freeMonitorSites()).toBe(2);
+  });
+
+  it("falls back to one for a value that is not a whole number", () => {
+    // A typo must not silently grant five sites or none.
+    for (const bad of ["", " ", "abc", "-1", "1.5", "NaN"]) {
+      process.env["FREE_MONITOR_SITES"] = bad;
+      expect(freeMonitorSites(), JSON.stringify(bad)).toBe(1);
+    }
+  });
+
+  it("holds a free site to weekly rescans", () => {
+    expect(FREE_MONITOR_MIN_DAYS).toBe(7);
+  });
+});
+
+describe("rescanFloorDays", () => {
+  it("holds an account with no live plan to weekly once plans are enforced", () => {
+    expect(rescanFloorDays({ enforced: true, hasLivePlan: false })).toBe(FREE_MONITOR_MIN_DAYS);
+  });
+
+  it("leaves a paying account on the grade-based cadence", () => {
+    expect(rescanFloorDays({ enforced: true, hasLivePlan: true })).toBe(0);
+  });
+
+  it("changes nothing while enforcement is off, whoever the account is", () => {
+    expect(rescanFloorDays({ enforced: false, hasLivePlan: false })).toBe(0);
+    expect(rescanFloorDays({ enforced: false, hasLivePlan: true })).toBe(0);
   });
 });

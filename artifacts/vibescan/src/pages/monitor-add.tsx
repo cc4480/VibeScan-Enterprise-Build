@@ -40,9 +40,11 @@ export function AddSubscriptionForm({ onSuccess }: { onSuccess: () => void }) {
       onSuccess();
     } catch (err: unknown) {
       // Keyed on the server's code, never on the prose, which will be reworded.
-      const code = err instanceof ApiError ? (err.data as { code?: unknown } | null)?.code : undefined;
+      const data = err instanceof ApiError ? (err.data as { code?: unknown; reason?: unknown } | null) : null;
+      const code = data?.code;
       if (code === "monitor_plan_required") setRefusal("plan");
-      else if (code === "monitor_url_limit") setRefusal("limit");
+      // A free account at its one site is shown the plans; a paid one is pointed at its own limit.
+      else if (code === "monitor_url_limit") setRefusal(data?.reason === "free" ? "plan" : "limit");
       const msg = err instanceof Error ? err.message : "Failed to create subscription";
       setError(msg.replace(/^HTTP \d+ [^:]+: /, ""));
     } finally {

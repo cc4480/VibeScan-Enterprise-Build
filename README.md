@@ -30,7 +30,10 @@ side projects that quietly went to production.
 > `lib/plans.ts` — and checkout builds Stripe prices from them. Payments are on
 > exactly when `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` are set; see
 > `deploy/PAYMENTS-GO-LIVE.md`. Monitoring stays free for everyone until
-> `MONITORING_REQUIRES_PLAN=true`.
+> `MONITORING_REQUIRES_PLAN=true`. Once it is set, an account with no plan keeps
+> one watched site (`FREE_MONITOR_SITES`, default 1; 0 turns it off), rescanned
+> no more often than weekly. Accounts already monitoring more are grandfathered
+> by `scripts/grandfather-monitor-users.ts`, which must run first.
 
 ## What it checks
 

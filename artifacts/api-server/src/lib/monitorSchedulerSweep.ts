@@ -12,14 +12,19 @@ export const SWEEP_QUEUE      = "monitor-sweep";
 
 // ─── Cadence helpers ──────────────────────────────────────────────────────────
 
-export function nextScanDelayDays(grade: string): number {
-  if (grade === "A") return 14;
-  if (grade === "B" || grade === "C") return 7;
-  return 3; // D or F
+/**
+ * Days until the next full rescan, from the grade. `opts.minDays` is a floor, an object and not a bare number so `.map(nextScanDelayDays)` cannot pass an array index as one: a free
+ * account's site is never rescanned more often than weekly (FREE_MONITOR_MIN_DAYS),
+ * so a D or F grade, which would otherwise rescan every 3 days, waits 7. A paid
+ * plan passes no floor and keeps the grade-based cadence.
+ */
+export function nextScanDelayDays(grade: string, opts: { minDays?: number } = {}): number {
+  const days = grade === "A" ? 14 : grade === "B" || grade === "C" ? 7 : 3; // D or F: 3
+  return Math.max(days, opts.minDays ?? 0);
 }
 
-export function computeNextScanAt(grade: string, from: Date = new Date()): Date {
-  const days = nextScanDelayDays(grade);
+export function computeNextScanAt(grade: string, from: Date = new Date(), opts: { minDays?: number } = {}): Date {
+  const days = nextScanDelayDays(grade, opts);
   return new Date(from.getTime() + days * 24 * 60 * 60 * 1000);
 }
 

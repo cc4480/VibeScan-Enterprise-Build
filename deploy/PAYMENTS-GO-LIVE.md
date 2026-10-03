@@ -76,6 +76,9 @@ Card `4242 4242 4242 4242`, any future date, any CVC.
 - [ ] Stripe → Webhooks → your endpoint: every delivery shows **200**.
 - [ ] Declined card `4000 0000 0000 0002` → nothing is granted.
 - [ ] With `MONITORING_REQUIRES_PLAN=true` locally: a cancelled plan stops monitors (rows kept); resubscribing restarts them.
+- [ ] With `MONITORING_REQUIRES_PLAN=true` locally and no plan: the first monitor is accepted, a second is refused with the plans shown, and its rescans are no more often than weekly (`FREE_MONITOR_SITES=0` turns the free site off).
+- [ ] An account that was monitoring before the flag (run `scripts/grandfather-monitor-users.ts --apply` first) keeps all its sites.
+- [ ] Report → Share → **Get badge**: the image loads on another origin, shows the grade and date only, and **Remove badge** turns it into "badge not found". Migration `0025` creates the `report_badges` table, and it must have run.
 
 ## 3. Go live (last step, after QA)
 

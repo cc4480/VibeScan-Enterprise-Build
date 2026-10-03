@@ -12,12 +12,17 @@
  * the dormant checkout work. Turning it on before subscriptions can be bought
  * would lock every existing user out of a feature they are using today, so the
  * flag flips when Phase 3 ships, not before.
+ *
+ * When it does flip, an account with no plan keeps one free site (freeMonitorSites)
+ * instead of losing monitoring outright. Accounts already monitoring more than that
+ * are covered by their grandfathered billing rows, not by this rule.
  */
 import { db, billingSubscriptionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
 export type EntitlementReason =
   | "unenforced"
+  | "free"
   | "grandfathered"
   | "active"
   | "grace_period"
@@ -41,6 +46,38 @@ export interface BillingRow {
   status: string;
   urlLimit: number;
   grandfathered: boolean;
+}
+
+/**
+ * Sites an account with no plan may watch once plans are enforced.
+ *
+ * One free site gives a person who tried the product a reason to come back: the
+ * hourly pulse, the CVE match and the certificate alerts cost almost nothing, and
+ * the rescans are held to weekly (see FREE_MONITOR_MIN_DAYS). FREE_MONITOR_SITES=0
+ * turns the free site off and restores "monitoring needs a plan". Read on each
+ * call so a test, or an operator restart, changes it without a code edit.
+ */
+export function freeMonitorSites(): number {
+  const raw = process.env["FREE_MONITOR_SITES"];
+  if (raw === undefined || raw.trim() === "") return 1;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 ? n : 1;
+}
+
+/**
+ * The shortest gap between full rescans of a free account's site. The grade-based
+ * cadence runs as often as every 3 days at D or F; a free site is held to weekly so
+ * the free tier stays cheap. A paid plan keeps the grade-based cadence.
+ */
+export const FREE_MONITOR_MIN_DAYS = 7;
+
+/**
+ * The rescan floor, in days, for an account's monitored sites. Weekly for an account
+ * with no live plan once plans are enforced, none otherwise. Unenforced, nobody is on
+ * a "free plan" yet, so today's grade-based cadence is untouched.
+ */
+export function rescanFloorDays(opts: { enforced: boolean; hasLivePlan: boolean }): number {
+  return opts.enforced && !opts.hasLivePlan ? FREE_MONITOR_MIN_DAYS : 0;
 }
 
 /** Whether plan enforcement is switched on for this deployment. */
@@ -76,7 +113,13 @@ export function monitorExpiryApplies(): boolean {
  */
 export function resolveEntitlement(
   row: BillingRow | null,
-  opts: { enforced: boolean },
+  /**
+   * `freeSites` is how many sites an account with no billing row may watch. It
+   * defaults to 0, which keeps this function's old answer ("no plan, no
+   * monitoring") for any caller that does not opt in; monitorEntitlement passes
+   * the deployment's setting.
+   */
+  opts: { enforced: boolean; freeSites?: number },
 ): MonitorEntitlement {
   if (!opts.enforced) {
     // Today's behaviour, preserved exactly: everyone may monitor anything.
@@ -89,6 +132,12 @@ export function resolveEntitlement(
   }
 
   if (!row) {
+    // Never had a plan. Only these accounts get the free site: a cancelled or
+    // paused row is a decision someone made, handled below.
+    const freeSites = opts.freeSites ?? 0;
+    if (freeSites > 0) {
+      return { monitoringActive: true, urlLimit: freeSites, plan: null, reason: "free" };
+    }
     return { monitoringActive: false, urlLimit: 0, plan: null, reason: "no_plan" };
   }
 
@@ -138,7 +187,7 @@ export async function monitorEntitlement(userId: string): Promise<MonitorEntitle
       .where(eq(billingSubscriptionsTable.userId, userId))
       .limit(1);
 
-    return resolveEntitlement(row ?? null, { enforced });
+    return resolveEntitlement(row ?? null, { enforced, freeSites: freeMonitorSites() });
   } catch (err) {
     console.error("[entitlements] Could not read billing row; allowing:", err);
     return {
