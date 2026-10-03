@@ -12,7 +12,7 @@ export function PricingSection() {
           <Zap className="w-3.5 h-3.5" /> Free Trial
         </div>
         <h2 className="text-3xl md:text-4xl font-bold mb-4">3 free scans every month, everything included</h2>
-        <p className="text-muted-foreground max-w-2xl mx-auto">Every account gets 3 free scans a month, renewing on the 1st — every check, no tier to pick. Paid plans and scan credits are coming soon; we'll email you when they open.</p>
+        <p className="text-muted-foreground max-w-2xl mx-auto">Every account gets 3 free scans a month, renewing on the 1st — every check, no tier to pick. The paid plan, with unlimited scans, is coming soon; we'll email you when it opens.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
@@ -42,15 +42,16 @@ export function PricingSection() {
           },
           {
             icon: Bell,
-            title: "Monitoring — from $19/month",
-            desc: "Starter: 3 sites and 20 scans a month. Pro ($49): 5 sites and 100 scans a month.",
+            title: "Unlimited — $19/month",
+            desc: "One plan: unlimited scans and 5 sites watched around the clock.",
             features: [
-              "3 sites (Starter) or 5 sites (Pro) watched around the clock",
-              "20 or 100 on-demand full scans every month",
+              "Unlimited full scans (fair use)",
+              "5 sites watched around the clock",
               "Hourly uptime, header and certificate checks",
               "Hourly CVE matching, ranked by EPSS",
               "Rescans that follow your grade (A: 14d → F: 3d)",
               "Regression alerts and Slack webhooks",
+              "Cancel any time",
             ],
             cta: "See pricing",
             href: "#buy",
@@ -105,10 +106,10 @@ export function PricingSection() {
       <div id="buy" className="mt-14 max-w-5xl mx-auto scroll-mt-24">
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary border border-white/10 text-muted-foreground text-xs font-semibold mb-4 uppercase tracking-wider">
-            <Package className="w-3.5 h-3.5" /> Plans & Credits
+            <Package className="w-3.5 h-3.5" /> The plan
           </div>
-          <h3 className="text-2xl md:text-3xl font-bold mb-3">Keep going once your free scans are gone</h3>
-          <p className="text-muted-foreground max-w-xl mx-auto text-sm">Paid plans and scan credits are coming soon, with the same checks, AI report and fix guides. We'll email you when they open.</p>
+          <h3 className="text-2xl md:text-3xl font-bold mb-3">Unlimited scans for $19 a month</h3>
+          <p className="text-muted-foreground max-w-xl mx-auto text-sm">The paid plan is coming soon, with the same checks, AI report and fix guides. We'll email you when it opens.</p>
         </div>
 
         {/* Live Buy / Subscribe buttons once Stripe is configured; until then,
@@ -120,42 +121,20 @@ export function PricingSection() {
   );
 }
 
-/** Prices as information only — shown until checkout is switched on. */
+/** The price as information only — shown until checkout is switched on. */
 function StaticPricing() {
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {[
-          { label: "SecScan Starter", price: "$19", per: "per month · 3 sites watched · 20 scans", note: null },
-          { label: "SecScan Pro", price: "$49", per: "per month · 5 sites watched · 100 scans", note: null, popular: true },
-          { label: "10 Scan Credits", price: "$12", per: "$1.20 / scan", note: null },
-          { label: "50 Scan Credits", price: "$49", per: "$0.98 / scan", note: "18% off" },
-        ].map((tier, i) => (
-          <div
-            key={i}
-            className={cn(
-              "glass-panel p-6 rounded-xl flex flex-col items-center text-center gap-1 relative",
-              tier.popular ? "border-primary/50" : "border-white/10",
-            )}
-          >
-            {tier.popular && (
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-primary text-primary-foreground px-3 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider">
-                Best Value
-              </div>
-            )}
-            <span className="text-sm text-muted-foreground mt-1">{tier.label}</span>
-            <span className="text-3xl font-bold">{tier.price}</span>
-            <span className="text-xs text-muted-foreground">
-              {tier.per}
-              {tier.note && <span className="text-primary font-semibold"> · {tier.note}</span>}
-            </span>
-          </div>
-        ))}
+      <div className="max-w-sm mx-auto">
+        <div className="glass-panel p-6 rounded-xl flex flex-col items-center text-center gap-1 border-primary/50">
+          <span className="text-sm text-muted-foreground mt-1">SecScan Unlimited</span>
+          <span className="text-3xl font-bold">$19</span>
+          <span className="text-xs text-muted-foreground">per month · unlimited scans · 5 sites watched</span>
+        </div>
       </div>
       <p className="text-center text-xs text-muted-foreground mt-6">
-        Purchasing isn't live yet — <Link href="/scan" className="underline hover:text-foreground">start with this month's 3 free scans</Link> and we'll email you when plans and credits are ready to buy.
+        Purchasing isn't live yet — <Link href="/scan" className="underline hover:text-foreground">start with this month's 3 free scans</Link> and we'll email you when the plan is ready to buy.
       </p>
     </>
   );
 }
-

@@ -1,7 +1,7 @@
 /** Guards and lookups shared by the checkout routes. */
 import { db, billingSubscriptionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { CREDITS_MAP } from "../lib/stripe";
+import { CREDITS_MAP, PACKS_ON_SALE } from "../lib/stripe";
 
 /**
  * Refuse checkout to an identity that has no email — the browser-only accounts
@@ -22,8 +22,8 @@ export function refuseUnregistered(req: { user: { email?: string | null } }, res
   return true;
 }
 
-/** The packs that may be bought. Anything outside CREDITS_MAP grants nothing. */
-export const BUYABLE = Object.keys(CREDITS_MAP);
+/** The packs that may be bought. Anything outside CREDITS_MAP grants nothing, so it is excluded here too. */
+export const BUYABLE = PACKS_ON_SALE.filter((tier) => tier in CREDITS_MAP);
 
 /** The user's plan row, or null. */
 export async function currentPlan(userId: string) {

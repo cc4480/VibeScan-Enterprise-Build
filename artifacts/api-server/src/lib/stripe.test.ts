@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { PRICE_MAP, CREDITS_MAP } from "./stripe";
+import { PRICE_MAP, CREDITS_MAP, PACKS_ON_SALE } from "./stripe";
 
 /**
  * PRICE_MAP and CREDITS_MAP are two separate objects that have to agree, and
@@ -46,8 +46,9 @@ describe("pack pricing", () => {
   const perCredit = (tier: string) => PRICE_MAP[tier]!.amount / CREDITS_MAP[tier]!;
   const packs = [...sold].sort((a, b) => CREDITS_MAP[a]! - CREDITS_MAP[b]!);
 
-  it("sells the packs decided on 2026-09-24: 10 for $12, 50 for $49", () => {
-    // What the pricing page promises; a change here is a change to what customers are sold.
+  it("still credits the packs decided on 2026-09-24: 10 for $12, 50 for $49", () => {
+    // The grant table, not the shop window: a payment that arrives for one of these is credited
+    // even though none is on sale any more (see PACKS_ON_SALE).
     expect(packs).toEqual(["pack_10", "pack_50"]);
     expect([PRICE_MAP["pack_10"]!.amount, CREDITS_MAP["pack_10"]]).toEqual([1200, 10]);
     expect([PRICE_MAP["pack_50"]!.amount, CREDITS_MAP["pack_50"]]).toEqual([4900, 50]);
@@ -59,6 +60,16 @@ describe("pack pricing", () => {
       expect(perCredit(packs[i]!), `${packs[i]} should cost less per credit than ${packs[i - 1]}`)
         .toBeLessThan(perCredit(packs[i - 1]!));
     }
+  });
+});
+
+describe("PACKS_ON_SALE", () => {
+  it("is empty: no credit pack is sold since the move to one unlimited plan (2026-10-03)", () => {
+    expect(PACKS_ON_SALE).toEqual([]);
+  });
+
+  it("only ever lists a pack that grants credits, so a sale cannot take money and grant nothing", () => {
+    for (const tier of PACKS_ON_SALE) expect(CREDITS_MAP[tier], tier).toBeGreaterThan(0);
   });
 });
 

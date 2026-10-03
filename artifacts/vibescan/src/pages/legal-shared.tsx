@@ -11,7 +11,7 @@
 // Per document: a change to one must not re-date the other.
 export const LAST_UPDATED: Record<"privacy" | "terms", string> = {
   privacy: "September 30, 2026", // AI opt-out described; GitHub option, created test account, credential deletion, Google named
-  terms: "September 30, 2026", // Paid plans and credits stated as not yet on sale
+  terms: "October 3, 2026", // One unlimited plan replaces Starter, Pro and credit packs; fair use stated
 };
 
 export const CONTACT = "hello@secscan.us";

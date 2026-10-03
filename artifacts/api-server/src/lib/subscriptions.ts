@@ -10,7 +10,7 @@
  */
 import { billingSubscriptionsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
-import { DEFAULT_PLAN, SOLD_PLANS, type MonitorPlan } from "./plans";
+import { DEFAULT_PLAN, MONITOR_PLANS, type MonitorPlan } from "./plans";
 import type { Executor } from "./billing";
 
 /** Stripe's subscription status mapped onto ours. See entitlements.ts. */
@@ -128,9 +128,11 @@ export async function applyPaidInvoice(
   },
 ): Promise<"applied" | "unknown_subscription" | "duplicate"> {
   // Each plan's allowance, chosen by the plan stored on the row, so a Starter
-  // invoice grants Starter's scans. A row whose plan is not sold keeps what it has.
+  // invoice grants Starter's scans. Every known plan is listed, sold or not, so a row on a
+  // plan that is no longer sold is still granted its scans; an unlimited plan grants 0
+  // because it keeps no counter. A row whose plan is not in the table keeps what it has.
   const allowance = sql.join(
-    SOLD_PLANS.map((p) => sql`WHEN ${billingSubscriptionsTable.plan} = ${p.key} THEN ${p.includedScans}`),
+    Object.values(MONITOR_PLANS).map((p) => sql`WHEN ${billingSubscriptionsTable.plan} = ${p.key} THEN ${p.includedScans}`),
     sql` `,
   );
   const updated = await tx

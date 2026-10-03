@@ -4,11 +4,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useGetCurrentAuthUser } from "@workspace/api-client-react";
 import { Bell, CheckCircle2, Loader2, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { buyPack, formatUsd, getBillingCatalog, getBillingStatus, perScanCents, subscribe } from "@/lib/billing-api";
+import { buyPack, formatUsd, getBillingCatalog, getBillingStatus, perScanCents, planPerScanLabel, planScansLine, subscribe } from "@/lib/billing-api";
 export { BillingSummary, PurchaseResultBanner } from "./billing-summary";
 
 /**
- * Buying: the SecScan Starter and Pro subscriptions, and the credit packs.
+ * Buying: the subscription (SecScan Unlimited since 2026-10-03) and any credit packs on sale
+ * (none are, so that section renders nothing).
  *
  * Prices come from the server (GET /api/checkout/packs), never from this file,
  * so the page cannot show a number the checkout will not charge. Until Stripe
@@ -82,7 +83,7 @@ const PLAN_FEATURES = [
 ];
 
 /**
- * The two plans and the credit packs, with Subscribe / Buy buttons.
+ * The plans on sale and any credit packs, with Subscribe / Buy buttons.
  *
  * Signed-out visitors (the landing page) get links to create an account
  * instead: checkout needs an account to attach the purchase to.
@@ -117,8 +118,10 @@ export function BuyOptions({
   const { plans, packs } = catalog.data;
   const hasPlan = status.data?.subscription && status.data.subscription.status !== "cancelled";
   // The priciest pack per scan is the baseline a bigger pack's discount is measured from.
-  const basePerScan = Math.max(...packs.map((p) => perScanCents(p)));
+  const basePerScan = packs.length > 0 ? Math.max(...packs.map((p) => perScanCents(p))) : 0;
   const topPlan = plans[plans.length - 1];
+  // "Best value" only means something next to another plan.
+  const compareable = plans.length > 1;
 
   const cta = (run: () => Promise<void>, label: string, primary?: boolean) =>
     signedIn ? (
@@ -141,7 +144,13 @@ export function BuyOptions({
     <div className="space-y-6">
       {/* The subscriptions — the way to save, so they lead. */}
       {!packsOnly && (
-        <div className={cn("grid gap-5", compact ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2")}>
+        <div
+          className={cn(
+            "grid gap-5",
+            compact || plans.length === 1 ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2",
+            plans.length === 1 && !compact && "max-w-md mx-auto",
+          )}
+        >
           {plans.map((plan) => {
             const featured = plan.key === topPlan?.key;
             return (
@@ -152,7 +161,7 @@ export function BuyOptions({
                   featured ? "border border-primary/50 shadow-[0_0_30px_rgba(20,184,120,0.08)]" : "border border-white/10",
                 )}
               >
-                {featured && (
+                {featured && compareable && (
                   <div className="absolute top-0 left-6 -translate-y-1/2 bg-primary text-primary-foreground px-3 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider">
                     Best value
                   </div>
@@ -166,12 +175,12 @@ export function BuyOptions({
                   <span className="text-muted-foreground text-sm">/ month</span>
                 </div>
                 <p className="text-xs text-muted-foreground mb-4 tabular-nums">
-                  {formatUsd(Math.round(plan.amountCents / plan.includedScans))} per scan
+                  {planPerScanLabel(plan) ?? "No scan limit, only fair use"}
                 </p>
                 <ul className="space-y-2 mb-6 flex-1 text-sm">
                   {[
                     plan.urlLimit === 1 ? "1 site watched around the clock" : `Up to ${plan.urlLimit} sites watched around the clock`,
-                    `${plan.includedScans} full scans every month`,
+                    planScansLine(plan),
                     ...PLAN_FEATURES,
                   ].map((f) => (
                     <li key={f} className="flex items-start gap-2">
@@ -191,7 +200,8 @@ export function BuyOptions({
         </div>
       )}
 
-      {/* Credit packs — for one-off needs, never expire. */}
+      {/* Credit packs — for one-off needs, never expire. None are on sale now, so this renders nothing. */}
+      {packs.length > 0 && (
       <div className="space-y-3">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Package className="w-4 h-4" /> Or buy scan credits — no subscription, and they never expire
@@ -219,6 +229,7 @@ export function BuyOptions({
           })}
         </div>
       </div>
+      )}
     </div>
   );
 }

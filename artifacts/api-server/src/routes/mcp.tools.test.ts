@@ -68,12 +68,21 @@ describe("tool output", () => {
     expect(t).toContain("Free scans left this month: 16 of 20");
     expect(t).toContain("Credits: 5");
     expect(t).toContain("Plan: none");
-    expect(t).toContain("Buying scans is not open yet.");
+    expect(t).toContain("Subscribing is not open yet.");
+    // Credits are no longer sold, so the line is left out for someone who holds none.
+    expect(formatAccount({ freeScansRemaining: 3, freeScanLimit: 3, credits: 0, subscription: null, paymentsEnabled: false })).not.toContain("Credits");
     const pro = formatAccount({
       freeScansRemaining: 0, freeScanLimit: 3, credits: 0, paymentsEnabled: true,
       subscription: { plan: "pro", status: "active", includedScansRemaining: 4, urlLimit: 3, currentPeriodEnd: "2026-10-22T00:00:00.000Z" },
     });
     expect(pro).toContain("Plan: pro (active) · 4 included scans left this period · up to 3 monitored sites · renews 2026-10-22");
+    const unlimited = formatAccount({
+      freeScansRemaining: 3, freeScanLimit: 3, credits: 0, paymentsEnabled: true,
+      subscription: { plan: "unlimited", status: "active", includedScansRemaining: 0, unlimitedScans: true, urlLimit: 5, currentPeriodEnd: "2026-10-22T00:00:00.000Z" },
+    });
+    // "0 included scans left" would read as out of scans; an unlimited plan has no counter.
+    expect(unlimited).toContain("Plan: unlimited (active) · unlimited scans · up to 5 monitored sites · renews 2026-10-22");
+    expect(unlimited).not.toContain("included scans left");
   });
 
   it("start_domain_verification: exactly what to publish, both ways", () => {

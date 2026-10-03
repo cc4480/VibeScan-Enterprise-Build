@@ -2,8 +2,8 @@
 import { useState } from "react";
 import { CheckCircle2, CreditCard, Loader2, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { openBillingPortal, type BillingStatus } from "@/lib/billing-api";
-import { useBillingStatus, BuyOptions } from "./billing-options";
+import { openBillingPortal, planDisplayName, type BillingStatus } from "@/lib/billing-api";
+import { useBillingStatus, useBillingCatalog, BuyOptions } from "./billing-options";
 
 export function statusLabel(s: NonNullable<BillingStatus["subscription"]>): { text: string; tone: string } {
   switch (s.status) {
@@ -21,6 +21,7 @@ export function statusLabel(s: NonNullable<BillingStatus["subscription"]>): { te
 /** The account's billing position, for Settings. */
 export function BillingSummary() {
   const status = useBillingStatus();
+  const catalog = useBillingCatalog();
   const [portalError, setPortalError] = useState<string | null>(null);
 
   if (status.isLoading) {
@@ -31,15 +32,25 @@ export function BillingSummary() {
   const d = status.data;
   const sub = d.subscription;
   const label = sub ? statusLabel(sub) : null;
+  const live = !!sub && sub.status !== "cancelled";
+  // An unlimited plan has no counter, so a number would read as "0 left". Credits are no longer
+  // sold, so their tile is shown only to someone who still holds some.
+  const tiles = [
+    { n: d.freeScansRemaining as string | number, l: "free scans left this month" },
+    live
+      ? sub.unlimitedScans
+        ? { n: "Unlimited", l: "scans on your plan" }
+        : { n: sub.includedScansRemaining, l: "plan scans left" }
+      : { n: "—", l: "plan scans left" },
+    ...(d.credits > 0 ? [{ n: d.credits, l: "credits" }] : []),
+  ];
+  // Packs are not sold, so "buy credits" has nothing to show and the prompt is left out.
+  const packsOnSale = (catalog.data?.packs.length ?? 0) > 0;
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-3 gap-3 text-center">
-        {[
-          { n: d.freeScansRemaining, l: "free scans left this month" },
-          { n: sub && sub.status !== "cancelled" ? sub.includedScansRemaining : "—", l: "plan scans left" },
-          { n: d.credits, l: "credits" },
-        ].map((x) => (
+      <div className={cn("grid gap-3 text-center", tiles.length === 3 ? "grid-cols-3" : "grid-cols-2")}>
+        {tiles.map((x) => (
           <div key={x.l} className="rounded-xl border border-white/10 bg-background/40 py-3">
             <div className="text-2xl font-bold tabular-nums">{x.n}</div>
             <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{x.l}</div>
@@ -50,11 +61,12 @@ export function BillingSummary() {
       {sub && label ? (
         <div className="rounded-xl border border-white/10 p-4 flex flex-wrap items-center gap-3">
           <Zap className="w-4 h-4 text-primary" />
-          <span className="font-semibold">{sub.plan === "starter" ? "SecScan Starter" : "SecScan Pro"}</span>
+          <span className="font-semibold">{planDisplayName(sub.plan)}</span>
           <span className={cn("text-xs px-2 py-0.5 rounded-full border", label.tone)}>{label.text}</span>
           {sub.currentPeriodEnd && sub.status !== "cancelled" && (
             <span className="text-xs text-muted-foreground">
-              Renews {new Date(sub.currentPeriodEnd).toLocaleDateString()} · scans reset then
+              Renews {new Date(sub.currentPeriodEnd).toLocaleDateString()}
+              {sub.unlimitedScans ? "" : " · scans reset then"}
             </span>
           )}
           {sub.canManage && (
@@ -78,7 +90,7 @@ export function BillingSummary() {
       ) : null}
 
       {(!sub || sub.status === "cancelled") && <BuyOptions compact />}
-      {sub && sub.status !== "cancelled" && (
+      {sub && sub.status !== "cancelled" && packsOnSale && !sub.unlimitedScans && (
         <details className="text-sm">
           <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Need more scans this month? Buy credits</summary>
           <div className="mt-4">
@@ -98,7 +110,7 @@ export function PurchaseResultBanner() {
 
   const text =
     result === "subscribed"
-      ? "Your subscription is active. Your monthly scans appear as soon as Stripe confirms the payment — usually a few seconds."
+      ? "Your subscription is active. It starts as soon as Stripe confirms the payment — usually a few seconds."
       : result === "success"
         ? "Payment received. Your credits appear as soon as Stripe confirms it — usually a few seconds."
         : result === "cancelled"

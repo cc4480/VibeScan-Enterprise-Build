@@ -39,6 +39,7 @@ vi.mock("../lib/stripe", () => ({
   },
   PRICE_MAP: { single: { amount: 1200, name: "Single", description: "" } },
   CREDITS_MAP: { single: 1 },
+  PACKS_ON_SALE: [],
   getOrigin: () => "https://secscan.us",
 }));
 
@@ -104,8 +105,8 @@ beforeEach(() => {
 });
 
 describe("POST /checkout/subscription", () => {
-  it("creates a $49 Pro session when no plan is named, carrying the user on BOTH session and subscription", async () => {
-    // No body: the one-plan client this endpoint served before there were two.
+  it("creates a $19 Unlimited session when no plan is named, carrying the user on BOTH session and subscription", async () => {
+    // No body: a client written before plans had keys gets the one plan on sale.
     const res = makeRes();
     await (await handlerFor("post", "/checkout/subscription"))(makeReq(), res);
 
@@ -115,22 +116,35 @@ describe("POST /checkout/subscription", () => {
     const args = state.sessionArgs as any;
     expect(args.mode).toBe("subscription");
     const price = args.line_items[0].price_data;
-    expect(price.unit_amount).toBe(4900);
+    expect(price.unit_amount).toBe(1900);
     expect(price.recurring).toEqual({ interval: "month" });
+    expect(price.product_data.name).toBe("SecScan Unlimited");
     // The session's metadata reaches checkout.session.completed; the
     // subscription's is snapshotted onto every invoice — invoice.paid needs it
     // to find the customer when it arrives first.
-    expect(args.metadata).toMatchObject({ type: "subscription", user_id: "user-1", plan: "pro" });
-    expect(args.subscription_data.metadata).toMatchObject({ type: "subscription", user_id: "user-1", plan: "pro" });
+    expect(args.metadata).toMatchObject({ type: "subscription", user_id: "user-1", plan: "unlimited" });
+    expect(args.subscription_data.metadata).toMatchObject({ type: "subscription", user_id: "user-1", plan: "unlimited" });
   });
 
-  it("sells Starter at $19 when asked, and records the plan for the webhook", async () => {
+  it("sells the unlimited plan by name too, and records it for the webhook", async () => {
     const res = makeRes();
-    await (await handlerFor("post", "/checkout/subscription"))(makeReq({ body: { plan: "starter" } }), res);
+    await (await handlerFor("post", "/checkout/subscription"))(makeReq({ body: { plan: "unlimited" } }), res);
     expect(res.statusCode).toBe(201);
     const args = state.sessionArgs as any;
     expect(args.line_items[0].price_data.unit_amount).toBe(1900);
-    expect(args.subscription_data.metadata.plan).toBe("starter");
+    expect(args.subscription_data.metadata.plan).toBe("unlimited");
+  });
+
+  it("will not sell Starter or Pro, which are known plans but no longer on sale", async () => {
+    // A row carrying one of these keys still resolves to its allowance. Naming one at checkout
+    // must not start a session: it would sell a plan that was withdrawn from the page.
+    for (const plan of ["starter", "pro"]) {
+      const res = makeRes();
+      await (await handlerFor("post", "/checkout/subscription"))(makeReq({ body: { plan } }), res);
+      expect(res.statusCode, plan).toBe(400);
+      expect(res.body.code, plan).toBe("unknown_plan");
+    }
+    expect(state.sessionArgs).toBeNull();
   });
 
   it("refuses a plan that is not sold, without starting a session", async () => {

@@ -170,13 +170,15 @@ export function formatAccount(b: any): string {
   return [
     `Free scans left this month: ${b.freeScansRemaining} of ${b.freeScanLimit}` +
       (b.freeScansResetAt ? ` · renew ${String(b.freeScansResetAt).slice(0, 10)}` : ""),
-    `Credits: ${b.credits}`,
+    // Credits are no longer sold, so the line is shown only to someone who still holds some.
+    ...(b.credits > 0 ? [`Credits: ${b.credits}`] : []),
     sub
-      ? `Plan: ${sub.plan} (${sub.status}) · ${sub.includedScansRemaining} included scans left this period · ` +
-        `up to ${sub.urlLimit} monitored sites` +
+      ? `Plan: ${sub.plan} (${sub.status}) · ` +
+        (sub.unlimitedScans ? "unlimited scans" : `${sub.includedScansRemaining} included scans left this period`) +
+        ` · up to ${sub.urlLimit} monitored sites` +
         (sub.currentPeriodEnd ? ` · renews ${String(sub.currentPeriodEnd).slice(0, 10)}` : "")
       : "Plan: none",
-    b.paymentsEnabled ? `Plans and credits: ${APP_ORIGIN}/settings#billing` : "Buying scans is not open yet.",
+    b.paymentsEnabled ? `Plan: ${APP_ORIGIN}/settings#billing` : "Subscribing is not open yet.",
   ].join("\n");
 }
 

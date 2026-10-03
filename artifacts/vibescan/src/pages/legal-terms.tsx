@@ -64,20 +64,21 @@ export function Terms() {
         <p>We may suspend an account that does any of this.</p>
       </Section>
 
-      <Section title="Credits and payment">
+      <Section title="Payment">
         <p>
-          Paid plans and scan credits are not on sale yet. This section describes how they will
-          work when they open; until then, the free scans above are the only way to run a scan.
+          The paid plan is not on sale yet. This section describes how it will work when it
+          opens; until then, the free scans above are the only way to run a scan.
         </p>
         <p>
           Every account gets 3 free scans each calendar month (UTC); unused free scans do not
-          carry over. Beyond those, scans are paid for with a subscription or with scan credits. Prices are shown before you pay, and payment is
+          carry over. Beyond those, scans are covered by a subscription. The price is shown before you pay, and payment is
           taken by Stripe.
         </p>
         <p>
-          Scan credits are sold in packs and do not expire. Because a scan is
-          delivered immediately and cannot be un-run, a completed scan is not refundable. If a
-          scan fails for a reason on our side, the credit is returned to your account
+          Scan credits are no longer sold. If you already hold credits, they do not expire and are
+          used after your free scans when you have no plan. Because a scan is delivered immediately
+          and cannot be un-run, a completed scan is not refundable. If a scan fails for a reason on
+          our side and you paid for it with a credit, the credit is returned to your account
           automatically. Unused credits can be refunded within 30 days of purchase.
         </p>
       </Section>
@@ -87,18 +88,19 @@ export function Terms() {
           Subscriptions are not on sale yet; this describes how they will work when they open.
         </p>
         <p>
-          SecScan Starter and SecScan Pro are billed monthly in advance and renew automatically
-          each month until you cancel. Starter includes continuous monitoring for up to 3 sites and 20
-          full scans per billing month; Pro includes up to 5 sites and 100 full scans per billing
-          month. Included scans reset at each renewal and do not carry over; while you
-          have included scans left, they are used before any scan credits.
+          SecScan Unlimited is billed monthly in advance and renews automatically each month
+          until you cancel. It includes continuous monitoring for up to 5 sites and unlimited full
+          scans. Unlimited means scans are not counted against you, and it is subject to fair use:
+          we limit how fast scans can be started (currently 5 an hour and 20 a day per account) so
+          the service stays available to everyone, and we may restrict an account that uses it to
+          scan sites it does not own or in a way that harms the service.
         </p>
         <p>
           You can cancel at any time from Settings. Cancelling stops the next renewal: you keep
           your plan until the end of the month you have paid for, and are not charged again.
           We do not refund partial months. If a renewal payment fails, Stripe retries it for a
           short period during which your plan stays active; if it still fails, monitoring and
-          included scans pause until the payment is updated.
+          scanning on your plan pause until the payment is updated.
         </p>
         <p>
           If we change the price of your plan, we will email you before the change applies to

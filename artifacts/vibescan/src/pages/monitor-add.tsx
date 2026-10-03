@@ -16,7 +16,7 @@ export function AddSubscriptionForm({ onSuccess }: { onSuccess: () => void }) {
   const [showWebhook, setShowWebhook] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Set when the server says monitoring needs SecScan Pro (only once
+  // Set when the server says monitoring needs a plan (only once
   // MONITORING_REQUIRES_PLAN is on). The moment someone asks to monitor is the
   // moment to offer the plan — a bare error there loses the sale.
   const [refusal, setRefusal] = useState<"plan" | "limit" | null>(null);

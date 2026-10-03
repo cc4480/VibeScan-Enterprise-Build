@@ -1,17 +1,19 @@
 # Turning payments on
 
-What is sold (decided 2026-09-24; replaces the 2026-09-22 single $50 plan):
+What is sold (decided 2026-10-03; replaces the 2026-09-24 Starter, Pro and credit packs):
 
 | Product | Price | What it gives |
 |---|---|---|
-| **SecScan Starter** | $19 / month | Monitoring for 3 sites + 20 full scans every month (no rollover) |
-| **SecScan Pro** | $49 / month | Monitoring for up to 5 sites + 100 full scans every month (no rollover) |
-| 10-scan pack | $12 | Ten scans, never expire |
-| 50-scan pack | $49 | Fifty scans, never expire |
+| **SecScan Unlimited** | $19 / month | Unlimited full scans (fair use: 5 an hour, 20 a day per account by default) + monitoring for up to 5 sites |
+
+Starter ($19, 3 sites, 20 scans), Pro ($49, 5 sites, 100 scans) and the 10 and 50-scan packs are
+**not sold**. Starter and Pro stay in `lib/plans.ts` so a row carrying one still resolves, and the
+pack grant table stays in `lib/stripe.ts` so a checkout opened before the change and paid after it
+is still credited. `PACKS_ON_SALE` is empty, and the subscription endpoint refuses a plan that is not on sale.
 
 Every account also gets 3 free scans each calendar month (UTC), renewing on
-the 1st; unused ones do not carry over. Scans are paid for in this order: free →
-this month's plan scans → credits.
+the 1st; unused ones do not carry over. Scans are paid for in this order: an unlimited
+plan (nothing is counted) → free → a counted plan's scans (legacy only) → credits (a balance already held).
 
 All prices live in code (`lib/stripe.ts` `PRICE_MAP`, `lib/plans.ts`). You do
 **not** create products or prices in Stripe — checkout builds them from the code.
@@ -68,11 +70,10 @@ These are what a customer sees on the checkout page and their bank statement.
 
 Card `4242 4242 4242 4242`, any future date, any CVC.
 
-- [ ] Buy the 10-scan pack → Settings shows **10 credits**; buy the 50-scan pack → **60**.
-- [ ] Subscribe to Starter → Settings shows **SecScan Starter**, **Active**, **20 plan scans**, a renewal date.
-- [ ] Cancel it, then subscribe to Pro → **SecScan Pro**, **100 plan scans**.
-- [ ] Run a scan → plan scans drop by 1 (credits untouched).
-- [ ] Settings → **Manage or cancel** → cancel → Settings shows **Cancelled**, plan scans 0.
+- [ ] The pricing page and Settings show one plan, **SecScan Unlimited $19**, and no credit packs.
+- [ ] Subscribe → Settings shows **SecScan Unlimited**, **Active**, **Unlimited scans on your plan**, a renewal date.
+- [ ] Run several scans → still **Unlimited**; the free scans are untouched.
+- [ ] Settings → **Manage or cancel** → cancel → Settings shows **Cancelled**, and scans fall back to the free ones.
 - [ ] Stripe → Webhooks → your endpoint: every delivery shows **200**.
 - [ ] Declined card `4000 0000 0000 0002` → nothing is granted.
 - [ ] With `MONITORING_REQUIRES_PLAN=true` locally: a cancelled plan stops monitors (rows kept); resubscribing restarts them.
@@ -104,8 +105,8 @@ Card `4242 4242 4242 4242`, any future date, any CVC.
    **Failed payments** (and the card-update reminders). SecScan emails its own
    receipt for credit packs, but a monthly renewal's receipt — and the "your
    card was declined" email — come only from Stripe.
-6. Buy one real $12 pack (10 credits) with your own card, confirm it lands, refund it from
-   the Stripe dashboard.
+6. Subscribe once for real ($19) with your own card, confirm Settings shows the plan as Active and
+   a scan runs, then cancel and refund it from the Stripe dashboard.
 7. **Tell the people who asked.** Everyone who clicked "Email me when I can buy
    scans" was promised an email. Dry run first, then send (once):
    ```
@@ -117,9 +118,9 @@ Card `4242 4242 4242 4242`, any future date, any CVC.
    While payments are off, `/ai-editors` says "Buying more scans isn't open yet"
    (troubleshooting table, "You've used this month's 3 free scans") and the app shows
    "Paid scans are coming soon". Once checkout is live, change both to point at
-   the pricing. `/monitoring` already advertises Starter ($19/month, 3 sites, 20
-   scans) and Pro ($49/month, 5 sites, 100 scans); that page is only true once
-   step 6 has passed.
+   the pricing. `/monitoring` and any other page there that names Starter, Pro or credit packs
+   must be changed to the single SecScan Unlimited plan ($19/month, unlimited scans,
+   5 sites); that page is only true once step 6 has passed.
 
 ## Sales tax
 
@@ -130,10 +131,13 @@ accountant, not a default.
 
 ## 4. Decide before switching monitoring to paid
 
-Monitoring is free for everyone today. It becomes Pro-only when
-`MONITORING_REQUIRES_PLAN=true` is set on the **web** and **secscan** services.
-The moment it is set, **every existing free monitor stops** (hourly checks,
-rescans, CVE and certificate alerts) for anyone without a plan.
+Monitoring is free and unlimited for everyone today. It needs the SecScan Unlimited plan
+when `MONITORING_REQUIRES_PLAN=true` is set on the **web** and **secscan** services, except
+that an account with no plan keeps **one** free site (`FREE_MONITOR_SITES`, default 1; 0 turns
+it off), rescanned no more often than weekly. The site limit applies when someone **adds** a
+monitor: monitors an account already has keep running after the flag is set (still rescanned
+no more often than weekly), but it cannot add another until it has a plan. Grandfathering
+(below) keeps specific people on the normal grade-based cadence and a higher site limit.
 
 Before flipping it, decide what existing monitor users get. To keep them
 monitored for free (recommended — they signed up when monitoring had no plan),

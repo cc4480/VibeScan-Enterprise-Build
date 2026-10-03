@@ -23,6 +23,8 @@ export interface PlanOffer {
   interval: "month";
   urlLimit: number;
   includedScans: number;
+  /** Scans are not counted, only rate-limited. `includedScans` is 0 then and means nothing. */
+  unlimitedScans: boolean;
   description: string;
 }
 
@@ -44,6 +46,8 @@ export interface BillingStatus {
     plan: string;
     status: "active" | "past_due" | "paused" | "cancelled";
     includedScansRemaining: number;
+    /** The counter above means nothing on an unlimited plan. */
+    unlimitedScans?: boolean;
     urlLimit: number;
     currentPeriodEnd: string | null;
     canManage: boolean;
@@ -87,4 +91,28 @@ export function formatUsd(cents: number): string {
 /** Per-scan price of a pack, for the "you save" line. */
 export function perScanCents(pack: CreditPack): number {
   return Math.round(pack.amountCents / Math.max(1, pack.credits));
+}
+
+const PLAN_NAMES: Record<string, string> = {
+  unlimited: "SecScan Unlimited",
+  starter: "SecScan Starter",
+  pro: "SecScan Pro",
+};
+
+/** A plan's display name. A key this build does not know reads as plain "SecScan". */
+export function planDisplayName(key: string): string {
+  // hasOwn, not a bare lookup: "constructor" and the other inherited names would otherwise
+  // resolve to a function and render as its source text.
+  return Object.hasOwn(PLAN_NAMES, key) ? PLAN_NAMES[key]! : "SecScan";
+}
+
+/** What a plan says about scans: "Unlimited full scans", or the monthly count. */
+export function planScansLine(plan: Pick<PlanOffer, "unlimitedScans" | "includedScans">): string {
+  return plan.unlimitedScans ? "Unlimited full scans (fair use)" : `${plan.includedScans} full scans every month`;
+}
+
+/** "$0.95 per scan", or null for an unlimited plan, where a per-scan price would be meaningless. */
+export function planPerScanLabel(plan: Pick<PlanOffer, "unlimitedScans" | "includedScans" | "amountCents">): string | null {
+  if (plan.unlimitedScans || plan.includedScans <= 0) return null;
+  return `${formatUsd(Math.round(plan.amountCents / plan.includedScans))} per scan`;
 }

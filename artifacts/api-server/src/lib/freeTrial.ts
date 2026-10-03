@@ -7,7 +7,7 @@ import { and, count, eq, gte, or } from "drizzle-orm";
  * Every account gets FREE_TRIAL_SCAN_LIMIT scans each calendar month (UTC),
  * renewing on the 1st. It used to be a one-time total, which gave someone who
  * tried the product no reason to come back; rivals give a few scans every month
- * (decision 2026-09-24). Plans and credits are spent only after the month's free
+ * (decision 2026-09-24). A plan or credits are spent only after the month's free
  * scans (see chargeScan in billing.ts), so a paying customer is never capped here.
  *
  * This lives in lib/ rather than in the scans route because the monitor routes
@@ -21,7 +21,7 @@ export const FREE_TRIAL_SCAN_LIMIT = Number(process.env["FREE_TRIAL_SCAN_LIMIT"]
 // someone to buy what cannot be bought is the dead end this message used to be
 // the other way round ("coming soon") once checkout existed.
 export const TRIAL_LIMIT_MESSAGE = process.env["STRIPE_SECRET_KEY"]
-  ? `You've used this month's ${FREE_TRIAL_SCAN_LIMIT} free scans. They renew on the 1st, or subscribe or buy scan credits to keep scanning now.`
+  ? `You've used this month's ${FREE_TRIAL_SCAN_LIMIT} free scans. They renew on the 1st, or subscribe for unlimited scans to keep scanning now.`
   : `You've used this month's ${FREE_TRIAL_SCAN_LIMIT} free scans. They renew on the 1st of next month.`;
 
 /** Midnight UTC on the 1st of the current month: the start of this month's allowance. */

@@ -17,7 +17,7 @@ import { creditBalance } from "../lib/credits";
 export function registerMonitorCreate(router: IRouter): void {
   // ── POST /api/monitor/subscriptions ──────────────────────────────────────────
   // Create a new monitoring subscription for a URL.
-  // Free unless MONITORING_REQUIRES_PLAN is on; then one site is free and more need a Starter or Pro plan (see lib/entitlements.ts).
+  // Free unless MONITORING_REQUIRES_PLAN is on; then one site is free and more need a plan (see lib/entitlements.ts).
 
 
   router.post("/monitor/subscriptions", requireMonitorAuth, monitorRateLimit, async (req, res): Promise<void> => {

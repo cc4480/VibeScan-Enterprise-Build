@@ -60,8 +60,8 @@ export function McpSection() {
             </p>
           </div>
           <figcaption className="px-5 pb-4 text-[11px] text-muted-foreground">
-            Example session. Scans follow the same rules as the website: they use your free scans, plan scans or
-            credits, and active tests run only on domains you've verified.
+            Example session. Scans follow the same rules as the website: they use your free scans, or your
+            plan if you have one, and active tests run only on domains you've verified.
           </figcaption>
         </figure>
       </div>

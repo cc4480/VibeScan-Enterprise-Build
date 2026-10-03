@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { resolveEntitlement, monitorExpiryApplies, freeMonitorSites, FREE_MONITOR_MIN_DAYS, rescanFloorDays, type BillingRow } from "./entitlements";
-import { MONITOR_PLANS, DEFAULT_PLAN, SOLD_PLANS, planByKey, urlLimitForPlan, includedScansForPlan } from "./plans";
-import { PRICE_MAP, CREDITS_MAP } from "./stripe";
+import { MONITOR_PLANS, DEFAULT_PLAN, SOLD_PLANS, planByKey, urlLimitForPlan, includedScansForPlan, isUnlimitedPlan } from "./plans";
+import { CREDITS_MAP, PACKS_ON_SALE } from "./stripe";
 
 /**
  * This is the rule that decides whether a paying customer's site keeps being
@@ -103,45 +103,58 @@ describe("resolveEntitlement — grandfathered accounts", () => {
 });
 
 describe("MONITOR_PLANS", () => {
-  // The plans decided 2026-09-24. These numbers are what the pricing page
-  // promises, so a change here is a change to what customers are sold — it
-  // should fail a test and be made on purpose.
-  it("sells two plans: Starter $19 (3 sites, 20 scans) and Pro $49 (5 sites, 100 scans)", () => {
-    expect(SOLD_PLANS.map((p) => p.key)).toEqual(["starter", "pro"]);
-    expect(MONITOR_PLANS.starter).toMatchObject({ amountCents: 1900, urlLimit: 3, includedScans: 20 });
-    expect(MONITOR_PLANS.pro).toMatchObject({ amountCents: 4900, urlLimit: 5, includedScans: 100 });
-    // A subscription started before there were two plans carried no plan key; it was Pro.
-    expect(DEFAULT_PLAN.key).toBe("pro");
+  // The plan decided 2026-10-03. These numbers are what the pricing page promises, so a
+  // change here is a change to what customers are sold: it should fail a test and be made
+  // on purpose.
+  it("sells one plan: SecScan Unlimited, $19 a month, unlimited scans and 5 sites", () => {
+    expect(SOLD_PLANS.map((p) => p.key)).toEqual(["unlimited"]);
+    expect(MONITOR_PLANS.unlimited).toMatchObject({ amountCents: 1900, urlLimit: 5, unlimitedScans: true });
+    // An unlimited plan keeps no counter, so the allowance a paid invoice grants is 0.
+    expect(MONITOR_PLANS.unlimited.includedScans).toBe(0);
+    // A request or webhook that names no plan gets the one on sale.
+    expect(DEFAULT_PLAN.key).toBe("unlimited");
   });
 
   it("is priced in whole cents, as Stripe requires", () => {
     for (const p of SOLD_PLANS) expect(Number.isInteger(p.amountCents), p.key).toBe(true);
   });
 
-  it("makes every plan's included scans cheaper than any credit pack", () => {
-    // The subscription is the way to save. If a pack beat a plan on the scans
-    // alone, the pricing page would be arguing against itself; the first
-    // proposal for these prices did exactly that, and this is what caught it.
-    const cheapestPack = Math.min(
-      ...Object.keys(CREDITS_MAP).map((t) => PRICE_MAP[t]!.amount / CREDITS_MAP[t]!),
-    );
-    for (const p of SOLD_PLANS) {
-      expect(p.amountCents / p.includedScans, p.key).toBeLessThan(cheapestPack);
-    }
+  it("keeps Starter and Pro as known plans that are not sold, so a row carrying one still resolves", () => {
+    // Withdrawn 2026-10-03. Nobody holds one (payments were never on), but removing the keys
+    // would make such a row look like an unknown plan and stop granting its scans.
+    expect(MONITOR_PLANS.starter).toMatchObject({ amountCents: 1900, urlLimit: 3, includedScans: 20, unlimitedScans: false });
+    expect(MONITOR_PLANS.pro).toMatchObject({ amountCents: 4900, urlLimit: 5, includedScans: 100, unlimitedScans: false });
+    expect(SOLD_PLANS).not.toContain(MONITOR_PLANS.starter);
+    expect(SOLD_PLANS).not.toContain(MONITOR_PLANS.pro);
   });
 
-  it("resolves limits for the sold plans, and nothing else", () => {
+  it("sells no credit pack alongside it", () => {
+    // With unlimited scans a pack has nothing to offer; the grant table stays for late payments.
+    expect(PACKS_ON_SALE).toEqual([]);
+    expect(Object.keys(CREDITS_MAP).length).toBeGreaterThan(0);
+  });
+
+  it("resolves limits for every known plan, and nothing else", () => {
+    expect(urlLimitForPlan("unlimited")).toBe(5);
+    expect(includedScansForPlan("unlimited")).toBe(0);
     expect(urlLimitForPlan("starter")).toBe(3);
     expect(includedScansForPlan("starter")).toBe(20);
     expect(urlLimitForPlan("pro")).toBe(5);
     expect(includedScansForPlan("pro")).toBe(100);
-    expect(planByKey("pro")?.name).toBe("SecScan Pro");
+    expect(planByKey("unlimited")?.name).toBe("SecScan Unlimited");
     // Designed-but-never-sold tiers and grandfathered rows get their allowance
     // from the row, never from this table.
     for (const k of ["solo", "studio", "agency", "grandfathered", "enterprise", "", "constructor"]) {
       expect(urlLimitForPlan(k), k).toBeNull();
       expect(includedScansForPlan(k), k).toBe(0);
       expect(planByKey(k), k).toBeNull();
+    }
+  });
+
+  it("says which plans are unlimited, and treats anything unknown as not", () => {
+    expect(isUnlimitedPlan("unlimited")).toBe(true);
+    for (const k of ["starter", "pro", "grandfathered", "enterprise", "", "constructor", null, undefined]) {
+      expect(isUnlimitedPlan(k as string | null | undefined), String(k)).toBe(false);
     }
   });
 });

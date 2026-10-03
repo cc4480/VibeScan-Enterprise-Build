@@ -29,7 +29,7 @@ export const API_V1_SPEC = {
     "/scans": {
       post: {
         summary: "Start a scan",
-        description: "Spends one of your free scans, plan scans or credits, exactly as the website does.",
+        description: "Counts against your free scans, or your plan if you have one (an unlimited plan is not counted), exactly as the website does.",
         requestBody: {
           required: true,
           content: { "application/json": { schema: { type: "object", required: ["url"], properties: { url: { type: "string", example: "https://staging.example.com" }, githubRepo: { type: "string", description: "Optional. A public GitHub repository to also read for committed secrets, e.g. https://github.com/owner/repo. Only GitHub is contacted for it, never the scanned site.", example: "https://github.com/owner/repo" } } } } },

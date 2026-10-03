@@ -38,8 +38,11 @@ vi.mock("../lib/stripe", () => ({
     deep: { amount: 1900, name: "SecScan Deep", description: "legacy" },
     pack_5: { amount: 1000, name: "SecScan 5-Scan Pack", description: "5 credits" },
     pack_20: { amount: 4000, name: "SecScan 20-Scan Pack", description: "20 credits" },
+    // Withdrawn from sale but still credited: priced, in CREDITS_MAP, not in PACKS_ON_SALE.
+    pack_old: { amount: 2000, name: "SecScan Old Pack", description: "10 credits" },
   },
-  CREDITS_MAP: { pack_5: 5, pack_20: 20 },
+  CREDITS_MAP: { pack_5: 5, pack_20: 20, pack_old: 10 },
+  PACKS_ON_SALE: ["pack_5", "pack_20"],
   getOrigin: () => "https://secscan.us",
 }));
 
@@ -100,6 +103,8 @@ describe("GET /checkout/packs", () => {
     const body = res.body as { packs: Array<{ tier: string }> };
     const tiers = body.packs.map((p) => p.tier);
     expect(tiers).toEqual(["pack_5", "pack_20"]);
+    // Withdrawn from sale: it grants credits, but the page must not offer it.
+    expect(tiers).not.toContain("pack_old");
     expect(tiers).not.toContain("basic");
     expect(tiers).not.toContain("deep");
   });
@@ -163,6 +168,17 @@ describe("POST /checkout/credits — what it will and won't sell", () => {
     const h = await handlerFor("post", "/checkout/credits");
     const res = makeRes();
     await h(makeReq({ tier: "basic" }), res);
+
+    expect(res.statusCode).toBe(400);
+    expect(state.createArgs).toBeNull();
+  });
+
+  it("refuses a pack that was withdrawn from sale, though it still grants credits when an old payment arrives", async () => {
+    // The grant table (CREDITS_MAP) keeps the pack so a checkout opened before the change is
+    // still credited when it is paid. That is a reason to keep crediting it, not to sell it.
+    const h = await handlerFor("post", "/checkout/credits");
+    const res = makeRes();
+    await h(makeReq({ tier: "pack_old" }), res);
 
     expect(res.statusCode).toBe(400);
     expect(state.createArgs).toBeNull();

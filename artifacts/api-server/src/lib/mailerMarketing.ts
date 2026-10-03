@@ -119,13 +119,11 @@ export async function sendPaymentsLiveEmail(toEmail: string): Promise<"sent" | "
 
   const heading = "You can keep scanning now";
   const body =
-    "You asked us to tell you when you could buy more scans on SecScan. You can now.<br><br>" +
-    "<strong>SecScan Starter</strong> — $19 a month: up to 3 sites watched around the clock, " +
-    "plus 20 on-demand full scans every month.<br>" +
-    "<strong>SecScan Pro</strong> — $49 a month: up to 5 sites watched around the clock, " +
-    "plus 100 on-demand full scans every month. Cancel either any time.<br>" +
-    "<strong>Scan credits</strong> — 10 for $12, or 50 for $49. They never expire.";
-  const ctaLabel = "See plans and credits";
+    "You asked us to tell you when you could get more scans on SecScan. You can now.<br><br>" +
+    "<strong>SecScan Unlimited</strong> — $19 a month: unlimited full scans and up to 5 sites " +
+    "watched around the clock. Cancel any time.<br>" +
+    "Your 3 free scans every month are still there.";
+  const ctaLabel = "See the plan";
   const ctaUrl = `${APP_ORIGIN}/settings#billing`;
   const footnote = "You're receiving this once, because you asked to be told. You won't get it again.";
 

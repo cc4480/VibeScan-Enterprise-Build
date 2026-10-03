@@ -25,9 +25,11 @@ export const PRICE_MAP: Record<string, { amount: number; name: string; descripti
   single: { amount: 1200, name: "SecScan Scan Credit", description: "Retired pack — not sold" },
   pack_5: { amount: 5000, name: "SecScan 5-Scan Pack", description: "Retired pack — not sold" },
   pack_20: { amount: 16000, name: "SecScan 20-Scan Pack", description: "Retired pack — not sold" },
-  // Priced per scan above both plans ($0.95 Starter, $0.49 Pro), so a pack never
-  // undercuts a subscription; credits cost a little more because they never
-  // expire and need no commitment. $1.20 and $0.98 a scan.
+  // Withdrawn from sale 2026-10-03 with the move to one unlimited plan (see plans.ts): not
+  // in PACKS_ON_SALE, so they cannot be bought. They were priced above the old plans per
+  // scan, so a pack never undercut a subscription; with unlimited scans that argument is
+  // gone. Still in CREDITS_MAP, deliberately: a checkout opened before the change and paid
+  // after it must still be credited.
   pack_10: {
     amount: 1200,
     name: "SecScan 10-Scan Pack",
@@ -40,11 +42,22 @@ export const PRICE_MAP: Record<string, { amount: number; name: string; descripti
   },
 };
 
-/** The packs on sale, and the credits each grants. Anything not here cannot be bought. */
+/**
+ * What a PAID credit-pack session grants. This is the grant table, not the shop window: a
+ * payment that arrives for a listed pack is always credited, even if the pack has since been
+ * withdrawn, because the customer paid for it when it was on sale.
+ */
 export const CREDITS_MAP: Record<string, number> = {
   pack_10: 10,
   pack_50: 50,
 };
+
+/**
+ * The packs that may be bought now. Empty since 2026-10-03: the one plan sold is unlimited,
+ * so a pack has nothing to offer. A credit balance already held still spends (see chargeScan).
+ * Every entry must also be in CREDITS_MAP, or it would take money and grant nothing.
+ */
+export const PACKS_ON_SALE: readonly string[] = [];
 
 export function getOrigin(req: { headers: Record<string, string | string[] | undefined> }): string {
   // The configured origin wins. The headers below are client-influenced, and

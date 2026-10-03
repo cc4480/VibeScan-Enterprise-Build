@@ -19,7 +19,7 @@
 
 import { Router, type IRouter } from "express";
 import { stripe, PRICE_MAP, CREDITS_MAP, getOrigin } from "../lib/stripe";
-import { DEFAULT_PLAN, SOLD_PLANS, planByKey } from "../lib/plans";
+import { DEFAULT_PLAN, SOLD_PLANS, isUnlimitedPlan } from "../lib/plans";
 import { creditBalance } from "../lib/credits";
 import { trialScansUsedBy, FREE_TRIAL_SCAN_LIMIT, freeScansResetAt } from "../lib/freeTrial";
 import { refuseUnregistered, BUYABLE, currentPlan } from "./checkoutShared";
@@ -45,6 +45,7 @@ router.get("/checkout/packs", (_req, res): void => {
       interval: "month",
       urlLimit: p.urlLimit,
       includedScans: p.includedScans,
+      unlimitedScans: p.unlimitedScans,
       description: p.description,
     })),
     enabled: stripe !== null,
@@ -73,7 +74,9 @@ router.post("/checkout/credits", async (req, res): Promise<void> => {
   // Checked against CREDITS_MAP, not just PRICE_MAP: PRICE_MAP still carries
   // the retired per-scan entries, and one of those would take money and grant
   // zero credits, because the webhook looks the tier up in CREDITS_MAP.
-  if (!price || !credits) {
+  // Also on sale: a withdrawn pack still grants credits when an old payment arrives, but it
+  // cannot be bought any more.
+  if (!price || !credits || !BUYABLE.includes(tier)) {
     res.status(400).json({ error: "Unknown pack." });
     return;
   }
@@ -155,9 +158,11 @@ router.post("/checkout/subscription", async (req, res): Promise<void> => {
     return;
   }
 
-  // Omitted means Pro, the plan this endpoint sold before there were two.
+  // Omitted means the plan on sale, so a client written before plans had keys still works.
   const requested = (req.body as { plan?: unknown } | undefined)?.plan;
-  const plan = requested === undefined ? DEFAULT_PLAN : planByKey(typeof requested === "string" ? requested : null);
+  // Only a plan that is on sale: Starter and Pro still resolve elsewhere (a row carrying one
+  // keeps its allowance) but cannot be bought by naming them.
+  const plan = requested === undefined ? DEFAULT_PLAN : (SOLD_PLANS.find((p) => p.key === requested) ?? null);
   if (!plan) {
     res.status(400).json({ error: "Unknown plan.", code: "unknown_plan" });
     return;
@@ -262,6 +267,8 @@ router.get("/billing/status", async (req, res): Promise<void> => {
             plan: row.plan,
             status: row.status,
             includedScansRemaining: row.includedScansRemaining,
+            // The counter means nothing on an unlimited plan; the page reads this instead.
+            unlimitedScans: isUnlimitedPlan(row.plan),
             urlLimit: row.urlLimit,
             currentPeriodEnd: row.currentPeriodEnd?.toISOString() ?? null,
             canManage: row.stripeCustomerId !== null,

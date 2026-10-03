@@ -169,7 +169,7 @@ export function AiEditorsSection() {
               <CopyBlock label="The token alone" value={fresh.token} />
               <p className="text-xs text-muted-foreground">
                 This token opens the REST API only, not the MCP endpoint or your account. Scans use your free scans,
-                plan scans or credits, and active tests run only on domains you've verified. The full description is
+                or your plan if you have one, and active tests run only on domains you've verified. The full description is
                 at {apiBase}/openapi.json.
               </p>
             </>
@@ -190,8 +190,8 @@ export function AiEditorsSection() {
           <CopyBlock label="The token alone" value={fresh.token} />
           <p className="text-xs text-muted-foreground">
             Then restart your editor and ask it "How many SecScan scans do I have left?" to check it's connected
-            (that uses no scan). After that, ask it to "scan my site with SecScan". Scans use your free scans, plan
-            scans or credits, exactly as on this site, and active tests run only on domains you've verified.
+            (that uses no scan). After that, ask it to "scan my site with SecScan". Scans use your free scans, or
+            your plan if you have one, exactly as on this site, and active tests run only on domains you've verified.
             Step-by-step help: secscan.info/ai-editors
           </p>
             </>

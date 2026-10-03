@@ -19,7 +19,7 @@ import {
   stripeEventsTable,
 } from "@workspace/db";
 import { and, eq, gt, inArray, lt, sql } from "drizzle-orm";
-import { includedScansForPlan } from "./plans";
+import { includedScansForPlan, isUnlimitedPlan } from "./plans";
 
 /** A transaction handle, or the pool itself — every helper accepts either. */
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -108,6 +108,16 @@ export async function spendIncludedScan(userId: string): Promise<number | null> 
  * would get nothing back.
  */
 export async function refundIncludedScan(tx: Executor, userId: string): Promise<void> {
+  // An unlimited plan keeps no counter, so there is nothing to put back, and a credit would
+  // be a scan the person never paid for. Looked up first because a counter row is the
+  // only kind this function can restore.
+  const [held] = await tx
+    .select({ plan: billingSubscriptionsTable.plan })
+    .from(billingSubscriptionsTable)
+    .where(eq(billingSubscriptionsTable.userId, userId))
+    .limit(1);
+  if (held && isUnlimitedPlan(held.plan)) return;
+
   const restored = await tx
     .update(billingSubscriptionsTable)
     .set({
@@ -216,11 +226,25 @@ export async function hasLivePlan(userId: string): Promise<boolean> {
   return row.grandfathered || row.status === "active" || row.status === "past_due";
 }
 
+/**
+ * Does this account hold a live unlimited plan? active and past_due count, the same as
+ * for a counted plan (a card being retried keeps its service); paused and cancelled do not.
+ */
+export async function hasUnlimitedPlan(userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ plan: billingSubscriptionsTable.plan, status: billingSubscriptionsTable.status })
+    .from(billingSubscriptionsTable)
+    .where(eq(billingSubscriptionsTable.userId, userId))
+    .limit(1);
+  return !!row && isUnlimitedPlan(row.plan) && (row.status === "active" || row.status === "past_due");
+}
+
 export type PaidWith = "free" | "included" | "credit";
 
 /**
- * Pay for one scan, in the product's one spend order: free trial, then the
- * plan's included scans (they expire), then credits (they never do). Returns
+ * Pay for one scan, in the product's one spend order: an unlimited plan first, then the
+ * free trial, then a counted plan's included scans (they expire), then credits (they
+ * never do; none are sold any more, but a balance still spends). Returns
  * what paid, or null when nothing is left.
  *
  * The ONE place this order lives — the scan form, the MCP endpoint and the
@@ -229,6 +253,9 @@ export type PaidWith = "free" | "included" | "credit";
  * is itself what counts against the trial (see freeTrial.ts).
  */
 export async function chargeScan(userId: string): Promise<PaidWith | null> {
+  // An unlimited plan pays for every scan, and is checked first so a subscriber never
+  // spends the month's free scans (which exist for people who have not subscribed).
+  if (await hasUnlimitedPlan(userId)) return "included";
   const { trialScansExhausted } = await import("./freeTrial");
   if (!(await trialScansExhausted(userId))) return "free";
   if ((await spendIncludedScan(userId)) !== null) return "included";

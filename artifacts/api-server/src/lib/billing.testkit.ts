@@ -1,5 +1,5 @@
 import { describe, beforeAll, beforeEach, afterAll, it } from "vitest";
-import { MONITOR_PLANS } from "./plans";
+import { MONITOR_PLANS, type PlanKey } from "./plans";
 
 /**
  * Billing against a REAL Postgres.
@@ -20,8 +20,11 @@ import { MONITOR_PLANS } from "./plans";
 
 
 
-// The plan a subscription with no plan metadata gets (Pro).
+// The counted plan most of these tests exercise. Pro stopped being sold on 2026-10-03 but is
+// still a known plan, so a row carrying it must keep working; the builders below name it
+// explicitly because a subscription with NO plan metadata now gets the unlimited plan.
 export const PRO = MONITOR_PLANS.pro;
+export const UNLIMITED = MONITOR_PLANS.unlimited;
 
 export const URL_ = process.env["BILLING_TEST_DATABASE_URL"];
 export const suite = URL_ ? describe : describe.skip;
@@ -59,7 +62,7 @@ export function packCompleted(userId: string, tier: string, paymentStatus: "paid
   } as never;
 }
 
-export function subscriptionCompleted(userId: string, subId: string) {
+export function subscriptionCompleted(userId: string, subId: string, plan: PlanKey | null = "pro") {
   return {
     id: evId(),
     type: "checkout.session.completed",
@@ -67,7 +70,7 @@ export function subscriptionCompleted(userId: string, subId: string) {
       object: {
         mode: "subscription",
         payment_status: "paid",
-        metadata: { type: "subscription", user_id: userId },
+        metadata: { type: "subscription", user_id: userId, ...(plan ? { plan } : {}) },
         subscription: subId,
         customer: "cus_test",
       },
@@ -75,14 +78,14 @@ export function subscriptionCompleted(userId: string, subId: string) {
   } as never;
 }
 
-export function invoicePaid(subId: string, userId: string | null, id = evId()) {
+export function invoicePaid(subId: string, userId: string | null, id = evId(), plan: PlanKey | null = "pro") {
   return {
     id,
     type: "invoice.paid",
     data: {
       object: {
         customer: "cus_test",
-        parent: { subscription_details: { subscription: subId, metadata: userId ? { user_id: userId } : {} } },
+        parent: { subscription_details: { subscription: subId, metadata: userId ? { user_id: userId, ...(plan ? { plan } : {}) } : {} } },
         lines: { data: [{ period: { end: Math.floor(Date.now() / 1000) + 30 * 86400 } }] },
       },
     },

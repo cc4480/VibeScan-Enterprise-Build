@@ -182,7 +182,7 @@ Two consequences worth knowing before you debug either one:
   findings never appear, check this first.
 
 - **Payments are on exactly when `STRIPE_SECRET_KEY` is set** — the SecScan
-  Starter and Pro subscriptions and the credit packs become buyable. Set
+  Unlimited subscription becomes buyable. Set
   `STRIPE_WEBHOOK_SECRET` with it, and register the webhook at
   `/api/scan/webhook`; `deploy/PAYMENTS-GO-LIVE.md` lists the five events.
   Without either, every surface shows prices as "not live yet" and nothing can
