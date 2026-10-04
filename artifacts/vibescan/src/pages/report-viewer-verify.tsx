@@ -9,8 +9,10 @@ import type { CoverageTest } from "./shared-report-coverage";
  * verify somebody else's domain, so the shared report does not render this.
  *
  * Renders nothing when the scan skipped nothing for want of a verified domain, so a scan of a
- * verified site is unchanged. It makes no promise about what verifying will find: it says what
- * was not tested and what verifying lets the next scan test.
+ * verified site is unchanged. It makes no promise about what verifying will find, and none that
+ * every listed test will then run: some also need a test login, or only run when the site uses
+ * that service. It does not say the rest of the report ran either, because tests skipped for
+ * other reasons (no repository supplied, say) are not counted here; the coverage card lists them.
  */
 export function VerifyBanner({ tests, targetUrl }: { tests: CoverageTest[] | null | undefined; targetUrl: string }) {
   const gap = verificationGap(tests);
@@ -35,7 +37,8 @@ export function VerifyBanner({ tests, targetUrl }: { tests: CoverageTest[] | nul
         <p className="text-sm text-muted-foreground">
           Active tests only run against a site you have proven you own. Verifying is free: add one DNS record or
           upload one small file.
-          {examples && <> It lets the next scan run {examples}.</>} Everything else in this report already ran.
+          {examples && <> Once it is verified, the next scan can try {examples}; some of these also need a test login, or only run when the site uses that service.</>}{" "}
+          Tests skipped for any other reason are listed, each with its reason, under &ldquo;What this scan tested&rdquo;.
         </p>
       </div>
       <Link
