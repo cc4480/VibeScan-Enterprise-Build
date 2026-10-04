@@ -144,8 +144,8 @@ export function isHostnameSafeSync(hostname: string): boolean {
 
 // Resolution is cached because the scanner asks about the same host on every
 // request of a scan, and a DNS round-trip per request would dominate the time
-// budget. The TTL is short enough that a rebinding attack has to win a race
-// rather than simply wait us out.
+// budget. This cache only spares the lookup in the pre-check; it is not what stops rebinding.
+// scanFetch connects through pinnedDispatcher, which vets the address the socket opens to.
 const RESOLVE_TTL_MS = 30_000;
 const RESOLVE_CACHE_MAX = 512;
 const resolveCache = new Map<string, { safe: boolean; at: number }>();

@@ -27,6 +27,7 @@
  */
 
 import { checkUrlSafe } from "./ssrfGuard";
+import { scanDispatcher } from "./pinnedDispatcher";
 import { SCANNER_USER_AGENT } from "./appOrigin";
 import { DEFAULT_TIMEOUT_MS, MAX_REDIRECT_HOPS, type HttpResult, type ScanFetchOptions, type Outcome } from "./httpTypes";
 import { storage, tryReauthenticate, throttle } from "./httpContext";
@@ -114,6 +115,9 @@ async function perform(url: string, options: ScanFetchOptions): Promise<Outcome>
         ...init,
         // Always manual: following is done below so each hop is scope-checked.
         redirect: "manual",
+        // Opens the socket only to an address vetted at connect time, so a name that
+        // re-resolves to a private address between the check above and here is refused.
+        dispatcher: scanDispatcher,
         signal,
         headers: buildHeaders(current, ctx, callerHeaders, identity, identityGiven),
       });
