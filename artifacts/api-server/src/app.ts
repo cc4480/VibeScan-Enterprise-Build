@@ -87,6 +87,11 @@ app.use((req, res, next) => {
   next();
 });
 
+// A share link's token is a bearer credential for one report, so it must not sit in the request log.
+function maskSecretPath(path: string | undefined): string | undefined {
+  return path?.replace(/^(\/api\/(?:share|oob)\/)[^/]+/, "$1:token");
+}
+
 app.use(
   pinoHttp({
     logger,
@@ -95,7 +100,7 @@ app.use(
         return {
           id: req.id,
           method: req.method,
-          url: req.url?.split("?")[0],
+          url: maskSecretPath(req.url?.split("?")[0]),
         };
       },
       res(res) {
