@@ -48,6 +48,9 @@ function isLoginRateLimited(ip: string): boolean {
 const PKCE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 function getCallbackUrl(req: Request): string {
+  // A configured origin wins: X-Forwarded-Host is client-writable unless every hop overwrites it.
+  const configured = process.env["APP_ORIGIN"]?.replace(/\/+$/, "");
+  if (configured) return `${configured}/api/callback`;
   const proto = req.headers["x-forwarded-proto"] ?? req.protocol;
   const host = req.headers["x-forwarded-host"] ?? req.headers["host"];
   return `${proto}://${host}/api/callback`;

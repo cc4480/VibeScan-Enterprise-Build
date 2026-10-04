@@ -114,6 +114,12 @@ export async function verifyPassword(password: string, stored: string): Promise<
 }
 
 /** True when a stored hash used weaker parameters than the current settings. */
+let dummy: Promise<string> | undefined;
+/** A real hash of a throwaway password, to spend the same time on a login for an account that does not exist. */
+export function dummyHash(): Promise<string> {
+  return (dummy ??= hashPassword(`not-a-real-password-${Math.random()}`));
+}
+
 export function needsRehash(stored: string): boolean {
   const parts = stored.split("$");
   if (parts.length !== 6 || parts[0] !== "scrypt") return true;

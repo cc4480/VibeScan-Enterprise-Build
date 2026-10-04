@@ -235,3 +235,13 @@ describe("embedded IPv4 in every IPv6 notation", () => {
     expect(isPrivateAddress("::ffff:8.8.8.8")).toBe(false);
   });
 });
+
+describe("special ranges the guard used to allow (audit #14)", () => {
+  it.each(["224.0.0.1", "239.255.255.250", "240.0.0.1", "255.255.255.255", "ff02::1", "2002:c000:204::1", "2001:0:4136:e378:8000:63bf:3fff:fdd2", "64:ff9b:1::1"])(
+    "blocks %s",
+    (addr) => expect(isPrivateAddress(addr)).toBe(true),
+  );
+  it.each(["8.8.8.8", "223.255.255.254", "2606:4700:4700::1111", "2001:4860:4860::8888"])("still allows %s", (addr) =>
+    expect(isPrivateAddress(addr)).toBe(false),
+  );
+});

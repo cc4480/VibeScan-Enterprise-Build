@@ -22,7 +22,7 @@
 
 import { randomUUID, randomBytes } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
-import { SCANNER_USER_AGENT } from "./appOrigin";
+import { scanFetch } from "./http";
 import { isDestructiveUrl } from "./destructive";
 import { runExtraInjectionProbes } from "./injectionExtra";
 import { reflectionStates, breakoutFor } from "./xssContext";
@@ -71,21 +71,8 @@ interface Probed {
 }
 
 async function safeGet(url: string): Promise<Probed | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      redirect: "follow",
-      headers: { "User-Agent": SCANNER_USER_AGENT },
-    });
-    const body = await res.text().catch(() => "");
-    return { status: res.status, body, contentType: res.headers.get("content-type") ?? "" };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  const res = await scanFetch(url, { timeoutMs: TIMEOUT_MS });
+  return res ? { status: res.status, body: res.body, contentType: res.headers["content-type"] ?? "" } : null;
 }
 
 /**

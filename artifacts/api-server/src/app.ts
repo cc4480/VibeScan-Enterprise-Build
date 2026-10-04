@@ -28,23 +28,6 @@ configureTrustProxy(app);
 // Hide "X-Powered-By: Express" — no reason to advertise the server tech.
 app.disable("x-powered-by");
 
-// Behind a TLS-terminating reverse proxy — the standard container deployment —
-// Express sees a plain HTTP hop, so `req.protocol` is "http" and the session
-// cookie in routes/auth.ts is issued WITHOUT the Secure flag, leaving it
-// sendable over plaintext. Setting trust proxy makes req.protocol reflect
-// X-Forwarded-Proto.
-//
-// TRUST_PROXY is the number of proxy hops in front of the app (1 for a single
-// nginx/Caddy), or an express-recognised value like a subnet. It is
-// deliberately opt-in and deliberately NOT `true`: the /login rate limiter
-// keys on X-Forwarded-For, and trusting every hop would let a client spoof
-// that header and sidestep the limit.
-const trustProxy = process.env["TRUST_PROXY"];
-if (trustProxy) {
-  const hops = Number(trustProxy);
-  app.set("trust proxy", Number.isNaN(hops) ? trustProxy : hops);
-}
-
 // ── Security response headers — set before all routes ────────────────────────
 // In production Express owns everything (API + static frontend) so we set
 // headers on every response.
@@ -104,6 +87,11 @@ app.use((req, res, next) => {
   next();
 });
 
+// A share link's token is a bearer credential for one report, so it must not sit in the request log.
+function maskSecretPath(path: string | undefined): string | undefined {
+  return path?.replace(/^(\/api\/(?:share|oob)\/)[^/]+/, "$1:token");
+}
+
 app.use(
   pinoHttp({
     logger,
@@ -112,7 +100,7 @@ app.use(
         return {
           id: req.id,
           method: req.method,
-          url: req.url?.split("?")[0],
+          url: maskSecretPath(req.url?.split("?")[0]),
         };
       },
       res(res) {

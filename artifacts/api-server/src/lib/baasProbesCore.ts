@@ -1,6 +1,7 @@
 /** Shared helpers for the BaaS probes. */
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
+import { scanFetch } from "./http";
 
 export const TIMEOUT_MS = 8_000;
 
@@ -12,21 +13,9 @@ export async function safeGet(
   url: string,
   headers?: Record<string, string>,
 ): Promise<{ status: number; body: string } | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 SecScan Security Scanner", ...headers },
-      signal: controller.signal,
-      redirect: "follow",
-    });
-    const body = await res.text().catch(() => "");
-    return { status: res.status, body };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  // scanFetch checks the address of every hop, which a bare fetch with redirect: "follow" does not.
+  const res = await scanFetch(url, { timeoutMs: TIMEOUT_MS, headers });
+  return res ? { status: res.status, body: res.body } : null;
 }
 
 export function extractInlineJs(html: string): string {

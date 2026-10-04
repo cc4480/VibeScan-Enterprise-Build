@@ -94,12 +94,20 @@ describe("origin secret", () => {
 
   it("ignores a Cloudflare address the client merely prepended", () => {
     // Forging the header does not help: only the final entry is consulted, and
-    // that one the client cannot write.
+    // that one the client cannot write. A request that did not come through
+    // Cloudflare is counted by that final entry, the address the platform saw.
     const req = makeReq({
       "cf-connecting-ip": "1.2.3.4",
       "x-forwarded-for": "172.68.14.1, 9.9.9.9",
     });
-    expect(clientIp(req)).toBe("203.0.113.9");
+    expect(clientIp(req)).toBe("9.9.9.9");
+  });
+
+  it("counts a direct request by the last X-Forwarded-For entry, not a forged first one", () => {
+    const a = makeReq({ "x-forwarded-for": "1.1.1.1, 9.9.9.9" });
+    const b = makeReq({ "x-forwarded-for": "2.2.2.2, 9.9.9.9" });
+    expect(clientIp(a)).toBe("9.9.9.9");
+    expect(clientIp(b)).toBe("9.9.9.9");
   });
 
   it("does not consult the secret at all when Cloudflare is not in front", () => {

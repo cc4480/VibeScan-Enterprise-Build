@@ -20,6 +20,7 @@
 import crypto from "node:crypto";
 import * as dns from "node:dns/promises";
 import { checkHostname, isPrivateAddress } from "./ssrfGuard";
+import { readBodyMarked } from "./httpBody";
 
 export function extractDomain(rawUrl: string): string {
   let u = (rawUrl || "").trim();
@@ -138,7 +139,8 @@ export async function checkWellKnownFile(domain: string, token: string): Promise
     if (!res.ok) return false;
     // Cap the read: a verification file is 40-odd bytes, and this is an
     // attacker-controlled endpoint that would otherwise happily stream forever.
-    const body = (await res.text()).slice(0, 1024);
+    // readBodyMarked stops reading at the cap; res.text() would pull the whole stream first.
+    const { body } = await readBodyMarked(res, 1024);
     return body.trim() === token;
   } catch {
     return false;

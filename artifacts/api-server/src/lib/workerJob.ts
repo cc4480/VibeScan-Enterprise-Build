@@ -101,16 +101,22 @@ export async function processScanJob(job: ScanJob): Promise<void> {
   const SCAN_HTTP_TIMEOUT_MS = 3 * 60 * 1_000;
 
   let scanResult: ScanResult;
+  let scanTimer: ReturnType<typeof setTimeout> | undefined;
+  let scanAbort: AbortController | undefined;
   let auth: Awaited<ReturnType<typeof loadScanAuth>>;
   // Finished tests, saved as they happen so the progress page shows real ones.
   const live = createLiveProgress(scanId);
   try {
-    const scanTimeout = new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error(`HTTP scan timed out after ${SCAN_HTTP_TIMEOUT_MS / 1000}s`)),
-        SCAN_HTTP_TIMEOUT_MS,
-      ),
-    );
+    // The race alone only stops waiting; runScan would carry on, and its probes would keep hitting
+    // the target. Aborting the signal makes every scan request fail at once.
+    const abort = new AbortController();
+    scanAbort = abort;
+    const scanTimeout = new Promise<never>((_, reject) => {
+      scanTimer = setTimeout(() => {
+        abort.abort();
+        reject(new Error(`HTTP scan timed out after ${SCAN_HTTP_TIMEOUT_MS / 1000}s`));
+      }, SCAN_HTTP_TIMEOUT_MS);
+    });
     auth = await loadScanAuth(scanId, log);
     const { scanRow, httpCredentials, reauthenticate, secondaryCredentials } = auth;
 
@@ -139,6 +145,7 @@ export async function processScanJob(job: ScanJob): Promise<void> {
           ...(scanRow?.autoSecondAccount ? { autoSecondAccount: true } : {}),
           // If the target redirects elsewhere, active probing continues only on a host this user verified.
           verifyHost: (url: string) => activeProbesUnlocked(userId, url),
+          signal: abort.signal,
         },
       ),
       scanTimeout,
@@ -155,6 +162,7 @@ export async function processScanJob(job: ScanJob): Promise<void> {
       "HTTP scan complete",
     );
   } catch (scanErr) {
+    scanAbort?.abort(); // whatever failed, stop the scan's requests from carrying on
     await live.finish();
     const errMsg = scanErr instanceof Error ? scanErr.message : String(scanErr);
     log.error({ err: scanErr }, "Scan failed during HTTP fetch");
@@ -167,6 +175,8 @@ export async function processScanJob(job: ScanJob): Promise<void> {
     await failVerificationForScan(scanId).catch(() => {});
     await refundIfPaid(scanId, log);
     return;
+  } finally {
+    clearTimeout(scanTimer);
   }
 
   // Wait for SSL Labs (it was started in parallel with the header scan)
@@ -248,14 +258,16 @@ export async function processScanJob(job: ScanJob): Promise<void> {
       });
       log.info({ verificationId, verdict }, "Verification complete");
     }
+    // The report is saved. A failure in what follows must not reach the catch below, which marks the
+    // scan failed and refunds it while the report stays.
     await recordMonitorScan({
       monitorSubscriptionId, userId, scanId, reportId: report.id, targetUrl, grade, riskScore,
       completedAt, intercepted, severityCounts, tests, vulnerabilities: scanResult.vulnerabilities, log,
-    });
+    }).catch((err) => log.error({ err }, "Could not record the monitor scan after saving the report"));
 
     await sendReportReadyNotification({
       scanId, userId, verificationId, tier, targetUrl, report, scanResult, grade, riskScore, tests, executiveSummary, severityCounts,
-    });
+    }).catch((err) => log.error({ err }, "Could not send the report-ready notification"));
   } catch (dbErr) {
     log.error({ err: dbErr }, "Failed to save report to database");
     await db

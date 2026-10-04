@@ -192,5 +192,20 @@ suite("OAuth tokens (real Postgres)", () => {
       expect(await mcp(b.access_token)).toBeNull();
       await expect(oauth.revokeByToken("not-a-token-that-exists-at-all-0000")).resolves.toBeUndefined();
     });
+
+    it("revokeAllAccess (password reset) kills connected apps, refresh tokens and pasted API tokens", async () => {
+      const t = await mint();
+      const { db, apiTokensTable } = dbMod;
+      const { token, hash, prefix } = tokens.generateToken();
+      await db.insert(apiTokensTable).values({ userId, name: "ci", tokenHash: hash, prefix, scope: "mcp" });
+      expect((await mcp(token))?.id).toBe(userId);
+
+      await oauth.revokeAllAccess(userId);
+
+      expect(await mcp(token)).toBeNull();
+      expect(await mcp(t.access_token)).toBeNull();
+      const again = await oauth.refreshTokens({ refreshToken: t.refresh_token, clientId });
+      expect(again.ok).toBe(false);
+    });
   });
 });

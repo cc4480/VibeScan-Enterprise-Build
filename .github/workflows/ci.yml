@@ -27,6 +27,9 @@ jobs:
     name: Typecheck, test, build
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Read-only: nothing in this job writes to the repository or to packages.
+    permissions:
+      contents: read
 
     # The 114 tests that need a real database (billing, signup, OAuth, health, the GitHub wiring)
     # skipped on every CI run because nothing provided one. Each suite migrates and truncates its
@@ -131,6 +134,10 @@ jobs:
   docker:
     name: Docker image (${{ matrix.target }})
     runs-on: ubuntu-latest
+    # Railway deploys every master push by itself, and this job pushes the images, so neither
+    # should happen for a commit whose tests fail. Railway's own "Wait for CI" setting is what
+    # holds back its deploy, and has to be switched on in Railway for both services.
+    needs: verify
     timeout-minutes: 30
 
     # web and secscan deploy as separate images, so both are built here.

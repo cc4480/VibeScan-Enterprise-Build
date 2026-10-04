@@ -21,7 +21,7 @@
  */
 import { randomUUID, randomBytes } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
-import { SCANNER_USER_AGENT } from "./appOrigin";
+import { scanFetch } from "./http";
 import { isDestructiveUrl } from "./destructive";
 
 const TIMEOUT_MS = 7_000;
@@ -40,16 +40,8 @@ const SYNTAXES = [
 const vuln = (partial: Omit<ScanVulnerability, "id">): ScanVulnerability => ({ id: randomUUID(), ...partial });
 
 async function get(url: string, redirect: "follow" | "manual"): Promise<{ body: string; headers: Headers } | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, { signal: controller.signal, redirect, headers: { "User-Agent": SCANNER_USER_AGENT } });
-    return { body: await res.text().catch(() => ""), headers: res.headers };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  const res = await scanFetch(url, { timeoutMs: TIMEOUT_MS, redirect });
+  return res ? { body: res.body, headers: new Headers(res.headers) } : null;
 }
 
 /** Which template syntax, if any, the server evaluated; pure so it can be tested on its own. */

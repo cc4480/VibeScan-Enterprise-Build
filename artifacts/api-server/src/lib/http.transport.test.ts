@@ -1,5 +1,5 @@
 import { serve } from "./http.testkit";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import http from "node:http";
 import { scanFetch, SCANNER_USER_AGENT } from "./http.js";
 
@@ -82,5 +82,23 @@ describe("scanFetch transport", () => {
     expect(result).toMatchObject({ status: 201, body: "body text" });
     expect(result?.headers["x-custom"]).toBe("Value");
     expect(result?.finalUrl).toContain("/x");
+  });
+});
+
+describe("scan abort signal", () => {
+  it("fails requests at once once the scan's signal is aborted", async () => {
+    const { runWithScanHttp, scanFetch } = await import("./http");
+    const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("ok"));
+    const ac = new AbortController();
+    const out = await runWithScanHttp({ targetUrl: "http://127.0.0.1/", signal: ac.signal }, async () => {
+      const before = await scanFetch("http://127.0.0.1/");
+      ac.abort();
+      const after = await scanFetch("http://127.0.0.1/");
+      return { before, after };
+    });
+    expect(out.before?.body).toBe("ok");
+    expect(out.after).toBeNull();
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
   });
 });

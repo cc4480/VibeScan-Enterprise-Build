@@ -9,6 +9,7 @@
 import { Router, type IRouter } from "express";
 import { db, domainVerificationsTable } from "@workspace/db";
 import { and, desc, eq } from "drizzle-orm";
+import { isRateLimited } from "./accountShared";
 import {
   WELL_KNOWN_PATH,
   checkTxtRecord,
@@ -112,6 +113,12 @@ router.post("/domain-verifications", async (req, res): Promise<void> => {
 router.post("/domain-verifications/:domain/check", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) {
     res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  // Each check makes the server fetch a URL on someone's site, so it is limited per account.
+  if (isRateLimited(`domain-check:${req.user.id}`)) {
+    res.status(429).json({ error: "Too many checks. Please wait a few minutes and try again." });
     return;
   }
 

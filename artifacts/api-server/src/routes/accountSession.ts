@@ -1,9 +1,9 @@
 import { type IRouter } from "express";
 import { LoginBody, attempts, isRateLimited, maskEmail, publicUser, startSession } from "./accountShared";
-import { db, usersTable, scansTable, creditsTable, monitorSubscriptionsTable, dismissedFindingsTable, reportSharesTable, domainVerificationsTable, authTokensTable, pendingLoginsTable, billingSubscriptionsTable, purchaseIntentsTable, apiTokensTable, feedbackTable } from "@workspace/db";
+import { db, usersTable, scansTable, creditsTable, monitorSubscriptionsTable, dismissedFindingsTable, reportSharesTable, domainVerificationsTable, authTokensTable, pendingLoginsTable, billingSubscriptionsTable, purchaseIntentsTable, apiTokensTable, feedbackTable, findingVerificationsTable, oauthCodesTable, oauthRefreshTokensTable } from "@workspace/db";
 import { stripe } from "../lib/stripe";
 import { eq } from "drizzle-orm";
-import { hashPassword, verifyPassword, needsRehash } from "../lib/password";
+import { hashPassword, verifyPassword, needsRehash, dummyHash } from "../lib/password";
 import { clearSession, deleteSessionsForUser, getSessionId } from "../lib/auth";
 import { LOGIN_CODE_TTL_MS, normalizeLoginCode } from "../lib/loginCode";
 import { abandonLoginChallenges, issueLoginChallenge, redeemLoginChallenge } from "../lib/pendingLogin";
@@ -36,6 +36,8 @@ export function registerAccountSession(router: IRouter): void {
     try {
       const [row] = await db.select().from(usersTable).where(eq(usersTable.email, email));
       if (!row?.passwordHash) {
+        // Spend the same hashing time as a real check, or the reply time says whether the account exists.
+        await verifyPassword(password, await dummyHash());
         reject();
         return;
       }
@@ -238,6 +240,10 @@ export function registerAccountSession(router: IRouter): void {
         .set({ userId: null, email: null })
         .where(eq(feedbackTable.userId, userId));
       await db.delete(authTokensTable).where(eq(authTokensTable.userId, userId));
+      // Tables with no foreign key to users: ids and verdicts only, but still the account's.
+      await db.delete(findingVerificationsTable).where(eq(findingVerificationsTable.userId, userId));
+      await db.delete(oauthCodesTable).where(eq(oauthCodesTable.userId, userId));
+      await db.delete(oauthRefreshTokensTable).where(eq(oauthRefreshTokensTable.userId, userId));
       await db.delete(pendingLoginsTable).where(eq(pendingLoginsTable.userId, userId));
       await db.delete(usersTable).where(eq(usersTable.id, userId));
 

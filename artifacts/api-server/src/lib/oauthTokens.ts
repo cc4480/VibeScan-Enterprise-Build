@@ -172,6 +172,23 @@ export async function disconnectApp(userId: string, clientId: string): Promise<n
   return revoked.length;
 }
 
+/**
+ * Revoke everything an account has handed out: every API token, every connected app's access
+ * token and every refresh token. For a password reset, where whoever held the old password may
+ * have minted a token or connected an app that would otherwise outlive the reset.
+ */
+export async function revokeAllAccess(userId: string): Promise<void> {
+  const now = new Date();
+  await db
+    .update(apiTokensTable)
+    .set({ revokedAt: now })
+    .where(and(eq(apiTokensTable.userId, userId), isNull(apiTokensTable.revokedAt)));
+  await db
+    .update(oauthRefreshTokensTable)
+    .set({ revokedAt: now })
+    .where(and(eq(oauthRefreshTokensTable.userId, userId), isNull(oauthRefreshTokensTable.revokedAt)));
+}
+
 export interface Connection {
   clientId: string;
   name: string;

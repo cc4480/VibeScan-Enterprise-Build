@@ -32,11 +32,17 @@ export const PRIVATE_IP_PATTERNS = [
   /^100\.6[4-9]\.|^100\.[7-9]\d\.|^100\.1[01]\d\.|^100\.12[0-7]\./,  // CGNAT
   /^192\.0\.0\./,     // IETF protocol assignments
   /^198\.1[89]\./,    // benchmarking
+  /^2(2[4-9]|3\d)\./,  // multicast 224.0.0.0/4
+  /^2(4\d|5[0-5])\./,  // reserved 240.0.0.0/4, which includes 255.255.255.255
   /^::1$/,            // IPv6 loopback
   /^::$/,             // IPv6 unspecified
   /^fc[0-9a-f]{2}:/i, // IPv6 unique-local
   /^fd[0-9a-f]{2}:/i,
   /^fe[89ab][0-9a-f]:/i, // IPv6 link-local
+  /^ff[0-9a-f]{2}:/i, // IPv6 multicast ff00::/8
+  /^2002:/i,          // 6to4: embeds an IPv4 address of the sender's choosing
+  /^2001:0{0,3}:/i,   // Teredo 2001::/32
+  /^64:ff9b:1:/i,     // local-use NAT64 64:ff9b:1::/48
   /^::ffff:/i,        // IPv4-mapped IPv6 — unwrapped below before testing
 ];
 
@@ -144,8 +150,8 @@ export function isHostnameSafeSync(hostname: string): boolean {
 
 // Resolution is cached because the scanner asks about the same host on every
 // request of a scan, and a DNS round-trip per request would dominate the time
-// budget. The TTL is short enough that a rebinding attack has to win a race
-// rather than simply wait us out.
+// budget. This cache only spares the lookup in the pre-check; it is not what stops rebinding.
+// scanFetch connects through pinnedDispatcher, which vets the address the socket opens to.
 const RESOLVE_TTL_MS = 30_000;
 const RESOLVE_CACHE_MAX = 512;
 const resolveCache = new Map<string, { safe: boolean; at: number }>();

@@ -33,20 +33,7 @@ export async function sendReportReadyNotification(input: {
     if (scan?.userEmail && !verificationId) {
       const appOrigin = APP_ORIGIN;
 
-      // The emailed link must resolve WITHOUT a session. /report/:id requires
-      // being signed in as the report's owner, which fails on the most common
-      // way people open mail: on a phone, logged out (401) or signed into a
-      // different account (404) — both of which render as a bare "Failed to
-      // load report", so the person the report was sent to could not read it.
-      // Observed live: one report answered 200 on the device that ran the scan
-      // and 404 on the owner's own phone, signed into their other account.
-      //
-      // A share token resolves through GET /api/share/:token, which takes no
-      // session. It is a bearer credential for that ONE report, which is
-      // acceptable because it is delivered only to the owner's own mailbox —
-      // see lib/reportShare.ts. If minting it fails the email still goes out
-      // with the dashboard link rather than not at all: a link that needs a
-      // login beats no notification.
+      // The link is /report/:id, which needs a session (no share token is minted for the email).
       // The owner's full report, the same page as in the app. Opening it
       // signed out goes through sign-in and comes straight back here
       // (sign-in honours ?returnTo), so a phone that is not signed in still

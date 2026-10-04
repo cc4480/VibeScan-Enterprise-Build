@@ -2,6 +2,8 @@ import { processScanJob } from "./workerJob";
 import { and } from "drizzle-orm";
 import { getBoss, SCAN_QUEUE, type ScanJobData } from "./queue";
 import { purgeExpiredOobTokens } from "./oobServer";
+import { purgeExpiredSessions } from "./auth";
+import { purgeStaleTokens } from "./authTokens";
 import { warnIfLocalDataStale, OSV_CACHE_MAX_SIZE } from "./cveCheck";
 import { refreshEolData, loadEolCacheFromDb, EOL_REFRESH_QUEUE } from "./eolFetcher";
 import { initBrowser } from "./browser";
@@ -110,5 +112,8 @@ export async function startWorker(): Promise<void> {
   await boss.schedule(OOB_PURGE_QUEUE, "30 3 * * *", {});
   await boss.work(OOB_PURGE_QUEUE, async () => {
     await purgeExpiredOobTokens();
+    // Same daily pass: expired sessions and spent or long-expired sign-in tokens.
+    await purgeExpiredSessions();
+    await purgeStaleTokens();
   });
 }

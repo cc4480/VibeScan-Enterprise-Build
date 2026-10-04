@@ -9,6 +9,8 @@ import { issueToken, redeemToken } from "../lib/authTokens";
 import { abandonLoginChallenges } from "../lib/pendingLogin";
 import { sendEmailVerification, sendPasswordReset } from "../lib/mailer";
 import { clientIp } from "../lib/clientIp";
+import { revokeAllAccess } from "../lib/oauthTokens";
+import { APP_ORIGIN } from "../lib/appOrigin";
 
 /** Email verification and password forgot / reset / change. */
 
@@ -16,7 +18,10 @@ import { clientIp } from "../lib/clientIp";
 
 export function registerAccountRecovery(router: IRouter): void {
   function appOrigin(): string {
-    return (process.env["APP_ORIGIN"] ?? "").replace(/\/+$/, "");
+    // In production an unset APP_ORIGIN falls back to the product's own origin: a relative link in a
+    // reset email goes nowhere. Development keeps it empty so links point at the local server.
+    const configured = process.env["APP_ORIGIN"] ?? (process.env["NODE_ENV"] === "production" ? APP_ORIGIN : "");
+    return configured.replace(/\/+$/, "");
   }
 
   router.post("/account/verify/request", async (req, res): Promise<void> => {
@@ -143,6 +148,9 @@ export function registerAccountRecovery(router: IRouter): void {
       // Evict every existing session. Whoever prompted the reset may already be
       // signed in, and leaving their cookie alive would make the reset pointless.
       await deleteSessionsForUser(result.userId);
+      // Sessions are not the only way in: someone who had the old password may have minted an
+      // API token or connected an app, and those would survive the reset.
+      await revokeAllAccess(result.userId);
       await clearSession(res, getSessionId(req));
 
       // And kill any pending two-factor challenge. Someone who knew the OLD

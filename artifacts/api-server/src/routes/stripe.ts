@@ -169,6 +169,8 @@ export async function processStripeEvent(event: Stripe.Event): Promise<EventOutc
         applied =
           result === "applied"
             ? `period started: plan allowance granted for ${subscriptionId}`
+            : result === "stale"
+              ? `invoice for cancelled subscription ${subscriptionId}: ignored`
             : result === "duplicate"
               ? `invoice for duplicate subscription ${subscriptionId}: cancelled and refunded`
               : `invoice for unknown subscription ${subscriptionId}`;

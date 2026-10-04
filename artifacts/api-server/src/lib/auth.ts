@@ -2,7 +2,7 @@ import * as client from "openid-client";
 import crypto from "crypto";
 import { type Request, type Response } from "express";
 import { db, sessionsTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { eq, lt, sql } from "drizzle-orm";
 import type { AuthUser } from "@workspace/api-zod";
 
 export const ISSUER_URL = process.env.ISSUER_URL ?? "https://replit.com/oidc";
@@ -63,6 +63,11 @@ export async function updateSession(
       expire: new Date(Date.now() + SESSION_TTL),
     })
     .where(eq(sessionsTable.sid, sid));
+}
+
+/** Housekeeping: an expired session is otherwise deleted only if someone presents it again. */
+export async function purgeExpiredSessions(): Promise<void> {
+  await db.delete(sessionsTable).where(lt(sessionsTable.expire, new Date()));
 }
 
 export async function deleteSession(sid: string): Promise<void> {

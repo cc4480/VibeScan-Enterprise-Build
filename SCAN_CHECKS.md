@@ -39,9 +39,9 @@ module does. `none` — neither, so no test exercises it at all.
 | `baasProbes.ts` | 2 | 166 | 11 | direct |
 | `graphqlExtra.ts` | 2 | 105 | 8 | direct |
 | `graphqlProbe.ts` | 2 | 256 | 12 | direct |
-| `injectionExtra.ts` | 2 | 140 | 9 | direct |
-| `injectionProbe.ts` | 2 | 283 | 13 | direct |
-| `scanner.ts` | 2 | 388 | 6 | direct |
+| `injectionExtra.ts` | 2 | 132 | 9 | direct |
+| `injectionProbe.ts` | 2 | 270 | 13 | direct |
+| `scanner.ts` | 2 | 389 | 6 | direct |
 | `sourceMaps.ts` | 2 | 236 | 19 | direct |
 | `supabase-probes.ts` | 2 | 104 | 7 | direct |
 | `apiDocsProbe.ts` | 1 | 129 | 9 | direct |
@@ -295,7 +295,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `injectionExtra.ts`
 
-*2 findings · 140 lines · 9 tests.*
+*2 findings · 132 lines · 9 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -304,7 +304,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `injectionProbe.ts`
 
-*2 findings · 283 lines · 13 tests.*
+*2 findings · 270 lines · 13 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -565,7 +565,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `scanner.ts`
 
-*2 findings · 388 lines · 6 tests.*
+*2 findings · 389 lines · 6 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|

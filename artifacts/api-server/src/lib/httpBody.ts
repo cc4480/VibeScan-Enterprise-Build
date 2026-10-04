@@ -39,6 +39,9 @@ export function buildHeaders(
   return headers;
 }
 
+/** Most decoded bytes of a target's response the scanner will hold in memory. */
+export const MAX_BODY_BYTES = 5 * 1024 * 1024;
+
 /**
  * The body as text, keeping whatever arrived if the request is aborted (the timeout) or the
  * connection drops part-way. res.text() throws away everything on failure, which for a stream that
@@ -49,19 +52,32 @@ export async function readBodyBounded(res: Response): Promise<string> {
 }
 
 /** As readBodyBounded, and says whether the read was cut short (deadline or reset) so the body is partial. */
-export async function readBodyMarked(res: Response): Promise<{ body: string; truncated: boolean }> {
+export async function readBodyMarked(
+  res: Response,
+  maxBytes: number = MAX_BODY_BYTES,
+): Promise<{ body: string; truncated: boolean }> {
   const reader = res.body?.getReader?.();
   if (!reader) {
     let failed = false;
     const body = await res.text().catch(() => { failed = true; return ""; });
-    return { body, truncated: failed };
+    return { body: body.slice(0, maxBytes), truncated: failed || body.length > maxBytes };
   }
   const decoder = new TextDecoder();
   let out = "";
+  let received = 0;
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
+      received += value.length;
+      if (received > maxBytes) {
+        // A decompressed body can be a thousand times its wire size. Stop reading and
+        // drop the connection rather than hold it all in memory.
+        out += decoder.decode(value.subarray(0, value.length - (received - maxBytes)), { stream: true });
+        out += decoder.decode();
+        await reader.cancel().catch(() => {});
+        return { body: out, truncated: true };
+      }
       out += decoder.decode(value, { stream: true });
     }
     out += decoder.decode();

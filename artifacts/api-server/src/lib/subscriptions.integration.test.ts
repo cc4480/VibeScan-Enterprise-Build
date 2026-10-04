@@ -136,6 +136,36 @@ suite("second subscription for one account (real Postgres)", () => {
     expect(r?.status).toBe("active");
   });
 
+  it("ignores an invoice.paid retry that arrives after the subscription was cancelled", async () => {
+    await subscribe("d6", "sub_gone", "starter");
+    await m.webhook.processStripeEvent({
+      id: evId(),
+      type: "customer.subscription.deleted",
+      data: { object: { id: "sub_gone", status: "canceled", items: { data: [] } } },
+    } as never);
+
+    const late = await m.webhook.processStripeEvent(invoicePaid("sub_gone", "d6", "starter"));
+    expect(late.applied).toMatch(/cancelled subscription sub_gone: ignored/);
+    const r = await row("d6");
+    expect(r?.status).toBe("cancelled");
+    expect(r?.includedScansRemaining).toBe(0);
+  });
+
+  it("ignores a subscription.updated that arrives after the subscription was deleted", async () => {
+    await subscribe("d7", "sub_gone2", "starter");
+    await m.webhook.processStripeEvent({
+      id: evId(),
+      type: "customer.subscription.deleted",
+      data: { object: { id: "sub_gone2", status: "canceled", items: { data: [] } } },
+    } as never);
+    await m.webhook.processStripeEvent({
+      id: evId(),
+      type: "customer.subscription.updated",
+      data: { object: { id: "sub_gone2", status: "active", items: { data: [] } } },
+    } as never);
+    expect((await row("d7"))?.status).toBe("cancelled");
+  });
+
   it("lets a grandfathered account with no Stripe subscription buy a plan", async () => {
     const { db, billingSubscriptionsTable } = m.db;
     await db.insert(billingSubscriptionsTable).values({ userId: "d6", plan: "grandfathered", status: "active", urlLimit: 3, grandfathered: true });
