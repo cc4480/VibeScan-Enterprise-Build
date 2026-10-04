@@ -32,7 +32,9 @@ export function PricingSection() {
               "Step-by-step fix guides",
               "Every finding and fix unlocked, with no paywall on results",
               "Free re-tests to confirm a fix (10 a day, no scan used)",
-              "Your first site watched free: hourly uptime, certificate and header checks, with email alerts",
+              // Adding a site runs its first full scan, which a free account pays for with a free scan
+              // (routes/monitorCreate.ts), so the line says so rather than calling the whole thing free.
+              "Your first site watched free: hourly uptime, certificate and header checks, with email alerts (adding it uses one free scan)",
               "A grade badge for your README, for a site you have verified, showing only the grade and the scan date",
               "Scan from Claude Code, Cursor or the REST API on the same free scans",
             ],

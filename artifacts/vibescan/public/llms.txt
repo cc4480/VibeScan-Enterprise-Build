@@ -47,9 +47,10 @@ every coding session.
 
 Every account gets 3 free scans every month (renewing on the 1st, UTC), every check included, with every
 finding and fix unlocked. Free accounts also get free re-tests to confirm a fix (10 a day, no scan used),
-their first site watched free (hourly uptime, certificate and header checks, with email alerts), a grade
-badge for a README (for a domain the account has verified) that shows only the grade and the scan date, and scanning from AI editors over MCP or
-the REST API on the same free scans.
+their first site watched free (hourly uptime, certificate and header checks, with email alerts; adding the
+site uses one free scan for its first full scan), a grade badge for a README (for a domain the account has
+verified) that shows only the grade and the scan date, and scanning from AI editors over MCP or the REST
+API on the same free scans.
 
 - SecScan Unlimited — $19/month: unlimited full scans (fair use: up to 5 scans an hour and 20 a day
   per account) and up to 5 sites watched around the clock. Cancel any time.

@@ -81,7 +81,8 @@ export default function AboutPage() {
           <li>
             <strong className="text-foreground">Watches a site around the clock.</strong> Uptime, certificate and
             header checks run on a schedule, and a full rescan follows the grade: sites that score worse are
-            looked at more often. Problems arrive by email. A first site is watched free.
+            looked at more often. Problems arrive by email. A first site is watched free; adding it uses one of
+            the month's free scans for its first full scan.
           </li>
           <li>
             <strong className="text-foreground">Gives a site a grade badge</strong> for a README or a footer. A
