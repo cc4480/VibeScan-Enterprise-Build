@@ -258,14 +258,16 @@ export async function processScanJob(job: ScanJob): Promise<void> {
       });
       log.info({ verificationId, verdict }, "Verification complete");
     }
+    // The report is saved. A failure in what follows must not reach the catch below, which marks the
+    // scan failed and refunds it while the report stays.
     await recordMonitorScan({
       monitorSubscriptionId, userId, scanId, reportId: report.id, targetUrl, grade, riskScore,
       completedAt, intercepted, severityCounts, tests, vulnerabilities: scanResult.vulnerabilities, log,
-    });
+    }).catch((err) => log.error({ err }, "Could not record the monitor scan after saving the report"));
 
     await sendReportReadyNotification({
       scanId, userId, verificationId, tier, targetUrl, report, scanResult, grade, riskScore, tests, executiveSummary, severityCounts,
-    });
+    }).catch((err) => log.error({ err }, "Could not send the report-ready notification"));
   } catch (dbErr) {
     log.error({ err: dbErr }, "Failed to save report to database");
     await db

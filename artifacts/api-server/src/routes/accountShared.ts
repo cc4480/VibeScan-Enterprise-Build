@@ -23,6 +23,9 @@ export const LoginBody = z.object({
   password: z.string().min(1, "Enter your password"),
 });
 
+/** Any well-formed UUID: for rejecting a malformed id before it reaches a uuid column. */
+export const UUID_ANY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // ── Rate limiting ────────────────────────────────────────────────────────────
@@ -33,8 +36,14 @@ export const attempts = new Map<string, number[]>();
 export const WINDOW_MS = 15 * 60_000;
 export const MAX_ATTEMPTS = 10;
 
+const PRUNE_ABOVE = 2_000;
+
 export function isRateLimited(key: string): boolean {
   const now = Date.now();
+  // Forged addresses add a key each and nothing else removes them, so sweep stale keys once the map is large.
+  if (attempts.size > PRUNE_ABOVE) {
+    for (const [k, ts] of attempts) if (!ts.some((t) => now - t < WINDOW_MS)) attempts.delete(k);
+  }
   const recent = (attempts.get(key) ?? []).filter((t) => now - t < WINDOW_MS);
   recent.push(now);
   attempts.set(key, recent);

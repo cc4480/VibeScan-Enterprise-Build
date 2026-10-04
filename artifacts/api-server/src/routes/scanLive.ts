@@ -7,6 +7,7 @@
  * Same access rule as status: only the scan's owner.
  */
 import { Router, type IRouter } from "express";
+import { UUID_ANY } from "./accountShared";
 import { and, eq } from "drizzle-orm";
 import { db, scansTable } from "@workspace/db";
 import { isTestRecord } from "../lib/testLedger";
@@ -22,6 +23,10 @@ router.get("/scans/:id/live", async (req, res): Promise<void> => {
   }
 
   const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (!rawId || !UUID_ANY.test(rawId)) {
+    res.status(404).json({ error: "Scan not found" });
+    return;
+  }
   const [scan] = await db
     .select({ status: scansTable.status, liveTests: scansTable.liveTests })
     .from(scansTable)

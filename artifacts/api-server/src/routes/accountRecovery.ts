@@ -10,6 +10,7 @@ import { abandonLoginChallenges } from "../lib/pendingLogin";
 import { sendEmailVerification, sendPasswordReset } from "../lib/mailer";
 import { clientIp } from "../lib/clientIp";
 import { revokeAllAccess } from "../lib/oauthTokens";
+import { APP_ORIGIN } from "../lib/appOrigin";
 
 /** Email verification and password forgot / reset / change. */
 
@@ -17,7 +18,10 @@ import { revokeAllAccess } from "../lib/oauthTokens";
 
 export function registerAccountRecovery(router: IRouter): void {
   function appOrigin(): string {
-    return (process.env["APP_ORIGIN"] ?? "").replace(/\/+$/, "");
+    // In production an unset APP_ORIGIN falls back to the product's own origin: a relative link in a
+    // reset email goes nowhere. Development keeps it empty so links point at the local server.
+    const configured = process.env["APP_ORIGIN"] ?? (process.env["NODE_ENV"] === "production" ? APP_ORIGIN : "");
+    return configured.replace(/\/+$/, "");
   }
 
   router.post("/account/verify/request", async (req, res): Promise<void> => {

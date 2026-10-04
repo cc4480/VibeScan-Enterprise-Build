@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { UUID_ANY } from "./accountShared";
 import { db, scansTable, reportsTable } from "@workspace/db";
 import { eq, and, desc, inArray, ne } from "drizzle-orm";
 import { ListScansResponseItem, GetScanStatusResponse } from "@workspace/api-zod";
@@ -82,6 +83,10 @@ router.get("/scans/:id/status", async (req, res): Promise<void> => {
   }
 
   const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (!rawId || !UUID_ANY.test(rawId)) {
+    res.status(404).json({ error: "Scan not found" });
+    return;
+  }
 
   const [scan] = await db
     .select()
