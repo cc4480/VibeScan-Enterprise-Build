@@ -8,7 +8,11 @@ import {
   isBadgeToken,
   badgeSnippets,
   STALE_AFTER_DAYS,
+  scanRanVerified,
+  badgeStateForReport,
+  NOT_VERIFIED_PREFIX,
 } from "./reportBadge";
+import { NOT_VERIFIED } from "./testLedger";
 
 const day = 86_400_000;
 const scanned = new Date("2026-10-03T12:00:00Z");
@@ -112,5 +116,55 @@ describe("badgeSnippets", () => {
     // A badge is public. It must never link at a share URL, which opens the full report.
     expect(s.markdown).not.toContain("/share/");
     expect(s.html).not.toContain("/share/");
+  });
+});
+
+describe("scanRanVerified", () => {
+  const ran = { group: "active", name: "injection (XSS, SQLi)", status: "ran" };
+  const skippedUnverified = { group: "active", name: "path traversal", status: "skipped", reason: NOT_VERIFIED };
+
+  it("is true for a scan whose ledger skipped nothing for want of a verified domain", () => {
+    expect(scanRanVerified({ tests: [ran] })).toBe(true);
+    // Skipped for another reason is still a verified scan.
+    expect(scanRanVerified({ tests: [ran, { name: "GitHub source code secrets", status: "skipped", reason: "no repository was supplied for this scan" }] })).toBe(true);
+  });
+
+  it("is false when any test was skipped because the domain was not verified", () => {
+    expect(scanRanVerified({ tests: [ran, skippedUnverified] })).toBe(false);
+  });
+
+  it("is false for a report with no ledger, an empty one, or no data at all", () => {
+    expect(scanRanVerified({ summary: { grade: "A" } })).toBe(false);
+    expect(scanRanVerified({ tests: [] })).toBe(false);
+    expect(scanRanVerified(null)).toBe(false);
+    expect(scanRanVerified("A")).toBe(false);
+  });
+
+  it("matches the reason the scanner writes, by its stable prefix", () => {
+    // Rewording NOT_VERIFIED without updating NOT_VERIFIED_PREFIX would make every unverified
+    // report look verified, and its badge show a grade again. This fails first.
+    expect(NOT_VERIFIED.startsWith(NOT_VERIFIED_PREFIX)).toBe(true);
+  });
+});
+
+describe("badgeStateForReport", () => {
+  const now = new Date(scanned.getTime() + 2 * day);
+
+  it("shows the grade for a scan that ran with the domain verified", () => {
+    const s = badgeStateForReport({ summary: { grade: "A" }, tests: [{ name: "x", status: "ran" }] }, scanned, now);
+    expect(s.value).toBe("grade A · Oct 3, 2026");
+  });
+
+  it("shows 'not verified', never the grade, for a scan that skipped the active tests", () => {
+    const data = { summary: { grade: "A" }, tests: [{ name: "x", status: "skipped", reason: NOT_VERIFIED }] };
+    const s = badgeStateForReport(data, scanned, now);
+    expect(s.value).toBe("not verified · Oct 3, 2026");
+    expect(s.value).not.toContain("grade");
+    expect(s.color).toBe(badgeState("N/A", scanned, now).color);
+  });
+
+  it("still marks an old unverified badge as stale", () => {
+    const later = new Date(scanned.getTime() + (STALE_AFTER_DAYS + 1) * day);
+    expect(badgeStateForReport({ summary: { grade: "A" } }, scanned, later).stale).toBe(true);
   });
 });

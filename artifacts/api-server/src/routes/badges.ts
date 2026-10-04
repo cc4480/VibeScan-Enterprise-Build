@@ -4,20 +4,22 @@ import { eq, and, isNull } from "drizzle-orm";
 import { APP_ORIGIN } from "../lib/appOrigin";
 import {
   badgeSnippets,
-  badgeState,
+  badgeStateForReport,
+  domainVerifiedBy,
   ensureReportBadge,
   isBadgeToken,
   renderBadgeSvg,
   renderMissingBadgeSvg,
+  scanRanVerified,
 } from "../lib/reportBadge";
 
 const router: IRouter = Router();
 
 /** Owner-only: the report must exist and belong to the caller. Returns null after answering. */
-async function ownedReportId(
+async function ownedReport(
   req: Parameters<Parameters<IRouter["post"]>[1]>[0],
   res: Parameters<Parameters<IRouter["post"]>[1]>[1],
-): Promise<string | null> {
+): Promise<{ id: string; targetUrl: string; data: unknown } | null> {
   if (!req.isAuthenticated()) {
     res.status(401).json({ error: "Unauthorized" });
     return null;
@@ -29,7 +31,7 @@ async function ownedReportId(
     return null;
   }
   const [report] = await db
-    .select({ id: reportsTable.id, userId: reportsTable.userId })
+    .select({ id: reportsTable.id, userId: reportsTable.userId, targetUrl: reportsTable.targetUrl, data: reportsTable.data })
     .from(reportsTable)
     .where(eq(reportsTable.id, reportId));
   if (!report) {
@@ -40,15 +42,27 @@ async function ownedReportId(
     res.status(403).json({ error: "Forbidden" });
     return null;
   }
-  return report.id;
+  return { id: report.id, targetUrl: report.targetUrl, data: report.data };
 }
 
 // ── POST /api/reports/:id/badge: get (or create) the report's badge ───────────
+//
+// Only for a scan of a domain the caller has verified. The badge does not name the site, so
+// without this anyone could scan a well-run site they do not own and show its grade as their
+// own; and a scan that skipped the active tests would show a grade for half a test.
 router.post("/reports/:id/badge", async (req, res): Promise<void> => {
   try {
-    const reportId = await ownedReportId(req, res);
-    if (!reportId) return;
-    const { token } = await ensureReportBadge(reportId, req.user!.id);
+    const report = await ownedReport(req, res);
+    if (!report) return;
+    if (!scanRanVerified(report.data) || !(await domainVerifiedBy(req.user!.id, report.targetUrl))) {
+      res.status(409).json({
+        error:
+          "A badge can only be made for a scan of a domain you have verified. Verify the domain, scan it again, and get the badge from that report.",
+        code: "badge_needs_verified_scan",
+      });
+      return;
+    }
+    const { token } = await ensureReportBadge(report.id, req.user!.id);
     res.status(201).json({ token, ...badgeSnippets(APP_ORIGIN, token) });
   } catch (err) {
     req.log.error({ err }, "Failed to create badge");
@@ -59,12 +73,12 @@ router.post("/reports/:id/badge", async (req, res): Promise<void> => {
 // ── DELETE /api/reports/:id/badge: take the badge down ────────────────────────
 router.delete("/reports/:id/badge", async (req, res): Promise<void> => {
   try {
-    const reportId = await ownedReportId(req, res);
-    if (!reportId) return;
+    const report = await ownedReport(req, res);
+    if (!report) return;
     await db
       .update(reportBadgesTable)
       .set({ revokedAt: new Date() })
-      .where(and(eq(reportBadgesTable.reportId, reportId), isNull(reportBadgesTable.revokedAt)));
+      .where(and(eq(reportBadgesTable.reportId, report.id), isNull(reportBadgesTable.revokedAt)));
     res.status(204).send();
   } catch (err) {
     req.log.error({ err }, "Failed to revoke badge");
@@ -116,10 +130,10 @@ router.get("/badge/:file", async (req, res): Promise<void> => {
       .where(eq(reportsTable.id, badge.reportId));
     if (!report) return notFound();
 
-    const grade = (report.data as { summary?: { grade?: unknown } } | null)?.summary?.grade;
     // An hour: long enough that a popular README does not hit the database per view,
-    // short enough that a revoked badge is gone the same day.
-    send(200, renderBadgeSvg(badgeState(grade, report.scannedAt)), "public, max-age=3600");
+    // short enough that a revoked badge is gone the same day. A badge minted before badges
+    // needed a verified scan reads "not verified" here rather than showing its grade.
+    send(200, renderBadgeSvg(badgeStateForReport(report.data, report.scannedAt)), "public, max-age=3600");
   } catch (err) {
     req.log.error({ err }, "Failed to render badge");
     // Not cached: a database blip must not pin a broken badge in every browser for an hour.

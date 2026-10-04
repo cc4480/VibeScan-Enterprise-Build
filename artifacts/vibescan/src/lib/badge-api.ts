@@ -11,7 +11,11 @@ export interface ReportBadge {
   html: string;
 }
 
-/** Get the report's badge, creating it the first time. Asking twice returns the same one. */
+/**
+ * Get the report's badge, creating it the first time. Asking twice returns the same one.
+ * Refused (409, code "badge_needs_verified_scan") unless the scan was of a domain the account
+ * has verified.
+ */
 export const getReportBadge = (reportId: string) =>
   customFetch<ReportBadge>(`/api/reports/${encodeURIComponent(reportId)}/badge`, {
     method: "POST",

@@ -30,7 +30,7 @@ export function PricingSection() {
               "Every finding and fix unlocked, with no paywall on results",
               "Free re-tests to confirm a fix (10 a day, no scan used)",
               "Your first site watched free: hourly uptime, certificate and header checks, with email alerts",
-              "A grade badge for your README that shows only the grade and the scan date",
+              "A grade badge for your README, for a site you have verified, showing only the grade and the scan date",
               "Scan from Claude Code, Cursor or the REST API on the same free scans",
             ],
             cta: "Run a Scan",

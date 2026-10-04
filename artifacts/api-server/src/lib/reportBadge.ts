@@ -9,14 +9,19 @@
  * Its token is its own (see reportBadgesTable), not the report's share token: a share
  * token opens the whole report, so it must never appear in a public README.
  *
- * Two things keep a badge honest:
+ * Three things keep a badge honest:
+ *   - It is only for a scan of a domain its owner has verified (scanRanVerified and
+ *     domainVerifiedBy). Without that, anyone could scan a well-run site they do not own and
+ *     paste its A on their own app, and a passive-only scan's grade would read as the whole
+ *     test. A badge minted before this rule shows "not verified" instead of the grade.
  *   - It shows the date. A grade with no date is a claim that never expires.
  *   - After STALE_AFTER_DAYS it goes grey and says "old scan", so a site that scanned
  *     once as an A and has changed since does not go on advertising it.
  */
 import { randomBytes } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
-import { db, reportBadgesTable } from "@workspace/db";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import { db, domainVerificationsTable, reportBadgesTable } from "@workspace/db";
+import { extractDomain } from "./domainVerify";
 
 /** A badge older than this goes grey and says so. */
 export const STALE_AFTER_DAYS = 30;
@@ -72,6 +77,66 @@ export function badgeState(grade: unknown, scannedAt: Date, now: Date = new Date
     return { label: LABEL, value: `grade ${letter} · ${date} (old scan)`, color: NEUTRAL, stale: true };
   }
   return { label: LABEL, value: `grade ${letter} · ${date}`, color: GRADE_COLOR[letter]!, stale: false };
+}
+
+/**
+ * The start of the ledger's reason for a test skipped because the domain is not verified
+ * (NOT_VERIFIED in testLedger.ts; a test pins that it still starts with this). Matched on the
+ * prefix, not the whole text, so a later rewording of the tail does not make old unverified
+ * reports look verified.
+ */
+export const NOT_VERIFIED_PREFIX = "domain not verified";
+
+/**
+ * Did this stored report's scan run with the domain verified, so its grade covers the active
+ * tests too? Read from the report's test ledger: a scan of an unverified domain records each
+ * active test as skipped for that reason. A report with no ledger cannot show it either way,
+ * so it does not count.
+ */
+export function scanRanVerified(data: unknown): boolean {
+  const tests = data && typeof data === "object" ? (data as { tests?: unknown }).tests : undefined;
+  if (!Array.isArray(tests) || tests.length === 0) return false;
+  return !tests.some((t) => {
+    if (!t || typeof t !== "object") return false;
+    const { status, reason } = t as { status?: unknown; reason?: unknown };
+    return status === "skipped" && typeof reason === "string" && reason.startsWith(NOT_VERIFIED_PREFIX);
+  });
+}
+
+/**
+ * What the badge says for a stored report: its grade (see badgeState), or "not verified" when
+ * the scan skipped the active tests for want of a verified domain. That second case is a badge
+ * minted before badges needed a verified scan; it keeps loading, but no longer shows a grade.
+ */
+export function badgeStateForReport(data: unknown, scannedAt: Date, now: Date = new Date()): BadgeState {
+  if (!scanRanVerified(data)) {
+    const stale = (now.getTime() - scannedAt.getTime()) / 86_400_000 > STALE_AFTER_DAYS;
+    return { label: LABEL, value: `not verified · ${badgeDate(scannedAt)}`, color: NEUTRAL, stale };
+  }
+  const grade = (data as { summary?: { grade?: unknown } }).summary?.grade;
+  return badgeState(grade, scannedAt, now);
+}
+
+/** Has this account verified the domain of `targetUrl`? The same match the active-test gate makes. */
+export async function domainVerifiedBy(userId: string, targetUrl: string): Promise<boolean> {
+  let domain: string;
+  try {
+    domain = extractDomain(targetUrl);
+  } catch {
+    return false;
+  }
+  const [row] = await db
+    .select({ id: domainVerificationsTable.id })
+    .from(domainVerificationsTable)
+    .where(
+      and(
+        eq(domainVerificationsTable.userId, userId),
+        eq(domainVerificationsTable.domain, domain),
+        isNotNull(domainVerificationsTable.verifiedAt),
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
 }
 
 function xmlEscape(s: string): string {

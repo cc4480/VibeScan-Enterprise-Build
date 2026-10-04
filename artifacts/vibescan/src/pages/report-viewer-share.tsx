@@ -1,5 +1,5 @@
 /** Create and revoke a public share link for the report. */
-import { useCreateReportShare, useListReportShares, useRevokeReportShare, getListReportSharesQueryKey } from "@workspace/api-client-react";
+import { ApiError, useCreateReportShare, useListReportShares, useRevokeReportShare, getListReportSharesQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Share2, Plus, X, Copy, Check, BadgeCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -67,8 +67,14 @@ export function ShareButton({ reportId }: { reportId: string }) {
     setBadgeError(null);
     try {
       setBadge(await getReportBadge(reportId));
-    } catch {
-      setBadgeError("Could not create the badge. Try again.");
+    } catch (err) {
+      // A scan of an unverified domain is refused with a reason the person can act on; say it.
+      const data = err instanceof ApiError ? (err.data as { code?: unknown; error?: unknown } | null) : null;
+      setBadgeError(
+        data?.code === "badge_needs_verified_scan" && typeof data.error === "string"
+          ? data.error
+          : "Could not create the badge. Try again.",
+      );
     } finally {
       setBadgeBusy(false);
     }
@@ -247,8 +253,9 @@ export function ShareButton({ reportId }: { reportId: string }) {
                 <BadgeCheck className="w-3.5 h-3.5" /> Grade badge
               </label>
               <p className="text-sm text-muted-foreground">
-                A small image for your README or footer. It shows your grade and the scan date, and
-                nothing else: no address, no findings. It turns grey and says "old scan" after 30 days.
+                A small image for your README or footer, for a scan of a domain you have verified. It
+                shows your grade and the scan date, and nothing else: no address, no findings. It turns
+                grey and says "old scan" after 30 days.
               </p>
               {!badge ? (
                 <button
