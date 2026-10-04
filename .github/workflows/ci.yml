@@ -131,6 +131,10 @@ jobs:
   docker:
     name: Docker image (${{ matrix.target }})
     runs-on: ubuntu-latest
+    # Railway deploys every master push by itself, and this job pushes the images, so neither
+    # should happen for a commit whose tests fail. Railway's own "Wait for CI" setting is what
+    # holds back its deploy, and has to be switched on in Railway for both services.
+    needs: verify
     timeout-minutes: 30
 
     # web and secscan deploy as separate images, so both are built here.

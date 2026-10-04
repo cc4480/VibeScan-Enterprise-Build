@@ -51,6 +51,7 @@ export function runWithScanHttp<T>(init: ScanHttpInit, fn: () => Promise<T>): Pr
     lastRequestAt: new Map(),
     ...(init.detectSignedOut ? { detectSignedOut: init.detectSignedOut } : {}),
     ...(init.onSessionLost ? { onSessionLost: init.onSessionLost } : {}),
+    ...(init.signal ? { signal: init.signal } : {}),
     reauthAttempts: 0,
     reauthInFlight: null,
     sessionWasLost: false,

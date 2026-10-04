@@ -9,7 +9,7 @@
  * longer knows about. See hasOtherLiveSubscription.
  */
 import { billingSubscriptionsTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { DEFAULT_PLAN, MONITOR_PLANS, type MonitorPlan } from "./plans";
 import type { Executor } from "./billing";
 
@@ -126,7 +126,7 @@ export async function applyPaidInvoice(
     /** The plan named in the subscription metadata, for the row-does-not-exist-yet case. */
     plan?: MonitorPlan;
   },
-): Promise<"applied" | "unknown_subscription" | "duplicate"> {
+): Promise<"applied" | "unknown_subscription" | "duplicate" | "stale"> {
   // Each plan's allowance, chosen by the plan stored on the row, so a Starter
   // invoice grants Starter's scans. Every known plan is listed, sold or not, so a row on a
   // plan that is no longer sold is still granted its scans; an unlimited plan grants 0
@@ -143,10 +143,18 @@ export async function applyPaidInvoice(
       currentPeriodEnd: opts.currentPeriodEnd,
       updatedAt: new Date(),
     })
-    .where(eq(billingSubscriptionsTable.stripeSubscriptionId, opts.stripeSubscriptionId))
+    // A cancelled subscription is final in Stripe, so an invoice.paid for it that arrives now
+    // is a late retry delivered out of order, not a renewal. It must not turn the plan back on.
+    .where(and(eq(billingSubscriptionsTable.stripeSubscriptionId, opts.stripeSubscriptionId), ne(billingSubscriptionsTable.status, "cancelled")))
     .returning({ id: billingSubscriptionsTable.id });
 
   if (updated.length > 0) return "applied";
+  const cancelled = await tx
+    .select({ id: billingSubscriptionsTable.id })
+    .from(billingSubscriptionsTable)
+    .where(eq(billingSubscriptionsTable.stripeSubscriptionId, opts.stripeSubscriptionId))
+    .limit(1);
+  if (cancelled.length > 0) return "stale";
   if (!opts.userId) return "unknown_subscription";
 
   const plan = opts.plan ?? DEFAULT_PLAN;
@@ -165,7 +173,12 @@ export async function applyPaidInvoice(
   return "applied";
 }
 
-/** Mirror a subscription's status and period from Stripe onto the plan row. */
+/**
+ * Mirror a subscription's status and period from Stripe onto the plan row.
+ *
+ * Stripe does not deliver events in order, and "canceled" is terminal, so a cancelled row is
+ * left alone: a customer.subscription.updated that lands after .deleted must not revive it.
+ */
 export async function syncSubscription(
   tx: Executor,
   opts: { stripeSubscriptionId: string; stripeStatus: string; currentPeriodEnd: Date | null },
@@ -181,5 +194,5 @@ export async function syncSubscription(
       ...(status === "cancelled" ? { includedScansRemaining: 0 } : {}),
       updatedAt: new Date(),
     })
-    .where(eq(billingSubscriptionsTable.stripeSubscriptionId, opts.stripeSubscriptionId));
+    .where(and(eq(billingSubscriptionsTable.stripeSubscriptionId, opts.stripeSubscriptionId), ne(billingSubscriptionsTable.status, "cancelled")));
 }

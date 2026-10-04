@@ -14,14 +14,9 @@
 
 import { Router, type IRouter, type Request, type Response } from "express";
 import { recordOobInteraction } from "../lib/oobServer";
+import { clientIp } from "../lib/clientIp";
 
 const router: IRouter = Router();
-
-function clientIp(req: Request): string {
-  return String(
-    req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "",
-  ).split(",")[0]!.trim();
-}
 
 async function handle(req: Request, res: Response): Promise<void> {
   const raw = req.params["token"];
@@ -32,6 +27,7 @@ async function handle(req: Request, res: Response): Promise<void> {
     await recordOobInteraction(token, {
       method: req.method,
       path: req.originalUrl,
+      // The real peer under the configured proxy trust, not a client-writable header.
       sourceIp: clientIp(req),
       userAgent: typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : undefined,
     }).catch(() => undefined);

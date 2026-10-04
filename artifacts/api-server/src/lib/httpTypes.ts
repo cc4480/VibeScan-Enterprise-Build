@@ -46,6 +46,8 @@ export interface ScanHttpInit {
    * — and the scan continues signed out.
    */
   onSessionLost?: () => Promise<ScanCredentials | null>;
+  /** Aborted when the scan is abandoned (its deadline passed): in-flight and later requests fail. */
+  signal?: AbortSignal;
 }
 
 /** How many times one scan will try to sign back in before giving up. */
@@ -59,6 +61,7 @@ export interface ScanHttpContext {
   lastRequestAt: Map<string, number>;
   detectSignedOut?: (body: string, finalUrl: string, requestedUrl: string) => boolean;
   onSessionLost?: () => Promise<ScanCredentials | null>;
+  signal?: AbortSignal;
   reauthAttempts: number;
   /**
    * Shared across concurrent probes so twenty parallel requests noticing the

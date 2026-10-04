@@ -101,6 +101,8 @@ export interface RunScanAuth {
  * passes none of this) is entirely unaffected.
  */
 export interface RunScanExtras {
+  /** Aborted when the worker gives up on the scan; every scanFetch then fails at once. */
+  signal?: AbortSignal;
   /**
    * A public GitHub repository ("owner/repo" or a full URL) to additionally
    * scan for hardcoded secrets in source, alongside the live-URL scan. See

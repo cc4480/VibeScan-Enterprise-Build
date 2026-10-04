@@ -86,6 +86,7 @@ async function perform(url: string, options: ScanFetchOptions): Promise<Outcome>
     // validated there too, but a target can redirect us to an internal address,
     // or re-answer DNS with one between the two checks — so the last word has
     // to belong to the code that is about to open the socket.
+    if (ctx?.signal?.aborted) return { ok: false, error: "scan abandoned" };
     const safety = await checkUrlSafe(current, { allowOptOut: true });
     if (!safety.ok) {
       return { ok: false, error: `blocked target address: ${safety.reason}` };
@@ -105,9 +106,9 @@ async function perform(url: string, options: ScanFetchOptions): Promise<Outcome>
     // across several parallel probes. Honour both: whichever fires first wins,
     // rather than silently discarding the caller's.
     const { signal: callerSignal, ...init } = rest;
-    const signal = callerSignal
-      ? AbortSignal.any([callerSignal, controller.signal])
-      : controller.signal;
+    const signal = AbortSignal.any(
+      [controller.signal, callerSignal, ctx?.signal].filter((x): x is AbortSignal => x != null),
+    );
 
     let res: Response;
     try {

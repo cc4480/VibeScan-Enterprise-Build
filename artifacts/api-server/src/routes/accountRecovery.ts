@@ -9,6 +9,7 @@ import { issueToken, redeemToken } from "../lib/authTokens";
 import { abandonLoginChallenges } from "../lib/pendingLogin";
 import { sendEmailVerification, sendPasswordReset } from "../lib/mailer";
 import { clientIp } from "../lib/clientIp";
+import { revokeAllAccess } from "../lib/oauthTokens";
 
 /** Email verification and password forgot / reset / change. */
 
@@ -143,6 +144,9 @@ export function registerAccountRecovery(router: IRouter): void {
       // Evict every existing session. Whoever prompted the reset may already be
       // signed in, and leaving their cookie alive would make the reset pointless.
       await deleteSessionsForUser(result.userId);
+      // Sessions are not the only way in: someone who had the old password may have minted an
+      // API token or connected an app, and those would survive the reset.
+      await revokeAllAccess(result.userId);
       await clearSession(res, getSessionId(req));
 
       // And kill any pending two-factor challenge. Someone who knew the OLD

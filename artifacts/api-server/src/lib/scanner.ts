@@ -64,6 +64,7 @@ export async function runScan(
   return runWithScanHttp(
     {
       targetUrl,
+      ...(extra?.signal ? { signal: extra.signal } : {}),
       ...(auth
         ? {
             credentials: auth.credentials,
