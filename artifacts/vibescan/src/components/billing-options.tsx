@@ -175,12 +175,13 @@ export function BuyOptions({
                   <span className="text-muted-foreground text-sm">/ month</span>
                 </div>
                 <p className="text-xs text-muted-foreground mb-4 tabular-nums">
-                  {planPerScanLabel(plan) ?? "No scan limit, only fair use"}
+                  {/* Not "no scan limit": scans are uncounted but still rate-limited, as the line below says. */}
+                  {planPerScanLabel(plan) ?? "No monthly scan count"}
                 </p>
                 <ul className="space-y-2 mb-6 flex-1 text-sm">
                   {[
                     plan.urlLimit === 1 ? "1 site watched around the clock" : `Up to ${plan.urlLimit} sites watched around the clock`,
-                    planScansLine(plan),
+                    planScansLine(plan, catalog.data.scanLimits),
                     ...PLAN_FEATURES,
                   ].map((f) => (
                     <li key={f} className="flex items-start gap-2">

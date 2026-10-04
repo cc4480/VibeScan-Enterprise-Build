@@ -79,7 +79,7 @@ Card `4242 4242 4242 4242`, any future date, any CVC.
 - [ ] With `MONITORING_REQUIRES_PLAN=true` locally: a cancelled plan stops monitors (rows kept); resubscribing restarts them.
 - [ ] With `MONITORING_REQUIRES_PLAN=true` locally and no plan: the first monitor is accepted, a second is refused with the plans shown, and its rescans are no more often than weekly (`FREE_MONITOR_SITES=0` turns the free site off).
 - [ ] An account that was monitoring before the flag (run `scripts/grandfather-monitor-users.ts --apply` first) keeps all its sites.
-- [ ] Report → Share → **Get badge**: the image loads on another origin, shows the grade and date only, and **Remove badge** turns it into "badge not found". Migration `0025` creates the `report_badges` table, and it must have run.
+- [ ] Report → Share → **Get badge** on a scan of a verified domain: the image loads on another origin, shows the grade and date only, and **Remove badge** turns it into "badge not found". On a scan of an unverified domain, **Get badge** is refused with the reason. Migration `0025` creates the `report_badges` table, and it must have run.
 
 ## 3. Go live (last step, after QA)
 

@@ -28,10 +28,18 @@ export interface PlanOffer {
   description: string;
 }
 
+/** The per-account scan caps an unlimited plan is still subject to (the server's rate limits). */
+export interface ScanLimits {
+  perHour: number;
+  perDay: number;
+}
+
 export interface BillingCatalog {
   packs: CreditPack[];
   /** The subscriptions on sale, cheapest first. */
   plans: PlanOffer[];
+  /** Absent from a server older than this field. */
+  scanLimits?: ScanLimits;
   /** False until Stripe is configured on this deployment. */
   enabled: boolean;
 }
@@ -106,9 +114,18 @@ export function planDisplayName(key: string): string {
   return Object.hasOwn(PLAN_NAMES, key) ? PLAN_NAMES[key]! : "SecScan";
 }
 
-/** What a plan says about scans: "Unlimited full scans", or the monthly count. */
-export function planScansLine(plan: Pick<PlanOffer, "unlimitedScans" | "includedScans">): string {
-  return plan.unlimitedScans ? "Unlimited full scans (fair use)" : `${plan.includedScans} full scans every month`;
+/**
+ * "fair use: up to 5 scans an hour and 20 a day", from the caps the server enforces. The cap is
+ * material to an "unlimited" offer, so it is shown beside the word, not only in the Terms. With
+ * no caps to hand (an older server, or the catalog not loaded yet) it says only "fair use".
+ */
+export function fairUseText(limits: ScanLimits | undefined): string {
+  return limits ? `fair use: up to ${limits.perHour} scans an hour and ${limits.perDay} a day` : "fair use";
+}
+
+/** What a plan says about scans: "Unlimited full scans (fair use: ...)", or the monthly count. */
+export function planScansLine(plan: Pick<PlanOffer, "unlimitedScans" | "includedScans">, limits?: ScanLimits): string {
+  return plan.unlimitedScans ? `Unlimited full scans (${fairUseText(limits)})` : `${plan.includedScans} full scans every month`;
 }
 
 /** "$0.95 per scan", or null for an unlimited plan, where a per-scan price would be meaningless. */

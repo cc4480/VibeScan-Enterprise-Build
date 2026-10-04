@@ -1,10 +1,13 @@
 import { Link } from "wouter";
 import { CheckCircle2, Zap, Bell, Bot, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { BuyOptions } from "@/components/billing-options";
+import { BuyOptions, useBillingCatalog } from "@/components/billing-options";
+import { fairUseText } from "@/lib/billing-api";
 
 /** What you get, and the prices. */
 export function PricingSection() {
+  // The scan caps "unlimited" is subject to, from the server, so the card states what is enforced.
+  const scanLimits = useBillingCatalog().data?.scanLimits;
   return (
     <section id="pricing" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div className="text-center mb-16">
@@ -29,8 +32,10 @@ export function PricingSection() {
               "Step-by-step fix guides",
               "Every finding and fix unlocked, with no paywall on results",
               "Free re-tests to confirm a fix (10 a day, no scan used)",
-              "Your first site watched free: hourly uptime, certificate and header checks, with email alerts",
-              "A grade badge for your README that shows only the grade and the scan date",
+              // Adding a site runs its first full scan, which a free account pays for with a free scan
+              // (routes/monitorCreate.ts), so the line says so rather than calling the whole thing free.
+              "Your first site watched free: hourly uptime, certificate and header checks, with email alerts (adding it uses one free scan)",
+              "A grade badge for your README, for a site you have verified, showing only the grade and the scan date",
               "Scan from Claude Code, Cursor or the REST API on the same free scans",
             ],
             cta: "Run a Scan",
@@ -45,7 +50,7 @@ export function PricingSection() {
             title: "Unlimited — $19/month",
             desc: "One plan: unlimited scans and 5 sites watched around the clock.",
             features: [
-              "Unlimited full scans (fair use)",
+              `Unlimited full scans (${fairUseText(scanLimits)})`,
               "5 sites watched around the clock",
               "Hourly uptime, header and certificate checks",
               "Hourly CVE matching, ranked by EPSS",
@@ -123,13 +128,14 @@ export function PricingSection() {
 
 /** The price as information only — shown until checkout is switched on. */
 function StaticPricing() {
+  const scanLimits = useBillingCatalog().data?.scanLimits;
   return (
     <>
       <div className="max-w-sm mx-auto">
         <div className="glass-panel p-6 rounded-xl flex flex-col items-center text-center gap-1 border-primary/50">
           <span className="text-sm text-muted-foreground mt-1">SecScan Unlimited</span>
           <span className="text-3xl font-bold">$19</span>
-          <span className="text-xs text-muted-foreground">per month · unlimited scans · 5 sites watched</span>
+          <span className="text-xs text-muted-foreground">per month · unlimited scans ({fairUseText(scanLimits)}) · 5 sites watched</span>
         </div>
       </div>
       <p className="text-center text-xs text-muted-foreground mt-6">

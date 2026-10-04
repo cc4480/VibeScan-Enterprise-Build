@@ -81,12 +81,14 @@ export default function AboutPage() {
           <li>
             <strong className="text-foreground">Watches a site around the clock.</strong> Uptime, certificate and
             header checks run on a schedule, and a full rescan follows the grade: sites that score worse are
-            looked at more often. Problems arrive by email. A first site is watched free.
+            looked at more often. Problems arrive by email. A first site is watched free; adding it uses one of
+            the month's free scans for its first full scan.
           </li>
           <li>
-            <strong className="text-foreground">Gives a site a grade badge</strong> for a README or a footer. It
-            shows the grade and the scan date, never the address or a finding, and it goes grey and says "old
-            scan" once it is a month old, so a grade cannot outlive the site it was earned on.
+            <strong className="text-foreground">Gives a site a grade badge</strong> for a README or a footer. A
+            badge can only be made for a scan of a domain its owner has verified, so it cannot be borrowed from
+            someone else's site. It shows the grade and the scan date, never the address or a finding, and it
+            goes grey and says "old scan" once it is a month old.
           </li>
           <li>
             <strong className="text-foreground">Works inside AI editors and over an API,</strong> so a scan can
