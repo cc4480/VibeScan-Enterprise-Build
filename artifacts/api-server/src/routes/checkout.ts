@@ -21,6 +21,7 @@ import { Router, type IRouter } from "express";
 import { stripe, PRICE_MAP, CREDITS_MAP, getOrigin } from "../lib/stripe";
 import { DEFAULT_PLAN, SOLD_PLANS, isUnlimitedPlan } from "../lib/plans";
 import { creditBalance } from "../lib/credits";
+import { scanLimitsForPricing } from "../lib/fairUse";
 import { trialScansUsedBy, FREE_TRIAL_SCAN_LIMIT, freeScansResetAt } from "../lib/freeTrial";
 import { refuseUnregistered, BUYABLE, currentPlan } from "./checkoutShared";
 
@@ -48,6 +49,8 @@ router.get("/checkout/packs", (_req, res): void => {
       unlimitedScans: p.unlimitedScans,
       description: p.description,
     })),
+    // The per-account caps an unlimited plan is still subject to, shown beside "unlimited".
+    scanLimits: scanLimitsForPricing(),
     enabled: stripe !== null,
   });
 });

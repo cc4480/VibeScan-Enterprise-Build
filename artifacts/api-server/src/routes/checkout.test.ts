@@ -129,6 +129,14 @@ describe("GET /checkout/packs", () => {
     expect((res.body as { enabled: boolean }).enabled).toBe(false);
   });
 
+  it("states the per-account scan caps, so the page can show them beside \"unlimited\"", async () => {
+    const h = await handlerFor("get", "/checkout/packs");
+    const res = makeRes();
+    await h(makeReq(), res);
+
+    expect((res.body as { scanLimits: unknown }).scanLimits).toEqual({ perHour: 5, perDay: 20 });
+  });
+
   it("does not require authentication — the price list is not sensitive", async () => {
     const h = await handlerFor("get", "/checkout/packs");
     const res = makeRes();

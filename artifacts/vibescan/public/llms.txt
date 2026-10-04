@@ -51,8 +51,8 @@ their first site watched free (hourly uptime, certificate and header checks, wit
 badge for a README (for a domain the account has verified) that shows only the grade and the scan date, and scanning from AI editors over MCP or
 the REST API on the same free scans.
 
-- SecScan Unlimited — $19/month: unlimited full scans (fair use) and up to 5 sites watched around
-  the clock. Cancel any time.
+- SecScan Unlimited — $19/month: unlimited full scans (fair use: up to 5 scans an hour and 20 a day
+  per account) and up to 5 sites watched around the clock. Cancel any time.
 
 The paid plan is not yet available for purchase; it will be handled by Stripe when it opens.
 

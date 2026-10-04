@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { planDisplayName, planScansLine, planPerScanLabel } from "./billing-api";
+import { planDisplayName, planScansLine, planPerScanLabel, fairUseText } from "./billing-api";
 
 describe("planDisplayName", () => {
   it("names the plan on sale and the withdrawn ones", () => {
@@ -23,8 +23,21 @@ describe("planScansLine", () => {
     expect(planScansLine({ unlimitedScans: true, includedScans: 999 })).toBe("Unlimited full scans (fair use)");
   });
 
+  it("puts the daily and hourly cap beside \"unlimited\" when the server states them", () => {
+    expect(planScansLine({ unlimitedScans: true, includedScans: 0 }, { perHour: 5, perDay: 20 })).toBe(
+      "Unlimited full scans (fair use: up to 5 scans an hour and 20 a day)",
+    );
+  });
+
   it("gives the monthly count for a counted plan", () => {
     expect(planScansLine({ unlimitedScans: false, includedScans: 20 })).toBe("20 full scans every month");
+  });
+});
+
+describe("fairUseText", () => {
+  it("states the caps when known, and says only fair use when not", () => {
+    expect(fairUseText({ perHour: 8, perDay: 40 })).toBe("fair use: up to 8 scans an hour and 40 a day");
+    expect(fairUseText(undefined)).toBe("fair use");
   });
 });
 
