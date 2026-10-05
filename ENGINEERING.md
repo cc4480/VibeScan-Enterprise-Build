@@ -7,28 +7,27 @@ A website and vulnerability scanning SaaS that runs black-box security scans and
 | Command | Purpose |
 |---|---|
 | `pnpm --filter @workspace/api-server run dev` | Start API server (port 8080) |
-| `pnpm --filter @workspace/vibescan run dev` | Start frontend (port 18425 via artifact router, 5000 for webview) |
+| `pnpm --filter @workspace/vibescan run dev` | Start frontend (port 18425) |
 | `pnpm --filter @workspace/db run db:push` | Push Drizzle schema to DB |
 | `pnpm --filter @workspace/api-server run typecheck` | TypeScript check (API only) |
-| `pnpm --filter @workspace/db run build && pnpm --filter @workspace/api-zod run build && pnpm --filter @workspace/api-client-react run build && pnpm --filter @workspace/replit-auth-web run build` | Build shared lib `.d.ts` files (required before full typecheck on fresh clone) |
+| `pnpm --filter @workspace/db run build && pnpm --filter @workspace/api-zod run build && pnpm --filter @workspace/api-client-react run build` | Build shared lib `.d.ts` files (required before full typecheck on fresh clone) |
 
 Required env vars (secrets):
 - `PORT` — the API server throws at boot without it (`8080` locally; the Vite
-  dev server proxies `/api` there). Injected by the artifact router on Replit.
-- `DATABASE_URL` — auto-provisioned by Replit PostgreSQL
+  dev server proxies `/api` there).
+- `DATABASE_URL` — PostgreSQL connection string
 - `DEEPSEEK_API_KEY` — the AI analysis key. `callDeepSeek` reads this and only this; without it the scan completes and the report simply carries no AI section.
 - `ENCRYPTION_KEY` — 32-byte base64 AES-256-GCM key. Seals **scan credentials** at rest (`lib/crypto.ts`, used by `lib/scanCredentials.ts`); the worker nulls the column once the scan ends, on both the success and failure paths. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. Without it, credentialed scanning is unavailable; anonymous scanning is unaffected.
 - `RESEND_API_KEY` — Email notifications (report ready, CVE alerts)
 - `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` — payments; set both or neither (see `deploy/PAYMENTS-GO-LIVE.md`)
 
-### Local (non-Replit) development
+### Local development
 
-Replit injects the above as real environment variables; running elsewhere
-(e.g. a local Windows/Mac/Linux machine) needs its own PostgreSQL 16 instance
+A local Windows/Mac/Linux machine needs its own PostgreSQL 16 instance
 and a `.env` file (see `.env.example`) — `.env` is gitignored, never commit
 it. The API server's `start` script loads it with Node's
 `--env-file-if-exists=../../.env`; real environment variables take precedence,
-so the file is inert on Replit. Nothing else reads it — `db:push` shells out to
+so the file is inert where the platform injects its own. Nothing else reads it — `db:push` shells out to
 drizzle-kit, which sees only the shell environment, so export `DATABASE_URL`
 for that command. Verified working on Windows as of 2026-08; `lib/db/drizzle.config.ts` and
 `pnpm-workspace.yaml`'s `overrides` needed fixes for Windows path separators
@@ -36,12 +35,11 @@ and previously-stripped `win32-*-msvc` optional binaries (`rollup`,
 `@tailwindcss/oxide`, `lightningcss`) respectively — both now resolve
 correctly cross-platform.
 
-## Deploying (non-Replit)
+## Deploying
 
-Production runs on Docker Compose — see `DEPLOY.md`. `Dockerfile`,
-`docker-compose.yml` and `deploy/Caddyfile` are the deployment surface; `.replit` and
-the `.replit-artifact/` configs are for Replit **development** only and are not
-used in production.
+Production runs on Railway behind Cloudflare (`deploy/railway/README.md`); the
+self-hosted path is Docker Compose (`DOCKER.md`, `deploy/README.md`). `Dockerfile`,
+`docker-compose.yml` and `deploy/Caddyfile` are the deployment surface.
 
 Note `APP_ORIGIN` is a build arg, not just an env var: `vite.config.ts` bakes it
 into index.html, the sitemap and robots.txt at build time, so a domain change
@@ -53,7 +51,7 @@ needs a rebuilt image.
 - **Backend**: Express 5, TypeScript (ESM), pino logging, pg-boss job queue
 - **Database**: PostgreSQL 16 via Drizzle ORM
 - **Build**: pnpm workspaces monorepo, esbuild for API bundling
-- **Runtime**: Node 24, NixOS (stable-25_05)
+- **Runtime**: Node 24
 
 ## Where things live
 
@@ -66,13 +64,12 @@ lib/
   api-client-react/ — Generated API client + custom fetch
   api-zod/          — Shared Zod schemas (source of truth for API contracts)
   db/               — Drizzle schema + migrations (schema at lib/db/src/schema/)
-  replit-auth-web/  — Auth utilities (not used — app uses UUID tokens)
 ```
 
 ## Architecture decisions
 
-- **Artifact router handles external routing**: The Replit artifact router (`REPLIT_ARTIFACT_ROUTER`) proxies `/api` to Express (port 8080) and `/` to Vite (port 18425). The `Start application` webview workflow runs Vite on port 5000 for the Replit preview pane.
-- **No login required**: Auth is a UUID token auto-generated in `localStorage` (`vibescan_client_token`). The `authMiddleware` reads it from the `Authorization: Bearer` header.
+- **Dev routing**: the Vite dev server (port 18425) proxies `/api` to Express (port 8080). In production Express serves the built frontend itself.
+- **Accounts**: sign-up needs an emailed code (`routes/accountSignup.ts`); sessions are cookies. The old anonymous `Authorization: Bearer <user id>` path only honours rows that already exist and can be closed (`LEGACY_BEARER_SUNSET`, `ALLOW_LEGACY_ANONYMOUS_BEARER`; see `deploy/railway/README.md`).
 - **Graceful degradation**: All three external services (DeepSeek, Resend, Stripe) check for their env var and skip with a warning if not set — the app remains fully functional.
 - **Payments**: on exactly when `STRIPE_SECRET_KEY` (and `STRIPE_WEBHOOK_SECRET`) are set. Checkout sells one plan, SecScan Unlimited ($19/month, unlimited scans, 5 sites); credit packs are withdrawn from sale (still credited if an old checkout is paid); the webhook applies each Stripe event exactly once (see `lib/billing.ts`). Setup: `deploy/PAYMENTS-GO-LIVE.md`.
 - **Two processes, one image**: `src/index.ts` (the `web` tier) serves the API and frontend and only enqueues; `src/secscan.ts` runs the pg-boss worker, the monitor scheduler, the EOL/CVE refresh, and owns Chromium. The only channel between them is the `scan-job` queue in Postgres. Do not add Playwright imports to anything reachable from `index.ts`.
@@ -183,11 +180,8 @@ resist abuse counts against the client address instead.
 
 ## Gotchas
 
-- **Shared libs must be built before typecheck on a fresh clone** — `lib/db`, `lib/api-zod`, `lib/api-client-react`, and `lib/replit-auth-web` all use TypeScript project references and must have their `dist/` emitted first. Each has a `build` script (`tsc -p tsconfig.json`). The `typecheck` workflow does this automatically.
+- **Shared libs must be built before typecheck on a fresh clone** — `lib/db`, `lib/api-zod` and `lib/api-client-react` all use TypeScript project references and must have their `dist/` emitted first. Each has a `build` script (`tsc -p tsconfig.json`). The `typecheck` workflow does this automatically.
 - API server build step is part of `pnpm run dev` (builds then starts) — cold starts take ~5s
-- `NODE_TLS_REJECT_UNAUTHORIZED=0` is set in dev userenv (Replit internal TLS) — never set this in production
-- Vite runs on port 18425 (artifact router) AND port 5000 (webview) simultaneously — both are separate workflow instances
-- The artifact router config lives in `artifacts/*/replit-artifact/artifact.toml` — do not delete these files
 - **Avoid runtime (value) imports from `scanner.ts` in modules with standalone unit tests** — `scanner.ts` transitively imports `@workspace/db`, which throws at import time if `DATABASE_URL` isn't set. `crawler.test.ts` doesn't set it, so a value import (e.g. importing a helper function) breaks that whole test file even though the function itself doesn't touch the DB. `import type { ... }` is erased at compile time and is safe; small pure-logic helpers shared between the two are duplicated instead (see `INFRA_COOKIE_NAMES` / `SESSION_COOKIE_PATTERN` — both intentionally copy-pasted between `scanner.ts` and `crawler.ts` with a "must match" comment, rather than imported)
 - **Mocking `fetch` in Vitest**: use `vi.stubGlobal("fetch", vi.fn())` + `vi.unstubAllGlobals()` in `afterEach` — not `vi.spyOn(globalThis, "fetch")`, which wraps the existing property while the module under test closed over its own reference to `globalThis.fetch` at import time, so the spy silently doesn't apply. For network-failure tests use `vi.mocked(fetch).mockRejectedValue(new Error(...))`, not a synchronous throw in `mockImplementation` (it propagates out of the test instead of being caught by the module's try/catch). `fetch`'s first arg is `string | URL | Request` — convert with `String(input)`, not `input.toString()` (throws if `input` is undefined).
 

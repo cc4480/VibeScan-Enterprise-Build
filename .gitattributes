@@ -1,0 +1,5 @@
+# Keep LF everywhere: tests assert exact byte counts of captured fixtures and a CRLF shebang breaks the CLI.
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.woff2 binary

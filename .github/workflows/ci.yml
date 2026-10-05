@@ -1,6 +1,6 @@
 # Runs the checks that were previously only ever run by hand.
 #
-# Node 24 matches the .replit `nodejs-24` module and the Dockerfile base, so a
+# Node 24 matches the Dockerfile base, so a
 # version difference cannot be the reason CI and production disagree.
 #
 # pnpm is not pinned in package.json, so the version lives here and in the

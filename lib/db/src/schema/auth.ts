@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, timestamp, varchar, boolean} from "drizzle-orm/pg-core";
 
-// (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
+// (IMPORTANT) Sign-in sessions live here; don't drop it.
 export const sessionsTable = pgTable(
   "sessions",
   {
@@ -28,7 +28,7 @@ export const sessionsTable = pgTable(
  */
 export const sessionUserIdExpr = sql`(${sessionsTable.sess}->'user'->>'id')`;
 
-// (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
+// (IMPORTANT) Accounts live here; don't drop it.
 export const usersTable = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: varchar("email").unique(),
