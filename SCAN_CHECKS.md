@@ -7,7 +7,7 @@ Every finding the scanner can emit, read out of `artifacts/api-server/src/lib`. 
 complete list; [SCAN_COVERAGE.md](SCAN_COVERAGE.md) is the readable one, grouped by module with
 the Basic/Deep tier and the methodology behind each group.
 
-**315 findings across 60 modules**, in 38 categories. 85 critical, 73 high, 55 medium, 32 low, 70 info.
+**327 findings across 61 modules**, in 38 categories. 85 critical, 78 high, 60 medium, 34 low, 70 info.
 
 A finding is a distinct name the scanner can put in a report, which is not the same as a check
 type: the data-table modules below define many findings from one piece of detection logic —
@@ -22,6 +22,7 @@ module does. `none` — neither, so no test exercises it at all.
 | Module | Findings | Lines | Tests | Coverage |
 |---|---:|---:|---:|---|
 | `recon-data.ts` | 14 | 178 | 12 | direct |
+| `tlsCheckFindings.ts` | 12 | 377 | 35 | direct |
 | `nextjsProbe.ts` | 9 | 255 | 8 | direct |
 | `structuredData.ts` | 9 | 285 | 36 | direct |
 | `crawler-data.ts` | 8 | 181 | 35 | direct |
@@ -53,6 +54,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `promptInjectionProbe.ts` | 1 | 214 | 26 | direct |
 | `raceConditionProbe.ts` | 1 | 181 | 21 | direct |
 | `ssrfProbe.ts` | 1 | 200 | 7 | direct |
+| `workerSideChecks.ts` | 1 | 186 | 11 | direct |
 | `probes-data-vcs.ts` | 24 | 244 | — | indirect, via probes-data.test.ts (split from probes-data) |
 | `probes-data-config.ts` | 23 | 273 | — | indirect, via probes-data.test.ts (split from probes-data) |
 | `secret-pattern-vendors.ts` | 21 | 247 | — | indirect, via secret-pattern-data.test.ts (split from secret-pattern-data) |
@@ -80,7 +82,6 @@ module does. `none` — neither, so no test exercises it at all.
 | `bannerRules.ts` | 1 | 112 | — | indirect, via cveCheckLocal.test.ts, cveCheckVersions.test.ts |
 | `githubFindings.ts` | 1 | 60 | — | indirect, via githubSourceProbe.test.ts |
 | `probesSri.ts` | 1 | 79 | — | indirect, via probes.test.ts (split from probes) |
-| `workerSideChecks.ts` | 1 | 125 | — | indirect, via worker.test.ts (split from worker) |
 
 ## Findings by module
 
@@ -802,6 +803,25 @@ module does. `none` — neither, so no test exercises it at all.
 | Supabase Tables Returned Empty Results To Anonymous Requests (Inconclusive) | Info | Broken Access Control | 0 | — | — |
 | Supabase Write Access Not Confirmed (Inconclusive Probe Response) | Info | Broken Access Control | 0 | — | — |
 
+### `tlsCheckFindings.ts`
+
+*12 findings · 377 lines · 35 tests.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| Self-Signed TLS Certificate | High | Transport Security | 7.4 | CWE-295 | WSTG-CRYP-01 |
+| TLS Certificate Does Not Match the Hostname | High | Transport Security | 7.4 | CWE-297 | WSTG-CRYP-01 |
+| TLS Certificate Expired | High | Transport Security | 7.4 | CWE-298 | WSTG-CRYP-01 |
+| TLS Certificate Not Trusted | High | Transport Security | 7.4 | CWE-295 | WSTG-CRYP-01 |
+| TLS Certificate Not Yet Valid | High | Transport Security | 7.4 | CWE-298 | WSTG-CRYP-01 |
+| Deprecated TLS Protocol Versions Accepted | Medium | Transport Security | 5.3 | CWE-326 | WSTG-CRYP-01 |
+| TLS Certificate Chain Incomplete | Medium | Transport Security | 5.3 | CWE-295 | WSTG-CRYP-01 |
+| TLS Certificate Key Too Short | Medium | Transport Security | 5.9 | CWE-326 | WSTG-CRYP-01 |
+| TLS Certificate Signed With a Weak Hash | Medium | Transport Security | 5.9 | CWE-328 | WSTG-CRYP-01 |
+| Weak Cipher Suite Negotiated | Medium | Transport Security | 5.9 | CWE-327 | WSTG-CRYP-01 |
+| Cipher Suite Without Forward Secrecy | Low | Transport Security | 3.7 | CWE-326 | WSTG-CRYP-01 |
+| TLS Certificate Expires Soon | Low | Transport Security | 3.1 | CWE-298 | WSTG-CRYP-01 |
+
 ### `workerAi.ts`
 
 *2 findings · 100 lines · no test file.*
@@ -813,7 +833,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `workerSideChecks.ts`
 
-*1 findings · 125 lines · no test file.*
+*1 findings · 186 lines · 11 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|

@@ -1,7 +1,7 @@
 import * as client from "openid-client";
 import crypto from "crypto";
 import { type Request, type Response } from "express";
-import { db, sessionsTable } from "@workspace/db";
+import { db, sessionsTable, sessionUserIdExpr } from "@workspace/db";
 import { eq, lt, sql } from "drizzle-orm";
 import type { AuthUser } from "@workspace/api-zod";
 
@@ -82,10 +82,13 @@ export async function deleteSession(sid: string): Promise<void> {
  * keeps working until it expires, which defeats the point of resetting.
  *
  * Sessions store the user inside the `sess` JSON blob, so this filters on that
- * rather than on a column.
+ * rather than on a column. `sessionUserIdExpr` is the exact expression the
+ * `IDX_session_user_id` expression index is built on; Postgres only uses an
+ * expression index when the query repeats the expression verbatim, so do not
+ * inline a differently-written copy here.
  */
 export async function deleteSessionsForUser(userId: string): Promise<void> {
-  await db.delete(sessionsTable).where(sql`${sessionsTable.sess}->'user'->>'id' = ${userId}`);
+  await db.delete(sessionsTable).where(sql`${sessionUserIdExpr} = ${userId}`);
 }
 
 export async function clearSession(

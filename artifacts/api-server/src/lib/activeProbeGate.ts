@@ -9,15 +9,18 @@
  *     ALLOW_UNVERIFIED_ACTIVE_PROBES (any environment) or
  *     DEV_SKIP_DOMAIN_VERIFICATION (non-production only); or
  *   - the user has proven ownership of the target's domain, by DNS TXT record
- *     or a well-known file.
+ *     or a well-known file, and the proof was last seen within
+ *     VERIFICATION_VALID_DAYS. A verification that stops being re-proved lapses
+ *     (see lib/domainReverify.ts for the job that keeps live ones fresh), so a
+ *     domain that is sold or abandoned does not stay open to its previous owner.
  *
  * With neither, only passive checks run. That is the control which stops this
  * platform being used as an anonymous attack proxy, so it fails closed: any
  * error looking up the verification is treated as "not verified".
  */
 import { db, domainVerificationsTable } from "@workspace/db";
-import { and, eq, isNotNull } from "drizzle-orm";
-import { extractDomain } from "./domainVerify";
+import { and, eq, gt, type SQL } from "drizzle-orm";
+import { extractDomain, verificationCutoff } from "./domainVerify";
 import { logger } from "./logger";
 
 /** Operator override. Intended for self-hosted installs scanning their own estate. */
@@ -34,6 +37,17 @@ function devSkipDomainVerification(): boolean {
     process.env.DEV_SKIP_DOMAIN_VERIFICATION === "true" &&
     process.env.NODE_ENV !== "production"
   );
+}
+
+/**
+ * "This verification is still valid", as a where-clause fragment. Done in SQL,
+ * not on a fetched row, so no caller can read `verified_at IS NOT NULL` and
+ * forget the expiry. A NULL verified_at compares false, so this also covers
+ * "has been verified at all". Every query that treats a domain as verified
+ * (this gate, the badge issuer, the MCP listing) uses it.
+ */
+export function verificationIsCurrent(now: Date = new Date()): SQL {
+  return gt(domainVerificationsTable.verifiedAt, verificationCutoff(now));
 }
 
 export async function activeProbesUnlocked(userId: string, targetUrl: string): Promise<boolean> {
@@ -54,7 +68,7 @@ export async function activeProbesUnlocked(userId: string, targetUrl: string): P
         and(
           eq(domainVerificationsTable.userId, userId),
           eq(domainVerificationsTable.domain, domain),
-          isNotNull(domainVerificationsTable.verifiedAt),
+          verificationIsCurrent(),
         ),
       )
       .limit(1);

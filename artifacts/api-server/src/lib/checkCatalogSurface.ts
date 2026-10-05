@@ -114,6 +114,23 @@ export const CATALOG_SURFACE: CatalogTest[] = [
   test("port scan", "Network Exposure", "recon.ts", [
     ["varies", "Unexpected open port", "Exposed ${spec.service} Service"],
   ]),
+  // The scanner's own handshake-level check; runs on every HTTPS scan. tlsCheckFindings.ts raises these.
+  test("TLS configuration check", "Transport Security", "tlsCheck.ts", [
+    ["medium", "Deprecated TLS Protocol Versions Accepted", "Deprecated TLS Protocol Versions Accepted"],
+    ["high", "TLS Certificate Expired", "TLS Certificate Expired"],
+    ["high", "TLS Certificate Not Yet Valid", "TLS Certificate Not Yet Valid"],
+    ["low", "TLS Certificate Expires Soon", "TLS Certificate Expires Soon"],
+    ["high", "TLS Certificate Does Not Match the Hostname", "TLS Certificate Does Not Match the Hostname"],
+    ["high", "Self-Signed TLS Certificate", "Self-Signed TLS Certificate"],
+    ["medium", "TLS Certificate Chain Incomplete", "TLS Certificate Chain Incomplete"],
+    ["high", "TLS Certificate Not Trusted", "TLS Certificate Not Trusted"],
+    ["medium", "TLS Certificate Key Too Short", "TLS Certificate Key Too Short"],
+    ["medium", "TLS Certificate Signed With a Weak Hash", "TLS Certificate Signed With a Weak Hash"],
+    ["medium", "Weak Cipher Suite Negotiated", "Weak Cipher Suite Negotiated"],
+    ["low", "Cipher Suite Without Forward Secrecy", "Cipher Suite Without Forward Secrecy"],
+  ]),
+  // Opt-in (SSLLABS_ENABLED=true): Qualys's terms need their permission for commercial use, so the
+  // default scan does not call it. Kept so a deployment that has that permission is accounted for.
   test("SSL Labs TLS grade", "Transport Security", "worker.ts", [
     ["varies", "Weak TLS Configuration (SSL Labs grade C or below)", "Weak TLS Configuration (SSL Labs Grade"],
     ["info", "TLS Grade Below A (SSL Labs)", "TLS Grade Below A (SSL Labs)", "workerSideChecks.ts"],

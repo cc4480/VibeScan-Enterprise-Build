@@ -277,8 +277,25 @@ flagged. Both are behaviourally confirmed — confidence 90.*
 
 ---
 
-## Module 14 — TLS Assessment
-*Delegated to Qualys SSL Labs; cached results reused where available.*
+## Module 14 — TLS Configuration
+*The scanner's own check (`tlsCheck.ts`): a handful of TLS handshakes to the target's host:443 (or the port in its URL), each pinned to one protocol version, then a read of the certificate. It grades nothing and uses no third-party service. Targets that resolve to private addresses are refused.*
+
+| # | Check | Severity if failing |
+|---|---|---|
+| 100a | TLS 1.0 or 1.1 still accepted (a handshake restricted to that version completed; a version the scanner could not test is reported as untested, never as unsupported) | Medium |
+| 100b | Certificate expired, or not yet valid | High |
+| 100c | Certificate expires in under 14 days | Low |
+| 100d | Certificate does not cover the host | High |
+| 100e | Self-signed certificate, or a chain that does not lead to a root the scanner trusts | High |
+| 100f | Chain incomplete (only the leaf was sent; the intermediate is missing) | Medium |
+| 100g | RSA key under 2048 bits, or EC key under 224 | Medium |
+| 100h | Certificate signed with SHA-1 or MD5 | Medium |
+| 100i | Negotiated cipher suite uses RC4, DES/3DES, NULL, EXPORT, anonymous key exchange or MD5 | Medium |
+| 100j | Negotiated cipher suite has no forward secrecy (static RSA key exchange) | Low |
+
+SSL 2.0 and 3.0 are not tested (the scanner's TLS library cannot speak them).
+
+**Optional: Qualys SSL Labs grade** — only when the operator sets `SSLLABS_ENABLED=true` (Qualys's terms need their permission for commercial use, and the API version used is deprecated).
 
 | # | Check | Severity if failing |
 |---|---|---|

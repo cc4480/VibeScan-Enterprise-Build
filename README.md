@@ -60,8 +60,9 @@ What varies between two scans is **access, not tier**:
 | An OOB collector (`OOB_BASE_URL`) | SSRF detection (A10) |
 
 Coverage spans: HTTP
-response headers and cookie flags, TLS (Qualys SSL Labs grade plus certificate
-expiry), DNS and email authentication (SPF/DMARC/DKIM/DNSSEC), technology
+response headers and cookie flags, TLS (the scanner's own check of protocol
+versions, certificate validity and trust, key size and cipher suite; a Qualys SSL
+Labs grade only if `SSLLABS_ENABLED=true`), DNS and email authentication (SPF/DMARC/DKIM/DNSSEC), technology
 fingerprinting (~60 technologies), active HTTP path probes, known-CVE version
 matching, JWT analysis, subdomain takeover, vibe-stack database exposure
 (Supabase RLS, open Firebase rules), source-map exposure, JavaScript secret

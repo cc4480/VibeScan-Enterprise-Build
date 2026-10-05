@@ -1,6 +1,12 @@
 /**
- * SSL Labs API integration.
- * Uses the free Qualys SSL Labs API v3 (no key required).
+ * SSL Labs API integration. OFF BY DEFAULT: the worker calls it only when SSLLABS_ENABLED=true
+ * (workerSideChecks.ts sslLabsEnabled). The scanner's own TLS configuration check (tlsCheck.ts) is
+ * what a report carries otherwise.
+ *
+ * Why it is opt-in. Qualys's terms of use require their permission for commercial use of the SSL
+ * Labs APIs, and this module calls API v3, which Qualys deprecated from 2024-01-01 (v4 needs a
+ * registered email address). An operator who has Qualys's permission can turn it on; moving to v4
+ * would also need that registration.
  *
  * Strategy:
  *   Always trigger a fresh assessment (startNew=on, fromCache=off) so every

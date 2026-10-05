@@ -16,6 +16,12 @@
  *     of the zone; or
  *   - a file at /.well-known/secscan-verification.txt, which requires control
  *     of the web root.
+ *
+ * A verification is not permanent. It stays valid for VERIFICATION_VALID_DAYS
+ * after the last time the proof was seen, and lib/domainReverify.ts (a daily
+ * job) looks for the proof again and moves that date forward while it is still
+ * there. A domain that was sold or abandoned therefore stops being attackable
+ * by its previous owner once the proof is gone.
  */
 import crypto from "node:crypto";
 import * as dns from "node:dns/promises";
@@ -37,6 +43,34 @@ export function txtRecordName(domain: string): string {
 }
 
 export const WELL_KNOWN_PATH = "/.well-known/secscan-verification.txt";
+
+/**
+ * How long a verification stays valid after the proof was last seen. Long
+ * enough that a few days of DNS or hosting trouble does not lock a user out of
+ * their own domain (the daily re-check just keeps failing, and the row lapses
+ * only after a fortnight of it); short enough that a domain which changed hands
+ * does not stay open to its previous owner.
+ */
+export const VERIFICATION_VALID_DAYS = 14;
+const DAY_MS = 86_400_000;
+
+/** A verification whose `verifiedAt` is later than this is still valid. */
+export function verificationCutoff(now: Date = new Date()): Date {
+  return new Date(now.getTime() - VERIFICATION_VALID_DAYS * DAY_MS);
+}
+
+/** When a verification last proved at `verifiedAt` lapses unless the proof is seen again. */
+export function verificationExpiresAt(verifiedAt: Date): Date {
+  return new Date(verifiedAt.getTime() + VERIFICATION_VALID_DAYS * DAY_MS);
+}
+
+/**
+ * The same boundary the active-probe gate applies in SQL (strictly later than
+ * the cutoff), for code that already holds the row.
+ */
+export function isVerificationCurrent(verifiedAt: Date | null | undefined, now: Date = new Date()): boolean {
+  return verifiedAt != null && verifiedAt.getTime() > verificationCutoff(now).getTime();
+}
 
 // A TXT value longer than 255 bytes arrives split into chunks; join before
 // comparing or a token that straddles the boundary never matches.
@@ -147,4 +181,21 @@ export async function checkWellKnownFile(domain: string, token: string): Promise
   } finally {
     clearTimeout(timer);
   }
+}
+
+export type VerificationMethod = "dns" | "well_known";
+
+/**
+ * The one check for "is the proof for this token live right now". Used by the
+ * user-triggered check endpoint and by the scheduled re-verification, so the
+ * two cannot drift apart: whatever passes the first is exactly what keeps a
+ * domain verified afterwards.
+ *
+ * DNS first: it is cheaper than an HTTP round trip and cannot be satisfied by
+ * anyone who merely controls a path on the web server.
+ */
+export async function runVerificationCheck(domain: string, token: string): Promise<VerificationMethod | null> {
+  if (await checkTxtRecord(domain, token)) return "dns";
+  if (await checkWellKnownFile(domain, token)) return "well_known";
+  return null;
 }

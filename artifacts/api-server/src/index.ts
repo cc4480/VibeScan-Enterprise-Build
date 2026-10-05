@@ -18,10 +18,12 @@ import { installCrashHandlers } from "./lib/crashHandlers";
 import { warnIfPaymentsMisconfigured } from "./lib/stripe";
 import { refreshCloudflareIps } from "./lib/cloudflareIps";
 import { behindCloudflare } from "./lib/clientIp";
+import { logLegacyBearerStatus } from "./lib/legacyBearer";
 import { migrateToLatest } from "@workspace/db";
 
 installCrashHandlers("web");
 warnIfPaymentsMisconfigured(logger);
+logLegacyBearerStatus(logger);
 
 const rawPort = process.env["PORT"];
 

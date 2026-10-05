@@ -25,6 +25,8 @@ const callLog = {
   runScan: 0,
   callDeepSeek: 0,
   insertReport: 0,
+  checkSslLabs: 0,
+  inspectTls: 0,
 };
 
 vi.mock("@workspace/db", () => {
@@ -99,7 +101,19 @@ vi.mock("./aiAnalysis", () => ({
   describeAiFailure: () => ({ reason: "The AI provider did not answer in time.", evidence: "test" }),
 }));
 
-vi.mock("./ssllabs", () => ({ checkSslLabs: () => Promise.resolve(null) }));
+vi.mock("./ssllabs", () => ({
+  checkSslLabs: () => {
+    callLog.checkSslLabs += 1;
+    return Promise.resolve(null);
+  },
+}));
+// The TLS check opens real sockets to the target; a job test must not.
+vi.mock("./tlsCheck", () => ({
+  inspectTls: () => {
+    callLog.inspectTls += 1;
+    return Promise.resolve({ status: "skipped", reason: "not run in this test" });
+  },
+}));
 vi.mock("./recon", () => ({ runRecon: () => Promise.resolve(null) }));
 vi.mock("./activeProbeGate", () => ({ activeProbesUnlocked: () => Promise.resolve(false) }));
 vi.mock("./http", () => ({ runWithScanHttp: (_c: unknown, fn: () => unknown) => fn() }));
@@ -156,6 +170,9 @@ beforeEach(() => {
   callLog.runScan = 0;
   callLog.callDeepSeek = 0;
   callLog.insertReport = 0;
+  callLog.checkSslLabs = 0;
+  callLog.inspectTls = 0;
+  delete process.env["SSLLABS_ENABLED"];
 });
 
 describe("processScanJob — abandoned when the scan row is gone", () => {
@@ -198,5 +215,41 @@ describe("processScanJob — abandoned when the scan row is gone", () => {
     expect(callLog.runScan).toBe(1);
     expect(callLog.callDeepSeek).toBe(1);
     expect(callLog.insertReport).toBe(1);
+  });
+});
+
+describe("processScanJob — which TLS checks run", () => {
+  it("runs the scanner's own TLS check and does not call SSL Labs by default", async () => {
+    // Qualys's terms need their permission for commercial use, so SSL Labs is opt-in.
+    updateReturns.push([{ id: "scan-1" }], [{ id: "scan-1" }]);
+
+    const { processScanJob } = await load();
+    await processScanJob(job);
+
+    expect(callLog.inspectTls).toBe(1);
+    expect(callLog.checkSslLabs).toBe(0);
+    expect(callLog.insertReport).toBe(1);
+  });
+
+  it("calls SSL Labs only when SSLLABS_ENABLED=true, and still runs the TLS check", async () => {
+    process.env["SSLLABS_ENABLED"] = "true";
+    updateReturns.push([{ id: "scan-1" }], [{ id: "scan-1" }]);
+
+    const { processScanJob } = await load();
+    await processScanJob(job);
+
+    expect(callLog.inspectTls).toBe(1);
+    expect(callLog.checkSslLabs).toBe(1);
+    expect(callLog.insertReport).toBe(1);
+  });
+
+  it("does not treat any other value as enabling it", async () => {
+    process.env["SSLLABS_ENABLED"] = "1";
+    updateReturns.push([{ id: "scan-1" }], [{ id: "scan-1" }]);
+
+    const { processScanJob } = await load();
+    await processScanJob(job);
+
+    expect(callLog.checkSslLabs).toBe(0);
   });
 });

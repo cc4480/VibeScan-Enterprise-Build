@@ -3,6 +3,7 @@ import type { AuthUser } from "@workspace/api-zod";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { getSession } from "../lib/auth";
+import { legacyBearerAllowed, legacyBearerReporter, loggableRoute } from "../lib/legacyBearer";
 
 declare global {
   namespace Express {
@@ -71,10 +72,15 @@ export async function authMiddleware(
   // Existing anonymous rows keep working during the changeover rather than
   // being cut off, because their scans, credits and monitors hang off that id
   // and registering PROMOTES the same row in place (see routes/account.ts) —
-  // so those users can claim their history instead of losing it. Set
-  // ALLOW_LEGACY_ANONYMOUS_BEARER=false to close the path completely once
-  // they have had the chance.
-  if (process.env["ALLOW_LEGACY_ANONYMOUS_BEARER"] === "false") {
+  // so those users can claim their history instead of losing it.
+  //
+  // A user id is not a secret, so this is weak authentication and is on its way
+  // out. Every use is logged (warn, once per user id per day, see
+  // lib/legacyBearer.ts) so an operator can see who still depends on it, and it
+  // closes in either of two ways: LEGACY_BEARER_SUNSET=<ISO date> closes it
+  // automatically from that moment, ALLOW_LEGACY_ANONYMOUS_BEARER=false closes it
+  // now and always wins. With neither set it stays open, as before.
+  if (!legacyBearerAllowed()) {
     next();
     return;
   }
@@ -116,6 +122,13 @@ export async function authMiddleware(
         lastName: dbUser.lastName,
         profileImageUrl: dbUser.profileImageUrl,
       };
+
+      // Logging must never be the reason a request fails.
+      try {
+        legacyBearerReporter.report(dbUser.id, loggableRoute(req.method, req.path));
+      } catch {
+        // non-fatal
+      }
     }
   } catch {
     // non-fatal — proceed unauthenticated

@@ -9,8 +9,24 @@ export const sessionsTable = pgTable(
     sess: jsonb("sess").notNull(),
     expire: timestamp("expire").notNull(),
   },
-  (table) => [index("IDX_session_expire").on(table.expire)],
+  (table) => [
+    index("IDX_session_expire").on(table.expire),
+    // The user id lives inside the `sess` JSON, not in a column of its own, so
+    // revoking a user's sessions (deleteSessionsForUser, after a password reset
+    // or account deletion) was a scan of the whole table. This expression index
+    // makes that lookup an index scan. Postgres only uses an expression index
+    // when the query repeats the expression exactly, so deleteSessionsForUser
+    // builds its WHERE clause from `sessionUserIdExpr` (exported below), and
+    // the two must not be reworded independently of each other.
+    index("IDX_session_user_id").on(sql`(${table.sess}->'user'->>'id')`),
+  ],
 );
+
+/**
+ * The expression `IDX_session_user_id` is built on, as SQL for a WHERE clause.
+ * Keep it identical to the indexed expression above.
+ */
+export const sessionUserIdExpr = sql`(${sessionsTable.sess}->'user'->>'id')`;
 
 // (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
 export const usersTable = pgTable("users", {

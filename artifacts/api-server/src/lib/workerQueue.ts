@@ -9,9 +9,11 @@ import { refreshEolData, loadEolCacheFromDb, EOL_REFRESH_QUEUE } from "./eolFetc
 import { initBrowser } from "./browser";
 import { logger } from "./logger";
 import { reapStuckScans } from "./billing";
+import { reverifyDomains } from "./domainReverify";
 
 const OOB_PURGE_QUEUE = "oob-purge";
 const STUCK_SCAN_QUEUE = "stuck-scan-cleanup";
+const DOMAIN_REVERIFY_QUEUE = "domain-reverify";
 
 export async function startWorker(): Promise<void> {
   // Log the effective OSV cache size so operators can confirm env var took effect
@@ -116,4 +118,33 @@ export async function startWorker(): Promise<void> {
     await purgeExpiredSessions();
     await purgeStaleTokens();
   });
+
+  // ── Domain re-verification ────────────────────────────────────────────────
+  // A domain verification lapses VERIFICATION_VALID_DAYS after the proof was
+  // last seen, so it has to be looked for again to stay valid. See
+  // lib/domainReverify.ts. Daily at 04:15 UTC, after the other daily jobs.
+  // retryLimit 0: a pass is idempotent and the next one retries every domain
+  // anyway, and a retry would only repeat the outbound checks. The expiry is
+  // raised above the 15-minute default because a pass over many domains with
+  // 5 checks in flight can run longer than that.
+  await boss.createQueue(DOMAIN_REVERIFY_QUEUE, { retryLimit: 0, expireInSeconds: 3600 });
+  await boss.schedule(DOMAIN_REVERIFY_QUEUE, "15 4 * * *", {});
+  await boss.work(DOMAIN_REVERIFY_QUEUE, async () => {
+    await reverifyDomains();
+  });
+  logger.info(
+    { queue: DOMAIN_REVERIFY_QUEUE, cron: "15 4 * * *" },
+    "Domain re-verification schedule registered (daily 04:15 UTC)",
+  );
+
+  // One pass shortly after start. Without it, rows verified before this job
+  // existed would be refused by the gate once they pass VERIFICATION_VALID_DAYS
+  // and stay refused until the next daily run. Sent as a job rather than run
+  // inline so only one replica does it: the singleton key lets one send through
+  // per hour across the fleet. The delay lets the process finish starting.
+  try {
+    await boss.send(DOMAIN_REVERIFY_QUEUE, {}, { startAfter: 60, singletonKey: "startup", singletonSeconds: 3600 });
+  } catch (err) {
+    logger.warn({ err }, "Could not queue the startup domain re-verification; the daily run will cover it");
+  }
 }

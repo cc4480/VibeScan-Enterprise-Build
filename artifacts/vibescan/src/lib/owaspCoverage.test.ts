@@ -11,7 +11,7 @@ const UNVERIFIED_SCAN: TestLike[] = [
   ran("known-CVE and end-of-life versions"),
   ran("JWT analysis"),
   ran("JavaScript secret scanning"),
-  ran("SSL Labs TLS grade (A)"),
+  ran("TLS configuration check (TLS 1.3 negotiated, certificate valid for 60 more days)"),
   skipped("injection (XSS, SQLi)"),
   skipped("path traversal"),
   skipped("API endpoint testing (auth, injection, IDOR, mass assignment)"),
@@ -52,6 +52,18 @@ describe("owaspCoverage: a category with no findings is not automatically 'passe
     for (const code of ["A01", "A02", "A03", "A05", "A06", "A07", "A08"]) {
       expect(owaspCoverage(code, 0, all).state).toBe("clear");
     }
+  });
+
+  it("reads the TLS configuration check, and SSL Labs when an operator has enabled it, as covering A02", () => {
+    // A02 is covered by the TLS check, the mail transport check and the HTTP probes.
+    const withoutTls = UNVERIFIED_SCAN.filter((t) => !t.name.startsWith("TLS configuration check"));
+    expect(owaspCoverage("A02", 0, withoutTls).state).toBe("clear"); // HTTP probes alone still cover it
+    const tlsSkipped = [...withoutTls, skipped("TLS configuration check")];
+    const r = owaspCoverage("A02", 0, tlsSkipped);
+    expect(r.state).toBe("partial");
+    expect(r.notRun).toEqual(["TLS configuration check"]);
+    expect(owaspCoverage("A02", 0, [ran("SSL Labs TLS grade (A)")]).state).toBe("clear");
+    expect(owaspCoverage("A02", 0, [skipped("TLS configuration check")]).state).toBe("untested");
   });
 
   it("flags a category with findings whatever ran", () => {

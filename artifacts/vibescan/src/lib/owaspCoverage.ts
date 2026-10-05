@@ -33,7 +33,7 @@ export interface TestLike {
 /** The recorded tests that speak to each category. */
 export const OWASP_TESTS: Record<string, RegExp> = {
   A01: /cross-account access|API endpoint testing|path traversal|Supabase RLS|BaaS open data|public cloud storage|GraphQL/i,
-  A02: /SSL Labs|mail transport|HTTP probes/i,
+  A02: /TLS configuration|SSL Labs|mail transport|HTTP probes/i,
   A03: /^injection|API endpoint testing|GraphQL/i,
   A05: /HTTP probes|exposed API documentation|source map|Next\.js|public cloud storage|subdomain takeover|DNS and email/i,
   A06: /known-CVE|dependency CVEs/i,

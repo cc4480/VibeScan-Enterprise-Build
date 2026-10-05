@@ -38,8 +38,8 @@ Target URL
     │     └─ cveCheck.ts          ★  OSV.dev CVE + EOL version lookup
     │
     └─ Stage 3: Worker-level checks (run from worker.ts, not runScan)
-          ├─ ssllabs.ts           ★  SSL Labs API TLS assessment (starts in
-          │                          parallel with Stage 1, waits up to 120s)
+          ├─ tlsCheck.ts          ★  TLS configuration check (starts in
+          │                          parallel with Stage 1; 8 s per handshake)
           └─ recon.ts             ★  DNS enumeration, subdomain discovery via
                                      crt.sh + brute-force, TCP port scan (33 ports)
 ```
@@ -587,14 +587,30 @@ Extracts versioned software from HTML meta tags, inline JS, and response headers
 
 ---
 
-## 16. SSL Labs TLS Assessment — `ssllabs.ts`
+## 16. TLS Configuration Check — `tlsCheck.ts`, `tlsCheckFindings.ts`
 
-Started in parallel with the Stage 1 header scan from the worker (not from `runScan`), so it runs concurrently with the entire probe suite. Polls the [SSL Labs API v3](https://api.ssllabs.com/api/v3) until the assessment completes or a 120-second timeout is reached. Only runs on HTTPS targets.
+Started in parallel with the Stage 1 header scan from the worker (not from `runScan`). Opens one handshake per protocol version (TLS 1.0, 1.1, 1.2, 1.3, each pinned with min = max) to the target's host:443, or the port in its URL, then reads the certificate and cipher from the highest version that completed. Only runs on HTTPS targets. A private or local address is refused (IP literals are checked up front, names through `vettedLookup` on every connection), and every handshake has an 8-second timeout. Verification is off during the probe so a broken certificate can still be read; trust comes from the socket's own verdict.
 
-The SSL Labs grade overrides the basic TLS detection grade from `scanner.ts`.
+TLS 1.0 and 1.1 are best effort: if the scanner's OpenSSL will not offer a version, it is reported as "could not test", never "not supported". SSL 2.0 and 3.0 are not tested. No letter grade is produced.
 
 | Finding | Trigger | Severity |
 |---------|---------|----------|
+| Deprecated TLS Protocol Versions Accepted | A handshake pinned to TLS 1.0 or 1.1 completed | Medium |
+| TLS Certificate Expired / Not Yet Valid | Validity period has ended / not begun | High |
+| TLS Certificate Expires Soon | Fewer than 14 days left | Low |
+| TLS Certificate Does Not Match the Hostname | Host not in the certificate's names | High |
+| Self-Signed TLS Certificate / TLS Certificate Not Trusted | Chain does not validate against the runtime's root certificates | High |
+| TLS Certificate Chain Incomplete | Only the leaf was sent | Medium |
+| TLS Certificate Key Too Short | RSA < 2048 bits, EC < 224 bits | Medium |
+| TLS Certificate Signed With a Weak Hash | SHA-1 or MD5 signature | Medium |
+| Weak Cipher Suite Negotiated | RC4, DES/3DES, NULL, EXPORT, anonymous or MD5 suite chosen | Medium |
+| Cipher Suite Without Forward Secrecy | Static-RSA key exchange chosen although ECDHE was offered | Low |
+
+### Optional: SSL Labs (`ssllabs.ts`)
+
+Off by default. Qualys's terms require their permission for commercial use of the SSL Labs APIs, and the module calls API v3, which Qualys deprecated in 2024. With `SSLLABS_ENABLED=true` the worker also polls the [SSL Labs API](https://api.ssllabs.com/api/v3) for up to 30 seconds, sets the report's TLS grade from it, and adds the weak-TLS findings for grades C and below. When it is off the report has no TLS grade and no SSL Labs line in its test list.
+
+---------|---------|----------|
 | Weak TLS — Grade C | SSL Labs returns `C` | Medium |
 | Weak TLS — Grade D | SSL Labs returns `D` (outdated protocols, weak ciphers) | High |
 | Weak TLS — Grade F | SSL Labs returns `F` (broken cipher suites, certificate failure) | Critical |

@@ -30,7 +30,7 @@ vi.mock("@workspace/db", () => {
     domainVerificationsTable: { id: "id", userId: "user_id", domain: "domain", verifiedAt: "verified_at" },
   };
 });
-vi.mock("drizzle-orm", () => ({ eq: () => ({}), and: () => ({}), isNull: () => ({}), isNotNull: () => ({}) }));
+vi.mock("drizzle-orm", () => ({ eq: () => ({}), and: () => ({}), isNull: () => ({}), isNotNull: () => ({}), gt: () => ({}) }));
 
 // A ledger from a scan that ran with the domain verified, and one from a scan that did not.
 const ranVerified = [{ group: "active", name: "injection (XSS, SQLi)", status: "ran" }];

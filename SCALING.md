@@ -146,7 +146,8 @@ Then go to 5.
 | `Scan worker concurrency` at boot | worker logs | the replica picked up the env var |
 | Scans slow with no errors | timings | connection pool is the ceiling |
 | `AI analysis could not be completed` | reports | AI provider is rate-limiting under load |
-| SSL Labs timeouts | worker logs | expected under load; grade degrades to basic TLS |
+| `TLS configuration check could not complete` | worker logs | the target's port 443 did not answer a handshake within 8 s; the scan carries on without it |
+| SSL Labs timeouts | worker logs | only when `SSLLABS_ENABLED=true`; expected under load, and the report simply has no SSL Labs grade |
 | Replica restarts | Railway metrics | memory — lower concurrency, add a replica |
 
 ---
