@@ -2,7 +2,8 @@ import { Router, type IRouter } from "express";
 import { db, reportsTable, reportSharesTable } from "@workspace/db";
 import { eq, and, isNull } from "drizzle-orm";
 import { z } from "zod";
-import { createReportShare } from "../lib/reportShare";
+import { createReportShare, hashShareToken } from "../lib/reportShare";
+import { UUID_ANY } from "./accountShared";
 import { withNoteFreeTotals } from "../lib/reportTotals";
 
 const router: IRouter = Router();
@@ -44,6 +45,7 @@ router.post("/reports/:id/shares", async (req, res): Promise<void> => {
     // worker's emailed link and this route cannot drift apart.
     const share = await createReportShare(reportId, req.user!.id, parsed.data.expiresIn);
 
+    // The only response that carries the token: the database keeps a hash, so the link cannot be shown again.
     res.status(201).json({
       id: share.id,
       token: share.token,
@@ -94,7 +96,6 @@ router.get("/reports/:id/shares", async (req, res): Promise<void> => {
     res.json(
       shares.map((s) => ({
         id: s.id,
-        token: s.token,
         expiresAt: s.expiresAt?.toISOString() ?? null,
         createdAt: s.createdAt.toISOString(),
         revokedAt: s.revokedAt?.toISOString() ?? null,
@@ -106,15 +107,19 @@ router.get("/reports/:id/shares", async (req, res): Promise<void> => {
   }
 });
 
-// ── DELETE /api/reports/:id/shares/:token — revoke a share link ───────────────
-router.delete("/reports/:id/shares/:token", async (req, res): Promise<void> => {
+// ── DELETE /api/reports/:id/shares/:shareId — revoke a share link ─────────────
+router.delete("/reports/:id/shares/:shareId", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
   const reportId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const token = Array.isArray(req.params.token) ? req.params.token[0] : req.params.token;
+  const shareId = Array.isArray(req.params.shareId) ? req.params.shareId[0] : req.params.shareId;
+  if (!shareId || !UUID_ANY.test(shareId)) {
+    res.status(404).json({ error: "Share link not found" });
+    return;
+  }
 
   try {
     const [report] = await db
@@ -137,7 +142,7 @@ router.delete("/reports/:id/shares/:token", async (req, res): Promise<void> => {
       .where(
         and(
           eq(reportSharesTable.reportId, reportId),
-          eq(reportSharesTable.token, token),
+          eq(reportSharesTable.id, shareId),
           isNull(reportSharesTable.revokedAt),
         ),
       )
@@ -165,7 +170,7 @@ router.get("/share/:token", async (req, res): Promise<void> => {
       .from(reportSharesTable)
       .where(
         and(
-          eq(reportSharesTable.token, token),
+          eq(reportSharesTable.tokenHash, hashShareToken(token)),
           isNull(reportSharesTable.revokedAt),
         ),
       );

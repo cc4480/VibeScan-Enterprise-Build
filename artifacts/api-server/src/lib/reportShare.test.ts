@@ -29,7 +29,7 @@ vi.mock("@workspace/db", () => ({
   },
 }));
 
-const { createReportShare, computeShareExpiry, shareUrl } = await import("./reportShare");
+const { createReportShare, computeShareExpiry, shareUrl, hashShareToken } = await import("./reportShare");
 
 beforeEach(() => {
   inserted.length = 0;
@@ -46,6 +46,20 @@ describe("createReportShare", () => {
   it("mints a 64-hex-character token", async () => {
     const share = await createReportShare("report_1", "user_42");
     expect(share.token).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("stores a SHA-256 of the token and never the token itself", async () => {
+    const share = await createReportShare("report_1", "user_42");
+    expect(inserted[0]!["tokenHash"]).toBe(hashShareToken(share.token));
+    expect(inserted[0]!["tokenHash"]).toMatch(/^[0-9a-f]{64}$/);
+    expect(inserted[0]!["tokenHash"]).not.toBe(share.token);
+    expect(JSON.stringify(inserted[0])).not.toContain(share.token);
+    expect(inserted[0]).not.toHaveProperty("token");
+  });
+
+  it("hashes the way the migration backfill does (sha256 of the UTF-8 text, hex)", () => {
+    // sha256("abc"): the same value as encode(sha256(convert_to('abc','UTF8')),'hex') in 0026_share_token_hash.sql.
+    expect(hashShareToken("abc")).toBe("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
   });
 
   it("never repeats a token across calls", async () => {

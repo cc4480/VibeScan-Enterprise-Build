@@ -1437,16 +1437,16 @@ export function useListReportShares<
 /**
  * @summary Revoke a share link
  */
-export const getRevokeReportShareUrl = (id: string, token: string) => {
-  return `/api/reports/${id}/shares/${token}`;
+export const getRevokeReportShareUrl = (id: string, shareId: string) => {
+  return `/api/reports/${id}/shares/${shareId}`;
 };
 
 export const revokeReportShare = async (
   id: string,
-  token: string,
+  shareId: string,
   options?: RequestInit,
 ): Promise<void> => {
-  return customFetch<void>(getRevokeReportShareUrl(id, token), {
+  return customFetch<void>(getRevokeReportShareUrl(id, shareId), {
     ...options,
     method: "DELETE",
   });
@@ -1459,14 +1459,14 @@ export const getRevokeReportShareMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof revokeReportShare>>,
     TError,
-    { id: string; token: string },
+    { id: string; shareId: string },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof revokeReportShare>>,
   TError,
-  { id: string; token: string },
+  { id: string; shareId: string },
   TContext
 > => {
   const mutationKey = ["revokeReportShare"];
@@ -1480,11 +1480,11 @@ export const getRevokeReportShareMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof revokeReportShare>>,
-    { id: string; token: string }
+    { id: string; shareId: string }
   > = (props) => {
-    const { id, token } = props ?? {};
+    const { id, shareId } = props ?? {};
 
-    return revokeReportShare(id, token, requestOptions);
+    return revokeReportShare(id, shareId, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -1506,14 +1506,14 @@ export const useRevokeReportShare = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof revokeReportShare>>,
     TError,
-    { id: string; token: string },
+    { id: string; shareId: string },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof revokeReportShare>>,
   TError,
-  { id: string; token: string },
+  { id: string; shareId: string },
   TContext
 > => {
   return useMutation(getRevokeReportShareMutationOptions(options));
