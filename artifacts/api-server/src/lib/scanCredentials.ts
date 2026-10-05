@@ -20,7 +20,8 @@ import { guardBrowser } from "./browserGuard";
 import { encryptSecret, decryptSecret, isEncryptionConfigured } from "./crypto";
 import type { ScanCredentials as HttpCredentials } from "./http";
 import { logger } from "./logger";
-import { CHROMIUM_ARGS } from "./browserArgs";
+import { launchChromium } from "./launchChromium";
+import { browserProxy } from "./browserProxy";
 
 export type CredentialMode = "session" | "form";
 
@@ -175,7 +176,7 @@ async function formLogin(
     // Same flags as the scanner's browser. Launching without them fails inside
     // the container, and the failure is swallowed below — leaving the scan to
     // continue unauthenticated against an app we were given credentials for.
-    browser = await chromium.launch({ headless: true, args: [...CHROMIUM_ARGS] });
+    browser = await launchChromium(chromium, await browserProxy());
   } catch (err) {
     log.warn({ err }, "[auth] Headless browser unavailable — cannot perform form login");
     return null;

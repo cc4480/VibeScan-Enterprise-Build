@@ -17,7 +17,8 @@
 import { guardBrowser } from "./browserGuard";
 import { logger } from "./logger";
 import { SCANNER_USER_AGENT } from "./appOrigin";
-import { CHROMIUM_ARGS } from "./browserArgs";
+import { launchChromium } from "./launchChromium";
+import { browserProxy, closeBrowserProxy } from "./browserProxy";
 import { getScanHttpContext } from "./http";
 import { jsonBodyKeys, type ObservedRequest } from "./apiRuntime";
 import { type RenderedPage, type BrowserCookie, toSetCookieStrings } from "./browserPage";
@@ -53,11 +54,6 @@ async function getChromium() {
   }
 }
 
-function proxyConfig(): { server: string } | undefined {
-  const url = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
-  return url ? { server: url } : undefined;
-}
-
 export async function initBrowser(): Promise<void> {
   const chromium = await getChromium();
   if (!chromium) {
@@ -65,14 +61,10 @@ export async function initBrowser(): Promise<void> {
     return;
   }
 
-  const proxy = proxyConfig();
+  const proxy = await browserProxy();
 
   try {
-    _browser = await chromium.launch({
-      headless: true,
-      proxy,
-      args: [...CHROMIUM_ARGS],
-    });
+    _browser = await launchChromium(chromium, proxy);
     logger.info(
       { proxy: proxy?.server ?? "none" },
       "Headless browser initialised — SPA rendering enabled",
@@ -89,6 +81,7 @@ export async function closeBrowser(): Promise<void> {
     _browser = null;
     logger.info("Headless browser closed");
   }
+  await closeBrowserProxy();
 }
 
 const NAVIGATION_TIMEOUT_MS = 25_000;
