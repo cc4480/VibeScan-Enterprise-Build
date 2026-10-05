@@ -110,8 +110,20 @@ function VerificationCard({ v }: { v: DomainVerification }) {
             <div className="text-xs text-muted-foreground">
               {v.verified
                 ? `Verified${v.method === "dns" ? " by DNS record" : v.method === "well_known" ? " by file" : ""}`
-                : "Awaiting verification"}
+                : v.verifiedAt
+                  ? "Verification lapsed"
+                  : "Awaiting verification"}
             </div>
+            {v.verified && (
+              <div className="text-xs text-muted-foreground mt-0.5">
+                Re-checked automatically; lapses if the proof is removed.
+              </div>
+            )}
+            {!v.verified && v.verifiedAt && (
+              <div className="text-xs text-amber-400/90 mt-0.5">
+                The proof was no longer found, so active testing is off. Publish it again, then press Check now.
+              </div>
+            )}
           </div>
         </div>
 

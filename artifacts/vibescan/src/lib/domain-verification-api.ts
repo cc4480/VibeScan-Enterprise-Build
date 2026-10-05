@@ -7,8 +7,12 @@ import { customFetch } from "@workspace/api-client-react";
 
 export interface DomainVerification {
   domain: string;
+  /** Valid right now: the proof was last seen within the validity window. Not merely "once passed". */
   verified: boolean;
+  /** When the proof was last seen. The server re-checks daily and moves this forward while the proof is in place. */
   verifiedAt: string | null;
+  /** When the verification lapses unless the proof is seen again (verifiedAt + 14 days). Null if never verified. */
+  expiresAt: string | null;
   method: "dns" | "well_known" | null;
   token: string;
   dns: { name: string; type: string; value: string };

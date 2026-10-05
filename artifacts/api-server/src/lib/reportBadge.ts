@@ -19,9 +19,10 @@
  *     once as an A and has changed since does not go on advertising it.
  */
 import { randomBytes } from "node:crypto";
-import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db, domainVerificationsTable, reportBadgesTable } from "@workspace/db";
 import { extractDomain } from "./domainVerify";
+import { verificationIsCurrent } from "./activeProbeGate";
 
 /** A badge older than this goes grey and says so. */
 export const STALE_AFTER_DAYS = 30;
@@ -117,7 +118,7 @@ export function badgeStateForReport(data: unknown, scannedAt: Date, now: Date = 
   return badgeState(grade, scannedAt, now);
 }
 
-/** Has this account verified the domain of `targetUrl`? The same match the active-test gate makes. */
+/** Has this account verified the domain of `targetUrl`? The same match, expiry included, the active-test gate makes. */
 export async function domainVerifiedBy(userId: string, targetUrl: string): Promise<boolean> {
   let domain: string;
   try {
@@ -132,7 +133,7 @@ export async function domainVerifiedBy(userId: string, targetUrl: string): Promi
       and(
         eq(domainVerificationsTable.userId, userId),
         eq(domainVerificationsTable.domain, domain),
-        isNotNull(domainVerificationsTable.verifiedAt),
+        verificationIsCurrent(),
       ),
     )
     .limit(1);

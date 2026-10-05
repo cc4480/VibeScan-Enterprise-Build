@@ -4,8 +4,9 @@ import type { TokenUser } from "../lib/apiTokens";
 import { text, hostOf, formatAccount, formatVerification } from "./mcpFormat";
 import { z } from "zod";
 import { db, scansTable, domainVerificationsTable } from "@workspace/db";
-import { and, desc, eq, isNotNull, ne } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import { runAppRoute } from "./appRouteRunner";
+import { verificationIsCurrent } from "../lib/activeProbeGate";
 import domainVerificationRouter from "./domainVerification";
 import checkoutRouter from "./checkout";
 import { APP_ORIGIN } from "../lib/appOrigin";
@@ -48,8 +49,9 @@ export function registerAccountTools(server: McpServer, httpReq: Request, user: 
         .select({ domain: domainVerificationsTable.domain })
         .from(domainVerificationsTable)
         // The same test the active-probe gate applies (lib/activeProbeGate.ts):
-        // a verification counts once verified_at is set. Exact hostname only.
-        .where(and(eq(domainVerificationsTable.userId, user.id), isNotNull(domainVerificationsTable.verifiedAt)));
+        // a verification counts while the proof was last seen within the
+        // validity window. Exact hostname only.
+        .where(and(eq(domainVerificationsTable.userId, user.id), verificationIsCurrent()));
       const verified = rows.map((r) => r.domain);
       return text(
         verified.length

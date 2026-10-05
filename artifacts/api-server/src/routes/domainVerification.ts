@@ -12,21 +12,32 @@ import { and, desc, eq } from "drizzle-orm";
 import { isRateLimited } from "./accountShared";
 import {
   WELL_KNOWN_PATH,
-  checkTxtRecord,
-  checkWellKnownFile,
   extractDomain,
   generateVerificationToken,
+  isVerificationCurrent,
+  runVerificationCheck,
   txtRecordName,
+  verificationExpiresAt,
 } from "../lib/domainVerify";
 
 const router: IRouter = Router();
 
-/** Shapes one row for the client, including the instructions to satisfy it. */
+/**
+ * Shapes one row for the client, including the instructions to satisfy it.
+ *
+ * `verified` means the verification is valid NOW, the same answer the
+ * active-probe gate gives, not merely that it once passed. `verifiedAt` is the
+ * last time the proof was seen and `expiresAt` the date it lapses unless it is
+ * seen again; the daily re-check (lib/domainReverify.ts) keeps moving both
+ * forward while the proof stays in place. A lapsed row keeps its token, so the
+ * user can republish the proof and press Check.
+ */
 function present(row: typeof domainVerificationsTable.$inferSelect) {
   return {
     domain: row.domain,
-    verified: row.verifiedAt != null,
+    verified: isVerificationCurrent(row.verifiedAt),
     verifiedAt: row.verifiedAt,
+    expiresAt: row.verifiedAt ? verificationExpiresAt(row.verifiedAt) : null,
     method: row.method,
     token: row.token,
     dns: { name: txtRecordName(row.domain), type: "TXT", value: row.token },
@@ -145,18 +156,15 @@ router.post("/domain-verifications/:domain/check", async (req, res): Promise<voi
       res.status(404).json({ error: "No verification started for that domain" });
       return;
     }
-    if (row.verifiedAt) {
+    // Only a verification that is still valid short-circuits. A lapsed one runs
+    // the check again, and passing it sets verifiedAt to now, which is how a
+    // user whose proof had been removed gets back in.
+    if (isVerificationCurrent(row.verifiedAt)) {
       res.json({ verification: present(row) });
       return;
     }
 
-    // DNS first: it is cheaper than an HTTP round trip and cannot be satisfied
-    // by anyone who merely controls a path on the web server.
-    const method = (await checkTxtRecord(domain, row.token))
-      ? "dns"
-      : (await checkWellKnownFile(domain, row.token))
-        ? "well_known"
-        : null;
+    const method = await runVerificationCheck(domain, row.token);
 
     const now = new Date();
     const [updated] = await db
