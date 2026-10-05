@@ -100,19 +100,47 @@ async function authoritativeServers(domain: string): Promise<string[]> {
   return [];
 }
 
+/**
+ * Longest the direct-to-authority attempt may take, in total. It is an optimisation (it dodges a stale
+ * negative-cache answer), so it must never decide how long a check takes: a platform that blocks
+ * outbound DNS to arbitrary nameservers would otherwise spend 15 s or more here, per domain, before the
+ * fallback and the HTTPS check even start. On the first scheduled re-verification in production every
+ * check ran into the 30 s backstop for that reason.
+ */
+export const AUTHORITY_DEADLINE_MS = 6_000;
+
 /** Asks the zone's nameservers directly. They hold the zone, so no cache sits in between. */
-async function txtFromAuthority(name: string, domain: string): Promise<string[][] | null> {
+async function txtFromAuthority(name: string, domain: string, held: { resolver?: dns.Resolver }): Promise<string[][] | null> {
   const servers = await authoritativeServers(domain);
   if (servers.length === 0) return null;
-  const resolver = new dns.Resolver({ timeout: 3000, tries: 2 });
+  // One try per server and a short wait: a nameserver that is going to answer does so in milliseconds.
+  const resolver = new dns.Resolver({ timeout: 2000, tries: 1 });
+  held.resolver = resolver;
   resolver.setServers(servers);
   try {
     return await resolver.resolveTxt(name);
   } catch (err) {
     // "No such record" from the authority is a real answer; anything else
-    // (timeout, refused) means we could not ask and should fall back.
+    // (timeout, refused, cancelled) means we could not ask and should fall back.
     const code = (err as NodeJS.ErrnoException).code;
     return code === "ENOTFOUND" || code === "ENODATA" ? [] : null;
+  }
+}
+
+/** txtFromAuthority, abandoned (and its outstanding queries cancelled) after AUTHORITY_DEADLINE_MS. */
+async function txtFromAuthorityWithinDeadline(name: string, domain: string): Promise<string[][] | null> {
+  const held: { resolver?: dns.Resolver } = {};
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<null>((resolve) => {
+    timer = setTimeout(() => {
+      held.resolver?.cancel();
+      resolve(null);
+    }, AUTHORITY_DEADLINE_MS);
+  });
+  try {
+    return await Promise.race([txtFromAuthority(name, domain, held), deadline]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -130,7 +158,7 @@ async function txtFromAuthority(name: string, domain: string): Promise<string[][
 export async function checkTxtRecord(domain: string, token: string): Promise<boolean> {
   const name = txtRecordName(domain);
   try {
-    const fresh = await txtFromAuthority(name, domain);
+    const fresh = await txtFromAuthorityWithinDeadline(name, domain);
     if (fresh && hasToken(fresh, token)) return true;
   } catch {
     // fall through to the recursive resolver
