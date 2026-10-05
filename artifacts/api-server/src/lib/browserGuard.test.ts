@@ -33,8 +33,15 @@ beforeAll(async () => {
 afterAll(async () => { await closeBrowser(); });
 afterEach(async () => {
   __setBrowserUrlRule(null);
+  delete process.env["ALLOW_PRIVATE_SCAN_TARGETS"];
   await Promise.all(servers.splice(0).map((s) => new Promise((r) => s.close(r))));
 });
+
+/** These tests play on 127.x hosts, which the vetted proxy refuses as private. Opt in so the rule under test is the guard's own. */
+function useRule(fn: Parameters<typeof __setBrowserUrlRule>[0]) {
+  process.env["ALLOW_PRIVATE_SCAN_TARGETS"] = "true";
+  __setBrowserUrlRule(fn);
+}
 
 const render = (url: string, credentials?: { cookie?: string }) =>
   runWithScanHttp({ targetUrl: url, ...(credentials ? { credentials } : {}) } as never, () => renderPage(url));
@@ -50,7 +57,7 @@ describe("browser request guard", () => {
   it("does not follow a redirect onto a blocked host", async () => {
     const victim = await serve("127.0.0.2", html("secret"));
     const target = await serve("127.0.0.1", (_q, res) => res.writeHead(302, { Location: `http://127.0.0.2:${victim.port}/meta` }).end());
-    __setBrowserUrlRule(async (u) => new URL(u).hostname === "127.0.0.1");
+    useRule(async (u) => new URL(u).hostname === "127.0.0.1");
     await render(`http://127.0.0.1:${target.port}/`);
     expect(victim.hits).toHaveLength(0);
   }, 60_000);
@@ -58,7 +65,7 @@ describe("browser request guard", () => {
   it("follows a redirect to an allowed host and does not carry the customer's cookie to it", async () => {
     const dest = await serve("127.0.0.3", html("<p>landed</p>"));
     const target = await serve("127.0.0.1", (_q, res) => res.writeHead(302, { Location: `http://127.0.0.3:${dest.port}/home` }).end());
-    __setBrowserUrlRule(async () => true);
+    useRule(async () => true);
     const page = await render(`http://127.0.0.1:${target.port}/`, { cookie: "sid=customer-session" });
     expect(page?.html).toContain("landed");
     expect(target.hits[0]?.cookie).toBe("sid=customer-session");
@@ -70,7 +77,7 @@ describe("browser request guard", () => {
     const victim = await serve("127.0.0.2", html("secret"));
     const mid = await serve("127.0.0.3", (_q, res) => res.writeHead(302, { Location: `http://127.0.0.2:${victim.port}/x` }).end());
     const target = await serve("127.0.0.1", (_q, res) => res.writeHead(302, { Location: `http://127.0.0.3:${mid.port}/hop` }).end());
-    __setBrowserUrlRule(async (u) => new URL(u).hostname !== "127.0.0.2");
+    useRule(async (u) => new URL(u).hostname !== "127.0.0.2");
     await render(`http://127.0.0.1:${target.port}/`);
     // renderPage retries its navigation once, so the allowed middle host may be asked twice.
     expect(mid.hits.length).toBeGreaterThan(0);
@@ -81,7 +88,7 @@ describe("browser request guard", () => {
   it("blocks requests the page's own script makes to a blocked host", async () => {
     const victim = await serve("127.0.0.2", (_q, res) => res.writeHead(200, { "access-control-allow-origin": "*" }).end("secret"));
     const target = await serve("127.0.0.1", html(`<script>fetch("http://127.0.0.2:${victim.port}/steal").catch(()=>{});</script>ok`));
-    __setBrowserUrlRule(async (u) => new URL(u).hostname === "127.0.0.1");
+    useRule(async (u) => new URL(u).hostname === "127.0.0.1");
     const page = await render(`http://127.0.0.1:${target.port}/`);
     expect(page?.html).toContain("ok");
     expect(victim.hits).toHaveLength(0);
@@ -90,7 +97,7 @@ describe("browser request guard", () => {
   it("sends the customer's cookie to the scanned host but not to other hosts the page loads", async () => {
     const other = await serve("127.0.0.3", (_q, res) => res.writeHead(200, { "content-type": "image/gif" }).end("GIF89a"));
     const target = await serve("127.0.0.1", html(`<img src="http://127.0.0.3:${other.port}/pixel.gif"><p>dashboard</p>`));
-    __setBrowserUrlRule(async () => true); // both hosts reachable: only the credential rule is under test
+    useRule(async () => true); // both hosts reachable: only the credential rule is under test
     await render(`http://127.0.0.1:${target.port}/`, { cookie: "sid=customer-session" });
     expect(target.hits[0]?.cookie).toBe("sid=customer-session");
     expect(other.hits.length).toBeGreaterThan(0);
@@ -104,7 +111,7 @@ describe("browser request guard", () => {
 // tests the decision the guard makes inside that handler, with a positive control.
 describe("browser request guard: WebSocket decision", () => {
   async function decide(allowed: boolean) {
-    __setBrowserUrlRule(async () => allowed);
+    useRule(async () => allowed);
     let handler: ((ws: { url(): string; close(o?: unknown): Promise<void>; connectToServer(): unknown }) => Promise<void>) | undefined;
     await guardBrowser({
       route: async () => undefined,
