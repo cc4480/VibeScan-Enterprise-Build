@@ -229,6 +229,70 @@ export async function sendLoginCode(toEmail: string, code: string, ttlMinutes: n
   console.log("[mailer] sign-in code sent", { to: toEmail });
 }
 
+/**
+ * What an address that ALREADY has an account is sent when someone signs up with
+ * it, in place of the sign-up code.
+ *
+ * POST /account/register answers a new address and an existing one with the
+ * same reply, so the caller cannot use it to learn who has an account. The
+ * people who CAN be told are the owners of the mailbox, and this is how: the
+ * email says someone tried, that nothing changed, and how to get in.
+ *
+ * THIS ONE THROWS, for the same reason sendLoginCode does and with a second
+ * one on top. The route must fail identically whether it was sending a code or
+ * this notice: if a suppressed or unreachable address made a new sign-up answer
+ * 502 but an existing account answer 202, that difference would be the oracle
+ * back again. So it has the same guards in the same order — missing key, bounce
+ * heal, suppression, then the request — and the same failure modes.
+ *
+ * It carries no code and no token. The only things in it are two links to
+ * pages anyone can already open.
+ */
+export async function sendSignupExistingAccountEmail(toEmail: string): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    throw new Error("RESEND_API_KEY is not set — the sign-up notice cannot be sent");
+  }
+
+  // As in sendLoginCode: a sign-up for this address is a request that mail
+  // reach it now, so a stale hard bounce is given one more try.
+  await healBounceSuppression(toEmail);
+  if (await isSuppressed(toEmail, "account")) {
+    throw new Error("That address is on the suppression list after a permanent delivery failure");
+  }
+
+  const message: AccountMessage = {
+    heading: "You already have an account",
+    body:
+      "Someone just tried to create a SecScan.us account with this email address. " +
+      "There is already an account here, so nothing was created and nothing about your account was changed.<br><br>" +
+      "If that was you, sign in instead. You will use your password and the code we email you, " +
+      "or Google if that is how you signed up. " +
+      `If you have forgotten your password, you can <a href="${APP_ORIGIN}/forgot-password">reset it</a>.`,
+    ctaLabel: "Sign in",
+    ctaUrl: `${APP_ORIGIN}/sign-in`,
+    footnote:
+      "If it wasn't you, you can ignore this email. Knowing your address is not enough to get into your account.",
+  };
+
+  const res = await fetch(RESEND_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: resendBody({
+      from: AUTH_FROM_EMAIL,
+      to: [toEmail],
+      subject: "You already have a SecScan.us account",
+      html: buildAccountHtml(message.heading, message.body, message.ctaLabel, message.ctaUrl, message.footnote),
+      text: buildAccountText(message.heading, message.body, message.ctaLabel, message.ctaUrl, message.footnote),
+    }),
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Resend API ${res.status}: ${errText}`);
+  }
+  console.log("[mailer] sign-up notice sent", { to: toEmail });
+}
+
 export async function sendPasswordReset(toEmail: string, resetUrl: string): Promise<void> {
   // Asking to reset a password is itself a signal someone can receive mail
   // here right now, so a stale hard bounce gets one more try. This is the ONLY

@@ -100,6 +100,16 @@ export default function RegisterPage() {
           />
         </AuthForm>
         <CheckSpamNote what="code" />
+        {/* The server answers an address that already has an account exactly as it
+            answers a new one, so it cannot be used to find out who is registered.
+            This is how someone who does have an account finds out what happened. */}
+        <p className="mt-4 text-xs text-muted-foreground text-center leading-relaxed">
+          Already have an account with this address? Then there's no code to enter. We've emailed you a link to{" "}
+          <Link href="/sign-in" className="text-primary hover:underline underline-offset-4">
+            sign in
+          </Link>{" "}
+          instead.
+        </p>
       </AuthShell>
     );
   }

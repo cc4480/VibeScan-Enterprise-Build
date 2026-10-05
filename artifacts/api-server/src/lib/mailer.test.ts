@@ -195,6 +195,77 @@ describe("account mail vs bulk mail sender", () => {
 });
 
 /**
+ * The email an address that already has an account gets when someone signs up
+ * with it. POST /account/register answers new and existing addresses alike, so
+ * this message is the only place the owner learns what happened.
+ *
+ * It must fail like the sign-in code does (throw), or a send failure would make
+ * the two paths answer differently and bring the oracle back.
+ */
+describe("sendSignupExistingAccountEmail", () => {
+  async function stubSuppressed(suppressed: boolean) {
+    const supp = await import("./emailSuppression.js");
+    vi.spyOn(supp, "isSuppressed").mockResolvedValue(suppressed);
+    vi.spyOn(supp, "healBounceSuppression").mockResolvedValue(undefined);
+  }
+
+  beforeEach(() => {
+    process.env.RESEND_API_KEY = "re_test_key";
+    process.env.FROM_EMAIL = "SecScan <reports@secscan.us>";
+    process.env.AUTH_FROM_EMAIL = "SecScan <codes@mail.secscan.us>";
+    vi.mocked(fetch).mockResolvedValue(new Response("{}", { status: 200 }));
+  });
+
+  it("tells the owner they already have an account, with sign-in and reset links and no code", async () => {
+    await stubSuppressed(false);
+    const { sendSignupExistingAccountEmail } = await import("./mailer.js");
+    const { APP_ORIGIN } = await import("./appOrigin.js");
+
+    await sendSignupExistingAccountEmail("owner@example.com");
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [, init] = vi.mocked(fetch).mock.calls[0]!;
+    const sent = JSON.parse((init as RequestInit).body as string);
+    // Account mail leaves from the account sender, like the code it replaces.
+    expect(sent.from).toBe("SecScan <codes@mail.secscan.us>");
+    expect(sent.to).toEqual(["owner@example.com"]);
+    expect(sent.subject).toMatch(/already have/i);
+    for (const part of [sent.html, sent.text]) {
+      expect(part).toContain(`${APP_ORIGIN}/sign-in`);
+      expect(part).toContain(`${APP_ORIGIN}/forgot-password`);
+      expect(part).toMatch(/already/i);
+      expect(part).not.toMatch(/\b\d{3} ?\d{3}\b/);
+    }
+  });
+
+  it("throws when the provider refuses, so the route can answer 502 as it does for a code", async () => {
+    await stubSuppressed(false);
+    vi.mocked(fetch).mockResolvedValue(new Response("boom", { status: 500 }));
+    const { sendSignupExistingAccountEmail } = await import("./mailer.js");
+
+    await expect(sendSignupExistingAccountEmail("owner@example.com")).rejects.toThrow(/Resend API 500/);
+  });
+
+  it("throws when no mail provider is configured", async () => {
+    await stubSuppressed(false);
+    delete process.env.RESEND_API_KEY;
+    const { sendSignupExistingAccountEmail } = await import("./mailer.js");
+
+    await expect(sendSignupExistingAccountEmail("owner@example.com")).rejects.toThrow(/RESEND_API_KEY/);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("throws, without sending, for a suppressed address, as sendLoginCode does", async () => {
+    await stubSuppressed(true);
+    const { sendSignupExistingAccountEmail, sendLoginCode } = await import("./mailer.js");
+
+    await expect(sendSignupExistingAccountEmail("gone@example.com")).rejects.toThrow(/suppression/);
+    await expect(sendLoginCode("gone@example.com", "123456", 10)).rejects.toThrow(/suppression/);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+/**
  * Does turning a preference off actually stop the email?
  *
  * The settings screen animates a toggle and the API stores a column, but
