@@ -376,7 +376,8 @@ export interface SharedReport {
 
 export interface ReportShare {
   id: string;
-  token: string;
+  /** The link's token. Present only in the response that creates the share; the server stores a hash and cannot return it again. */
+  token?: string;
   /** @nullable */
   expiresAt?: string | null;
   createdAt: string;

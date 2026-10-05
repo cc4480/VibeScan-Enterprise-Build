@@ -206,12 +206,14 @@ export const reportSharesTable = pgTable("report_shares", {
   id: uuid("id").primaryKey().defaultRandom(),
   reportId: uuid("report_id").notNull().references(() => reportsTable.id, { onDelete: "cascade" }),
   userId: text("user_id").notNull(),
-  token: text("token").notNull(),
+  // SHA-256 (hex) of the token in the link. The token itself is shown once, at creation, and never stored:
+  // a leaked database or backup then holds no working share links.
+  tokenHash: text("token_hash").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
 }, (table) => [
-  uniqueIndex("uq_report_shares_token").on(table.token),
+  uniqueIndex("uq_report_shares_token_hash").on(table.tokenHash),
   index("idx_report_shares_report_id").on(table.reportId),
   index("idx_report_shares_user_id").on(table.userId),
 ]);

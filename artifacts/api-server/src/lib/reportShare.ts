@@ -24,11 +24,21 @@
  * report owner's own mailbox and nowhere else, and it is scoped to a single
  * report — never to the account. Tokens are 32 bytes of CSPRNG output, so the
  * link cannot be guessed, and an operator can revoke it from the report's share
- * list like any other.
+ * list like any other. Only a hash of the token is stored, so the link can be
+ * copied at creation and never again.
  */
 
 import { db, reportSharesTable } from "@workspace/db";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+
+/**
+ * What is stored for a token: SHA-256 of its UTF-8 bytes, hex. A plain hash is right here for the same
+ * reason as for API tokens (lib/apiTokens.ts): the input is 256 random bits, so there is nothing for a
+ * slow hash to protect, and the public endpoint needs one indexed equality lookup.
+ */
+export function hashShareToken(token: string): string {
+  return createHash("sha256").update(token, "utf8").digest("hex");
+}
 
 export type ShareExpiry = "7d" | "30d" | "never";
 
@@ -42,6 +52,7 @@ export function computeShareExpiry(expiresIn: ShareExpiry): Date | null {
 
 export interface CreatedShare {
   id: string;
+  /** The link's token. Only ever available here, at creation: the database keeps its hash. */
   token: string;
   expiresAt: Date | null;
   createdAt: Date;
@@ -66,12 +77,12 @@ export async function createReportShare(
 
   const [share] = await db
     .insert(reportSharesTable)
-    .values({ reportId, userId, token, expiresAt })
+    .values({ reportId, userId, tokenHash: hashShareToken(token), expiresAt })
     .returning();
 
   return {
     id: share!.id,
-    token: share!.token,
+    token,
     expiresAt: share!.expiresAt,
     createdAt: share!.createdAt,
   };

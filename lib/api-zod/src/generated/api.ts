@@ -526,7 +526,12 @@ export const ListReportSharesHeader = zod.object({
 
 export const ListReportSharesResponseItem = zod.object({
   id: zod.string(),
-  token: zod.string(),
+  token: zod
+    .string()
+    .optional()
+    .describe(
+      "The link's token. Present only in the response that creates the share; the server stores a hash and cannot return it again.",
+    ),
   expiresAt: zod.date().nullish(),
   createdAt: zod.date(),
   revokedAt: zod.date().nullish(),
@@ -538,7 +543,7 @@ export const ListReportSharesResponse = zod.array(ListReportSharesResponseItem);
  */
 export const RevokeReportShareParams = zod.object({
   id: zod.coerce.string(),
-  token: zod.coerce.string(),
+  shareId: zod.coerce.string(),
 });
 
 export const RevokeReportShareHeader = zod.object({

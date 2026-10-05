@@ -10,7 +10,8 @@ import { getReportBadge, removeReportBadge, type ReportBadge } from "@/lib/badge
 
 export interface ShareLink {
   id: string;
-  token: string;
+  /** Only in the response that creates the link; the server keeps a hash and cannot show it again. */
+  token?: string;
   expiresAt: string | null;
   createdAt: string;
   revokedAt: string | null;
@@ -19,6 +20,8 @@ export interface ShareLink {
 export function ShareButton({ reportId }: { reportId: string }) {
   const [open, setOpen] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  // The link just created. It is shown once: the server stores only a hash of the token.
+  const [newToken, setNewToken] = useState<string | null>(null);
   const [expiresIn, setExpiresIn] = useState<"7d" | "30d" | "never">("never");
   const queryClient = useQueryClient();
 
@@ -37,7 +40,9 @@ export function ShareButton({ reportId }: { reportId: string }) {
 
   const { mutate: createShare, isPending: creating } = useCreateReportShare({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (created) => {
+        const token = (created as ShareLink).token;
+        if (token) setNewToken(token);
         void queryClient.invalidateQueries({ queryKey: getListReportSharesQueryKey(reportId) });
       },
     },
@@ -110,8 +115,8 @@ export function ShareButton({ reportId }: { reportId: string }) {
     createShare({ id: reportId, data: { expiresIn } });
   };
 
-  const handleRevoke = (token: string) => {
-    revokeShare({ id: reportId, token });
+  const handleRevoke = (shareId: string) => {
+    revokeShare({ id: reportId, shareId });
   };
 
   const activeShares = (shares as ShareLink[]).filter((s) => !s.revokedAt);
@@ -143,7 +148,7 @@ export function ShareButton({ reportId }: { reportId: string }) {
                 <h2 className="font-bold text-base">Share Report</h2>
               </div>
               <button
-                onClick={() => setOpen(false)}
+                onClick={() => { setOpen(false); setNewToken(null); }}
                 className="p-1.5 hover:bg-white/5 rounded-lg transition-colors"
               >
                 <X className="w-4 h-4 text-muted-foreground" />
@@ -182,6 +187,33 @@ export function ShareButton({ reportId }: { reportId: string }) {
                 </div>
               </div>
 
+              {/* The link just created: the only time its address can be copied. */}
+              {newToken && (
+                <div className="space-y-2 rounded-xl border border-green-500/30 bg-green-500/5 p-3">
+                  <p className="text-xs font-bold text-green-400 uppercase tracking-wider">New link</p>
+                  <div className="flex items-center gap-2">
+                    <p className="flex-1 min-w-0 text-xs font-mono text-foreground/80 truncate select-all">
+                      {`${window.location.origin}/share/${newToken}`}
+                    </p>
+                    <button
+                      onClick={() => void copyLink(newToken)}
+                      title="Copy link"
+                      className={cn(
+                        "shrink-0 p-1.5 rounded-lg transition-all",
+                        copiedToken === newToken
+                          ? "bg-green-500/20 text-green-400"
+                          : "hover:bg-white/10 text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {copiedToken === newToken ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Copy it now. For your security the link is not stored, so it cannot be shown again. If you lose it, revoke it below and create a new one.
+                  </p>
+                </div>
+              )}
+
               {/* Existing links */}
               <div className="space-y-2">
                 <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider">
@@ -199,7 +231,7 @@ export function ShareButton({ reportId }: { reportId: string }) {
                 ) : (
                   <div className="space-y-2 max-h-52 overflow-y-auto">
                     {activeShares.map((share) => {
-                      const shortToken = share.token.slice(0, 12) + "…";
+                      const created = new Date(share.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
                       const expires = share.expiresAt
                         ? new Date(share.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
                         : "Never";
@@ -211,7 +243,7 @@ export function ShareButton({ reportId }: { reportId: string }) {
                           className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-secondary/50 border border-white/5"
                         >
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs font-mono text-foreground/70 truncate">{shortToken}</p>
+                            <p className="text-xs text-foreground/70 truncate">Link created {created}</p>
                             <p className={cn(
                               "text-[10px] mt-0.5",
                               isExpired ? "text-red-400" : "text-muted-foreground/60",
@@ -220,19 +252,7 @@ export function ShareButton({ reportId }: { reportId: string }) {
                             </p>
                           </div>
                           <button
-                            onClick={() => void copyLink(share.token)}
-                            title="Copy link"
-                            className={cn(
-                              "shrink-0 p-1.5 rounded-lg transition-all",
-                              copiedToken === share.token
-                                ? "bg-green-500/20 text-green-400"
-                                : "hover:bg-white/10 text-muted-foreground hover:text-foreground",
-                            )}
-                          >
-                            {copiedToken === share.token ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                          </button>
-                          <button
-                            onClick={() => handleRevoke(share.token)}
+                            onClick={() => handleRevoke(share.id)}
                             disabled={revoking}
                             title="Revoke link"
                             className="shrink-0 p-1.5 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-all"
