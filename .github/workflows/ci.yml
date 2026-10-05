@@ -131,6 +131,62 @@ jobs:
         continue-on-error: true
         run: node artifacts/api-server/scripts/indexnow-ping.mjs https://secscan.us artifacts/vibescan/public/sitemap.xml
 
+  # Runs in parallel with verify and is not a dependency of docker: an advisory is not a reason to
+  # withhold a build that passed its tests.
+  dependency-audit:
+    name: Dependency audit (production, high+)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    # NOT BLOCKING YET. This fails today on GHSA-vfj7-8cjw-p6xm (braces <=3.0.3, stack-exhaustion
+    # DoS), reached through api-server > http-proxy-middleware > micromatch > braces. It is real
+    # but has no fix to apply: the advisory lists no patched version and 3.0.3 is the latest braces
+    # release. It is not reachable from production: the middleware is only mounted when
+    # NODE_ENV !== "production" (artifacts/api-server/src/app.ts), and it only calls micromatch for
+    # glob path filters, of which this app configures none.
+    # TODO: remove continue-on-error once braces ships a patch (or the proxy is dropped), so a new
+    # high or critical advisory in a production dependency fails the build.
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Same version handling as verify: action-setup reads packageManager from package.json.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # No install: pnpm audit reads pnpm-lock.yaml, so there is nothing to restore or build, and no
+      # package install scripts run in a job that exists to look at the dependency tree.
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level=high
+
+  # A tripwire for credentials committed by mistake, using only grep and a checked-in script (no
+  # third-party action, no secrets, no network). Also runs in parallel with verify.
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Proves the scanner still detects a planted key before trusting a clean result from it.
+      - name: Scanner self-test
+        run: bash scripts/scan-secrets.sh --self-test
+
+      - name: Scan for secrets
+        run: bash scripts/scan-secrets.sh
+
   docker:
     name: Docker image (${{ matrix.target }})
     runs-on: ubuntu-latest
