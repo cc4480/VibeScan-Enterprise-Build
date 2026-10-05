@@ -3,6 +3,30 @@
 Notable changes to the SecScan engine. Commit messages carry the full reasoning
 for each change; this collects what shipped and why it mattered.
 
+## 2026-10-05
+
+### Changed
+
+- **TLS is now checked by the scanner itself; the SSL Labs grade is opt-in.** Audit
+  finding #10: the scan called the Qualys SSL Labs API v3 on every scan, but Qualys
+  deprecated v3 from 2024-01-01, v4 needs a registered email, and their terms require
+  permission for commercial use. Every HTTPS scan now runs a "TLS configuration
+  check" (`tlsCheck.ts`, node:tls): which of TLS 1.0 to 1.3 the server accepts, the
+  cipher suite it chooses, and its certificate (expiry, hostname, chain trust, key
+  size, signature hash). It goes through the same address vetting as the rest of the
+  scanner (private targets and rebinding answers are refused) with an 8-second
+  timeout per handshake. TLS 1.0/1.1 are best effort: a version the scanner's OpenSSL
+  cannot offer is reported as "could not test", never "not supported". It gives no
+  letter grade. SSL Labs runs only when `SSLLABS_ENABLED=true`; with it off the report
+  has no TLS grade and no failed "SSL Labs" line, where before a scan that SSL Labs
+  could not assess listed it as failed.
+  New findings: Deprecated TLS Protocol Versions Accepted (medium), TLS Certificate
+  Expired / Not Yet Valid / Does Not Match the Hostname, Self-Signed TLS Certificate
+  and TLS Certificate Not Trusted (high), TLS Certificate Chain Incomplete, Key Too
+  Short, Signed With a Weak Hash and Weak Cipher Suite Negotiated (medium), TLS
+  Certificate Expires Soon (under 14 days) and Cipher Suite Without Forward Secrecy
+  (low).
+
 ## 2026-10-02
 
 ### Fixed

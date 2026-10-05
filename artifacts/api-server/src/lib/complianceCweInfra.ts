@@ -1,5 +1,13 @@
 import type { ControlRef } from "./compliance";
 
+/** A certificate that is expired, issued for another host or not chained to a trusted root (the TLS configuration check). */
+const CERTIFICATE_VALIDATION: ControlRef[] = [
+  { framework: "asvs", control: "V9.2.1", title: "Server connections use trusted TLS certificates" },
+  { framework: "pci", control: "4.2.1", title: "Certificates for open-network transmission are valid and trusted" },
+  { framework: "iso27001", control: "A.8.24", title: "Use of cryptography" },
+  { framework: "soc2", control: "CC6.7", title: "Transmission of data is protected" },
+];
+
 /** CWE → controls for transport, cryptography, access control, authentication, session and configuration weaknesses. */
 export const CWE_CONTROLS_INFRASTRUCTURE: Record<string, ControlRef[]> = {
   // ── Transport and cryptography ─────────────────────────────────────────────
@@ -19,6 +27,14 @@ export const CWE_CONTROLS_INFRASTRUCTURE: Record<string, ControlRef[]> = {
     { framework: "pci", control: "4.2.1", title: "Strong cryptography during transmission" },
     { framework: "iso27001", control: "A.8.24", title: "Use of cryptography" },
   ],
+  "CWE-328": [
+    { framework: "asvs", control: "V6.2.2", title: "Approved cryptographic algorithms only" },
+    { framework: "pci", control: "4.2.1", title: "Strong cryptography during transmission" },
+    { framework: "iso27001", control: "A.8.24", title: "Use of cryptography" },
+  ],
+  "CWE-295": CERTIFICATE_VALIDATION,
+  "CWE-297": CERTIFICATE_VALIDATION,
+  "CWE-298": CERTIFICATE_VALIDATION,
   "CWE-321": [
     { framework: "asvs", control: "V6.4.2", title: "Keys not hard-coded or shared" },
     { framework: "iso27001", control: "A.8.24", title: "Use of cryptography — key management" },

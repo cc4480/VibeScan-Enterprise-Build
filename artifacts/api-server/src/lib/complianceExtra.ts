@@ -61,7 +61,8 @@ const TOPICS: Topic[] = [
   { fw: "nist80053", control: "AC-12", title: "Session termination", cwes: ["CWE-613"] },
   { fw: "nist80053", control: "SC-23", title: "Session authenticity", cwes: ["CWE-614", "CWE-1004", "CWE-352"] },
   { fw: "nist80053", control: "SC-8", title: "Transmission confidentiality and integrity", cwes: ["CWE-319", "CWE-311", "CWE-523"], categories: ["Mail Transport Security"] },
-  { fw: "nist80053", control: "SC-13", title: "Cryptographic protection", cwes: ["CWE-326", "CWE-327"] },
+  { fw: "nist80053", control: "SC-13", title: "Cryptographic protection", cwes: ["CWE-326", "CWE-327", "CWE-328"] },
+  { fw: "nist80053", control: "SC-17", title: "Public key infrastructure certificates", cwes: ["CWE-295", "CWE-297", "CWE-298"] },
   { fw: "nist80053", control: "SC-12", title: "Cryptographic key establishment and management", cwes: ["CWE-321", "CWE-324"] },
   { fw: "nist80053", control: "SC-28", title: "Protection of information at rest", cwes: ["CWE-312"] },
   { fw: "nist80053", control: "SC-7", title: "Boundary protection", cwes: [], categories: ["Network Exposure"] },
@@ -78,7 +79,7 @@ const TOPICS: Topic[] = [
   { fw: "hipaa", control: "164.312(b)", title: "Audit controls", cwes: ["CWE-778"] },
   { fw: "hipaa", control: "164.312(c)(1)", title: "Integrity", cwes: ["CWE-347", "CWE-353"] },
   { fw: "hipaa", control: "164.312(d)", title: "Person or entity authentication", cwes: ["CWE-306", "CWE-307", "CWE-522"] },
-  { fw: "hipaa", control: "164.312(e)(1)", title: "Transmission security", cwes: ["CWE-319", "CWE-311", "CWE-523", "CWE-326", "CWE-327"], categories: ["Mail Transport Security"] },
+  { fw: "hipaa", control: "164.312(e)(1)", title: "Transmission security", cwes: ["CWE-319", "CWE-311", "CWE-523", "CWE-326", "CWE-327", "CWE-328", "CWE-295", "CWE-297", "CWE-298"], categories: ["Mail Transport Security"] },
 ];
 
 const ref = (t: Topic): ControlRef => ({ framework: t.fw, control: t.control, title: t.title });

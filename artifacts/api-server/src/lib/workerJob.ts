@@ -1,6 +1,6 @@
 import type { ScanResult } from "./scanner";
 import { loadScanAuth } from "./workerCredentials";
-import { mergeSslLabs, mergeRecon, recordSideTests } from "./workerSideChecks";
+import { mergeSslLabs, mergeTlsCheck, mergeRecon, recordSideTests, sslLabsEnabled } from "./workerSideChecks";
 import { refineFindings } from "./workerFilters";
 import { runAiStage } from "./workerAi";
 import { buildReport } from "./workerReport";
@@ -16,6 +16,7 @@ import { activeProbesUnlocked } from "./activeProbeGate";
 import { createLiveProgress } from "./liveProgress";
 import { completeVerification, failVerificationForScan } from "./verifyFix";
 import { checkSslLabs } from "./ssllabs";
+import { inspectTls } from "./tlsCheck";
 import { logger } from "./logger";
 import type { Job } from "pg-boss";
 import { refundFailedScan, reapStuckScans } from "./billing";
@@ -71,15 +72,24 @@ export async function processScanJob(job: ScanJob): Promise<void> {
     return;
   }
 
-  // ── 2. Run header scan + SSL Labs check in parallel ───────────────────
-  log.info("Starting HTTP scan, SSL Labs check, and reconnaissance in parallel");
+  // ── 2. Run header scan + TLS check in parallel ─────────────────────────
+  const useSslLabs = sslLabsEnabled();
+  log.info({ sslLabs: useSslLabs }, "Starting HTTP scan, TLS configuration check, and reconnaissance in parallel");
 
-  // SSL Labs is best-effort and can take up to 120 seconds — start it early
   const parallelStartedAt = Date.now();
-  const sslLabsPromise = checkSslLabs(targetUrl).catch((err) => {
-    log.warn({ err }, "SSL Labs check failed (non-fatal)");
-    return null;
+  // The scanner's own TLS check (tlsCheck.ts) is a few handshakes; it never rejects.
+  const tlsPromise = inspectTls(targetUrl).catch((err): Awaited<ReturnType<typeof inspectTls>> => {
+    log.warn({ err }, "TLS configuration check failed (non-fatal)");
+    return { status: "failed", reason: err instanceof Error ? err.message.slice(0, 200) : "unexpected error" };
   });
+  // SSL Labs is off unless SSLLABS_ENABLED=true (Qualys's terms need their permission for commercial
+  // use). When on, it is best-effort and can take up to 30 seconds — start it early.
+  const sslLabsPromise = useSslLabs
+    ? checkSslLabs(targetUrl).catch((err) => {
+        log.warn({ err }, "SSL Labs check failed (non-fatal)");
+        return null;
+      })
+    : Promise.resolve(null);
 
   // One decision, consulted by both the HTTP scan and recon, so a target can
   // never be port-scanned by a path that skipped the check the probes made.
@@ -179,17 +189,18 @@ export async function processScanJob(job: ScanJob): Promise<void> {
     clearTimeout(scanTimer);
   }
 
-  // Wait for SSL Labs (it was started in parallel with the header scan)
-  log.info("Waiting for SSL Labs assessment to complete");
+  // Wait for the TLS check and, when enabled, SSL Labs (both started in parallel with the header scan)
+  log.info("Waiting for the TLS configuration check to complete");
+  const tlsCheck = mergeTlsCheck(scanResult, await tlsPromise, log);
   const sslLabsResult = await sslLabsPromise;
-  mergeSslLabs(scanResult, sslLabsResult, log);
+  if (useSslLabs) mergeSslLabs(scanResult, sslLabsResult, log);
 
   // ── 2b. Merge reconnaissance results ─────────────────────────────────
   log.info("Waiting for reconnaissance to complete");
   const reconRunResult = await reconPromise;
   mergeRecon(scanResult, reconRunResult, log);
 
-  const tests = await recordSideTests({ scanResult, sslLabsResult, reconRunResult, allowActiveProbes, parallelStartedAt, live, log });
+  const tests = await recordSideTests({ scanResult, sslLabsEnabled: useSslLabs, sslLabsResult, tlsCheck, reconRunResult, allowActiveProbes, parallelStartedAt, live, log });
 
   // ── 2c–2e. Merge duplicates, re-verify borderline findings, drop dismissed ones ──
   const autoSuppressedCount = await refineFindings({ scanResult, targetUrl, userId, httpCredentials: auth.httpCredentials, log });

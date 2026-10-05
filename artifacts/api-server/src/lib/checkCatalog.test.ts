@@ -16,8 +16,9 @@ describe("the catalog matches the scanner's source", () => {
     // Deliberate: changing the count is a public-claim change, so it must be edited here too.
     // 140 → 143: GitHub source-code secret scanning, LLM prompt-injection extraction,
     // and the active race-condition probe. 143 → 144: the TLS grade note that says why a grade
-    // is below A.
-    expect(TOTAL_CHECKS).toBe(144);
+    // is below A. 144 → 156: the scanner's own TLS configuration check, which replaces the SSL Labs
+    // grade as the default (the two SSL Labs checks stay listed; they run only with SSLLABS_ENABLED).
+    expect(TOTAL_CHECKS).toBe(156);
     expect(CATALOG.flatMap((t) => t.checks)).toHaveLength(TOTAL_CHECKS);
   });
 
@@ -58,6 +59,7 @@ describe("every test the scanner records is accounted for", () => {
     "API endpoint testing (auth, injection, IDOR, mass assignment)",
     "SSRF (out-of-band callback)",
     "cross-account access control (IDOR)",
+    "TLS configuration check",
     "SSL Labs TLS grade",
     "port scan",
     "LLM prompt injection (system prompt extraction)",
@@ -91,6 +93,8 @@ describe("catalogFor", () => {
   it("matches a test whose name carries a count, and prefers the longer key", () => {
     expect(catalogFor("site crawl (14 inner pages)")?.test).toBe("site crawl");
     expect(catalogFor("SSL Labs TLS grade (A+)")?.test).toBe("SSL Labs TLS grade");
+    expect(catalogFor("TLS configuration check (TLS 1.3 negotiated, certificate valid for 80 more days)")?.test).toBe("TLS configuration check");
+    expect(catalogFor("TLS configuration check")?.test).toBe("TLS configuration check");
     expect(catalogFor("Supabase RLS")?.test).toBe("Supabase RLS");
     expect(catalogFor("Supabase RLS and Firebase rules")?.test).toBe("Supabase RLS and Firebase rules");
   });

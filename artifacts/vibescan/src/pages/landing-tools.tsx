@@ -97,7 +97,7 @@ export function OwaspSection() {
             tagColor: "text-primary",
             tagBg: "bg-primary/10 border-primary/20",
             title: "Cryptographic Failures",
-            desc: "SSL/TLS grade via Qualys SSL Labs, cipher strength, HSTS enforcement, and certificate validity.",
+            desc: "TLS configuration check (protocol versions, cipher strength, certificate validity and trust), plus HSTS enforcement.",
           },
           {
             tag: "A03",
