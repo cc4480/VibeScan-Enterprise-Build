@@ -269,6 +269,52 @@ Inspection** → request indexing for `/` and `/learn`.
 `robots.txt` deliberately disallows `/dashboard`, `/scan`, `/report/` and
 `/monitor`. Search Console will list them as excluded; that is intended.
 
+## Retiring the legacy anonymous bearer
+
+Before sign-up existed, an anonymous account was a row whose user id was its only
+credential (`Authorization: Bearer <user id>`). A user id is not a secret, so
+this is weak authentication. The `web` service still honours it for **existing
+anonymous rows only** (an unknown id never creates an account) so people who
+used the product before registration are not cut off: registering promotes
+their row in place and their scans, credits and monitors follow. Closing it is
+therefore your call, controlled by two variables on the `web` service:
+
+| Variable | Effect |
+| --- | --- |
+| `LEGACY_BEARER_SUNSET` | An ISO 8601 date or timestamp (`2026-12-01`, `2026-12-01T09:00:00Z`). From that moment the legacy bearer is rejected. Without an offset the value is read as UTC, so a bare date means the start of that day. Unset = never sunset (the default, and today's behaviour). A value that is not a real ISO date is ignored, **not** treated as already passed, and logged as an error once at startup. |
+| `ALLOW_LEGACY_ANONYMOUS_BEARER` | `false` closes it immediately. It **always wins**: it closes the path whatever `LEGACY_BEARER_SUNSET` says, and no sunset date can reopen it. |
+
+**See who still uses it.** Every request authenticated this way is logged at
+`warn`, as one line per user id per process per 24 hours (so a busy user does
+not flood the log, and each replica logs once a day):
+
+```json
+{"level":40,"event":"legacy_anonymous_bearer","userId":"3f2504e0-…","route":"GET /api/scans","msg":"Request authenticated by legacy anonymous bearer (user id is the only credential). …"}
+```
+
+Search the `web` service logs for `legacy_anonymous_bearer`. The line carries
+the user id and the route only; the token is the user id, and share-link tokens
+in the path are masked. The `web` service also logs its current state at boot
+("Legacy anonymous bearer authentication status": `open` or `closed`, and the
+sunset time if one is set). There is no counter: the log line is the signal.
+
+**Recommended order:**
+
+1. Deploy and **watch the logs** for a while. If lines keep appearing, those
+   users are still working anonymously; that is the group a sign-up prompt
+   needs to reach.
+2. **Set `LEGACY_BEARER_SUNSET`** to a date far enough ahead to warn them, and
+   keep watching. A sunset can be moved later (or unset) while it has not yet
+   passed; once it has passed, unsetting it reopens the path.
+3. When the lines have stopped, or the date has passed and you are satisfied,
+   **set `ALLOW_LEGACY_ANONYMOUS_BEARER=false`** to close the path
+   permanently, independent of any date.
+
+Closing the bearer does not by itself strand anyone's history: sign-up promotes
+an anonymous row whenever its id arrives in the `Authorization` header, and that
+step is not controlled by either variable. The user's browser still holds the id,
+so they can register after the cutoff and keep their scans.
+
 ## Backups
 
 The compose stack includes a backup service. **Railway deployments do not** —
