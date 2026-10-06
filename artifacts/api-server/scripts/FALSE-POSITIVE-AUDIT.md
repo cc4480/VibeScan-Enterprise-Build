@@ -18,6 +18,50 @@ DATABASE_URL=postgres://localhost/anything \
 `DATABASE_URL` only has to be *set* — the scanner module imports the db layer at
 load time. It is never read by a passive scan.
 
+## 2026-10-05 — passive sweep of the 20 guard sites, plus the TLS and mail checks
+
+Same 20 targets and mode as 2026-09-30 (`live-scan.ts`, passive). Raw output:
+`scan-results/2026-10-05-guards-20.json`. The new TLS configuration check (2026-10-05) and the mail
+transport check run in the worker, not in `runScan`, so `live-scan.ts` never exercises them; they were
+run separately against the same 20 sites: `scan-results/2026-10-05-tls-mail-20.json`.
+
+**Against 2026-09-30:** unchanged. Every difference was a route count inside a finding's name ("on 9
+Internal Routes" now "on 8"), dropbox swapping one info finding for another, and paypal losing one info
+note. stackoverflow.com and npmjs.com are no longer on the list (they answer this scanner with a
+challenge); pypi.org and rubygems.org replaced them. etsy, nytimes and reddit are withheld as bot
+challenges and report only the coverage notes, as intended.
+
+**New targets, checked against the live response (scanner User-Agent):** all findings on pypi.org and
+rubygems.org reproduced, apart from the one below. `/search/` on pypi has no CSP or Referrer-Policy;
+rubygems `/admin` is a real login page and lacks `nosniff`; pypi's root has no `Cache-Control`.
+
+**TLS and mail transport:** 18 of 20 sites produced no TLS finding; the two that did
+(google.com, mozilla.org: "Deprecated TLS Protocol Versions Accepted") were re-tested with plain
+`openssl s_client -tls1 / -tls1_1` in a container: both complete TLS 1.0 and 1.1 handshakes, and
+github.com, which the scanner passed, refuses them with a protocol-version alert. True positives. No
+mail-transport findings on any site (port 25 was reachable from the test machine for at least
+google's MX; a host that does not answer produces no finding by design).
+
+### Fixed: inner-page cookie check disagreed with the root check
+
+Found on pypi.org. `/account/login/` clears `user_id__insecure` (`Max-Age=0`, `expires` in 1997) and the
+crawler reported it as "Non-Session Cookie Readable by JavaScript on Inner Page". The root-page check
+already skips a cookie the server is clearing; the crawler's `checkPageCookies` and
+`seedCookieIssuesFromRoot` did not, and tested flags with `/secure/i` and `/httponly/i` over the whole
+Set-Cookie line. That also matched the word in the cookie's *name*: with the name `user_id__insecure`
+the cookie counted as `Secure`, so a live cookie of that name without the flag would never have been
+reported. Both now use `parseSetCookie`, as the root scan does. Tests fail on the old code (deleted
+cookie, live cookie with "insecure" in its name, `secure_pref` / `httponly_hint`, and the root seeding)
+and a clean twin keeps the real findings.
+
+### Left as is
+
+- pypi.org "JavaScript Source Map Exposed" (High): the map exists and embeds `sourcesContent`, as
+  reported. pypi's code is open source, which the scanner cannot know; the rating follows the existing
+  rule (a map is rated by whose code it embeds).
+- pypi.org SRI on `analytics.python.org`: a different registrable domain from pypi.org, so third-party
+  by the scanner's rule; arguable, not wrong.
+
 ## 2026-09-30 (evening) — full passive sweep after the probe-review fixes
 
 Live sweep, passive only: the 30-site list from 2026-09-24 plus the 20 guard targets built into
