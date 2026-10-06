@@ -145,3 +145,37 @@ describe("Cloudflare's passive JS-detection script (secscan.us, 2026-09-29)", ()
     expect(detectChallengePage(200, html).isChallenge).toBe(true);
   });
 });
+
+describe("AWS WAF challenge stub with a <noscript> heading (www.booking.com, 2026-10-05)", () => {
+  // GET / answered HTTP 202 with a bare document: an empty <title>, an empty #challenge-container,
+  // the WAF's challenge.js and AwsWafIntegration calls, and <noscript><h1>JavaScript is disabled</h1>.
+  // The <h1> made isStubDocument call it a real page, so the stub was graded as booking.com's
+  // homepage: 12 findings about an interstitial nobody publishes. Saved with LF line endings (the
+  // server sent CRLF; the repo normalises to LF).
+  const body = fixture("aws-waf-challenge-booking.html");
+
+  it("is the real capture", () => {
+    expect(body).toContain("AwsWafIntegration.getToken()");
+    expect(body).toContain("<h1>JavaScript is disabled</h1>");
+  });
+
+  it("is recognised as an AWS WAF challenge", () => {
+    const v = detectChallengePage(202, body, { server: "istio-envoy" });
+    expect(v.isChallenge).toBe(true);
+    expect(v.vendor).toBe("AWS WAF");
+  });
+
+  it("clean twin: a real page that loads the AWS WAF SDK and has a noscript fallback is left alone", () => {
+    const page = `<!doctype html><html><head><title>Acme Widgets - Home</title>
+<script src="https://1234.edge.sdk.awswaf.com/1234/567/challenge.js"></script></head>
+<body><h1>Acme Widgets</h1><nav>Shop</nav><p>${"Welcome to our shop. ".repeat(40)}</p>
+<noscript><h1>JavaScript is disabled</h1>Enable JavaScript to use the cart.</noscript></body></html>`;
+    expect(detectChallengePage(200, page, {}).isChallenge).toBe(false);
+  });
+
+  it("clean twin: a small page whose real content is outside the noscript block is left alone", () => {
+    const page = `<html><head><title>Status</title><script>AwsWafIntegration.getToken()</script></head>
+<body><main><p>${"All systems operational. ".repeat(12)}</p></main><noscript><h1>JavaScript is disabled</h1></noscript></body></html>`;
+    expect(detectChallengePage(200, page, {}).isChallenge).toBe(false);
+  });
+});
