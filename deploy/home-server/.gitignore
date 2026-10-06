@@ -1,0 +1,5 @@
+# Secrets and data: never commit these.
+.env
+env/*.env
+backups/
+migration/
