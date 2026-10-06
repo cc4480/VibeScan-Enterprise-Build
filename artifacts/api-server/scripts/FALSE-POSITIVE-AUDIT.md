@@ -18,6 +18,52 @@ DATABASE_URL=postgres://localhost/anything \
 `DATABASE_URL` only has to be *set* — the scanner module imports the db layer at
 load time. It is never read by a passive scan.
 
+## 2026-10-06 — rendered single-page apps (the first sweep that used the headless browser)
+
+**Why none of the earlier sweeps rendered.** `renderPage()` returns nothing until `initBrowser()` has run.
+The worker calls it at start-up (the Docker scanner logs "Headless browser initialised"); `live-scan.ts`
+never did. So production renders single-page apps and every sweep to date silently did not. `live-scan.ts`
+now initialises the browser, and closes it after the results are written (closing it also shuts its proxy,
+after which Node exits without running anything placed after it).
+
+**The list.** `sweep-lists/2026-10-05-spa-shells-12.txt`: of about 75 candidates, only 12 are empty
+client-rendered shells (the scanner's own `isSpa()` is true on the raw HTML) that answer the scanner
+without a challenge: excalidraw.com, tldraw.com, app.netlify.com, gitpod.io, app.logrocket.com,
+app.appsmith.com, dashboard.render.com, app.zenhub.com, vault.bitwarden.com, mail.proton.me,
+app.aave.com, snapshot.org. The sites that build with Lovable, Bolt and similar tools, and the AI chat
+apps (chatgpt.com, claude.ai, perplexity.ai, lovable.dev), all challenge the scanner, so they cannot be
+swept without an allowlist or a domain you own. Raw output: `2026-10-05-spa-shells-12.json` (not
+rendered, the old behaviour), `2026-10-05-spa-shells-12-rendered.json` (rendered, before the fix),
+`2026-10-06-spa-shells-12-rendered-fixed.json` (rendered, after).
+
+**Rendering found two false-positive classes**, both from reading the rendered DOM for checks about
+things the site owner controls:
+
+1. **Subresource integrity on injected scripts** (dashboard.render.com, app.netlify.com, app.zenhub.com,
+   excalidraw.com, app.appsmith.com). The rendered page lists scripts that tag loaders added at run time:
+   `cdn.segment.com/next-integrations/...`, `js.hs-analytics.net/analytics/<timestamp>/...js`, a
+   doubleclick URL with `random=<timestamp>`, FullStory, a Reddit pixel. The owner did not write them and
+   cannot pin a hash on a URL that changes per request.
+2. **A High "Full Source Code Accessible" for a third party's source map** (dashboard.render.com). The map
+   was `/segcdn/next-integrations/actions/reddit-pixel/...js.map`: 78 `node_modules` files and 40 under
+   `webpack://Destination/...`, which is Segment's open-source destination code, proxied through Render's
+   own path. The rule that rates a map by whose code it embeds counts anything outside `node_modules` as
+   the site's own, so Segment's code was rated as Render's.
+
+**Fix.** The probe stage takes the first response as the server sent it (`authoredHtml`), and SRI and
+source-map discovery read that. Everything else still reads the rendered page. Test:
+`probes.coverage.test.ts` (fails on the old wiring; a clean twin still reports a third-party script the
+site's own HTML carries; with no separate as-served page it behaves as before). Re-run: all 12 render, the
+rendered-only SRI findings are gone on all five sites, the High source-map finding is gone, and the
+fixture gate still passes.
+
+**Trade-off, stated:** a source map for a lazily loaded route chunk that only appears after rendering is no
+longer found. The main bundle named in the served HTML still is.
+
+**Left as is.** A few info-level differences between a raw and a rendered scan remain and are expected
+(gitpod.io's `noindex` is removed by the page's own JS, so the rendered page is the one a search engine
+sees; API-key notes depend on which scripts the rendered page loaded).
+
 ## 2026-10-05 (later) — 50 companies not tested before
 
 `sweep-lists/2026-10-05-companies-50.txt`: 50 sites with no overlap with any earlier sweep or with the
@@ -51,12 +97,9 @@ text. Real capture saved as `__fixtures__/aws-waf-challenge-booking.html`; the d
 the old code, and two clean twins (a real page loading the AWS WAF SDK with a noscript fallback) stay
 unflagged. Re-scan: 3 findings, 0 actionable, "intercepted by a bot-protection challenge".
 
-### Coverage gap, not a bug
+### Coverage gap (corrected below: it was the harness, and it is fixed)
 
-`renderedWithBrowser` is false for every site in every sweep to date (0 of 20, 30 and 50). None of these
-sites serves an empty single-page-app shell, so the headless-browser path, which matters most for sites
-built with Lovable, Bolt and similar tools, is never exercised by the sweep. A future list needs a few
-client-rendered app shells that do not challenge the scanner.
+`renderedWithBrowser` was false for every site in every sweep to date. See "Rendered pages" next.
 
 ## 2026-10-05 — passive sweep of the 20 guard sites, plus the TLS and mail checks
 

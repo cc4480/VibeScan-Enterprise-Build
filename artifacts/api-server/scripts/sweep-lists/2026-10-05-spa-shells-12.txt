@@ -1,0 +1,15 @@
+# 12 client-rendered single-page-app shells (2026-10-05), chosen because the scanner's own isSpa() is
+# true on the raw HTML AND they answer the scanner without a bot challenge. The company sweeps never
+# rendered a page in the headless browser; these are meant to. Passive scan only.
+https://excalidraw.com
+https://tldraw.com
+https://app.netlify.com
+https://gitpod.io
+https://app.logrocket.com
+https://app.appsmith.com
+https://dashboard.render.com
+https://app.zenhub.com
+https://vault.bitwarden.com
+https://mail.proton.me
+https://app.aave.com
+https://snapshot.org
