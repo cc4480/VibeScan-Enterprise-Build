@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { runInjectionProbes } from "./injectionProbe.js";
 
-// Mocking fetch: use vi.stubGlobal (see replit.md) — vi.spyOn(globalThis,"fetch")
+// Mocking fetch: use vi.stubGlobal (see ENGINEERING.md) — vi.spyOn(globalThis,"fetch")
 // does not apply because the module closed over globalThis.fetch at import time.
 afterEach(() => vi.unstubAllGlobals());
 

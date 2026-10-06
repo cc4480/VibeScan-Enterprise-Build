@@ -44,12 +44,11 @@ Thumbs.db
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md
 
-# Replit
+# Tool caches
 .cache/
 .local/
 
-# Local env files (Replit injects secrets directly; .env is only used for
-# non-Replit local dev and must never be committed)
+# Local env files (.env is only used for local dev and must never be committed)
 .env
 .env.local
 .env.*.local

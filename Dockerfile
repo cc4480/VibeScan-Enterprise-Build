@@ -20,7 +20,7 @@ COPY . .
 RUN pnpm install --frozen-lockfile
 
 # -r runs in topological order, so the lib packages (db, api-zod,
-# api-client-react, replit-auth-web) are compiled before the two apps that
+# api-client-react) are compiled before the two apps that
 # import their type output. mockup-sandbox is an unrelated demo artifact and is
 # excluded to keep the build lean.
 #

@@ -24,8 +24,8 @@ export async function getBoss(): Promise<PgBoss> {
       connectionTimeoutMillis: 10_000,
       // Run maintenance every 20 seconds instead of the default 60.
       // This keeps the pg-boss Timekeeper connection active, preventing it
-      // from sitting idle long enough for Replit's production Postgres to
-      // drop it (~30–60 s idle timeout on hosted providers).
+      // from sitting idle long enough for a hosted Postgres to drop it
+      // (~30–60 s idle timeout on hosted providers).
       monitorIntervalSeconds: 20,
       maintenanceIntervalSeconds: 20,
     });
