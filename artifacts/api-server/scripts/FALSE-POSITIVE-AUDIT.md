@@ -18,6 +18,46 @@ DATABASE_URL=postgres://localhost/anything \
 `DATABASE_URL` only has to be *set* — the scanner module imports the db layer at
 load time. It is never read by a passive scan.
 
+## 2026-10-05 (later) — 50 companies not tested before
+
+`sweep-lists/2026-10-05-companies-50.txt`: 50 sites with no overlap with any earlier sweep or with the
+20 guard targets, grouped by what each group stresses (AI app builders and BaaS, framework docs, SaaS
+marketing, PaaS, identity vendors, fintech, consumer apps, media, retail, government/education/health).
+Passive only. Raw output: `scan-results/2026-10-05-companies-50.json`. All 50 scans completed.
+
+**Withheld as bot challenges, correctly:** lovable.dev, canva.com, coinbase.com, nih.gov, mayoclinic.org.
+
+**Independent re-derivation.** For every site the scan reported on, the live response was fetched again
+with the scanner's User-Agent and these claims recomputed without any scanner code: missing CSP (9),
+missing `nosniff` (14), missing clickjacking protection (7), HSTS max-age too short (2), missing DMARC
+(3), DMARC `p=none` (3), DMARC without `rua` (1), missing SPF (2), SPF `?all` (3). **Every one agreed.**
+Nine sites refused the plain re-fetch (403, 406, 429) and were not re-derived: salesforce, intuit,
+spotify, airbnb, cdc.gov, mit.edu, lovable, coinbase, mayoclinic. Three sites looked like a missed
+"Missing CSP" (replit.com, netflix.com, booking.com): all three send only
+`Content-Security-Policy-Report-Only`, which the scanner reports as "not enforced", correctly.
+
+**Not hand-checked this round:** SRI (19 sites), weak CSP (19), `object-src` and `base-uri` (21 and 20),
+non-session cookie findings, technology and CVE matches, source maps, and the "on N internal routes"
+findings. Earlier rounds verified the logic behind these; nothing here re-verified them site by site.
+
+### Fixed: an AWS WAF challenge with a `<noscript>` heading was graded as the site
+
+booking.com answers the scanner with HTTP 202 and a 3.9 KB AWS WAF stub: an empty title, an empty
+`#challenge-container`, `challenge.js`, `AwsWafIntegration` calls and
+`<noscript><h1>JavaScript is disabled</h1>...`. The detector already knows the AWS WAF SDK, but only on a
+"stub document", and `isStubDocument` took the `<h1>` for page structure. The scan reported 12 findings
+(5 actionable) about the interstitial. `<noscript>` content now counts for neither structure nor visible
+text. Real capture saved as `__fixtures__/aws-waf-challenge-booking.html`; the detection test fails on
+the old code, and two clean twins (a real page loading the AWS WAF SDK with a noscript fallback) stay
+unflagged. Re-scan: 3 findings, 0 actionable, "intercepted by a bot-protection challenge".
+
+### Coverage gap, not a bug
+
+`renderedWithBrowser` is false for every site in every sweep to date (0 of 20, 30 and 50). None of these
+sites serves an empty single-page-app shell, so the headless-browser path, which matters most for sites
+built with Lovable, Bolt and similar tools, is never exercised by the sweep. A future list needs a few
+client-rendered app shells that do not challenge the scanner.
+
 ## 2026-10-05 — passive sweep of the 20 guard sites, plus the TLS and mail checks
 
 Same 20 targets and mode as 2026-09-30 (`live-scan.ts`, passive). Raw output:

@@ -104,8 +104,14 @@ function markupOnly(html: string): string {
  */
 function isStubDocument(html: string): boolean {
   if (html.length > 6_000) return false;
-  if (/<(?:h[1-6]|p|nav|footer|main|article|section)\b/i.test(html)) return false;
-  const visible = html.replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  // A <noscript> block is where a challenge explains itself to a client that cannot run its script
+  // ("JavaScript is disabled ... verify that you're not a robot"), usually under a heading.
+  // booking.com's AWS WAF stub (2026-10-05) has an <h1> there; it read as page structure and a 4 KB
+  // interstitial was graded as booking.com's homepage. A visitor who runs scripts never sees that
+  // block, so it counts for neither structure nor visible text.
+  const body = html.replace(/<noscript\b[\s\S]*?<\/noscript>/gi, "");
+  if (/<(?:h[1-6]|p|nav|footer|main|article|section)\b/i.test(body)) return false;
+  const visible = body.replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
   return visible.length < 150;
 }
 
