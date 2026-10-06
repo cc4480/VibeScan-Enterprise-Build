@@ -1,0 +1,72 @@
+# 50 companies for a passive sweep (2026-10-05). None appear in any earlier sweep or in live-scan.ts.
+# One URL per line; "#" starts a comment. Category notes say which rules each group is meant to exercise.
+
+# AI app builders and BaaS: the product's own audience (SPA rendering, Supabase/Firebase/AI-feature checks)
+https://lovable.dev
+https://bolt.new
+https://cursor.com
+https://replit.com
+https://supabase.com
+https://firebase.google.com
+https://huggingface.co
+https://www.anthropic.com
+
+# Frameworks and docs sites (static/Next.js/Vite shapes, catch-all routing)
+https://nextjs.org
+https://react.dev
+https://tailwindcss.com
+https://vuejs.org
+https://svelte.dev
+
+# SaaS marketing sites (heavy third-party scripts: SRI, CSP allowlists, analytics cookies)
+https://linear.app
+https://www.asana.com
+https://www.atlassian.com
+https://www.hubspot.com
+https://www.salesforce.com
+https://www.twilio.com
+https://www.datadoghq.com
+https://sentry.io
+https://www.mongodb.com
+https://www.canva.com
+
+# Hosting and PaaS (platform-gate and "no app running" pages, multi-tenant catch-alls)
+https://railway.com
+https://render.com
+https://fly.io
+https://www.heroku.com
+
+# Identity and security vendors (strict policies; should be near clean)
+https://auth0.com
+https://www.okta.com
+https://1password.com
+https://proton.me
+https://bitwarden.com
+
+# Fintech (session cookies, strict CSP, challenge pages)
+https://www.coinbase.com
+https://wise.com
+https://plaid.com
+https://www.intuit.com
+
+# Consumer apps (large SPAs, bot protection)
+https://www.spotify.com
+https://www.netflix.com
+https://www.airbnb.com
+https://www.booking.com
+https://discord.com
+
+# Media (ad-tech scripts, many cookies, WordPress-based newsrooms)
+https://www.cnn.com
+https://www.wired.com
+https://techcrunch.com
+
+# Retail (Akamai-style edges that challenge scanners)
+https://www.ikea.com
+
+# Government, education and health (older stacks, DNS/mail hygiene, security.txt)
+https://www.cdc.gov
+https://www.nih.gov
+https://www.mit.edu
+https://www.stanford.edu
+https://www.mayoclinic.org
