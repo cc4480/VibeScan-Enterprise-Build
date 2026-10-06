@@ -88,7 +88,7 @@ matches, entropy thresholds on secret patterns, session vs. non-session cookie
 classification, and public-by-design keys (`pk_live_`, `sb_publishable_`,
 Firebase `AIza…`) never flagged on their own. The rules every new probe is
 expected to follow are written up in
-[`replit.md`](replit.md#scanner-false-positive-prevention).
+[`ENGINEERING.md`](ENGINEERING.md#scanner-false-positive-prevention).
 
 ## Use from AI editors (MCP)
 
@@ -132,20 +132,19 @@ lib/
   api-zod/          Zod schemas generated from the spec
   api-client-react/ Generated API client
   db/               Drizzle schema + migrations
-  replit-auth-web/  Auth utilities (unused — see below)
 ```
 
 - **Stack**: React 19, Vite 7, Tailwind, Wouter, TanStack Query / Express 5,
   TypeScript ESM, pino, pg-boss / PostgreSQL 16 via Drizzle ORM / esbuild.
-- **Anonymous by default, accounts optional.** A first-time visitor gets a UUID
-  minted into `localStorage` (`vibescan_client_token`) and sent as
-  `Authorization: Bearer` — no signup needed to scan. On top of that sits a real
-  account system: `routes/account.ts` handles register, login, email
-  verification, password reset/change and deletion, and `routes/googleAuth.ts`
-  handles Google OAuth. Registering raises the daily scan quota from
-  `SCAN_DAILY_LIMIT_ANON` (10) to `SCAN_DAILY_LIMIT_ACCOUNT` (50), because an
-  account is attributable in a way an anonymous UUID is not.
-  `lib/replit-auth-web` is vestigial.
+- **Accounts.** Sign-up is two steps: details, then a six-digit code emailed to
+  the address, so no account exists until the email is proven. `routes/account*.ts`
+  handles register, login, email verification, password reset/change and deletion,
+  and `routes/googleAuth.ts` handles Google OAuth. Sessions are cookies. The old
+  anonymous `Authorization: Bearer <user id>` path honours only rows that already
+  exist (an unknown id creates nothing) and can be closed with
+  `LEGACY_BEARER_SUNSET` or `ALLOW_LEGACY_ANONYMOUS_BEARER=false`; registering
+  promotes such a row in place. Daily scan quotas are `SCAN_DAILY_LIMIT_ANON` (10)
+  and `SCAN_DAILY_LIMIT_ACCOUNT` (50).
 - **Two processes, one image.** `src/index.ts` (the `web` tier) serves
   the API and the built frontend and only *enqueues* scans. `src/secscan.ts`
   (the scanner) runs the pg-boss worker, the monitor scheduler and the EOL/CVE
@@ -180,7 +179,6 @@ pnpm install
 pnpm --filter @workspace/db run build
 pnpm --filter @workspace/api-zod run build
 pnpm --filter @workspace/api-client-react run build
-pnpm --filter @workspace/replit-auth-web run build
 
 cp .env.example .env    # then fill it in — see below
 ```
@@ -222,7 +220,7 @@ don't commit it.
 | `ENCRYPTION_KEY` | no | 32-byte base64 AES-256 key that seals scan credentials at rest. Without it, credentialed scanning is unavailable; anonymous scanning is unaffected. |
 | `RESEND_API_KEY` | no | Email notifications (report ready, CVE alerts). |
 | `APP_ORIGIN` | no | Base URL for links in emails. No trailing slash. |
-| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | no | Dormant — scans are free. |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | no | Payments are on exactly when both are set; unset, the pricing page shows "not live yet". See `deploy/PAYMENTS-GO-LIVE.md`. |
 
 Generate an encryption key with:
 
@@ -235,8 +233,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```bash
 pnpm run typecheck                              # whole workspace
 pnpm run build                                  # typecheck + build every package
-pnpm --filter @workspace/api-server run test    # 769 tests, 52 files
-pnpm --filter @workspace/vibescan run test      #  20 tests,  3 files
+pnpm --filter @workspace/api-server run test    # ~3,000 tests; the database-backed suites skip without Postgres
+pnpm --filter @workspace/vibescan run test
 ```
 
 After editing `lib/api-spec/openapi.yaml`, regenerate and rebuild the
@@ -248,7 +246,7 @@ pnpm --filter @workspace/api-zod run build
 pnpm --filter @workspace/api-client-react run build
 ```
 
-[`replit.md`](replit.md) is the working engineering doc: the false-positive
+[`ENGINEERING.md`](ENGINEERING.md) is the working engineering doc: the false-positive
 rules new probes must follow, plus the accumulated gotchas — why some helpers
 are deliberately duplicated between `scanner.ts` and `crawler.ts`, why Vitest
 `fetch` mocks need `vi.stubGlobal`, and other things worth knowing before your
@@ -271,14 +269,15 @@ host, with DNS, TLS, backups and the caveats worth knowing before taking real
 traffic.
 
 ```bash
-cp .env.example .env    # set APP_ORIGIN, POSTGRES_PASSWORD, TLS_EMAIL, ENCRYPTION_KEY
-docker compose up -d --build
+cp .env.docker.example .env.docker   # set POSTGRES_PASSWORD, ENCRYPTION_KEY, APP_ORIGIN
+docker compose --env-file .env.docker up -d --build
 ```
 
-That brings up PostgreSQL, applies the schema, starts the app, and puts Caddy
-in front for automatic Let's Encrypt TLS. The image is built on Microsoft's
-Playwright base so Chromium and its system libraries match the pinned
-Playwright version.
+That brings up PostgreSQL, the `web` tier, the `secscan` scanner and a backup
+service. Both app tiers apply pending migrations on boot. TLS is **not** part of
+the stack: `web` is published on `127.0.0.1:8090` only, so put a reverse proxy
+(Caddy, nginx) in front of it — see [`DOCKER.md`](DOCKER.md). The scanner image
+installs Chromium at the Playwright version pinned in the Dockerfile.
 
 `APP_ORIGIN` is a **build** argument as well as a runtime one: the frontend
 bakes it into canonical links, Open Graph tags, JSON-LD and the sitemap, so
