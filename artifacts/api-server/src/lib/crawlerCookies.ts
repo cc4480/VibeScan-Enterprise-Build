@@ -1,5 +1,6 @@
 /** Cookie checks on crawled pages. */
 import { isLikelySessionCookie, requiresHttpOnly } from "./cookieClassification.js";
+import { parseSetCookie } from "./cookieFlags.js";
 import { detectSerializedCookies } from "./deserializationProbe.js";
 import type { ScanVulnerability } from "./scanner";
 import { vuln } from "./crawlerFetch";
@@ -85,9 +86,13 @@ export function checkPageCookies(
     if (!cookie.trim()) continue;
     // Skip malformed Set-Cookie fragments that have no name=value pair.
     // These arise from dates in expires= values that get mis-split upstream.
-    const firstSegment = cookie.split(";")[0] ?? "";
-    if (!firstSegment.includes("=")) continue;
-    const namePart = firstSegment.split("=")[0]?.trim() ?? "cookie";
+    // Flags are read from the attributes (parseSetCookie), exactly as the root scan does: a
+    // regex over the whole line also matched a cookie NAME or value containing "secure".
+    const parsed = parseSetCookie(cookie);
+    if (!parsed) continue;
+    // A cookie the server is clearing (Max-Age=0 / past Expires) carries no session.
+    if (parsed.deleted) continue;
+    const namePart = parsed.name;
 
     // Skip infrastructure-owned cookies that the site operator cannot modify.
     if (INFRA_COOKIE_NAMES.has(namePart.toLowerCase())) continue;
@@ -97,7 +102,7 @@ export function checkPageCookies(
     // see isLikelySessionCookie in scanner.ts for the shared classification.
     const isSession = isLikelySessionCookie(namePart);
 
-    if (isHttps && !/secure/i.test(cookie)) {
+    if (isHttps && !parsed.secure) {
       const key = `secure::${namePart}`;
       if (!seenCookieIssues.has(key)) {
         seenCookieIssues.add(key);
@@ -120,7 +125,7 @@ export function checkPageCookies(
 
     // A double-submit CSRF token has to stay readable by JavaScript; see
     // requiresHttpOnly. The root scan applies the same exemption.
-    if (!/httponly/i.test(cookie) && requiresHttpOnly(namePart)) {
+    if (!parsed.httpOnly && requiresHttpOnly(namePart)) {
       const key = `httponly::${namePart}`;
       if (!seenCookieIssues.has(key)) {
         seenCookieIssues.add(key);
@@ -166,12 +171,13 @@ export function checkPageCookies(
 export function seedCookieIssuesFromRoot(rootSetCookies: string[]): Set<string> {
   const seen = new Set<string>();
   for (const cookie of rootSetCookies) {
-    const firstSegment = cookie.split(";")[0] ?? "";
-    if (!firstSegment.includes("=")) continue;
-    const namePart = firstSegment.split("=")[0]?.trim() ?? "";
+    const parsed = parseSetCookie(cookie);
+    // A cookie the root is clearing is skipped there, so it must not seed a key here.
+    if (!parsed || parsed.deleted) continue;
+    const namePart = parsed.name === "cookie" ? "" : parsed.name;
     if (!namePart || INFRA_COOKIE_NAMES.has(namePart.toLowerCase())) continue;
-    if (!/secure/i.test(cookie)) seen.add(`secure::${namePart}`);
-    if (!/httponly/i.test(cookie)) seen.add(`httponly::${namePart}`);
+    if (!parsed.secure) seen.add(`secure::${namePart}`);
+    if (!parsed.httpOnly) seen.add(`httponly::${namePart}`);
   }
   return seen;
 }

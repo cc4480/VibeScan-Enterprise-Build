@@ -51,6 +51,7 @@ overrides:
   'picomatch@^2': '^2.3.2'
   'picomatch@>=4.0.0 <4.0.4': '^4.0.4'
   'body-parser@^2': '^2.3.0'
+  'proxy-addr@^2': '^2.0.8'
   'dompurify@^3': '^3.4.13'
   '@esbuild-kit/esm-loader': npm:tsx@^4.21.0
   '@expo/ngrok-bin>@expo/ngrok-bin-darwin-arm64': '-'

@@ -1,0 +1,597 @@
+{
+ "scannedAt": "2026-10-06T04:22:58.916Z",
+ "results": [
+  {
+   "url": "https://google.com",
+   "tlsStatus": "inspected",
+   "protocols": {
+    "TLSv1": "accepted",
+    "TLSv1.1": "accepted",
+    "TLSv1.2": "accepted",
+    "TLSv1.3": "accepted"
+   },
+   "negotiated": {
+    "protocol": "TLSv1.3",
+    "cipher": "TLS_AES_256_GCM_SHA384",
+    "standardName": "TLS_AES_256_GCM_SHA384"
+   },
+   "trusted": true,
+   "trustError": null,
+   "cert": {
+    "subject": "*.google.com",
+    "issuer": "WE2",
+    "notAfter": "2026-12-11T20:00:18.000Z",
+    "keyType": "EC",
+    "keyBits": 256,
+    "sig": "ecdsa-with-SHA256",
+    "hostnameMatches": true
+   },
+   "tlsFindings": [
+    {
+     "sev": "medium",
+     "name": "Deprecated TLS Protocol Versions Accepted",
+     "evidence": "A handshake restricted to a deprecated TLS protocol version completed.\nHost: google.com:443\nTLS 1.0: accepted (TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA)\nTLS 1.1: accepted (TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA)"
+    }
+   ],
+   "mailHosts": 1,
+   "mailFindings": []
+  },
+  {
+   "url": "https://github.com",
+   "tlsStatus": "inspected",
+   "protocols": {
+    "TLSv1": "rejected",
+    "TLSv1.1": "rejected",
+    "TLSv1.2": "accepted",
+    "TLSv1.3": "accepted"
+   },
+   "negotiated": {
+    "protocol": "TLSv1.3",
+    "cipher": "TLS_AES_128_GCM_SHA256",
+    "standardName": "TLS_AES_128_GCM_SHA256"
+   },
+   "trusted": true,
+   "trustError": null,
+   "cert": {
+    "subject": "github.com",
+    "issuer": "Sectigo Public Server Authentication CA DV E36",
+    "notAfter": "2026-11-29T23:59:59.000Z",
+    "keyType": "EC",
+    "keyBits": 256,
+    "sig": "ecdsa-with-SHA256",
+    "hostnameMatches": true
+   },
+   "tlsFindings": [],
+   "mailHosts": 1,
+   "mailFindings": []
+  },
+  {
+   "url": "https://www.cloudflare.com",
+   "tlsStatus": "inspected",
+   "protocols": {
+    "TLSv1": "rejected",
+    "TLSv1.1": "rejected",
+    "TLSv1.2": "accepted",
+    "TLSv1.3": "accepted"
+   },
+   "negotiated": {
+    "protocol": "TLSv1.3",
+    "cipher": "TLS_AES_256_GCM_SHA384",
+    "standardName": "TLS_AES_256_GCM_SHA384"
+   },
+   "trusted": true,
+   "trustError": null,
+   "cert": {
+    "subject": "www.cloudflare.com",
+    "issuer": "WE1",
+    "notAfter": "2026-12-15T14:00:55.000Z",
+    "keyType": "EC",
+    "keyBits": 256,
+    "sig": "ecdsa-with-SHA256",
+    "hostnameMatches": true
+   },
+   "tlsFindings": [],
+   "mailHosts": 3,
+   "mailFindings": []
+  },
+  {
+   "url": "https://pypi.org",
+   "tlsStatus": "inspected",
+   "protocols": {
+    "TLSv1": "rejected",
+    "TLSv1.1": "rejected",
+    "TLSv1.2": "accepted",
+    "TLSv1.3": "accepted"
+   },
+   "negotiated": {
+    "protocol": "TLSv1.3",
+    "cipher": "TLS_AES_128_GCM_SHA256",
+    "standardName": "TLS_AES_128_GCM_SHA256"
+   },
+   "trusted": true,
+   "trustError": null,
+   "cert": {
+    "subject": "pypi.org",
+    "issuer": "GlobalSign Atlas R3 DV TLS CA 2025 Q4",
+    "notAfter": "2027-01-29T04:33:07.000Z",
+    "keyType": "RSA",
+    "keyBits": 2048,
+    "sig": "sha256WithRSAEncryption",
+    "hostnameMatches": true
+   },
+   "tlsFindings": [],
+   "mailHosts": 3,
+   "mailFindings": []
+  },
+  {
+   "url": "https://rubygems.org",
+   "tlsStatus": "inspected",
+   "protocols": {
+    "TLSv1": "rejected",
+    "TLSv1.1": "rejected",
+    "TLSv1.2": "accepted",
+    "TLSv1.3": "accepted"
+   },
+   "negotiated": {
+    "protocol": "TLSv1.3",
+    "cipher": "TLS_AES_128_GCM_SHA256",
+    "standardName": "TLS_AES_128_GCM_SHA256"
+   },
+   "trusted": true,
+   "trustError": null,
+   "cert": {
+    "subject": "rubygems.org",
+    "issuer": "GlobalSign Atlas R3 DV TLS CA 2026 Q1",
+    "notAfter": "2027-03-09T18:00:25.000Z",
+    "keyType": "RSA",
+    "keyBits": 2048,
+    "sig": "sha256WithRSAEncryption",
+    "hostnameMatches": true
+   },
+   "tlsFindings": [],
+   "mailHosts": 1,
+   "mailFindings": []
+  },
+  {
+   "url": "https://www.etsy.com",
+   "tlsStatus": "inspected",
+   "protocols": {
+    "TLSv1": "rejected",
+    "TLSv1.1": "rejected",
+    "TLSv1.2": "accepted",
+    "TLSv1.3": "accepted"
+   },
+   "negotiated": {
+    "protocol": "TLSv1.3",
+    "cipher": "TLS_AES_128_GCM_SHA256",
+    "standardName": "TLS_AES_128_GCM_SHA256"
+   },
+   "trusted": true,
+   "trustError": null,
+   "cert": {
+    "subject": "*.etsystatic.com",
+    "issuer": "GlobalSign Atlas R3 DV TLS CA 2025 Q4",
+    "notAfter": "2026-12-05T15:09:44.000Z",
+    "keyType": "RSA",
+    "keyBits": 2048,
+    "sig": "sha256WithRSAEncryption",
+    "hostnameMatches": true
+   },
+   "tlsFindings": [],
+   "mailHosts": 3,
+   "mailFindings": []
+  },
+  {
+   "url": "https://www.nytimes.com",
+   "tlsStatus": "inspected",
+   "protocols": {
+    "TLSv1": "rejected",
+    "TLSv1.1": "rejected",
+    "TLSv1.2": "accepted",
+    "TLSv1.3": "accepted"
+   },
+   "negotiated": {
+    "protocol": "TLSv1.3",
+    "cipher": "TLS_AES_128_GCM_SHA256",
+    "standardName": "TLS_AES_128_GCM_SHA256"
+   },
+   "trusted": true,
+   "trustError": null,
+   "cert": {
+    "subject": "nytimes.com",
+    "issuer": "Thawte TLS RSA CA G1",
+    "notAfter": "2027-03-19T23:59:59.000Z",
+    "keyType": "RSA",
+    "keyBits": 2048,
+    "sig": "sha256WithRSAEncryption",
+    "hostnameMatches": true
+   },
+   "tlsFindings": [],
+   "mailHosts": 3,
+   "mailFindings": []
+  },
+  {
+   "url": "https://www.dropbox.com",
+   "tlsStatus": "inspected",
+   "protocols": {
+    "TLSv1": "rejected",
+    "TLSv1.1": "rejected",
+    "TLSv1.2": "accepted",
+    "TLSv1.3": "accepted"
+   },
+   "negotiated": {
+    "protocol": "TLSv1.3",
+    "cipher": "TLS_AES_256_GCM_SHA384",
+    "standardName": "TLS_AES_256_GCM_SHA384"
+   },
+   "trusted": true,
+   "trustError": null,
+   "cert": {
+    "subject": "*.app.dropbox.com",
+    "issuer": "DigiCert Global G3 TLS ECC SHA384 2020 CA1",
+    "notAfter": "2027-04-17T23:59:59.000Z",
+    "keyType": "EC",
+    "keyBits": 256,
+    "sig": "ecdsa-with-SHA384",
+    "hostnameMatches": true
+   },
+   "tlsFindings": [],
+   "mailHosts": 2,
+   "mailFindings": []
+  },
+  {
+   "url": "https://stripe.com",
+   "tlsStatus": "inspected",
+   "protocols": {
+    "TLSv1": "rejected",
+    "TLSv1.1": "rejected",
+    "TLSv1.2": "accepted",
+    "TLSv1.3": "accepted"
+   },
+   "negotiated": {
+    "protocol": "TLSv1.3",
+    "cipher": "TLS_AES_256_GCM_SHA384",
+    "standardName": "TLS_AES_256_GCM_SHA384"
+   },
+   "trusted": true,
+   "trustError": null,
+   "cert": {
+    "subject": "stripe.com",
+    "issuer": "DigiCert G5 TLS ECC SHA384 2021 CA1",
+    "notAfter": "2026-12-10T23:59:59.000Z",
+    "keyType": "EC",
+    "keyBits": 256,
+    "sig": "ecdsa-with-SHA384",
+    "hostnameMatches": true
+   },
+   "tlsFindings": [],
+   "mailHosts": 3,
+   "mailFindings": []
+  },
+  {
+   "url": "https://www.mapbox.com",
+   "tlsStatus": "inspected",
+   "protocols": {
+    "TLSv1": "rejected",
+    "TLSv1.1": "rejected",
+    "TLSv1.2": "accepted",
+    "TLSv1.3": "rejected"
+   },
+   "negotiated": {
+    "protocol": "TLSv1.2",
+    "cipher": "ECDHE-RSA-AES128-GCM-SHA256",
+    "standardName": "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
+   },
+   "trusted": true,
+   "trustError": null,
+   "cert": {
+    "subject": "www.mapbox.com",
+    "issuer": "GlobalSign Atlas R3 DV TLS CA 2025 Q4",
+    "notAfter": "2027-01-09T23:00:19.000Z",
+    "keyType": "RSA",
+    "keyBits": 2048,
+    "sig": "sha256WithRSAEncryption",
+    "hostnameMatches": true
+   },
+   "tlsFindings": [],
+   "mailHosts": 1,
+   "mailFindings": []
+  },
+  {
+   "url": "https://vercel.com",
+   "tlsStatus": "inspected",
+   "protocols": {
+    "TLSv1": "rejected",
+    "TLSv1.1": "rejected",
+    "TLSv1.2": "accepted",
+    "TLSv1.3": "accepted"
+   },
+   "negotiated": {
+    "protocol": "TLSv1.3",
+    "cipher": "TLS_AES_128_GCM_SHA256",
+    "standardName": "TLS_AES_128_GCM_SHA256"
+   },
+   "trusted": true,
+   "trustError": null,
+   "cert": {
+    "subject": "*.vercel.com",
+    "issuer": "YR1",
+    "notAfter": "2026-12-24T12:18:21.000Z",
+    "keyType": "RSA",
+    "keyBits": 2048,
+    "sig": "sha256WithRSAEncryption",
+    "hostnameMatches": true
+   },
+   "tlsFindings": [],
+   "mailHosts": 3,
+   "mailFindings": []
+  },
+  {
+   "url": "https://www.netlify.com",
+   "tlsStatus": "inspected",
+   "protocols": {
+    "TLSv1": "rejected",
+    "TLSv1.1": "rejected",
+    "TLSv1.2": "accepted",
+    "TLSv1.3": "accepted"
+   },
+   "negotiated": {
+    "protocol": "TLSv1.3",
+    "cipher": "TLS_AES_128_GCM_SHA256",
+    "standardName": "TLS_AES_128_GCM_SHA256"
+   },
+   "trusted": true,
+   "trustError": null,
+   "cert": {
+    "subject": "netlify.com",
+    "issuer": "DigiCert Global G2 TLS RSA SHA256 2020 CA1",
+    "notAfter": "2027-02-05T23:59:59.000Z",
+    "keyType": "EC",
+    "keyBits": 256,
+    "sig": "sha256WithRSAEncryption",
+    "hostnameMatches": true
+   },
+   "tlsFindings": [],
+   "mailHosts": 3,
+   "mailFindings": []
+  },
+  {
+   "url": "https://www.linkedin.com",
+   "tlsStatus": "inspected",
+   "protocols": {
+    "TLSv1": "rejected",
+    "TLSv1.1": "rejected",
+    "TLSv1.2": "accepted",
+    "TLSv1.3": "accepted"
+   },
+   "negotiated": {
+    "protocol": "TLSv1.3",
+    "cipher": "TLS_AES_256_GCM_SHA384",
+    "standardName": "TLS_AES_256_GCM_SHA384"
+   },
+   "trusted": true,
+   "trustError": null,
+   "cert": {
+    "subject": "www.linkedin.com",
+    "issuer": "DigiCert Global G2 TLS RSA SHA256 2020 CA1",
+    "notAfter": "2027-02-22T23:59:59.000Z",
+    "keyType": "RSA",
+    "keyBits": 2048,
+    "sig": "sha256WithRSAEncryption",
+    "hostnameMatches": true
+   },
+   "tlsFindings": [],
+   "mailHosts": 3,
+   "mailFindings": []
+  },
+  {
+   "url": "https://www.reddit.com",
+   "tlsStatus": "inspected",
+   "protocols": {
+    "TLSv1": "rejected",
+    "TLSv1.1": "rejected",
+    "TLSv1.2": "accepted",
+    "TLSv1.3": "accepted"
+   },
+   "negotiated": {
+    "protocol": "TLSv1.3",
+    "cipher": "TLS_AES_128_GCM_SHA256",
+    "standardName": "TLS_AES_128_GCM_SHA256"
+   },
+   "trusted": true,
+   "trustError": null,
+   "cert": {
+    "subject": "*.reddit.com",
+    "issuer": "DigiCert Global G2 TLS RSA SHA256 2020 CA1",
+    "notAfter": "2027-02-16T23:59:59.000Z",
+    "keyType": "RSA",
+    "keyBits": 2048,
+    "sig": "sha256WithRSAEncryption",
+    "hostnameMatches": true
+   },
+   "tlsFindings": [],
+   "mailHosts": 3,
+   "mailFindings": []
+  },
+  {
+   "url": "https://www.wikipedia.org",
+   "tlsStatus": "inspected",
+   "protocols": {
+    "TLSv1": "rejected",
+    "TLSv1.1": "rejected",
+    "TLSv1.2": "accepted",
+    "TLSv1.3": "accepted"
+   },
+   "negotiated": {
+    "protocol": "TLSv1.3",
+    "cipher": "TLS_AES_128_GCM_SHA256",
+    "standardName": "TLS_AES_128_GCM_SHA256"
+   },
+   "trusted": true,
+   "trustError": null,
+   "cert": {
+    "subject": "*.wikipedia.org",
+    "issuer": "YE2",
+    "notAfter": "2026-11-03T19:15:40.000Z",
+    "keyType": "EC",
+    "keyBits": 256,
+    "sig": "ecdsa-with-SHA384",
+    "hostnameMatches": true
+   },
+   "tlsFindings": [],
+   "mailHosts": 2,
+   "mailFindings": []
+  },
+  {
+   "url": "https://www.apple.com",
+   "tlsStatus": "inspected",
+   "protocols": {
+    "TLSv1": "rejected",
+    "TLSv1.1": "rejected",
+    "TLSv1.2": "accepted",
+    "TLSv1.3": "accepted"
+   },
+   "negotiated": {
+    "protocol": "TLSv1.3",
+    "cipher": "TLS_AES_256_GCM_SHA384",
+    "standardName": "TLS_AES_256_GCM_SHA384"
+   },
+   "trusted": true,
+   "trustError": null,
+   "cert": {
+    "subject": "www.apple.com",
+    "issuer": "Apple Public EV Server RSA CA 1 - G1",
+    "notAfter": "2026-12-16T18:31:25.000Z",
+    "keyType": "RSA",
+    "keyBits": 2048,
+    "sig": "sha256WithRSAEncryption",
+    "hostnameMatches": true
+   },
+   "tlsFindings": [],
+   "mailHosts": 3,
+   "mailFindings": []
+  },
+  {
+   "url": "https://www.microsoft.com",
+   "tlsStatus": "inspected",
+   "protocols": {
+    "TLSv1": "rejected",
+    "TLSv1.1": "rejected",
+    "TLSv1.2": "accepted",
+    "TLSv1.3": "accepted"
+   },
+   "negotiated": {
+    "protocol": "TLSv1.3",
+    "cipher": "TLS_AES_256_GCM_SHA384",
+    "standardName": "TLS_AES_256_GCM_SHA384"
+   },
+   "trusted": true,
+   "trustError": null,
+   "cert": {
+    "subject": "www.microsoft.com",
+    "issuer": "Microsoft TLS G2 RSA CA OCSP 04",
+    "notAfter": "2027-01-17T19:55:21.000Z",
+    "keyType": "RSA",
+    "keyBits": 2048,
+    "sig": "sha384WithRSAEncryption",
+    "hostnameMatches": true
+   },
+   "tlsFindings": [],
+   "mailHosts": 1,
+   "mailFindings": []
+  },
+  {
+   "url": "https://www.mozilla.org",
+   "tlsStatus": "inspected",
+   "protocols": {
+    "TLSv1": "accepted",
+    "TLSv1.1": "accepted",
+    "TLSv1.2": "accepted",
+    "TLSv1.3": "accepted"
+   },
+   "negotiated": {
+    "protocol": "TLSv1.3",
+    "cipher": "TLS_AES_128_GCM_SHA256",
+    "standardName": "TLS_AES_128_GCM_SHA256"
+   },
+   "trusted": true,
+   "trustError": null,
+   "cert": {
+    "subject": "www.mozilla.org",
+    "issuer": "YR1",
+    "notAfter": "2026-11-20T02:47:58.000Z",
+    "keyType": "RSA",
+    "keyBits": 2048,
+    "sig": "sha256WithRSAEncryption",
+    "hostnameMatches": true
+   },
+   "tlsFindings": [
+    {
+     "sev": "medium",
+     "name": "Deprecated TLS Protocol Versions Accepted",
+     "evidence": "A handshake restricted to a deprecated TLS protocol version completed.\nHost: www.mozilla.org:443\nTLS 1.0: accepted (TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA)\nTLS 1.1: accepted (TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA)"
+    }
+   ],
+   "mailHosts": 3,
+   "mailFindings": []
+  },
+  {
+   "url": "https://www.paypal.com",
+   "tlsStatus": "inspected",
+   "protocols": {
+    "TLSv1": "rejected",
+    "TLSv1.1": "rejected",
+    "TLSv1.2": "accepted",
+    "TLSv1.3": "accepted"
+   },
+   "negotiated": {
+    "protocol": "TLSv1.3",
+    "cipher": "TLS_AES_256_GCM_SHA384",
+    "standardName": "TLS_AES_256_GCM_SHA384"
+   },
+   "trusted": true,
+   "trustError": null,
+   "cert": {
+    "subject": "www.paypal.com",
+    "issuer": "DigiCert EV RSA CA G2",
+    "notAfter": "2027-03-14T23:59:59.000Z",
+    "keyType": "RSA",
+    "keyBits": 2048,
+    "sig": "sha256WithRSAEncryption",
+    "hostnameMatches": true
+   },
+   "tlsFindings": [],
+   "mailHosts": 2,
+   "mailFindings": []
+  },
+  {
+   "url": "https://www.bbc.co.uk",
+   "tlsStatus": "inspected",
+   "protocols": {
+    "TLSv1": "rejected",
+    "TLSv1.1": "rejected",
+    "TLSv1.2": "accepted",
+    "TLSv1.3": "accepted"
+   },
+   "negotiated": {
+    "protocol": "TLSv1.3",
+    "cipher": "TLS_AES_128_GCM_SHA256",
+    "standardName": "TLS_AES_128_GCM_SHA256"
+   },
+   "trusted": true,
+   "trustError": null,
+   "cert": {
+    "subject": "www.bbc.com",
+    "issuer": "GlobalSign GCC R46 OV TLS CA 2025",
+    "notAfter": "2027-01-24T05:46:23.000Z",
+    "keyType": "RSA",
+    "keyBits": 2048,
+    "sig": "sha256WithRSAEncryption",
+    "hostnameMatches": true
+   },
+   "tlsFindings": [],
+   "mailHosts": 2,
+   "mailFindings": []
+  }
+ ]
+}

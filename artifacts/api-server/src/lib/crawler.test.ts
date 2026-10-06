@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { extractInternalLinks, seedCookieIssuesFromRoot, buildHeaderGapVulns, confirmHeaderGaps, redactCookieValue } from "./crawler.js";
+import { checkPageCookies } from "./crawlerCookies";
 
 const BASE = "https://example.com";
 
@@ -144,6 +145,43 @@ describe("seedCookieIssuesFromRoot", () => {
 
   it("is empty when the response sets no cookies", () => {
     expect(seedCookieIssuesFromRoot([]).size).toBe(0);
+  });
+});
+
+describe("checkPageCookies reads flags from the attributes and skips cookies being cleared", () => {
+  const PAGE = "https://example.com/account/login/";
+  const run = (cookies: string[]) => checkPageCookies(cookies, PAGE, true, new Set(), "crawl");
+
+  // Seen on pypi.org (2026-10-05): /account/login/ clears user_id__insecure with Max-Age=0 and an
+  // expires in 1997. The root scan already skips such a cookie; the inner-page check did not, and
+  // reported it as "Readable by JavaScript".
+  it("does not report a cookie the server is clearing", () => {
+    expect(run(["user_id__insecure=; Max-Age=0; Path=/; expires=Wed, 31-Dec-97 23:59:59 GMT"])).toEqual([]);
+    expect(run(["theme=; expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/"])).toEqual([]);
+  });
+
+  it("still reports the same cookie when it is being set, not cleared", () => {
+    const f = run(["user_id__insecure=abc; Max-Age=3600; Path=/"]);
+    expect(f.map((v) => v.name)).toContain("Non-Session Cookie Readable by JavaScript on Inner Page");
+    expect(f.map((v) => v.name)).toContain("Non-Session Cookie Missing Secure Flag on Inner Page");
+  });
+
+  // A regex over the whole line matched the word in the cookie's NAME, so a cookie called
+  // secure_pref with no Secure flag counted as secure and was never reported.
+  it("does not treat the word 'secure' or 'httponly' in a cookie name as the flag", () => {
+    const f = run(["secure_pref=1; Path=/", "httponly_hint=1; Path=/"]);
+    expect(f.some((v) => v.name.includes("Missing Secure Flag") && String(v.evidence).includes("secure_pref"))).toBe(true);
+    expect(f.some((v) => v.name.includes("Readable by JavaScript") && String(v.evidence).includes("httponly_hint"))).toBe(true);
+  });
+
+  it("reports nothing for a cookie carrying both flags", () => {
+    expect(run(["lang=en; Path=/; Secure; HttpOnly; SameSite=Lax"])).toEqual([]);
+  });
+
+  it("seeding from the root ignores a cleared cookie and reads the name's flags correctly", () => {
+    expect(seedCookieIssuesFromRoot(["old=; Max-Age=0; Path=/"]).size).toBe(0);
+    const seen = seedCookieIssuesFromRoot(["secure_pref=1; Path=/"]);
+    expect(seen.has("secure::secure_pref")).toBe(true);
   });
 });
 

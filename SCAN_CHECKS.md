@@ -75,7 +75,7 @@ module does. `none` — neither, so no test exercises it at all.
 | `probesPage.ts` | 3 | 244 | — | indirect, via probes.test.ts (split from probes) |
 | `scannerTransportChecks.ts` | 3 | 70 | — | indirect, via scanner.test.ts (split from scanner) |
 | `baasProbesPocketbase.ts` | 2 | 133 | — | indirect, via baasProbes.test.ts (split from baasProbes) |
-| `crawlerCookies.ts` | 2 | 178 | — | indirect, via crawler.test.ts (split from crawler) |
+| `crawlerCookies.ts` | 2 | 184 | — | indirect, via crawler.test.ts (split from crawler) |
 | `scannerPageChecks.ts` | 2 | 56 | — | indirect, via scanner.test.ts (split from scanner) |
 | `secret-pattern-jwt.ts` | 2 | 81 | — | indirect, via secret-pattern-generic.test.ts |
 | `workerAi.ts` | 2 | 100 | — | indirect, via worker.test.ts (split from worker) |
@@ -179,7 +179,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `crawlerCookies.ts`
 
-*2 findings · 178 lines · no test file.*
+*2 findings · 184 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
