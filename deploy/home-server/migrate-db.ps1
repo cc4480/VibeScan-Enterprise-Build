@@ -80,6 +80,7 @@ $railwayUrl = $env:RAILWAY_DATABASE_URL
 if (-not $railwayUrl) {
     Write-Host ''
     Write-Host "Railway: open the Postgres service used by $App -> Variables, and copy DATABASE_PUBLIC_URL."
+    Write-Host "(Two Postgres services in the project? The app's DATABASE_URL in its Raw Editor names the one it uses.)"
     $secure = Read-Host -AsSecureString 'Paste it here (input is hidden)'
     $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
     try { $railwayUrl = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }

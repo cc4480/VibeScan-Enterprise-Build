@@ -9,6 +9,7 @@ This folder moves the five apps that ran on Railway onto one Windows computer:
 | secscan.info | secscan-info | secscan.info | `secscan-info:8080` |
 | seclayer | seclayer.io2026 | seclayer.app | `seclayer:3000` |
 | complyscan | complyscan | your complyscan domain | `complyscan:5000` |
+| complyscan nightly re-scan | complyscan | (no address) | `complyscan-rescan` |
 | SEO-scan-Pro | SEO-scan-Pro | your SEO-scan-Pro domain | `seoscan:3000` |
 
 Plus one PostgreSQL (a separate database and login per app), a nightly backup
@@ -93,7 +94,7 @@ copy the values into the matching file in
 |---|---|
 | secscan → web | `env\secscan.env` (the scanner reads the same file) |
 | seclayer | `env\seclayer.env` |
-| complyscan | `env\complyscan.env` |
+| complyscan → web | `env\complyscan.env` (the nightly re-scan reads the same file) |
 | SEO-scan-Pro | `env\seoscan.env` |
 
 secscan.info needs no settings.
@@ -124,9 +125,14 @@ powershell -ExecutionPolicy Bypass -File .\migrate-db.ps1 -App seoscan
 
 Each one asks for that app's Railway database address: open the **Postgres**
 service the app uses on Railway → Variables → copy `DATABASE_PUBLIC_URL`, and
-paste it when asked (it is not shown on screen). The script copies everything,
-keeps a copy of the data in the `migration` folder, and tells you how many
-tables arrived.
+paste it when asked (it is not shown on screen). The secscan project has two
+Postgres services: copy from the one the app uses. To see which, open the
+secscan **web** service → Variables → **Raw Editor**: its `DATABASE_URL` line
+reads `${{<name>.DATABASE_URL}}`, and `<name>` is the Postgres service to copy
+from.
+
+The script copies everything, keeps a copy of the data in the `migration`
+folder, and tells you how many tables arrived.
 
 At the end you may see two or three errors that say **must be owner of
 extension**. Those are expected and harmless. Any error about a table, sequence
@@ -149,8 +155,12 @@ apps). Later starts take seconds. Then:
 docker compose ps
 ```
 
-Every app should say `running` (some also say `healthy` after a minute). Open
-each one in your browser on this computer:
+Every app should say `running` (some also say `healthy` after a minute).
+`complyscan-rescan` is Railway's `rescan-cron`: it waits and runs once a day at
+00:00 UTC, like on Railway; `docker compose logs complyscan-rescan` shows how
+long until the next run.
+
+Open each app in your browser on this computer:
 
 | App | Address on this computer |
 |---|---|
@@ -211,6 +221,10 @@ If a domain also uses `www.`, add a second public hostname for it with the same
 service URL, unless a Cloudflare Redirect Rule already sends `www` to the bare
 domain (secscan.info has one).
 
+For complyscan, nothing extra: until Railway is turned off, its `rescan-cron`
+keeps re-scanning Railway's copy of the data and the home one re-scans the home
+copy. Neither sends email, so the two do not get in each other's way.
+
 For SecScan, also start a scan and watch it run:
 `docker compose logs -f secscan-worker` (Ctrl+C stops watching, not the app).
 
@@ -218,11 +232,12 @@ If something is wrong, put the old record back: delete the public hostname
 from the tunnel and re-create the DNS record that pointed at Railway. Railway is
 still running, so it takes over again within minutes.
 
-## 8. Turn Railway off
+## 8. Turn Railway off (whenever you decide)
 
-Only after every app has worked from home for at least a day. Then, in Railway,
-remove each service. Keep the files in the `migration` folder: they are the last
-copy of each Railway database.
+Nothing here requires it, and nothing in this folder changes anything on
+Railway. When you choose to, after every app has worked from home for at least
+a day, remove each service in Railway. Keep the files in the `migration`
+folder: they are the last copy of each Railway database.
 
 ## 9. Keep the computer running
 

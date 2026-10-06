@@ -159,6 +159,35 @@ services:
       - "127.0.0.1:8093:5000"
     mem_limit: 512m
 
+  # complyscan's nightly re-scan of every connected GitHub/Okta/AWS account:
+  # Railway's `rescan-cron` service, same image, same schedule (00:00 UTC),
+  # same command. Days since 1970 start at 00:00 UTC, so rounding the clock up
+  # to the next multiple of 86400 seconds is the next 00:00 UTC.
+  complyscan-rescan:
+    <<: *app
+    build:
+      context: ${APPS_DIR:-../../..}/complyscan
+    env_file: env/complyscan.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://complyscan:${COMPLYSCAN_DB_PASSWORD}@db:5432/complyscan
+    # The image's healthcheck asks the web server, which this container does
+    # not run.
+    healthcheck:
+      disable: true
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        while true; do
+          now=$$(date -u +%s)
+          wait=$$(( (now / 86400 + 1) * 86400 - now ))
+          echo "[rescan] next run at 00:00 UTC, in $$wait seconds"
+          sleep "$$wait"
+          echo "[rescan] starting at $$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          python manage.py rescan || echo "[rescan] FAILED with exit code $$?" >&2
+        done
+    mem_limit: 384m
+
   # ── SEO-scan-Pro ───────────────────────────────────────────────────────────
   seoscan:
     <<: *app
