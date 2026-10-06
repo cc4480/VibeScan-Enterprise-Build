@@ -76,7 +76,7 @@ no safe default:
 | Variable | Why |
 | --- | --- |
 | `POSTGRES_PASSWORD` | Real credential, even though the db is not published. |
-| `ENCRYPTION_KEY` | 32 random bytes, base64. Encrypts user-supplied secrets. **Changing it makes every previously stored user secret undecryptable.** |
+| `ENCRYPTION_KEY` | 32 random bytes, base64. Seals stored scan credentials. **Changing it makes every previously stored scan login undecryptable.** |
 | `APP_ORIGIN` | Your public URL, no trailing slash. Used to build links in email. |
 
 `DEEPSEEK_API_KEY` is not strictly required to boot, but without it Deep scans
@@ -147,9 +147,8 @@ Two consequences worth knowing before you debug either one:
   number to match; after any change, confirm the session cookie comes back
   marked `Secure`.
 
-- **CORS** — `app.ts` carries a hardcoded allowlist of the original
-  `*.replit.app` / `secscan.us` origins. Your domain only gets through via
-  `CORS_EXTRA_ORIGINS`.
+- **CORS** — `app.ts` allows only `APP_ORIGIN` (and its `www`) by default.
+  Any other browser origin has to be listed in `CORS_EXTRA_ORIGINS`.
 
 - **Email is not configured until you set `RESEND_API_KEY`.** Accounts work
   without it, but verification and password-reset links are minted and then
@@ -166,7 +165,7 @@ Two consequences worth knowing before you debug either one:
   scan costs conversions on a pay-per-scan product. If you would rather gate
   it, that is a change to `ProtectedRoute`.
 
-- **`/api/login` is the old Replit OIDC route and cannot work off Replit.** It
+- **`/api/login` is a legacy OIDC route and is not registered unless `REPL_ID` is set.** It
   is reachable only from an explicit "Sign in instead" link and answers 500.
   Removing it is tidy-up, not a blocker.
 

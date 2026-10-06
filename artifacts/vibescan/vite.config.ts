@@ -2,11 +2,10 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
-import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import type { Plugin } from "vite";
 
 // index.html carries an inline <script> that repairs a half-initialised React
-// DevTools hook (added in 71fca36 — without it the Replit dev environment fails
+// DevTools hook (added in 71fca36 — without it the dev environment fails
 // to render at all). Production CSP is `script-src 'self'` with no nonce, so the
 // browser blocks it and logs a violation on every page load; the shim is a dev
 // concern and does nothing in production anyway. Strip it from the build rather
@@ -136,20 +135,6 @@ export default defineConfig({
     applyOriginToPublicFiles(),
     react(),
     tailwindcss(),
-    runtimeErrorOverlay(),
-    ...(process.env.NODE_ENV !== "production" &&
-    process.env.REPL_ID !== undefined
-      ? [
-          await import("@replit/vite-plugin-cartographer").then((m) =>
-            m.cartographer({
-              root: path.resolve(import.meta.dirname, ".."),
-            }),
-          ),
-          await import("@replit/vite-plugin-dev-banner").then((m) =>
-            m.devBanner(),
-          ),
-        ]
-      : []),
   ],
   resolve: {
     alias: {

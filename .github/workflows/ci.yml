@@ -1,6 +1,6 @@
 # Runs the checks that were previously only ever run by hand.
 #
-# Node 24 matches the .replit `nodejs-24` module and the Dockerfile base, so a
+# Node 24 matches the Dockerfile base, so a
 # version difference cannot be the reason CI and production disagree.
 #
 # pnpm is not pinned in package.json, so the version lives here and in the
@@ -139,15 +139,11 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-    # NOT BLOCKING YET. This fails today on GHSA-vfj7-8cjw-p6xm (braces <=3.0.3, stack-exhaustion
-    # DoS), reached through api-server > http-proxy-middleware > micromatch > braces. It is real
-    # but has no fix to apply: the advisory lists no patched version and 3.0.3 is the latest braces
-    # release. It is not reachable from production: the middleware is only mounted when
-    # NODE_ENV !== "production" (artifacts/api-server/src/app.ts), and it only calls micromatch for
-    # glob path filters, of which this app configures none.
-    # TODO: remove continue-on-error once braces ships a patch (or the proxy is dropped), so a new
-    # high or critical advisory in a production dependency fails the build.
-    continue-on-error: true
+    # Blocking: a new high or critical advisory in a production dependency fails the build.
+    # It used to be advisory-only because of GHSA-vfj7-8cjw-p6xm (braces <=3.0.3, no patched
+    # release), reached through http-proxy-middleware. That package is only mounted by the dev
+    # server (artifacts/api-server/src/app.ts), so it now lives in devDependencies and `--prod`
+    # no longer sees it.
 
     steps:
       - uses: actions/checkout@v4

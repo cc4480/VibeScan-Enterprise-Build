@@ -10,5 +10,4 @@ images:
 
 notes:
   - "Using wouter for routing"
-  - "Auth handled via @workspace/replit-auth-web"
   - "API hooks imported from @workspace/api-client-react"

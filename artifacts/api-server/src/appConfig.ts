@@ -32,7 +32,7 @@ export const FRONTEND_CSP = [
 //
 // The production origin is derived from APP_ORIGIN rather than hardcoded, so
 // moving the site to a new domain is a configuration change rather than a code
-// change. The old Replit and vibescan.app origins are gone; anything else that
+// change. Anything else that
 // still needs access goes in CORS_EXTRA_ORIGINS.
 //
 // www is included alongside the bare domain because a redirect from www to
@@ -51,7 +51,7 @@ export function withWww(origin: string): string[] {
 export const CORS_ALLOWLIST: (string | RegExp)[] = [
   ...withWww(APP_ORIGIN),
   ...(process.env.CORS_EXTRA_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? []),
-  ...(process.env.NODE_ENV !== "production" ? [/\.replit\.dev$/, /^http:\/\/localhost(:\d+)?$/] : []),
+  ...(process.env.NODE_ENV !== "production" ? [/^http:\/\/localhost(:\d+)?$/] : []),
 ];
 
 export const corsOptions: CorsOptions = {

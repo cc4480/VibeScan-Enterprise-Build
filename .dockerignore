@@ -22,8 +22,6 @@ dist
 
 # Host/editor/CI noise
 .claude
-.replit
-.replitignore
 .vscode
 .idea
 *.log
