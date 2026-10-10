@@ -1,6 +1,7 @@
 /** Header snapshots and the missing-header findings raised from them. */
 import type { ScanVulnerability } from "./scanner";
 import { vuln } from "./crawlerFetch";
+import { cspRestrictsFraming } from "./headerAnalysis.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PER-PAGE HEADER CHECKS
@@ -61,7 +62,7 @@ export function snapshotHeaders(headers: Record<string, string>): HeaderSnapshot
   return {
     hsts: !!h("strict-transport-security"),
     csp:  !!h("content-security-policy"),
-    xfo:  !!h("x-frame-options") || /frame-ancestors/i.test(h("content-security-policy") ?? ""),
+    xfo:  !!h("x-frame-options") || cspRestrictsFraming(h("content-security-policy")),
     xcto: h("x-content-type-options")?.toLowerCase() === "nosniff",
     rp:   !!h("referrer-policy"),
   };

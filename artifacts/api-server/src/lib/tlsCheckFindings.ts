@@ -156,8 +156,9 @@ export function tlsFindings(r: TlsHandshakeResult, now: Date = new Date()): Scan
       confidence: 90,
     }));
   } else if (cert && validity.state === "valid" && Date.parse(cert.notAfter!) - now.getTime() < expiryWarningMs(cert)) {
-    const shortLived = expiryWarningMs(cert) < EXPIRY_WARNING_DAYS * DAY_MS;
-    const lifetimeDays = Math.round((Date.parse(cert.notAfter!) - Date.parse(cert.notBefore!)) / DAY_MS);
+    const warningMs = expiryWarningMs(cert);
+    const shortLived = warningMs < EXPIRY_WARNING_DAYS * DAY_MS;
+    const lifetimeDays = Math.round((warningMs * 3) / DAY_MS);
     findings.push(vuln({
       name: "TLS Certificate Expires Soon",
       severity: "low",

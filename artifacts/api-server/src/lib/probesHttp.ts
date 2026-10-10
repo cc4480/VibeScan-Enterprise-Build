@@ -2,6 +2,7 @@
 import type { ScanVulnerability } from "./scanner";
 import { OPEN_REDIRECT_PROBE, OPEN_REDIRECT_PARAMS } from "./payloads";
 import { safeGet, vuln } from "./probesCore";
+import { cspRestrictsFraming } from "./headerAnalysis.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. HTTP METHODS PROBE
@@ -214,8 +215,9 @@ export async function checkClickjacking(targetUrl: string): Promise<ScanVulnerab
   // A browser that supports CSP ignores X-Frame-Options entirely when the
   // enforced policy has frame-ancestors, so the header's value cannot leave the
   // page frameable. Legacy ALLOW-FROM kept next to frame-ancestors for old
-  // browsers was reported as Medium here.
-  if (/frame-ancestors/i.test(csp)) return [];
+  // browsers was reported as Medium here. A frame-ancestors that allows every
+  // origin (`*`) protects nothing, so it does not excuse a broken header.
+  if (cspRestrictsFraming(csp)) return [];
 
   // If both protections are missing, this is handled by the main scanner
   // But if X-Frame-Options is present but misconfigured:

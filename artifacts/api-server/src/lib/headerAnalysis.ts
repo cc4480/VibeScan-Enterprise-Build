@@ -87,6 +87,21 @@ export function hasNosniff(value: string | undefined): boolean {
   return !!value && value.split(",").some((v) => v.trim().toLowerCase() === "nosniff");
 }
 
+/**
+ * Whether a Content-Security-Policy header limits who may frame the page. Naming the directive is not
+ * enough: `frame-ancestors *` (or a bare `https:` scheme) lets every origin embed the page. Policies
+ * joined by fetch with a comma are enforced together, so one restrictive policy is enough.
+ */
+export function cspRestrictsFraming(csp: string | undefined): boolean {
+  if (!csp) return false;
+  return csp.split(",").some((policy) => {
+    const directive = policy.split(";").map((d) => d.trim().split(/\s+/)).find((t) => t[0]?.toLowerCase() === "frame-ancestors");
+    if (!directive) return false;
+    const sources = directive.slice(1).map((s) => s.toLowerCase());
+    return !sources.some((s) => s === "*" || s === "http:" || s === "https:");
+  });
+}
+
 export interface MixedContentRef {
   tag: string;
   url: string;

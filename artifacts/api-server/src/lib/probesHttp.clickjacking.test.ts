@@ -3,6 +3,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { runWithScanHttp } from "./http.js";
 import { checkClickjacking, xfoBlocksFraming } from "./probesHttp.js";
+import { cspRestrictsFraming } from "./headerAnalysis.js";
 
 const servers: http.Server[] = [];
 async function serve(headers: Record<string, string | string[]>): Promise<number> {
@@ -40,10 +41,30 @@ describe("checkClickjacking — the header is judged the way a browser reads it"
   it.each([
     ["ALLOW-FROM alone, which no current browser supports", { "X-Frame-Options": "ALLOW-FROM https://partner.example" }],
     ["ALLOWALL", { "X-Frame-Options": "ALLOWALL" }],
+    ["ALLOWALL next to a frame-ancestors that allows every origin", {
+      "X-Frame-Options": "ALLOWALL",
+      "Content-Security-Policy": "frame-ancestors *",
+    }],
   ])("flags %s", async (_n, headers) => {
     const found = await clickjacking(headers);
     expect(found).toHaveLength(1);
     expect(found[0]!.name).toBe("X-Frame-Options Header Misconfigured");
+  });
+});
+
+describe("cspRestrictsFraming", () => {
+  it("counts only a frame-ancestors that limits who may embed the page", () => {
+    expect(cspRestrictsFraming("frame-ancestors 'none'")).toBe(true);
+    expect(cspRestrictsFraming("default-src 'self'; frame-ancestors 'self' https://a.example")).toBe(true);
+    expect(cspRestrictsFraming("FRAME-ANCESTORS 'self'")).toBe(true);
+    expect(cspRestrictsFraming("frame-ancestors *")).toBe(false);
+    expect(cspRestrictsFraming("frame-ancestors https:")).toBe(false);
+    expect(cspRestrictsFraming("frame-ancestors 'self' *")).toBe(false);
+    expect(cspRestrictsFraming("default-src 'self'")).toBe(false);
+    expect(cspRestrictsFraming("")).toBe(false);
+    expect(cspRestrictsFraming(undefined)).toBe(false);
+    // Two policies are enforced together, so the restrictive one wins.
+    expect(cspRestrictsFraming("frame-ancestors *, frame-ancestors 'none'")).toBe(true);
   });
 });
 

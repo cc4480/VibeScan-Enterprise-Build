@@ -16,6 +16,11 @@ describe("extractVersionedTechnologies — only what the page loads or runs", ()
     expect(detect(html)).toEqual([]);
   });
 
+  it("ignores a commented-out script whose comment closes past the 150KB scan limit", () => {
+    const commented = `<!-- <script src="/js/jquery-1.12.4.min.js"></script>${"x".repeat(200_000)} -->`;
+    expect(detect(page(commented))).toEqual([]);
+  });
+
   it("does not read another package whose name ends in the library's name", () => {
     expect(detect(page('<script src="https://unpkg.com/react-bootstrap@2.10.0/dist/react-bootstrap.min.js"></script>'))).toEqual([]);
     expect(detect(page('<script src="https://cdn.jsdelivr.net/npm/isomorphic-dompurify@2.3.0/dist/browser.js"></script>'))).toEqual([]);

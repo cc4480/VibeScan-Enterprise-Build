@@ -33,7 +33,9 @@ function attributes(tag: string): Record<string, string> {
 }
 
 export function versionEvidence(html: string): VersionEvidence {
-  const doc = html.slice(0, 150_000).replace(/<!--[\s\S]*?-->/g, ""); // only scan first 150KB
+  // Strip comments before cutting to 150KB, so a comment that straddles the cut is removed whole
+  // rather than left open with its markup exposed to the scanners below.
+  const doc = html.replace(/<!--[\s\S]*?-->/g, "").slice(0, 150_000);
   const ev: VersionEvidence = { scriptUrls: [], otherUrls: [], inlineScripts: [], inlineStyles: [], generatorMeta: [] };
 
   for (const m of doc.matchAll(/<(script|link)\b[^>]*>/gi)) {
