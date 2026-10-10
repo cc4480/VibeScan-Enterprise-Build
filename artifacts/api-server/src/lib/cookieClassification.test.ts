@@ -20,6 +20,20 @@ describe("session cookie classification", () => {
   });
 });
 
+describe("analytics identifiers are not session cookies", () => {
+  it("does not treat a vendor script's session or token id as a login", () => {
+    for (const n of ["ajs_session_id", "ajs_anonymous_id", "_hjSession_123456", "_hjSessionUser_123456", "mp_abc_mixpanel", "amplitude_id_x", "ph_phc_abc_posthog", "_ga_ABC123", "_pk_ses.1.abcd"]) {
+      expect(isLikelySessionCookie(n), n).toBe(false);
+    }
+  });
+
+  it("still treats a real session cookie as one, including one that merely contains an analytics-looking word", () => {
+    for (const n of ["session_id", "my_ajs_session", "sessionid", "auth_token", "_session_id", "ph_session"]) {
+      expect(isLikelySessionCookie(n), n).toBe(true);
+    }
+  });
+});
+
 describe("a CSRF token must stay readable by JavaScript", () => {
   // Dropbox sets __Host-js_csrf as Secure, SameSite=None and deliberately NOT
   // HttpOnly, while every other cookie it sets carries HttpOnly. We reported

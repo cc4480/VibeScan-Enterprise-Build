@@ -18,6 +18,33 @@ DATABASE_URL=postgres://localhost/anything \
 `DATABASE_URL` only has to be *set* — the scanner module imports the db layer at
 load time. It is never read by a passive scan.
 
+## 2026-10-09 (later) — hand check of the categories earlier rounds did not verify
+
+Eight sites (nextjs.org, vuejs.org, linear.app, hubspot.com, plaid.com, bolt.new, cursor.com, huggingface.co), one
+page each plus a few routes, scanned live and every claim recomputed with plain fetch and no scanner code. Passive only.
+
+**Agreed:** weak CSP (including HubSpot, whose `unsafe-inline` beside a nonce and `strict-dynamic` is correctly ignored
+and which is flagged only for the `unsafe-eval` that stays in effect), `object-src` and `base-uri` on all 8, non-session
+cookie flags (plaid, cursor), source maps (hubspot and plaid return 200 with valid JSON and `sourcesContent`), and the
+"missing on N internal routes" findings on every route re-fetched. No CVE finding appeared on any of the 8, so
+version-to-CVE matching was not exercised.
+
+### Fixed
+
+| Was reported | Benign trigger | Now |
+|---|---|---|
+| `Session Cookie Missing HttpOnly Flag` (MEDIUM) | bolt.new's `ajs_session_id`, a Segment analytics id the vendor script has to read | Analytics identifiers (`ajs_`, `_hj`, `mp_`, `amplitude_`, `ph_phc_`, `_pk_`, `_ga`, `_gid`) are not session cookies; they are judged as non-session, as `ajs_anonymous_id` already was |
+| `External Resources Missing SRI` told the site to add `integrity` | AWS WAF's `challenge.js` on `<id>.edge.sdk.awswaf.com`, which cannot be pinned | Not reported, like the other bot-protection tags (`DYNAMIC_SUFFIXES`) |
+| The same, with pinning advice | Fathom's `cdn.usefathom.com/script.js`, edited in place | Still reported, with the vendor-updated advice |
+| The same | HubSpot's own `hsappstatic.net` and `hs-banner.com` | Counted as HubSpot's own CDN (`OWNED_CDNS`) |
+
+Each has a test that fails on the old code and a twin showing a real session cookie or a real third party is still reported.
+
+### Narrowed on purpose
+
+- A session cookie whose name starts with an analytics prefix (`ajs_`, `_hj`, `mp_`, `_ga` and the rest) is no longer
+  treated as a login cookie, so a real one named that way would be missed.
+
 ## 2026-10-09 — code review against seclayer's fixes, and the fixes
 
 A code-only round: each false-positive class fixed in seclayer was checked against this scanner, and
