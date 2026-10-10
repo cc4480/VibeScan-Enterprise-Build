@@ -22,6 +22,7 @@
  *     npx tsx artifacts/api-server/scripts/live-scan.ts https://github.com
  */
 import { runScan } from "../src/lib/scanner.js";
+import { initBrowser, closeBrowser } from "../src/lib/browser.js";
 
 /**
  * Twenty targets chosen to exercise the suppression rules, not at random.
@@ -169,6 +170,11 @@ async function main(): Promise<void> {
       "Scrutinise every actionable finding.\n",
   );
 
+  // renderPage() returns nothing until initBrowser() has run (the worker does it at start-up). Without
+  // this, every sweep before 2026-10-05 silently skipped headless rendering, so the SPA path that
+  // matters most for sites built with Lovable, Bolt and similar tools was never exercised here.
+  await initBrowser();
+
   for (const url of list) {
     try {
       const started = Date.now();
@@ -216,6 +222,10 @@ async function main(): Promise<void> {
     writeFileSync(dest, JSON.stringify({ scannedAt: new Date().toISOString(), results: collected }, null, 1));
     console.log(`[live-scan] Wrote ${dest} — ${collected.length} result(s).`);
   }
+
+  // Last, and after the results are on disk: closing the browser also shuts its proxy, after which
+  // nothing keeps the event loop alive and Node exits without running any code placed after this.
+  await closeBrowser().catch(() => undefined);
 }
 
 void main();

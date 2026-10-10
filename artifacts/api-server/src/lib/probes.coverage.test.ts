@@ -148,3 +148,38 @@ describe("checkHttpsRedirect retry", () => {
     await expect(checkHttpsRedirect("https://example.test/")).rejects.toThrow(/could not reach/i);
   });
 });
+
+describe("runAllProbes reads subresource integrity from the page as the server sent it", () => {
+  // Found on the first sweep that rendered pages in the headless browser (2026-10-05): dashboard.render.com,
+  // app.netlify.com, app.zenhub.com and others gained "External Resources Missing SRI" listing scripts
+  // such as cdn.segment.com/next-integrations/..., js.hs-analytics.net/analytics/<timestamp>/...js and a
+  // doubleclick URL with random=<timestamp>. Tag loaders inject those at run time. The owner did not write
+  // them, cannot pin a hash on a URL that changes per request, and never sees them in their own HTML.
+  const SRI = /Subresource Integrity/i;
+  const injected = `<script src="https://widgets.vendor.test/loader.js"></script>`;
+  const shell = `<html><head><script src="/assets/app.js"></script></head><body><div id="root"></div></body></html>`;
+  const rendered = `<html><head><script src="/assets/app.js"></script>${injected}</head><body><div id="root"><h1>App</h1></div></body></html>`;
+
+  beforeEach(() => {
+    scanFetchMock.mockRejectedValue(new Error("offline"));
+  });
+
+  it("does not report a script that only the rendered page contains", async () => {
+    const { runAllProbes } = await load();
+    const findings = await runAllProbes("https://example.test/", rendered, false, undefined, undefined, undefined, shell);
+    expect(findings.some((f) => SRI.test(f.name))).toBe(false);
+  });
+
+  it("clean twin: still reports a third-party script the site's own HTML carries", async () => {
+    const { runAllProbes } = await load();
+    const authored = `<html><head>${injected}</head><body></body></html>`;
+    const findings = await runAllProbes("https://example.test/", rendered, false, undefined, undefined, undefined, authored);
+    expect(findings.some((f) => SRI.test(f.name))).toBe(true);
+  });
+
+  it("without a separate as-served page it reads the page it was given, as before", async () => {
+    const { runAllProbes } = await load();
+    const findings = await runAllProbes("https://example.test/", rendered, false);
+    expect(findings.some((f) => SRI.test(f.name))).toBe(true);
+  });
+});
