@@ -52,7 +52,10 @@ describe("isDynamicByDesign", () => {
       "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js",
       "https://transcend-cdn.com/cm/abc/airgap.js",
       "https://ct.captcha-delivery.com/c.js",
+      "https://de5282c3ca0c.edge.sdk.awswaf.com/de5282c3ca0c/526cf06acb0d/challenge.js",
     ]) expect(isDynamicByDesign(url(u)), u).toBe(true);
+    expect(isDynamicByDesign(url("https://sdk.awswaf.com.evil.net/x.js"))).toBe(false);
+    expect(isDynamicByDesign(url("https://notsdk.awswaf.com/x.js"))).toBe(false);
   });
 
   it("does not exempt a version-pinned library on a shared CDN, where SRI is the right thing", () => {
@@ -155,6 +158,19 @@ describe("vendor-updated tags get advice that can be followed", async () => {
     const [b] = await checkSRI(page("https://cdn.example.net/lib.js", "https://tag.clearbit.com/x.js"), "https://www.example.com/");
     expect(b!.solution).toContain("openssl");
     expect(b!.solution).toContain("[vendor-updated tag]");
+  });
+
+  it("gives Fathom's script the vendor-updated advice rather than telling the site to pin it", async () => {
+    const [v] = await checkSRI(page("https://cdn.usefathom.com/script.js"), "https://vuejs.org/");
+    expect(v!.evidence).toContain("[vendor-updated tag]");
+    expect(v!.solution).not.toContain("openssl");
+  });
+
+  it("treats HubSpot's own CDNs as first-party, and still reports a real third party", async () => {
+    const lines = (await checkSRI(page("https://static.hsappstatic.net/a/b.js", "https://js.hs-banner.com/v2/1/banner.js", "https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"), "https://www.hubspot.com/")).flatMap((v) => (v.evidence ?? "").split("\n"));
+    expect(lines.some((l) => l.includes("hsappstatic.net") || l.includes("hs-banner.com"))).toBe(false);
+    expect(lines.some((l) => l.includes("lodash"))).toBe(true);
+    expect(await checkSRI(page("https://static.hsappstatic.net/a/b.js"), "https://www.example.com/")).not.toEqual([]);
   });
 
   it("treats the Guardian's guim.co.uk as its own CDN", async () => {

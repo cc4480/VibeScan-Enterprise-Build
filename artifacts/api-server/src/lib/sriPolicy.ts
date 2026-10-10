@@ -53,6 +53,8 @@ function sharedSuffixLabels(a: string[], b: string[]): number {
 const OWNED_CDNS: Array<[string, string]> = [
   ["dropbox.com", "dropboxstatic.com"], ["stripe.com", "stripecdn.com"], ["linkedin.com", "licdn.com"],
   ["theguardian.com", "guim.co.uk"],
+  // HubSpot serves its app assets and consent banner from domains it owns.
+  ["hubspot.com", "hsappstatic.net"], ["hubspot.com", "hs-banner.com"],
 ];
 
 export function isFirstParty(pageHost: string, resourceHost: string): boolean {
@@ -93,9 +95,13 @@ const DYNAMIC_PATHS: Array<{ host: string; prefix: string }> = [
   { host: "www.gstatic.com", prefix: "/firebasejs/" },
 ];
 
+/** Per-customer subdomains of a provider that cannot be pinned (AWS WAF serves challenge.js from <id>.edge.sdk.awswaf.com). */
+const DYNAMIC_SUFFIXES = ["sdk.awswaf.com"];
+
 export function isDynamicByDesign(resource: URL): boolean {
   const host = resource.hostname.toLowerCase();
   if (DYNAMIC_HOSTS.has(host)) return true;
+  if (DYNAMIC_SUFFIXES.some((s) => host.endsWith("." + s))) return true;
   return DYNAMIC_PATHS.some((p) => p.host === host && resource.pathname.startsWith(p.prefix));
 }
 
@@ -122,7 +128,7 @@ const VENDOR_UPDATED_DOMAINS = [
   "parsely.com", "clearbit.com", "clearbitjs.com", "digitalgov.gov",
   "segment.com", "segment.io", "fullstory.com", "mouseflow.com", "drift.com", "driftt.com",
   "pardot.com", "pi.pardot.com", "demandbase.com", "6sc.co", "6sense.com", "zoominfo.com",
-  "optimizely.com", "mixpanel.com", "amplitude.com", "quantserve.com", "taboola.com", "outbrain.com",
+  "optimizely.com", "usefathom.com", "mixpanel.com", "amplitude.com", "quantserve.com", "taboola.com", "outbrain.com",
 ];
 
 export function isVendorUpdated(resource: URL): boolean {
