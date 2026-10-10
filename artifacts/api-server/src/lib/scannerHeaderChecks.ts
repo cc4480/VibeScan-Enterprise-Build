@@ -1,4 +1,4 @@
-import { hasNosniff } from "./headerAnalysis.js";
+import { cspRestrictsFraming, hasNosniff } from "./headerAnalysis.js";
 import { checkIsolationHeaders } from "./isolationHeaders";
 import { headerVal, vuln, type ScanVulnerability, type PageContext } from "./scannerTypes";
 
@@ -19,7 +19,7 @@ export function headerFindings({ finalUrl, rawHeaders }: PageContext): ScanVulne
   const csp = headerVal(rawHeaders, "content-security-policy");
   const server = headerVal(rawHeaders, "server") ?? null;
   const xfo = headerVal(rawHeaders, "x-frame-options");
-  const cspFrameAncestors = csp && /frame-ancestors/i.test(csp);
+  const cspFrameAncestors = cspRestrictsFraming(csp);
   if (!xfo && !cspFrameAncestors) {
     vulnerabilities.push(vuln({
       name: "Missing Clickjacking Protection (X-Frame-Options)",

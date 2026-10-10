@@ -135,6 +135,20 @@ describe("certificate validity", () => {
     expect(names(healthy({ certificate: goodCert({ notAfter: daysFromNow(80) }) }))).toEqual([]);
   });
 
+  it("does not report a healthy short-lived certificate for being short-lived", () => {
+    // Let's Encrypt's 6-day certificates always sit inside a fixed 14-day
+    // window, so each one was reported as failing renewal on every scan.
+    const sixDay = (remaining: number) =>
+      healthy({ certificate: goodCert({ notBefore: daysFromNow(remaining - 6), notAfter: daysFromNow(remaining) }) });
+    expect(names(sixDay(5))).toEqual([]);
+    expect(names(sixDay(2.5))).toEqual([]);
+    // Inside the last third of its life it should already have been renewed.
+    const late = one(sixDay(1.5), "TLS Certificate Expires Soon");
+    expect(late.description).toContain("the last third of its 6-day lifetime");
+    // A 90-day certificate keeps the fixed 14-day window.
+    expect(names(healthy({ certificate: goodCert({ notBefore: daysFromNow(-77), notAfter: daysFromNow(13) }) }))).toContain("TLS Certificate Expires Soon");
+  });
+
   it("states the clock position the same way the findings use it", () => {
     expect(certificateState(goodCert(), NOW)).toEqual({ state: "valid", days: 60 });
     expect(certificateState(null, NOW)).toEqual({ state: "unknown" });
