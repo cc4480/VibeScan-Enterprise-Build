@@ -187,6 +187,21 @@ export async function checkOpenRedirect(targetUrl: string): Promise<ScanVulnerab
 // 10. CLICKJACKING VERIFICATION
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Whether a browser blocks framing on these X-Frame-Options values, following
+ * the HTML spec's processing: values are split on commas, lowercased and
+ * de-duplicated, so "SAMEORIGIN, SAMEORIGIN" (an app and its proxy both adding
+ * the header, joined by fetch) is plain SAMEORIGIN. Several different values
+ * that include deny, sameorigin or allowall block framing outright. Anything
+ * else on its own (ALLOW-FROM, which no current browser supports, or an
+ * unknown word) is ignored, leaving the page frameable.
+ */
+export function xfoBlocksFraming(raw: string): boolean {
+  const values = new Set(raw.split(",").map((v) => v.trim().toLowerCase()).filter(Boolean));
+  if (values.size > 1) return ["deny", "sameorigin", "allowall"].some((v) => values.has(v));
+  return values.has("deny") || values.has("sameorigin");
+}
+
 export async function checkClickjacking(targetUrl: string): Promise<ScanVulnerability[]> {
   // Only run if main scanner didn't already flag this via headers
   // This does a direct page fetch and checks the actual response headers
@@ -195,11 +210,16 @@ export async function checkClickjacking(targetUrl: string): Promise<ScanVulnerab
 
   const xfo = result.headers["x-frame-options"];
   const csp = result.headers["content-security-policy"] ?? "";
-  const hasFrameAncestors = /frame-ancestors/i.test(csp);
+
+  // A browser that supports CSP ignores X-Frame-Options entirely when the
+  // enforced policy has frame-ancestors, so the header's value cannot leave the
+  // page frameable. Legacy ALLOW-FROM kept next to frame-ancestors for old
+  // browsers was reported as Medium here.
+  if (/frame-ancestors/i.test(csp)) return [];
 
   // If both protections are missing, this is handled by the main scanner
   // But if X-Frame-Options is present but misconfigured:
-  if (xfo && !/^(DENY|SAMEORIGIN)$/i.test(xfo.trim())) {
+  if (xfo && !xfoBlocksFraming(xfo)) {
     return [vuln({
       name: "X-Frame-Options Header Misconfigured",
       severity: "medium",

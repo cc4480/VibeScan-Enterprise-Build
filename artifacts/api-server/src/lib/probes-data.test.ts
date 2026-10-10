@@ -74,6 +74,19 @@ describe("SENSITIVE_PATHS: /wp-config.php", () => {
     expect(validate("<?php echo 'Hello World'; ?>", "text/html")).toBe(false));
 });
 
+// ─── server-info ──────────────────────────────────────────────────────────────
+
+describe("SENSITIVE_PATHS: /server-info", () => {
+  const validate = probeByPath("/server-info");
+
+  it("matches Apache mod_info's page", () =>
+    expect(validate('<html><head><title>Server Information</title></head><body><h1 style="text-align: center">Apache Server Information</h1><dl><dt><a name="server"><strong>Server Settings</strong></a></dt></dl></body></html>', "text/html")).toBe(true));
+  it("matches the module listing even without the heading", () =>
+    expect(validate("<h2>Server Settings</h2><dt><strong>Module Name:</strong> mod_rewrite.c</dt>", "text/html")).toBe(true));
+  it("rejects a bot or game-server dashboard that uses the same route", () =>
+    expect(validate("<!doctype html><html><head><title>My Bot — Server Info</title></head><body><h2>Server Settings</h2><p>Prefix: !</p></body></html>", "text/html")).toBe(false));
+});
+
 // ─── phpinfo.php ──────────────────────────────────────────────────────────────
 
 describe("SENSITIVE_PATHS: /phpinfo.php", () => {

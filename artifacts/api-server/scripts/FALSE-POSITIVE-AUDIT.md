@@ -18,6 +18,44 @@ DATABASE_URL=postgres://localhost/anything \
 `DATABASE_URL` only has to be *set* — the scanner module imports the db layer at
 load time. It is never read by a passive scan.
 
+## 2026-10-09 — code review against seclayer's fixes, and the fixes
+
+A code-only round: each false-positive class fixed in seclayer was checked against this scanner, and
+every claim below was reproduced by calling the real check code on a benign input (the clickjacking
+cases through a loopback server) before it was changed. No live sites were scanned.
+
+### Fixed
+
+| Was reported | Benign trigger | Now |
+|---|---|---|
+| `X-Frame-Options Header Misconfigured` (MEDIUM) | The header sent twice, which fetch joins as `SAMEORIGIN, SAMEORIGIN` (app and proxy both add it) | Values are split, lowercased and de-duplicated as the HTML spec does (`xfoBlocksFraming`): the same duplicate rule as `nosniff` |
+| The same (MEDIUM) | Legacy `ALLOW-FROM` kept next to CSP `frame-ancestors` | Not judged: browsers that support CSP ignore X-Frame-Options when `frame-ancestors` is set. The check computed this and never used it |
+| `Apache Server Info Page Exposed` (MEDIUM) | A bot or game-server dashboard at `/server-info` with a "Server Settings" heading | Needs "Apache Server Information", or "Server Settings" with mod_info's "Module Name:" entries |
+| `jQuery 1.12.4 — Known Vulnerability` and the like | A changelog sentence, an install snippet shown as escaped text, a download link, page-state JSON | Versions come only from what the page loads or runs: real `<script src>` / `<link href>` tags, import maps, executable inline scripts and styles, generator meta tags |
+| `Bootstrap 2.10.0 — Known Vulnerability` | `react-bootstrap@2.10.0` | A package whose name ends in the library's name is a different package (`(?<![\w-])`); same for `isomorphic-dompurify`, `chartjs-adapter-moment` |
+| Bootstrap CVEs | A Bootstrap stylesheet with no Bootstrap JavaScript | Bootstrap needs its script loaded; every advisory is in its JavaScript plugins |
+| Library CVEs at the wrong version | A WordPress theme's `bootstrap.min.css?ver=1.0.0` (the theme's version) | `?ver=` is trusted only on `wp-includes` paths, where core registers the library's real version |
+| "WordPress 3.7.1" in the technology list | WordPress core's `jquery.min.js?ver=3.7.1`, which is jQuery's version | That pattern no longer sets the WordPress version |
+| `TLS Certificate Expires Soon` with "renewal is not working" | Any healthy short-lived certificate (Let's Encrypt's 6-day profile) | The window is the last third of the certificate's lifetime, capped at 14 days; a 90-day certificate is judged as before |
+
+Each fix has a test that fails on the old code and a twin showing the real problem is still reported:
+`probesHttp.clickjacking.test.ts`, `cveCheckVersions.test.ts`, `probes-data.test.ts` (`/server-info`),
+`tlsCheckFindings.test.ts`.
+
+### Narrowed on purpose (a real problem in these shapes can now be missed)
+
+- A library version that appears only in non-executable markup (prose, `<pre>`, JSON data blocks, HTML
+  comments, `<a href>`) is no longer read.
+- A WordPress theme or plugin that passes a library's real version in `?ver=` outside `wp-includes`
+  is missed.
+- A page that ships Bootstrap's JavaScript inside its own bundle, with only the Bootstrap stylesheet
+  visible, is not reported.
+
+### Not verified, or still open
+
+- `TRACE` is still reported from the `Allow` header without confirming the server honours it. Not a
+  confirmed false positive; confirming would mean sending the method.
+
 ## 2026-10-05 (later) — 50 companies not tested before
 
 `sweep-lists/2026-10-05-companies-50.txt`: 50 sites with no overlap with any earlier sweep or with the
