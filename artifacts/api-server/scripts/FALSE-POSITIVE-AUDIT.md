@@ -64,6 +64,71 @@ longer found. The main bundle named in the served HTML still is.
 (gitpod.io's `noindex` is removed by the page's own JS, so the rendered page is the one a search engine
 sees; API-key notes depend on which scripts the rendered page loaded).
 
+## 2026-10-09 (later) — hand check of the categories earlier rounds did not verify
+
+Eight sites (nextjs.org, vuejs.org, linear.app, hubspot.com, plaid.com, bolt.new, cursor.com, huggingface.co), one
+page each plus a few routes, scanned live and every claim recomputed with plain fetch and no scanner code. Passive only.
+
+**Agreed:** weak CSP (including HubSpot, whose `unsafe-inline` beside a nonce and `strict-dynamic` is correctly ignored
+and which is flagged only for the `unsafe-eval` that stays in effect), `object-src` and `base-uri` on all 8, non-session
+cookie flags (plaid, cursor), source maps (hubspot and plaid return 200 with valid JSON and `sourcesContent`), and the
+"missing on N internal routes" findings on every route re-fetched. No CVE finding appeared on any of the 8, so
+version-to-CVE matching was not exercised.
+
+### Fixed
+
+| Was reported | Benign trigger | Now |
+|---|---|---|
+| `Session Cookie Missing HttpOnly Flag` (MEDIUM) | bolt.new's `ajs_session_id`, a Segment analytics id the vendor script has to read | Analytics identifiers (`ajs_`, `_hj`, `mp_`, `amplitude_`, `ph_phc_`, `_pk_`, `_ga`, `_gid`) are not session cookies; they are judged as non-session, as `ajs_anonymous_id` already was |
+| `External Resources Missing SRI` told the site to add `integrity` | AWS WAF's `challenge.js` on `<id>.edge.sdk.awswaf.com`, which cannot be pinned | Not reported, like the other bot-protection tags (`DYNAMIC_SUFFIXES`) |
+| The same, with pinning advice | Fathom's `cdn.usefathom.com/script.js`, edited in place | Still reported, with the vendor-updated advice |
+| The same | HubSpot's own `hsappstatic.net` and `hs-banner.com` | Counted as HubSpot's own CDN (`OWNED_CDNS`) |
+
+Each has a test that fails on the old code and a twin showing a real session cookie or a real third party is still reported.
+
+### Narrowed on purpose
+
+- A session cookie whose name starts with an analytics prefix (`ajs_`, `_hj`, `mp_`, `_ga` and the rest) is no longer
+  treated as a login cookie, so a real one named that way would be missed.
+
+## 2026-10-09 — code review against seclayer's fixes, and the fixes
+
+A code-only round: each false-positive class fixed in seclayer was checked against this scanner, and
+every claim below was reproduced by calling the real check code on a benign input (the clickjacking
+cases through a loopback server) before it was changed. No live sites were scanned.
+
+### Fixed
+
+| Was reported | Benign trigger | Now |
+|---|---|---|
+| `X-Frame-Options Header Misconfigured` (MEDIUM) | The header sent twice, which fetch joins as `SAMEORIGIN, SAMEORIGIN` (app and proxy both add it) | Values are split, lowercased and de-duplicated as the HTML spec does (`xfoBlocksFraming`): the same duplicate rule as `nosniff` |
+| The same (MEDIUM) | Legacy `ALLOW-FROM` kept next to CSP `frame-ancestors` | Not judged: browsers that support CSP ignore X-Frame-Options when `frame-ancestors` is set. The check computed this and never used it |
+| `Apache Server Info Page Exposed` (MEDIUM) | A bot or game-server dashboard at `/server-info` with a "Server Settings" heading | Needs "Apache Server Information", or "Server Settings" with mod_info's "Module Name:" entries |
+| `jQuery 1.12.4 — Known Vulnerability` and the like | A changelog sentence, an install snippet shown as escaped text, a download link, page-state JSON | Versions come only from what the page loads or runs: real `<script src>` / `<link href>` tags, import maps, executable inline scripts and styles, generator meta tags |
+| `Bootstrap 2.10.0 — Known Vulnerability` | `react-bootstrap@2.10.0` | A package whose name ends in the library's name is a different package (`(?<![\w-])`); same for `isomorphic-dompurify`, `chartjs-adapter-moment` |
+| Bootstrap CVEs | A Bootstrap stylesheet with no Bootstrap JavaScript | Bootstrap needs its script loaded; every advisory is in its JavaScript plugins |
+| Library CVEs at the wrong version | A WordPress theme's `bootstrap.min.css?ver=1.0.0` (the theme's version) | `?ver=` is trusted only on `wp-includes` paths, where core registers the library's real version |
+| "WordPress 3.7.1" in the technology list | WordPress core's `jquery.min.js?ver=3.7.1`, which is jQuery's version | That pattern no longer sets the WordPress version |
+| `TLS Certificate Expires Soon` with "renewal is not working" | Any healthy short-lived certificate (Let's Encrypt's 6-day profile) | The window is the last third of the certificate's lifetime, capped at 14 days; a 90-day certificate is judged as before |
+
+Each fix has a test that fails on the old code and a twin showing the real problem is still reported:
+`probesHttp.clickjacking.test.ts`, `cveCheckVersions.test.ts`, `probes-data.test.ts` (`/server-info`),
+`tlsCheckFindings.test.ts`.
+
+### Narrowed on purpose (a real problem in these shapes can now be missed)
+
+- A library version that appears only in non-executable markup (prose, `<pre>`, JSON data blocks, HTML
+  comments, `<a href>`) is no longer read.
+- A WordPress theme or plugin that passes a library's real version in `?ver=` outside `wp-includes`
+  is missed.
+- A page that ships Bootstrap's JavaScript inside its own bundle, with only the Bootstrap stylesheet
+  visible, is not reported.
+
+### Not verified, or still open
+
+- `TRACE` is still reported from the `Allow` header without confirming the server honours it. Not a
+  confirmed false positive; confirming would mean sending the method.
+
 ## 2026-10-05 (later) — 50 companies not tested before
 
 `sweep-lists/2026-10-05-companies-50.txt`: 50 sites with no overlap with any earlier sweep or with the

@@ -19,8 +19,16 @@
 export const SESSION_COOKIE_PATTERN =
   /session|token|jwt|csrf|xsrf|login|credential|phpsessid|jsessionid|connect\.sid|remember_?me|auth_?token|access_?token|refresh_?token|\bsid\b/i;
 
+/**
+ * Analytics and tag-manager identifiers (Segment `ajs_session_id`, Hotjar `_hjSession_123`, Mixpanel,
+ * Amplitude, PostHog, Matomo, Google Analytics). Their names say "session" but they carry no login:
+ * the vendor script reads them from the page, so HttpOnly would break them, and reporting one as a
+ * session cookie put a Medium finding on every site that runs Segment.
+ */
+const ANALYTICS_COOKIE_PATTERN = /^(?:ajs_|_hj|mp_|amplitude_|amp_|ph_phc_|_pk_|_ga|_gid)/i;
+
 export function isLikelySessionCookie(name: string): boolean {
-  return SESSION_COOKIE_PATTERN.test(name);
+  return SESSION_COOKIE_PATTERN.test(name) && !ANALYTICS_COOKIE_PATTERN.test(name);
 }
 
 /**

@@ -22,10 +22,11 @@ module does. `none` — neither, so no test exercises it at all.
 | Module | Findings | Lines | Tests | Coverage |
 |---|---:|---:|---:|---|
 | `recon-data.ts` | 14 | 178 | 12 | direct |
-| `tlsCheckFindings.ts` | 12 | 377 | 35 | direct |
+| `tlsCheckFindings.ts` | 12 | 393 | 36 | direct |
 | `nextjsProbe.ts` | 9 | 255 | 8 | direct |
 | `structuredData.ts` | 9 | 285 | 36 | direct |
 | `crawler-data.ts` | 8 | 181 | 35 | direct |
+| `probesHttp.ts` | 7 | 240 | 2 | direct |
 | `scannerCspChecks.ts` | 7 | 155 | 10 | direct |
 | `scannerHeaderChecks.ts` | 7 | 142 | 3 | direct |
 | `jwtAnalysis.ts` | 6 | 267 | 9 | direct |
@@ -59,15 +60,14 @@ module does. `none` — neither, so no test exercises it at all.
 | `probes-data-config.ts` | 23 | 273 | — | indirect, via probes-data.test.ts (split from probes-data) |
 | `secret-pattern-vendors.ts` | 21 | 247 | — | indirect, via secret-pattern-data.test.ts (split from secret-pattern-data) |
 | `subdomain-service-data.ts` | 19 | 172 | — | indirect, via subdomainTakeover.test.ts |
-| `probes-data-server.ts` | 17 | 177 | — | indirect, via probes-data.test.ts (split from probes-data) |
+| `probes-data-server.ts` | 17 | 180 | — | indirect, via probes-data.test.ts (split from probes-data) |
 | `probes-data-infra.ts` | 14 | 148 | — | indirect, via probes-data.test.ts (split from probes-data) |
 | `dnsChecksMail.ts` | 8 | 205 | — | indirect, via dnsChecks.test.ts (split from dnsChecks) |
 | `apiProbeFindings.ts` | 7 | 215 | — | indirect, via apiProbe.test.ts (split from apiProbe) |
-| `probesHttp.ts` | 7 | 218 | — | indirect, via probes.test.ts (split from probes) |
 | `secret-pattern-generic.ts` | 7 | 144 | — | indirect, via secret-pattern-data.test.ts (split from secret-pattern-data) |
 | `supabase-probes-report.ts` | 7 | 234 | — | indirect, via supabase-probes.test.ts (split from supabase-probes) |
 | `scannerCookies.ts` | 6 | 205 | — | indirect, via scanner.test.ts (split from scanner) |
-| `crawlerHeaders.ts` | 5 | 202 | — | indirect, via crawler.test.ts (split from crawler) |
+| `crawlerHeaders.ts` | 5 | 203 | — | indirect, via crawler.test.ts (split from crawler) |
 | `cveCheckLocal.ts` | 5 | 225 | — | indirect, via cveCheck.test.ts (split from cveCheck) |
 | `secret-pattern-ai.ts` | 5 | 62 | — | indirect, via secret-pattern-generic.test.ts |
 | `accessControlFindings.ts` | 3 | 129 | — | indirect, via accessControlProbe.test.ts |
@@ -188,7 +188,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `crawlerHeaders.ts`
 
-*5 findings · 202 lines · no test file.*
+*5 findings · 203 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -422,7 +422,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `probes-data-server.ts`
 
-*17 findings · 177 lines · no test file.*
+*17 findings · 180 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -487,7 +487,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `probesHttp.ts`
 
-*7 findings · 218 lines · no test file.*
+*7 findings · 240 lines · 2 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -805,7 +805,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `tlsCheckFindings.ts`
 
-*12 findings · 377 lines · 35 tests.*
+*12 findings · 393 lines · 36 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|

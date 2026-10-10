@@ -67,3 +67,4 @@ Thumbs.db
 /artifacts/vuln-fixture/manifest.json
 .secscan.log
 .web.log
+.railway-secrets/

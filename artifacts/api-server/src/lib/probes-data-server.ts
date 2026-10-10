@@ -63,7 +63,10 @@ export const SENSITIVE_PATHS_SERVER: SensitivePath[] = [
     category: "Information Disclosure",
     description: "Apache's /server-info page is accessible, revealing all loaded modules, configuration directives, virtual host settings, and compile-time options. This provides attackers a detailed map of the server configuration to find exploitable settings.",
     solution: "Disable mod_info or restrict to localhost: `<Location /server-info> Require local </Location>`",
-    validate: (body) => /Apache Server Information|Server Settings|Module Name/i.test(body),
+    // mod_info's own heading, or its module listing ("Module Name:" entries)
+    // together with its "Server Settings" section. "Server Settings" alone
+    // matched game-server and bot dashboards that use the same route.
+    validate: (body) => /Apache Server Information/i.test(body) || (/Server Settings/i.test(body) && /Module Name:/i.test(body)),
   },
   {
     path: "/nginx_status",

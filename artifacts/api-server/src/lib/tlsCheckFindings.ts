@@ -18,6 +18,19 @@ const DAY_MS = 86_400_000;
 /** A certificate with fewer days than this left is reported, at low severity. */
 export const EXPIRY_WARNING_DAYS = 14;
 
+/**
+ * How close to expiry a certificate must be before it is reported. ACME clients renew once a third of
+ * the lifetime is left, so the window is that third, capped at EXPIRY_WARNING_DAYS. A 90-day
+ * certificate is judged exactly as before; a short-lived one (Let's Encrypt issues 6-day certificates)
+ * always sat inside the fixed window and was reported as failing renewal on every scan.
+ */
+export function expiryWarningMs(cert: TlsCertificate): number {
+  const from = cert.notBefore ? Date.parse(cert.notBefore) : NaN;
+  const to = cert.notAfter ? Date.parse(cert.notAfter) : NaN;
+  const lifetime = !Number.isNaN(from) && !Number.isNaN(to) && from < to ? to - from : Infinity;
+  return Math.min(EXPIRY_WARNING_DAYS * DAY_MS, lifetime / 3);
+}
+
 
 /** Certificate problems that are reported by their own finding, so the trust finding stays out of their way. */
 const REPORTED_SEPARATELY = new Set(["CERT_HAS_EXPIRED", "CERT_NOT_YET_VALID", "ERR_TLS_CERT_ALTNAME_INVALID"]);
@@ -142,12 +155,15 @@ export function tlsFindings(r: TlsHandshakeResult, now: Date = new Date()): Scan
       wstgId: "WSTG-CRYP-01",
       confidence: 90,
     }));
-  } else if (cert && validity.state === "valid" && validity.days < EXPIRY_WARNING_DAYS) {
+  } else if (cert && validity.state === "valid" && Date.parse(cert.notAfter!) - now.getTime() < expiryWarningMs(cert)) {
+    const warningMs = expiryWarningMs(cert);
+    const shortLived = warningMs < EXPIRY_WARNING_DAYS * DAY_MS;
+    const lifetimeDays = Math.round((warningMs * 3) / DAY_MS);
     findings.push(vuln({
       name: "TLS Certificate Expires Soon",
       severity: "low",
       category: "Transport Security",
-      description: `The certificate the server presents expires in ${days(validity.days)} (the warning threshold is ${EXPIRY_WARNING_DAYS}). When it lapses the site fails for every visitor. Automatic renewal normally replaces a certificate well before this point, so a certificate this close to expiry suggests renewal is not working.`,
+      description: `The certificate the server presents expires in ${days(validity.days)} (the warning threshold is ${shortLived ? `the last third of its ${lifetimeDays}-day lifetime` : EXPIRY_WARNING_DAYS}). When it lapses the site fails for every visitor. Automatic renewal normally replaces a certificate well before this point, so a certificate this close to expiry suggests renewal is not working.`,
       evidence: [
         "The certificate the server presented is close to the end of its validity period.",
         `Host: ${target}`,
