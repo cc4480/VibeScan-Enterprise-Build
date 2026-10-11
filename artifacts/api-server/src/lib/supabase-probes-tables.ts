@@ -240,8 +240,9 @@ export async function probeTables(baseUrl: string, anonKey: string, tables: stri
     tables.map(async (t) => ({ table: t, result: await testTableRead(baseUrl, anonKey, t) })),
   );
 
-  const openReadTables: string[] = [];      // rows of sensitive/unclassified tables
+  const openReadTables: string[] = [];      // rows of sensitive (personal, secret, per-user) tables
   const publicReadTables: string[] = [];    // rows of public-catalogue tables
+  const unclassifiedReadTables: string[] = []; // rows that nothing marks as either
   const emptyTables: string[] = [];
   const publicColumns = new Map<string, string>();
 
@@ -250,8 +251,12 @@ export async function probeTables(baseUrl: string, anonKey: string, tables: stri
     const { table, result } = r.value;
     if (result.kind === "empty") emptyTables.push(table);
     if (result.kind !== "open") continue;
-    if (classifyExposure(table, result.rows) === "public") {
+    const exposure = classifyExposure(table, result.rows);
+    if (exposure === "public") {
       publicReadTables.push(table);
+      publicColumns.set(table, rowColumns(result.rows));
+    } else if (exposure === "unclassified") {
+      unclassifiedReadTables.push(table);
       publicColumns.set(table, rowColumns(result.rows));
     } else {
       openReadTables.push(table);
@@ -265,7 +270,7 @@ export async function probeTables(baseUrl: string, anonKey: string, tables: stri
   const openWriteTables: string[] = [];
   const unconfirmedWrites: Array<{ table: string; status: number; code: string }> = [];
   {
-    const writeTargets = [...openReadTables, ...publicReadTables, ...emptyTables];
+    const writeTargets = [...openReadTables, ...publicReadTables, ...unclassifiedReadTables, ...emptyTables];
     if (writeTargets.length > 0) {
       const writeResults = await Promise.allSettled(
         writeTargets.map(async (t) => ({ table: t, result: await testTableWrite(baseUrl, anonKey, t) })),
@@ -280,5 +285,5 @@ export async function probeTables(baseUrl: string, anonKey: string, tables: stri
       }
     }
   }
-  return { openReadTables, publicReadTables, emptyTables, publicColumns, openWriteTables, unconfirmedWrites };
+  return { openReadTables, publicReadTables, unclassifiedReadTables, emptyTables, publicColumns, openWriteTables, unconfirmedWrites };
 }

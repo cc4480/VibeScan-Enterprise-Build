@@ -76,6 +76,10 @@ const AUTH_CLAIMS = [
 ];
 
 function looksLikeAuthToken(payload: JwtPayload): boolean {
+  // Supabase's anon key says `role: "anon"` and names no one. It is published on purpose and issued
+  // for ten years, so how long it lives says nothing about the app: reporting that was a MEDIUM on the
+  // clean twin of a test app. A token that also names a subject is a real session and still counts.
+  if (payload["role"] === "anon" && payload.sub === undefined) return false;
   return AUTH_CLAIMS.some((c) => payload[c] !== undefined);
 }
 

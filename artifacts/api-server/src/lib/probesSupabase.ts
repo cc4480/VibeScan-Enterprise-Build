@@ -99,6 +99,7 @@ export async function checkSupabaseRLS(
   // 4. Query each table with the anon key — any 200 with rows = RLS is off
   const exposedTables: string[] = [];
   const publicTables: string[] = [];
+  const unclassifiedTables: string[] = [];
   await Promise.allSettled(
     tableNames.map(async (table) => {
       const tableUrl = `${restBase}${encodeURIComponent(table)}?select=*&limit=1`;
@@ -109,8 +110,10 @@ export async function checkSupabaseRLS(
         try {
           const rows = JSON.parse(res.body);
           if (Array.isArray(rows) && rows.length > 0) {
-            // Rows from a public catalogue (products, posts...) are not RLS-off.
-            (classifyExposure(table, rows) === "public" ? publicTables : exposedTables).push(table);
+            // Rows from a public catalogue (products, posts...) are not RLS-off, and rows that nothing
+            // marks as personal, secret or per-user are a question for the owner, not a critical finding.
+            const exposure = classifyExposure(table, rows);
+            (exposure === "public" ? publicTables : exposure === "unclassified" ? unclassifiedTables : exposedTables).push(table);
           }
         } catch { /* not JSON */ }
       }
@@ -135,8 +138,9 @@ export async function checkSupabaseRLS(
   // Only public-catalogue tables (products, posts...) answered with rows: that is
   // what the storefront shows every visitor, not "RLS disabled". Observed
   // fact, reported as INFO for the owner to confirm.
+  const notes: ScanVulnerability[] = [];
   if (publicTables.length > 0) {
-    return [vuln({
+    notes.push(vuln({
       name: "Supabase Public Content Tables Readable Without Authentication",
       severity: "info",
       category: "Database Security",
@@ -147,8 +151,25 @@ export async function checkSupabaseRLS(
       cvssScore: 0,
       wstgId: "WSTG-ATHZ-01",
       confidence: 60,
-    })];
+    }));
   }
 
-  return [];
+  // Rows came back and nothing says whose they are or that they are secret: the same note the
+  // table probe raises (see reportTableFindings), at the same severity.
+  if (unclassifiedTables.length > 0) {
+    notes.push(vuln({
+      name: "Supabase Tables Readable Without Authentication (Not Classified)",
+      severity: "info",
+      category: "Database Security",
+      description: `${unclassifiedTables.length} table(s) returned rows to the public anon key (${unclassifiedTables.join(", ")}). Their names and the sampled row do not mark them as personal, secret or per-user data (no email, token, password or owner column such as user_id), so this is not reported as a vulnerability, and nothing marks them as public catalogue content either. Confirm they are meant to be readable by every visitor and hold no hidden or per-user rows.`,
+      evidence: `Supabase project: ${supabaseOrigin}\nGET ${restBase}${unclassifiedTables[0]}?select=*&limit=1 → HTTP 200 with rows (anon key only)`,
+      solution: "If any of these tables should not be public, enable RLS and add a SELECT policy limited to published rows.",
+      cweId: null,
+      cvssScore: 0,
+      wstgId: "WSTG-ATHZ-01",
+      confidence: 40,
+    }));
+  }
+
+  return notes;
 }

@@ -183,7 +183,9 @@ describe("runSupabaseProbes — RLS checks via REST API", () => {
   it("finds the open table from .from() calls when REST enumeration is locked to service_role", async () => {
     mockFetch((url) => {
       if (url.includes("?select=")) {
-        return jsonResponse([{ id: 1, content: "exposed row" }], 200);
+        // A per-user row (it carries an owner column). Rows with nothing personal or per-user in them are
+        // reported as information, not critical: see supabase-exposure.test.ts.
+        return jsonResponse([{ id: 1, content: "exposed row", user_id: "u-1" }], 200);
       }
       if (url.includes("/rest/v1/notes") && !url.includes("?")) {
         return jsonResponse({ message: "Unauthorized" }, 401); // write: protected
