@@ -33,6 +33,13 @@ export interface ProbeStageInput {
   crawlPageBudget: number;
   /** What the user asked to scan, before any redirect. */
   requestedUrl?: string;
+  /**
+   * The first response exactly as the server sent it, before any browser rendering. The checks about
+   * assets the site owner controls (subresource integrity, source maps) read this: the rendered page
+   * also lists scripts injected at run time by tag loaders, and the source maps of the third-party
+   * code they pull in, neither of which the owner wrote or can fix. Defaults to `html`.
+   */
+  authoredHtml?: string;
 }
 
 /**
@@ -41,6 +48,7 @@ export interface ProbeStageInput {
  */
 export async function runProbeStage({
   finalUrl, html, rawHeaders, setCookies, status, tier, allowActiveProbes, githubRepoUrl, ledger, crawlPageBudget, requestedUrl,
+  authoredHtml,
 }: ProbeStageInput) {
   const vulnerabilities: ScanVulnerability[] = [];
   const crawlStarted = Date.now();
@@ -101,7 +109,7 @@ export async function runProbeStage({
       run: runAllProbes(finalUrl, html, allowActiveProbes, (checkName, reason) => {
         innerProbeFailures.push(checkName);
         console.error(`[scan] check failed: ${checkName}`, reason);
-      }, ledger, requestedUrl),
+      }, ledger, requestedUrl, authoredHtml),
     },
     { family: "DNS and email authentication", run: checkDnsSecurity(finalUrl) },
     // Mail transport security: does the domain's MX actually offer STARTTLS,
@@ -133,7 +141,7 @@ export async function runProbeStage({
     // Subdomain takeover — 1-2 DNS + HTTP checks
     { family: "subdomain takeover", run: checkSubdomainTakeover(finalUrl) },
     // Source map exposure — checks JS bundles for .map files
-    outcome("source map exposure", "passive", (nt) => checkSourceMaps(html, finalUrl, nt)),
+    outcome("source map exposure", "passive", (nt) => checkSourceMaps(authoredHtml ?? html, finalUrl, nt)),
     // Exposed API docs: Swagger/OpenAPI/ReDoc — fetching published doc paths
     { family: "exposed API documentation", run: runApiDocsProbe(finalUrl) },
     { family: "health endpoint disclosure", run: runHealthEndpointProbe(finalUrl) },

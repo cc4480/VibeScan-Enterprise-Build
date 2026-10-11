@@ -224,6 +224,8 @@ async function runScanInner(
     setCookies: initial.setCookies ?? [],
     status: initial.status,
     requestedUrl: targetUrl,
+    // Not the rendered DOM: see ProbeStageInput.authoredHtml.
+    authoredHtml: initial.body,
     crawlPageBudget: CRAWL_PAGE_BUDGET,
     ...(extra?.githubRepoUrl ? { githubRepoUrl: extra.githubRepoUrl } : {}),
   });

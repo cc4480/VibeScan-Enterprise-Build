@@ -52,11 +52,18 @@ export async function runAllProbes(
   ledger?: TestLedger,
   /** The address the user asked to scan, when it differs from targetUrl because of a redirect. */
   requestedUrl?: string,
+  /**
+   * The page exactly as the server sent it, before any browser rendering. Subresource integrity is
+   * read from this, not from `html`: a rendered page also holds scripts that tag loaders (Segment,
+   * HubSpot, Google Tag Manager, FullStory) injected at run time, which the site owner did not write
+   * and cannot pin a hash on. Defaults to `html`, which is the same thing when nothing was rendered.
+   */
+  authoredHtml?: string,
 ): Promise<ScanVulnerability[]> {
   const passive: Array<[string, Promise<ScanVulnerability[]>]> = [
     ["sensitive file exposure", checkSensitiveFiles(targetUrl)],
     ["robots.txt disclosure", checkRobotsTxt(targetUrl)],
-    ["subresource integrity", checkSRI(html, targetUrl, requestedUrl)],
+    ["subresource integrity", checkSRI(authoredHtml ?? html, targetUrl, requestedUrl)],
     ["verbose error pages", checkErrorDisclosure(targetUrl)],
     ["HTTP to HTTPS redirect", checkHttpsRedirect(targetUrl)],
     // Header heuristic only — the behavioural burst lives in apiProbe.ts and
