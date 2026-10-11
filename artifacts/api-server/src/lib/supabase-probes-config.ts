@@ -182,8 +182,9 @@ export function extractServiceRoleKey(content: string): string | null {
     if (m?.[1] && isServiceRoleToken(m[1])) return m[1];
   }
 
-  // Scan all JWTs and check role claim
-  const jwtRx = /eyJ[A-Za-z0-9._-]{20,}\.eyJ[A-Za-z0-9._-]{20,}\.[A-Za-z0-9._-]*/g;
+  // Scan all JWTs and check role claim. A token's segments are base64url, so a dot ends one; the
+  // lookbehind keeps a start from sitting inside a longer run (time grew with the square of the length).
+  const jwtRx = /eyJ(?<![A-Za-z0-9_-]eyJ)[A-Za-z0-9_-]{20,}\.eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]*/g;
   let m: RegExpExecArray | null;
   while ((m = jwtRx.exec(content)) !== null) {
     if (isServiceRoleToken(m[0])) return m[0];

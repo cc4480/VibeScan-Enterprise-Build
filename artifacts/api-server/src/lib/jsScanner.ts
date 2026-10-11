@@ -13,7 +13,15 @@ import type { ScanVulnerability } from "./scanner";
 
 const JS_FETCH_TIMEOUT_MS = 10_000;
 const MAX_EXTERNAL_SCRIPTS = 8;
-const MAX_SCRIPT_SIZE_BYTES = 512_000; // 512 KB per file
+/**
+ * Most of a script that is read, per file. This was 512,000, and a production bundle of an ordinary app is
+ * larger: in a Vite build the libraries come first and the app's own code, the part that holds its keys, comes
+ * last, so a cap that cuts the end cuts off exactly that part (a 761,001-byte bundle lost everything after
+ * byte 512,000: the service_role key at 756,7xx and an OpenAI key were never looked at). The transport already
+ * stops a body at MAX_BODY_BYTES, so this matches it. Reading it all costs about 50 ms a megabyte on a real
+ * bundle, and the patterns that did not scale (see secret-pattern-jwt.ts) are fixed.
+ */
+const MAX_SCRIPT_SIZE_BYTES = MAX_BODY_BYTES;
 
 function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
   return { id: randomUUID(), ...partial };
@@ -26,6 +34,7 @@ function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
 import { type SecretPattern, SECRET_PATTERNS } from "./secret-pattern-data";
 import { isPlaceholderToken } from "./secretPlaceholders";
 import { scanFetch, oncePerScan } from "./http";
+import { MAX_BODY_BYTES } from "./httpBody";
 import { scanAiUsage } from "./aiFeatureProbe";
 import { isFirstParty } from "./sriPolicy";
 
