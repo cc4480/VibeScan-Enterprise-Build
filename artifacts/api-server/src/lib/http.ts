@@ -118,7 +118,9 @@ async function perform(url: string, options: ScanFetchOptions): Promise<Outcome>
         redirect: "manual",
         // Opens the socket only to an address vetted at connect time, so a name that
         // re-resolves to a private address between the check above and here is refused.
-        dispatcher: scanDispatcher,
+        // Cast: the global fetch is typed by @types/node's bundled undici-types, a different version
+        // from the undici the dispatcher is built with. Same runtime object, mismatched declarations.
+        dispatcher: scanDispatcher as unknown as NonNullable<RequestInit["dispatcher"]>,
         signal,
         headers: buildHeaders(current, ctx, callerHeaders, identity, identityGiven),
       });
