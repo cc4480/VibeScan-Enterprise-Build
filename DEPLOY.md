@@ -108,6 +108,8 @@ docker compose --env-file .env.docker logs -f web secscan
 
 ## 5. Confirm it actually works
 
+Scans require a signed-in account, so the checks below need a session cookie from `POST /api/account/register` (or `/login`) followed by the matching `/verify` call with the emailed code. That means `RESEND_API_KEY` must be a working key first: without one, sign-up answers "Could not send your code" and nothing can be scanned. Send the cookie with `-b cookies.txt` on each request below; the `Authorization: Bearer` header shown is no longer accepted on its own.
+
 ```bash
 # The scanner must reject internal targets — if this returns 201, stop and
 # investigate: the deployment is an open proxy into your own network.
