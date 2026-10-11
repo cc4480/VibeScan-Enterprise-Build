@@ -115,8 +115,8 @@ Scans require a signed-in account, so the checks below need a session cookie fro
 # investigate: the deployment is an open proxy into your own network.
 curl -s -X POST https://secscan.us/api/scans \
   -H "Authorization: Bearer $(uuidgen)" -H 'Content-Type: application/json' \
-  -d '{"targetUrl":"http://169.254.169.254/","tier":"basic"}'
-# expected: {"error":"Target resolves to a private, loopback, or link-local address."}
+  -d '{"targetUrl":"http://169.254.169.254/","tier":"deep"}'
+# expected: HTTP 400, {"error":"That address cannot be scanned: it is a private, local or link-local address. ..."}
 ```
 
 ```bash
@@ -126,9 +126,9 @@ for i in $(seq 1 6); do
   curl -s -o /dev/null -w "%{http_code} " -X POST https://secscan.us/api/scans \
     -H "Authorization: Bearer $(uuidgen)" -H 'Content-Type: application/json' \
     -H "X-Forwarded-For: 198.51.100.$i" \
-    -d '{"targetUrl":"https://example.com/","tier":"basic"}'
+    -d '{"targetUrl":"https://example.com/","tier":"deep"}'
 done; echo
-# expected: 201 201 201 201 201 429   — if every one is 201, the app is seeing
+# expected: the first few 201, then 403 (free-tier allowance) and 429 (rate limit) — if the 429s never come, the app is seeing
 # the spoofed header: check TRUST_PROXY and that web's port is bound to loopback only.
 ```
 
