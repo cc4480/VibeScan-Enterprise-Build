@@ -151,7 +151,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 # been observed failing DNS resolution mid-build (ENOTFOUND) while the npm
 # registry resolved fine in the same step. One transient blip should not fail
 # an otherwise good image build.
-RUN npm install --no-save --omit=dev playwright@1.62.1 \
+RUN npm install --no-save --omit=dev playwright@1.64.0 \
  && for attempt in 1 2 3; do \
       npx playwright install --with-deps chromium && break; \
       echo "playwright browser install failed (attempt $attempt/3); retrying in 15s"; \
