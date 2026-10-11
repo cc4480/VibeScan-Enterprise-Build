@@ -1,4 +1,5 @@
 import { vuln, type ScanVulnerability } from "./scannerTypes";
+import { PLAINTEXT_FINDING_NAME } from "./scannerTransportChecks";
 import type { TestRecord } from "./testLedger";
 
 /**
@@ -173,13 +174,38 @@ export function rootErrorFinding(status: number, url: string): ScanVulnerability
     category: "Scan Coverage",
     description:
       `The page this scan started from answered HTTP ${status}${status >= 500 ? " (a server error)" : status === 401 || status === 403 ? " (sign-in or permission required)" : status === 404 ? " (not found)" : ""}. ` +
-      "Header, cookie and page findings below describe that response, which may not be what visitors to the working app receive. " +
+      "Header, cookie and page findings read from that response describe an error page, which may not be what visitors to the working app receive, so they are reported as information only and do not count towards the grade. " +
       "This is not a finding about your site on its own; it is here so a report built from an error page is not mistaken for one built from the app.",
     evidence: `GET ${url} → HTTP ${status}`,
     solution: status >= 500
       ? "Check the app is up, then scan again."
       : "Scan the address visitors actually land on, or supply a login (Scan credentials) if the app requires one.",
     confidence: 100,
+  });
+}
+
+/**
+ * Findings read from the response of a start page that answered an error status, reported as information.
+ *
+ * An error page is not the app: it often lacks the headers and cookies the app sets and carries no
+ * structured data or Open Graph tags, so "Missing Content-Security-Policy (HIGH)" read from a 502 page is
+ * a claim about the page the proxy served, not about the site. The findings are kept, because they may well
+ * be true, but they are shown as information so they cannot be graded as the site's, and the note from
+ * rootErrorFinding says so. A scheme problem is a fact about the address, not about the response, so
+ * "No HTTPS / Plaintext HTTP" keeps its severity.
+ *
+ * A refusal with almost no body (403, 406, 429...) is handled earlier, as an interception, and withheld.
+ */
+export function capFindingsReadFromErrorPage(findings: ScanVulnerability[], status: number): ScanVulnerability[] {
+  return findings.map((v) => {
+    if (v.severity === "info" || v.name === PLAINTEXT_FINDING_NAME) return v;
+    return {
+      ...v,
+      severity: "info",
+      cvssScore: 0,
+      confidence: Math.min(v.confidence ?? 100, 40),
+      description: `${v.description}\n\nReported as information only: the page this scan started from answered HTTP ${status}, so this describes that error response and may not describe the working app (it was ${v.severity} before the cap).`,
+    };
   });
 }
 

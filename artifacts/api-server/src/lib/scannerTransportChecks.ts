@@ -1,6 +1,9 @@
 import { headerVal, vuln, type ScanVulnerability, type PageContext } from "./scannerTypes";
 import { isHstsPreloaded } from "./scannerHstsPreload";
 
+/** The finding for an address served without TLS: a fact about the address, whatever the response was. */
+export const PLAINTEXT_FINDING_NAME = "No HTTPS / Plaintext HTTP";
+
 /** Plaintext HTTP and Strict-Transport-Security checks on the first response. */
 export async function transportFindings({ finalUrl, rawHeaders, isHttps }: PageContext): Promise<ScanVulnerability[]> {
   const vulnerabilities: ScanVulnerability[] = [];
@@ -8,7 +11,7 @@ export async function transportFindings({ finalUrl, rawHeaders, isHttps }: PageC
   // ── TLS / HTTPS ───────────────────────────────────────────────────────
   if (!isHttps) {
     vulnerabilities.push(vuln({
-      name: "No HTTPS / Plaintext HTTP",
+      name: PLAINTEXT_FINDING_NAME,
       severity: "critical",
       category: "Transport Security",
       description: "The application is served over HTTP without TLS encryption. All data transmitted between the browser and the server—including passwords and session tokens—can be intercepted by any network observer.",
