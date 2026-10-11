@@ -51,7 +51,7 @@ export async function checkVibeStackSecurity(
 ): Promise<ScanVulnerability[]> {
   const findings: ScanVulnerability[] = [];
   if (!extractSupabaseConfig(html) && !extractFirebaseConfig(html)) {
-    notTested?.("no Supabase or Firebase project configuration was found in the page");
+    notTested?.("no Supabase or Firebase project configuration was found in the page or its JavaScript");
   }
 
   // Run Supabase and Firebase probes in parallel

@@ -1,6 +1,7 @@
 /** Supabase row-level-security probe. */
 import type { ScanVulnerability } from "./scanner";
 import { classifyExposure } from "./baasExposure";
+import { extractSupabaseConfig } from "./supabase-probes-config";
 import { vuln, safeGet } from "./probesCore";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -12,8 +13,8 @@ import { vuln, safeGet } from "./probesCore";
  * properly configured on its database tables.
  *
  * Detection approach:
- *   1. Find the Supabase project URL in the page HTML.
- *   2. Extract the anon/publishable key from inline scripts or VITE_ bundle vars.
+ *   1. Find the Supabase project URL in the page HTML and in the site's own JavaScript.
+ *   2. Extract the anon/publishable key written next to it (a bundle keeps both as string constants).
  *   3. Call the Supabase REST API with only that key to enumerate table names.
  *   4. Query each discovered table — if rows come back, RLS is disabled.
  *
@@ -26,35 +27,22 @@ export async function checkSupabaseRLS(
   /** Told why nothing was tested, so the report says "not tested" rather than "ran, 0 findings". */
   notTested?: (reason: string) => void,
 ): Promise<ScanVulnerability[]> {
-  // 1. Find Supabase project URL
-  const projectMatch = /https:\/\/([a-z0-9]{20})\.supabase\.co/.exec(html);
-  if (!projectMatch) {
+  // 1. Find the Supabase project and its public key. The shared extractor reads a first-party bundle
+  //    as well as a page (a production build keeps both as renamed string constants), and never
+  //    returns the service_role key or a key issued for another project.
+  const config = extractSupabaseConfig(html);
+  const projectRef = config?.projectRef ?? /https:\/\/([a-z0-9]{20})\.supabase\.co/.exec(html)?.[1];
+  if (!projectRef || !/^[a-z0-9]{20}$/.test(projectRef)) {
     notTested?.("No Supabase project was found in the page, so there was no database to test.");
     return [];
   }
 
-  const projectRef = projectMatch[1];
   const supabaseOrigin = `https://${projectRef}.supabase.co`;
   const restBase = `${supabaseOrigin}/rest/v1/`;
 
-  // 2. Extract anon/publishable key from HTML / inline bundle
-  let anonKey: string | null = null;
-
-  // New format: sb_publishable_...
-  const newFmtMatch = /\bsb_publishable_[a-zA-Z0-9_-]{20,}\b/.exec(html);
-  if (newFmtMatch) {
-    anonKey = newFmtMatch[0];
-  } else {
-    // Old format: JWT in a Supabase-init context
-    const jwtMatch = /(?:supabaseKey|anon(?:Key|_key)|ANON_KEY|SUPABASE_ANON_KEY|apikey)\s*[:=,\s]+["'`]?(eyJ[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{10,})/.exec(html);
-    if (jwtMatch) anonKey = jwtMatch[1] ?? null;
-  }
-
-  // 2b. If no key found in context, look for any bare JWT next to supabase
-  if (!anonKey) {
-    const bareJwt = /eyJ[a-zA-Z0-9_-]{50,}\.[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{20,}/.exec(html);
-    if (bareJwt) anonKey = bareJwt[0];
-  }
+  // 2. The anon/publishable key (a sb_publishable_ key or the legacy JWT). A bare token that merely
+  //    appears somewhere in a page or bundle is not taken as the key: it could be any JWT.
+  const anonKey: string | null = config && config.projectRef === projectRef ? config.anonKey : null;
 
   if (!anonKey) {
     // Supabase detected but key is in a lazy-loaded bundle — advise manual check
@@ -65,7 +53,7 @@ export async function checkSupabaseRLS(
       severity: "info",
       category: "Database Security",
       description: "A Supabase backend was detected, but its public key could not be read from the page, so no table was tested. Nothing here shows a misconfiguration. Row Level Security (RLS) is the access control for Supabase data (CVE-2025-48757 affected apps that left it off), so it is worth confirming it is enabled on every table that holds non-public data.",
-      evidence: `Supabase project detected: ${supabaseOrigin}\nAnon key could not be extracted from inline HTML — it may be in a JS bundle. No request was made to the project.`,
+      evidence: `Supabase project detected: ${supabaseOrigin}\nThe anon key could not be read from the page or its first-party JavaScript — it may be in a lazy-loaded chunk. No request was made to the project.`,
       solution: "In Supabase Dashboard → Table Editor, confirm RLS is enabled on every table with non-public data (users, profiles, orders, payments). Test by hitting your REST API with just the anon key — you should get 0 rows or a 403 for those tables.",
       cweId: null,
       cvssScore: 0,

@@ -157,7 +157,7 @@ export async function runBaasProbes(
   if (appwriteCfg) tasks.push(probeAppwrite(appwriteCfg).catch(() => []));
 
   if (tasks.length === 0) {
-    notTested?.("no PocketBase or Appwrite backend is referenced in the page");
+    notTested?.("no PocketBase or Appwrite backend is referenced in the page or its JavaScript");
     return [];
   }
 

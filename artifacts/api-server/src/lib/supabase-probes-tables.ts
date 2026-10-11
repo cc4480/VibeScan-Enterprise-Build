@@ -66,12 +66,31 @@ export function extractTableNamesFromContent(content: string): string[] {
   const names = new Set<string>();
   // .from("table"), .from('table'), .from(`table`) — optional TS generic
   // between .from and the parenthesis, e.g. .from<Database>("table").
-  const rx = /\.from\s*(?:<[^>()]*>)?\s*\(\s*["'`]([a-zA-Z_][a-zA-Z0-9_]*)["'`]\s*\)/g;
+  //
+  // Not `.storage.from("bucket")`, which names a storage bucket, and not the built-in
+  // `Array.from("…")` / `Buffer.from("…")` of the library code a bundle carries: in a whole bundle
+  // those would take the places of real tables in the short list that gets probed.
+  const rx = /(?<!\.storage\s*|\b(?:Array|Buffer|Int8Array|Uint8Array|Uint16Array|Uint32Array|Float32Array|Float64Array)\s*)\.from\s*(?:<[^>()]*>)?\s*\(\s*["'`]([a-zA-Z_][a-zA-Z0-9_]*)["'`]\s*\)/g;
   let m: RegExpExecArray | null;
   while ((m = rx.exec(content)) !== null) {
     if (m[1]) names.add(m[1]);
   }
   return [...names].slice(0, MAX_TABLES_TO_TEST);
+}
+
+/**
+ * Storage bucket names the app's own code opens: `supabase.storage.from("avatars")`. The bucket list
+ * endpoint answers an empty list to the anon key unless a policy allows it, so a public bucket whose
+ * files can be listed is only found by naming it, and the code is where its name is written. The
+ * `.storage` property is not renamed by a minifier.
+ */
+export function extractStorageBucketNames(content: string): string[] {
+  const names = new Set<string>();
+  for (const m of content.matchAll(/\.storage\s*\.from\s*\(\s*["'`]([A-Za-z0-9][A-Za-z0-9._-]{0,62})["'`]\s*\)/g)) {
+    if (m[1]) names.add(m[1]);
+    if (names.size >= 10) break;
+  }
+  return [...names];
 }
 
 export type ReadResult =

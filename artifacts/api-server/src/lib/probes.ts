@@ -59,6 +59,13 @@ export async function runAllProbes(
    * and cannot pin a hash on. Defaults to `html`, which is the same thing when nothing was rendered.
    */
   authoredHtml?: string,
+  /**
+   * The site's own JavaScript (see collectFirstPartyJavaScript), for the checks that read a backend's
+   * address and keys. A production build keeps those in the bundle, not in the page, so a check that
+   * is given only `html` finds nothing to test. A promise so the checks that do not need it start at
+   * once while the scripts download.
+   */
+  siteCode?: Promise<string> | string,
 ): Promise<ScanVulnerability[]> {
   const passive: Array<[string, Promise<ScanVulnerability[]>]> = [
     ["sensitive file exposure", checkSensitiveFiles(targetUrl)],
@@ -84,7 +91,7 @@ export async function runAllProbes(
         ["active CORS", checkActiveCors(targetUrl)],
         ["open redirect", checkOpenRedirect(targetUrl)],
         // Reads rows out of the target's Supabase instance.
-        ["Supabase RLS", checkSupabaseRLS(html, (r) => { supabaseNotTested.value = r; })],
+        ["Supabase RLS", (async () => checkSupabaseRLS(`${html}\n${(await siteCode) ?? ""}`, (r) => { supabaseNotTested.value = r; }))()],
       ]
     : [];
 

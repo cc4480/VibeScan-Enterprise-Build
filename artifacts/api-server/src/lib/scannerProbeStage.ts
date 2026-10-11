@@ -2,7 +2,7 @@ import { vuln, type ScanVulnerability } from "./scannerTypes";
 import { runAllProbes } from "./probes";
 import { TestLedger, NOT_VERIFIED, foundNames, type ProbeOutcome } from "./testLedger";
 import { checkDnsSecurity } from "./dnsChecks";
-import { scanJavaScriptForSecrets } from "./jsScanner";
+import { scanJavaScriptForSecrets, collectFirstPartyJavaScript } from "./jsScanner";
 import { parseGithubRepoRef, scanGithubRepo, githubProbeOutcome } from "./githubSourceProbe";
 import { crawlAndCheck } from "./crawler";
 import { checkForKnownVulnerabilities } from "./cveCheck";
@@ -103,13 +103,24 @@ export async function runProbeStage({
     return { family, tracked: true, run: ledger.trackOutcome(group, family, run) };
   };
 
+  // The site's own JavaScript, fetched once and shared. The checks that look for a backend (Supabase,
+  // Firebase, PocketBase, Appwrite, cloud buckets) need its address, keys and bucket names, and a
+  // production build keeps those in the bundle, not in the page: an app shipped as an empty shell and one
+  // script has nothing for them to read in the HTML. Only the active checks use it, so a passive scan
+  // does not fetch anything extra; the secret scanner below reads the same scripts through the shared
+  // per-scan cache.
+  const siteCode: Promise<string> = allowActiveProbes
+    ? collectFirstPartyJavaScript(html, finalUrl).catch(() => "")
+    : Promise.resolve("");
+  const withSiteCode = async () => `${html}\n${await siteCode}`;
+
   const namedProbes: Array<{ family: string; run: Promise<ScanVulnerability[]>; tracked?: boolean }> = [
     {
       family: "HTTP probes (headers, files, methods, CORS)",
       run: runAllProbes(finalUrl, html, allowActiveProbes, (checkName, reason) => {
         innerProbeFailures.push(checkName);
         console.error(`[scan] check failed: ${checkName}`, reason);
-      }, ledger, requestedUrl, authoredHtml),
+      }, ledger, requestedUrl, authoredHtml, siteCode),
     },
     { family: "DNS and email authentication", run: checkDnsSecurity(finalUrl) },
     // Mail transport security: does the domain's MX actually offer STARTTLS,
@@ -166,13 +177,13 @@ export async function runProbeStage({
   if (allowActiveProbes) {
     namedProbes.push(
       // Vibe-stack database security — Supabase RLS + Firebase rules (both tiers)
-      outcome("Supabase RLS and Firebase rules", "active", (nt) => checkVibeStackSecurity(html, finalUrl, tier, nt)),
+      outcome("Supabase RLS and Firebase rules", "active", async (nt) => checkVibeStackSecurity(await withSiteCode(), finalUrl, tier, nt)),
       // BaaS open-data checks not covered above: PocketBase, Appwrite
-      outcome("BaaS open data (PocketBase, Appwrite)", "active", (nt) => runBaasProbes(finalUrl, html, nt)),
+      outcome("BaaS open data (PocketBase, Appwrite)", "active", async (nt) => runBaasProbes(finalUrl, await withSiteCode(), nt)),
       // GraphQL introspection + field suggestions
       { family: "GraphQL introspection", run: runGraphqlProbe(finalUrl, html) },
       // Public cloud storage listing: S3, GCS, Azure Blob
-      outcome("public cloud storage buckets", "active", (nt) => runStorageProbe(finalUrl, html, nt)),
+      outcome("public cloud storage buckets", "active", async (nt) => runStorageProbe(finalUrl, await withSiteCode(), nt)),
       // Real SCA, when the target publishes its own manifest. The path probe
       // already reports that /package.json is exposed; this reads the
       // dependency tree inside it and matches it against OSV, which is the
