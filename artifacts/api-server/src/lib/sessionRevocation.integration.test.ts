@@ -101,7 +101,8 @@ suite("Session revocation (real Postgres)", () => {
       for (const call of spy.mock.calls) {
         const cfg = call[0] as unknown;
         const text = typeof cfg === "string" ? cfg : (cfg as { text?: string })?.text;
-        const values = (typeof cfg === "string" ? call[1] : (cfg as { values?: unknown[] })?.values) as unknown[] | undefined;
+        // The values are the second argument, or inside the config object, depending on the driver version.
+        const values = ((cfg as { values?: unknown[] })?.values ?? call[1]) as unknown[] | undefined;
         if (text && /delete from "sessions"/i.test(text)) captured = { text, values: values ?? [] };
       }
     } finally {
