@@ -31,7 +31,7 @@
     "pino": "^9",
     "pino-http": "^10",
     "playwright": "^1.62.1",
-    "stripe": "^20.4.1",
+    "stripe": "^23.0.0",
     "undici": "^7.30.0",
     "zod": "^3"
   },
