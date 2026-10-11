@@ -1,7 +1,66 @@
 import { Link } from "wouter";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { ShieldAlert, Key, Globe, CheckCircle2, ArrowRight, Activity, Code2, Zap, Bot, FileKey, Database, Network } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+/** The animated shield mark above the headline: it scales in, then holds a
+ *  slow glow, with rings pinging outward and a scan line sweeping down it.
+ *  Everything past the entrance is skipped under prefers-reduced-motion. */
+function HeroShield() {
+  const reduce = useReducedMotion();
+  return (
+    <div className="relative mb-8 flex h-40 w-40 items-center justify-center sm:h-44 sm:w-44" aria-hidden="true">
+      {!reduce &&
+        [0, 1.2, 2.4].map((delay) => (
+          <motion.span
+            key={delay}
+            className="absolute inset-0 rounded-full border border-primary/60"
+            initial={{ opacity: 0, scale: 0.7 }}
+            animate={{ opacity: [0.5, 0], scale: [0.7, 1.7] }}
+            transition={{ duration: 3.6, delay: 1 + delay, repeat: Infinity, ease: "easeOut" }}
+          />
+        ))}
+      <motion.img
+        src={`${import.meta.env.BASE_URL}images/hero-shield.webp`}
+        alt=""
+        width={160}
+        height={160}
+        fetchPriority="high"
+        decoding="async"
+        className="relative z-10 h-36 w-36 rounded-2xl object-cover sm:h-40 sm:w-40"
+        initial={reduce ? false : { opacity: 0, scale: 0.82, y: 10, filter: "blur(6px)" }}
+        animate={
+          reduce
+            ? undefined
+            : {
+                opacity: 1,
+                scale: 1,
+                y: [0, -5, 0],
+                filter: [
+                  "blur(0px) drop-shadow(0 0 0px rgba(20,184,120,0))",
+                  "blur(0px) drop-shadow(0 0 16px rgba(20,184,120,0.55))",
+                  "blur(0px) drop-shadow(0 0 0px rgba(20,184,120,0))",
+                ],
+              }
+        }
+        transition={{
+          opacity: { duration: 0.9, delay: 0.1 },
+          scale: { duration: 1, delay: 0.1, ease: [0.2, 0.8, 0.2, 1] },
+          y: { duration: 5, delay: 1.2, repeat: Infinity, ease: "easeInOut" },
+          filter: { duration: 4, delay: 1.2, repeat: Infinity, ease: "easeInOut" },
+        }}
+      />
+      {!reduce && (
+        <motion.span
+          className="absolute left-4 right-4 z-20 h-0.5 rounded-full bg-gradient-to-r from-transparent via-cyan-300 to-transparent shadow-[0_0_12px_rgba(103,232,249,0.9)]"
+          initial={{ top: "12%", opacity: 0 }}
+          animate={{ top: ["12%", "88%", "12%"], opacity: [0, 1, 0] }}
+          transition={{ duration: 3.2, delay: 1.4, repeat: Infinity, ease: "easeInOut", times: [0, 0.5, 1] }}
+        />
+      )}
+    </div>
+  );
+}
 
 /** The hero: headline, subhead and the two calls to action. */
 export function HeroSection() {
@@ -43,6 +102,8 @@ export function HeroSection() {
           animate="show"
           className="max-w-3xl mx-auto text-center flex flex-col items-center"
         >
+          <HeroShield />
+
           <motion.div variants={itemVariants} className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary text-sm font-medium mb-8">
             <Activity className="w-4 h-4" />
             <span>AI Analysis Engine v1.0</span>
