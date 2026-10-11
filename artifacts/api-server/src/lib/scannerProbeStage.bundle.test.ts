@@ -106,3 +106,29 @@ describe("runProbeStage without active checks (a target the user has not verifie
     expect(await spies.all.mock.calls[0]![7]).toBe("");
   });
 });
+
+describe("a leaked service_role key is reported once", () => {
+  const finding = (name: string) => ({ id: name, name, severity: "critical" }) as never;
+  const FROM_CHECK = "Supabase Service Role Key Exposed in Client-Side Code";
+  const FROM_SCRIPTS = "Supabase Service Role Key Exposed in JavaScript";
+  const names = (r: { vulnerabilities: Array<{ name: string }> }) => r.vulnerabilities.map((v) => v.name).sort();
+
+  it("keeps the secret scanner's finding (it says which script held the key) and drops the Supabase check's", async () => {
+    spies.vibe.mockResolvedValueOnce([finding(FROM_CHECK)] as never);
+    spies.secrets.mockResolvedValueOnce([finding(FROM_SCRIPTS)] as never);
+    expect(names(await stage(true))).toEqual([FROM_SCRIPTS]);
+  });
+
+  it("keeps the Supabase check's finding when the secret scanner did not see the key", async () => {
+    spies.vibe.mockResolvedValueOnce([finding(FROM_CHECK)] as never);
+    expect(names(await stage(true))).toEqual([FROM_CHECK]);
+  });
+
+  it("still returns the Supabase check's other findings, and still runs it when the secret scan fails", async () => {
+    spies.vibe.mockResolvedValueOnce([finding(FROM_CHECK), finding("Supabase Tables Accept Unauthenticated Writes")] as never);
+    spies.secrets.mockRejectedValueOnce(new Error("download failed"));
+    const r = await stage(true);
+    expect(names(r)).toEqual([FROM_CHECK, "Supabase Tables Accept Unauthenticated Writes"]);
+    expect(r.unrunFamilies).toContain("JavaScript secret scanning");
+  });
+});

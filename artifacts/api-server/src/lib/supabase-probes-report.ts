@@ -2,13 +2,29 @@ import { vuln } from "./supabase-probes-core";
 import { extractServiceRoleKey } from "./supabase-probes-config";
 import type { ScanVulnerability } from "./scanner";
 
+/** What the Supabase check calls a service_role key it found in the page or its scripts. */
+export const SERVICE_ROLE_FROM_CHECK = "Supabase Service Role Key Exposed in Client-Side Code";
+/** What the secret scanner calls the same key (it also says which script held it). */
+export const SERVICE_ROLE_FROM_SCRIPTS = "Supabase Service Role Key Exposed in JavaScript";
+
+/**
+ * The secret scanner and the Supabase check each find a leaked service_role key, now that both read the
+ * bundle, and each reports it. One key is one finding: when the scanner has it (and it says which script
+ * held it), the check's copy is dropped.
+ */
+export function withoutRepeatedServiceRole(fromCheck: ScanVulnerability[], fromScripts: ScanVulnerability[]): ScanVulnerability[] {
+  return fromScripts.some((f) => f.name === SERVICE_ROLE_FROM_SCRIPTS)
+    ? fromCheck.filter((f) => f.name !== SERVICE_ROLE_FROM_CHECK)
+    : fromCheck;
+}
+
 /** A service-role key in client code bypasses Row Level Security entirely. */
 export function reportServiceRoleKey(content: string, findings: ScanVulnerability[]): void {
   const serviceKey = extractServiceRoleKey(content);
   if (serviceKey) {
     const short = serviceKey.slice(0, 12) + "…" + serviceKey.slice(-6);
     findings.push(vuln({
-      name: "Supabase Service Role Key Exposed in Client-Side Code",
+      name: SERVICE_ROLE_FROM_CHECK,
       severity: "critical",
       category: "Exposed Secrets / Credentials",
       description:

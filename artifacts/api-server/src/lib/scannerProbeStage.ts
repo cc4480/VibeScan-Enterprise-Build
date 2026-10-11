@@ -1,4 +1,5 @@
 import { vuln, type ScanVulnerability } from "./scannerTypes";
+import { withoutRepeatedServiceRole } from "./supabase-probes-report";
 import { runAllProbes } from "./probes";
 import { TestLedger, NOT_VERIFIED, foundNames, type ProbeOutcome } from "./testLedger";
 import { checkDnsSecurity } from "./dnsChecks";
@@ -113,6 +114,9 @@ export async function runProbeStage({
     ? collectFirstPartyJavaScript(html, finalUrl).catch(() => "")
     : Promise.resolve("");
   const withSiteCode = async () => `${html}\n${await siteCode}`;
+  // Started here, not where it is listed below, because the Supabase check reads its result to avoid reporting
+  // a leaked service_role key a second time.
+  const secretScan = scanJavaScriptForSecrets(html, finalUrl);
 
   const namedProbes: Array<{ family: string; run: Promise<ScanVulnerability[]>; tracked?: boolean }> = [
     {
@@ -177,7 +181,10 @@ export async function runProbeStage({
   if (allowActiveProbes) {
     namedProbes.push(
       // Vibe-stack database security — Supabase RLS + Firebase rules (both tiers)
-      outcome("Supabase RLS and Firebase rules", "active", async (nt) => checkVibeStackSecurity(await withSiteCode(), finalUrl, tier, nt)),
+      outcome("Supabase RLS and Firebase rules", "active", async (nt) => {
+        const found = await checkVibeStackSecurity(await withSiteCode(), finalUrl, tier, nt);
+        return withoutRepeatedServiceRole(found, await secretScan.catch(() => []));
+      }),
       // BaaS open-data checks not covered above: PocketBase, Appwrite
       outcome("BaaS open data (PocketBase, Appwrite)", "active", async (nt) => runBaasProbes(finalUrl, await withSiteCode(), nt)),
       // GraphQL introspection + field suggestions
@@ -195,7 +202,7 @@ export async function runProbeStage({
     );
   }
 
-  namedProbes.push({ family: "JavaScript secret scanning", run: scanJavaScriptForSecrets(html, finalUrl) });
+  namedProbes.push({ family: "JavaScript secret scanning", run: secretScan });
 
   // Optional source-code scan of a public GitHub repository the user
   // supplied for this scan — see githubSourceProbe.ts. Independent of
