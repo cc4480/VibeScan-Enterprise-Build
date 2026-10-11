@@ -23,10 +23,13 @@ import { vuln, safeGet } from "./probesCore";
  * Lovable-hosted apps had fully open tables leaking plaintext credentials.
  */
 export async function checkSupabaseRLS(
-  html: string,
+  /** The page, or the page plus the site's own scripts (a promise while those are still downloading). */
+  page: string | Promise<string>,
   /** Told why nothing was tested, so the report says "not tested" rather than "ran, 0 findings". */
   notTested?: (reason: string) => void,
 ): Promise<ScanVulnerability[]> {
+  const html = await page;
+
   // 1. Find the Supabase project and its public key. The shared extractor reads a first-party bundle
   //    as well as a page (a production build keeps both as renamed string constants), and never
   //    returns the service_role key or a key issued for another project.

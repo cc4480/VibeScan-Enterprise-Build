@@ -81,6 +81,11 @@ export async function runAllProbes(
     ["security.txt", checkSecurityTxt(targetUrl)],
   ];
 
+  // The page plus the site's own scripts, for the Supabase check only: the other checks do not wait for the scripts.
+  const pageAndScripts = async () => {
+    try { return `${html}\n${(await siteCode) ?? ""}`; } catch { return html; }
+  };
+
   // Checks that can say they had nothing to test; read once the check settles.
   const supabaseNotTested: { value?: string } = {};
   const notTestedReasons = new Map([["Supabase RLS", supabaseNotTested]]);
@@ -91,7 +96,7 @@ export async function runAllProbes(
         ["active CORS", checkActiveCors(targetUrl)],
         ["open redirect", checkOpenRedirect(targetUrl)],
         // Reads rows out of the target's Supabase instance.
-        ["Supabase RLS", (async () => checkSupabaseRLS(`${html}\n${(await siteCode) ?? ""}`, (r) => { supabaseNotTested.value = r; }))()],
+        ["Supabase RLS", checkSupabaseRLS(pageAndScripts(), (r) => { supabaseNotTested.value = r; })],
       ]
     : [];
 
