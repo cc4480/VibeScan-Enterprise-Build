@@ -32,8 +32,9 @@ export async function transportFindings({ finalUrl, rawHeaders, isHttps }: PageC
       // Since we successfully fetched this site over HTTPS, it clearly HAS HTTPS.
       // A missing STS header means browsers won't cache the HTTPS preference, but
       // HTTPS itself is working. This is MEDIUM (not HIGH). HIGH is reserved for
-      // sites with no HTTPS at all (handled above). Some sites (e.g. google.com)
-      // intentionally omit the header, relying on the HSTS preload list instead.
+      // sites with no HTTPS at all (handled above). A host on the preload list may
+      // omit the header; a redirect from http:// to https:// does not make up for
+      // it (the first visit is still plain HTTP), so it is not taken as a sign of preloading.
       vulnerabilities.push(vuln({
         name: "Missing HTTP Strict-Transport-Security (HSTS)",
         severity: "medium",
