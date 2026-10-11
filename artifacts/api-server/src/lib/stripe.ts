@@ -5,7 +5,7 @@ if (!process.env.STRIPE_SECRET_KEY) {
 }
 
 export const stripe = process.env.STRIPE_SECRET_KEY
-  ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2026-02-25.clover" })
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2026-09-30.endive" })
   : null;
 
 export const PRICE_MAP: Record<string, { amount: number; name: string; description: string }> = {
