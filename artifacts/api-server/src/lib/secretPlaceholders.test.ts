@@ -109,6 +109,7 @@ describe("the helpers", () => {
   it.each([
     "S3_SECRET_ACCESS_KEY", "OPENAI_API_KEY_2", "MY_DEEPSEEK_API_KEY", "mySecretKeyValueHere",
     "accessTokenGoesHere", "supersecretjwtkeychangeme", "a-very-long-random-string", "generate-a-random-string",
+    "your-super-secret-jwt-key-must-be-long!", "change-this-secret-in-production.", "your-super-secret-key-min-32-chars-long!",
   ])("looksLikeAName(%s)", (v) => expect(looksLikeAName(v)).toBe(true));
 
   it.each(["Kq8Zr2Lm9Vb3Xt7Nc4Wd6Hs1Jp5Ae0UoY", "b7f3c9a1e2d84f6a9c0b5e7d3a1f8c2e", "AKIAQZPXMC4278HDVBNR", "correct-horse-battery-staple-9"])(

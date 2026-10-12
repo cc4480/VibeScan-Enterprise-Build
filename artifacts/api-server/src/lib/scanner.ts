@@ -231,6 +231,7 @@ async function runScanInner(
     authoredHtml: initial.body,
     crawlPageBudget: CRAWL_PAGE_BUDGET,
     ...(extra?.githubRepoUrl ? { githubRepoUrl: extra.githubRepoUrl } : {}),
+    ...(extra?.githubAccessToken ? { githubAccessToken: extra.githubAccessToken } : {}),
   });
   const { crawlResult, unrunFamilies } = probes;
   vulnerabilities.push(...probes.vulnerabilities);

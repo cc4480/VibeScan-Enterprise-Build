@@ -92,7 +92,7 @@ describe("the Missing HSTS finding", () => {
     preloadApi({});
     const f = await transportFindings(ctx("www.example-site.com"));
     expect(hstsFinding(f)).toBeDefined();
-    expect((hstsFinding(f) as { severity: string }).severity).toBe("medium");
+    expect((hstsFinding(f) as unknown as { severity: string }).severity).toBe("medium");
   });
 
   it("is raised when the preload API cannot be reached", async () => {

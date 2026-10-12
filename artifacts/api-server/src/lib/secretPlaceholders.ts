@@ -48,7 +48,8 @@ const camelWords = (s: string): string[] => s.match(/[A-Z]?[a-z]+|[A-Z]+(?![a-z]
  * rejected only when it is an ALL-CAPS environment-variable name, or contains a filler word.
  */
 export function looksLikeAName(value: string): boolean {
-  const v = value.trim();
+  // "your-super-secret-jwt-key-must-be-very-long!" is as much a filler phrase as the same words without the "!".
+  const v = value.trim().replace(/[!.?]+$/, "");
 
   // ALL-CAPS environment-variable style. Digits are allowed inside a word (S3, _2) as long as at
   // least two of the words are plain letters, which real key material essentially never has.
@@ -61,6 +62,9 @@ export function looksLikeAName(value: string): boolean {
     if (v === v.toUpperCase()) return true;
     return v.split(/[_-]/).some(isFiller);
   }
+
+  // The same phrase with a bare number in it ("...-key-min-32-chars-long"): a filler word has to be there to say so.
+  if (/^[A-Za-z]+(?:[_-](?:[A-Za-z]+|\d{1,3}))+$/.test(v)) return v.split(/[_-]/).some(isFiller);
 
   // Joined phrases with no separator and no digit.
   if (/^[A-Za-z]{12,}$/.test(v)) {

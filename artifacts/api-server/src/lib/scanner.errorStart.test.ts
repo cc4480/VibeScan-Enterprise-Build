@@ -74,7 +74,7 @@ describe("runScan: the elastic.co case", () => {
     expect(find(r, /Open Graph/)).toBeUndefined();
     expect(find(r, /Cache-Control/)).toBeUndefined();
     // They are listed as withheld, with the reason, and the scan says what happened.
-    expect(r.withheld.some((w) => /Content-Security-Policy/.test(w.name))).toBe(true);
+    expect(r.withheld?.some((w) => /Content-Security-Policy/.test(w.name))).toBe(true);
     expect(find(r, /intercepted by a bot-protection challenge/)?.evidence).toMatch(/HTTP 406/);
   }, 60_000);
 

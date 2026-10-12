@@ -15,6 +15,26 @@ export const CWE_CONTROLS_INJECTION_SECRETS: Record<string, ControlRef[]> = {
     { framework: "iso27001", control: "A.8.28", title: "Secure coding" },
     { framework: "soc2", control: "CC6.6", title: "Logical access — protection against external threats" },
   ],
+  "CWE-78": [
+    { framework: "asvs", control: "V5.3.8", title: "OS command injection protection" },
+    { framework: "pci", control: "6.2.4", title: "Software engineering techniques prevent injection attacks" },
+    { framework: "iso27001", control: "A.8.28", title: "Secure coding" },
+  ],
+  "CWE-94": [
+    { framework: "asvs", control: "V5.2.4", title: "Dynamic code execution, eval and templates, avoided or sandboxed" },
+    { framework: "pci", control: "6.2.4", title: "Software engineering techniques prevent injection attacks" },
+    { framework: "iso27001", control: "A.8.28", title: "Secure coding" },
+  ],
+  "CWE-95": [
+    { framework: "asvs", control: "V5.2.4", title: "Dynamic code execution, eval and templates, avoided or sandboxed" },
+    { framework: "pci", control: "6.2.4", title: "Software engineering techniques prevent injection attacks" },
+    { framework: "iso27001", control: "A.8.28", title: "Secure coding" },
+  ],
+  "CWE-250": [
+    { framework: "asvs", control: "V4.1.3", title: "Principle of least privilege" },
+    { framework: "iso27001", control: "A.8.2", title: "Privileged access rights" },
+    { framework: "soc2", control: "CC6.3", title: "Logical access — least privilege" },
+  ],
   "CWE-22": [
     { framework: "asvs", control: "V12.3.1", title: "File path traversal prevented" },
     { framework: "pci", control: "6.2.4", title: "Software engineering techniques prevent injection attacks" },

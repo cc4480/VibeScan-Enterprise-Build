@@ -4,7 +4,9 @@ import { runAllProbes } from "./probes";
 import { TestLedger, NOT_VERIFIED, foundNames, type ProbeOutcome } from "./testLedger";
 import { checkDnsSecurity } from "./dnsChecks";
 import { scanJavaScriptForSecrets, collectFirstPartyJavaScript } from "./jsScanner";
-import { parseGithubRepoRef, scanGithubRepo, githubProbeOutcome } from "./githubSourceProbe";
+import { parseGithubRepoRef, githubProbeOutcome } from "./githubSourceProbe";
+import { scanRepository } from "./repoScan";
+import { publicGithubSource, githubInstallationSource } from "./repoSource";
 import { crawlAndCheck } from "./crawler";
 import { checkForKnownVulnerabilities } from "./cveCheck";
 import { analyzeJwts } from "./jwtAnalysis";
@@ -30,6 +32,11 @@ export interface ProbeStageInput {
   tier: string;
   allowActiveProbes: boolean;
   githubRepoUrl?: string;
+  /**
+   * A GitHub App installation token for the repository, when the owner connected it (githubApp.ts). Held in memory for
+   * this scan only; with none, only a public repository can be read.
+   */
+  githubAccessToken?: string;
   ledger: TestLedger;
   crawlPageBudget: number;
   /** What the user asked to scan, before any redirect. */
@@ -48,7 +55,7 @@ export interface ProbeStageInput {
  * which of them could not complete (see the notes on unrunFamilies below).
  */
 export async function runProbeStage({
-  finalUrl, html, rawHeaders, setCookies, status, tier, allowActiveProbes, githubRepoUrl, ledger, crawlPageBudget, requestedUrl,
+  finalUrl, html, rawHeaders, setCookies, status, tier, allowActiveProbes, githubRepoUrl, githubAccessToken, ledger, crawlPageBudget, requestedUrl,
   authoredHtml,
 }: ProbeStageInput) {
   const vulnerabilities: ScanVulnerability[] = [];
@@ -218,7 +225,7 @@ export async function runProbeStage({
         // tested" (see githubProbeOutcome) while a GitHub outage or rate limit still throws and is
         // recorded as failed, instead of either reading as a clean "nothing found".
         tracked: true,
-        run: ledger.trackOutcome("passive", "GitHub source code secrets", scanGithubRepo(repoRef).then(githubProbeOutcome)),
+        run: ledger.trackOutcome("passive", "GitHub source code secrets", scanRepository(githubAccessToken ? githubInstallationSource(repoRef, githubAccessToken) : publicGithubSource(repoRef), repoRef).then(githubProbeOutcome)),
       });
     } else {
       ledger.skip("passive", "GitHub source code secrets", "the supplied value was not a recognisable GitHub repository");
