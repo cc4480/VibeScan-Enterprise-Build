@@ -1,64 +1,66 @@
+import { useEffect, useRef } from "react";
 import { Link } from "wouter";
 import { motion, useReducedMotion } from "framer-motion";
 import { ShieldAlert, Key, Globe, CheckCircle2, ArrowRight, Activity, Code2, Zap, Bot, FileKey, Database, Network } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/** The animated shield mark above the headline: it scales in, then holds a
- *  slow glow, with rings pinging outward and a scan line sweeping down it.
- *  Everything past the entrance is skipped under prefers-reduced-motion. */
-function HeroShield() {
+/** The hero video above the headline: the SecScan universe animation, an
+ *  848x960 loop of about 7 seconds (~4.6 MB), video track only. It autoplays muted and inline,
+ *  which is what browsers allow without a click. The still shield image is the
+ *  poster, so it shows while the video loads, when autoplay is refused, and
+ *  for anyone with prefers-reduced-motion, who never gets the video started. */
+function HeroVideo() {
   const reduce = useReducedMotion();
+  const base = import.meta.env.BASE_URL;
+  const ref = useRef<HTMLVideoElement>(null);
+
+  // React sets `muted` as a property but never writes the attribute, and the
+  // browser's autoplay check reads the attribute, so autoplay alone is refused.
+  // defaultMuted writes it; play() then starts the video. Browsers also pause
+  // muted video while its tab is in the background, so play() runs again when
+  // the tab becomes visible. A refusal just leaves the poster showing.
+  useEffect(() => {
+    const video = ref.current;
+    if (!video || reduce) return;
+    video.defaultMuted = true;
+    video.muted = true;
+    const start = () => {
+      if (document.visibilityState === "visible") void video.play().catch(() => {});
+    };
+    start();
+    document.addEventListener("visibilitychange", start);
+    // There are no controls, so any pause while the tab is showing came from
+    // the browser, not the visitor. Start it again.
+    video.addEventListener("pause", start);
+    return () => {
+      document.removeEventListener("visibilitychange", start);
+      video.removeEventListener("pause", start);
+    };
+  }, [reduce]);
+
   return (
-    <div className="relative mb-8 flex h-40 w-40 items-center justify-center sm:h-44 sm:w-44" aria-hidden="true">
-      {!reduce &&
-        [0, 1.2, 2.4].map((delay) => (
-          <motion.span
-            key={delay}
-            className="absolute inset-0 rounded-full border border-primary/60"
-            initial={{ opacity: 0, scale: 0.7 }}
-            animate={{ opacity: [0.5, 0], scale: [0.7, 1.7] }}
-            transition={{ duration: 3.6, delay: 1 + delay, repeat: Infinity, ease: "easeOut" }}
-          />
-        ))}
-      <motion.img
-        src={`${import.meta.env.BASE_URL}images/hero-shield.webp`}
-        alt=""
-        width={160}
-        height={160}
-        fetchPriority="high"
-        decoding="async"
-        className="relative z-10 h-36 w-36 rounded-2xl object-cover sm:h-40 sm:w-40"
-        initial={reduce ? false : { opacity: 0, scale: 0.82, y: 10, filter: "blur(6px)" }}
-        animate={
-          reduce
-            ? undefined
-            : {
-                opacity: 1,
-                scale: 1,
-                y: [0, -5, 0],
-                filter: [
-                  "blur(0px) drop-shadow(0 0 0px rgba(20,184,120,0))",
-                  "blur(0px) drop-shadow(0 0 16px rgba(20,184,120,0.55))",
-                  "blur(0px) drop-shadow(0 0 0px rgba(20,184,120,0))",
-                ],
-              }
-        }
-        transition={{
-          opacity: { duration: 0.9, delay: 0.1 },
-          scale: { duration: 1, delay: 0.1, ease: [0.2, 0.8, 0.2, 1] },
-          y: { duration: 5, delay: 1.2, repeat: Infinity, ease: "easeInOut" },
-          filter: { duration: 4, delay: 1.2, repeat: Infinity, ease: "easeInOut" },
-        }}
+    <motion.div
+      className="relative mb-8 aspect-[848/960] w-60 overflow-hidden rounded-3xl border border-primary/30 shadow-[0_0_40px_rgba(20,184,120,0.25)] sm:w-72"
+      initial={reduce ? false : { opacity: 0, scale: 0.92, y: 10 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{ duration: 0.8, ease: [0.2, 0.8, 0.2, 1] }}
+    >
+      <video
+        ref={ref}
+        className="h-full w-full object-cover"
+        src={`${base}videos/secscan-universe.mp4`}
+        poster={`${base}images/hero-shield.webp`}
+        width={848}
+        height={960}
+        autoPlay={!reduce}
+        loop
+        muted
+        playsInline
+        preload={reduce ? "none" : "auto"}
+        aria-hidden="true"
+        tabIndex={-1}
       />
-      {!reduce && (
-        <motion.span
-          className="absolute left-4 right-4 z-20 h-0.5 rounded-full bg-gradient-to-r from-transparent via-cyan-300 to-transparent shadow-[0_0_12px_rgba(103,232,249,0.9)]"
-          initial={{ top: "12%", opacity: 0 }}
-          animate={{ top: ["12%", "88%", "12%"], opacity: [0, 1, 0] }}
-          transition={{ duration: 3.2, delay: 1.4, repeat: Infinity, ease: "easeInOut", times: [0, 0.5, 1] }}
-        />
-      )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -102,7 +104,7 @@ export function HeroSection() {
           animate="show"
           className="max-w-3xl mx-auto text-center flex flex-col items-center"
         >
-          <HeroShield />
+          <HeroVideo />
 
           <motion.div variants={itemVariants} className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary text-sm font-medium mb-8">
             <Activity className="w-4 h-4" />
