@@ -118,7 +118,7 @@ export function buildHtml(opts: SendReportEmailOptions): string {
         <!-- Nav: the app's mark and wordmark -->
         <tr><td style="padding:0 2px 22px;">
           <a href="${origin}" style="text-decoration:none;">
-            <img src="${origin}/icon-192.png" width="34" height="34" alt="SecScan" style="display:inline-block;vertical-align:middle;border:0;border-radius:9px;">
+            <img src="${origin}/icon-192.png?v=2" width="34" height="34" alt="SecScan" style="display:inline-block;vertical-align:middle;border:0;border-radius:9px;">
             <span style="display:inline-block;vertical-align:middle;margin-left:10px;font-family:${display};font-size:19px;font-weight:700;color:#fafafa;letter-spacing:-0.2px;">SecScan</span>
           </a>
         </td></tr>

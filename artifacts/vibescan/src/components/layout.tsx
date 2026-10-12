@@ -37,11 +37,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 its own dark ground and glow, so it needs no gradient tile behind
                 it — just the rounded crop. */}
             <img
-              src="/images/logo-80.webp"
+              src="/images/logo-80.webp?v=2"
               alt=""
               width={40}
               height={40}
-              className="w-10 h-10 rounded-xl object-cover shadow-lg shadow-primary/20 group-hover:shadow-primary/40 transition-all"
+              className="w-10 h-10 rounded-xl object-contain shadow-lg shadow-primary/20 group-hover:shadow-primary/40 transition-all"
             />
             <span className="font-display font-bold text-xl tracking-tight text-foreground">
               SecScan<span className="text-primary">.us</span>
@@ -216,7 +216,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <footer className="border-t border-white/5 pt-12 pb-24 mt-auto bg-card/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-2 opacity-50">
-            <img src="/images/logo-80.webp" alt="" width={20} height={20} className="w-5 h-5 rounded object-cover" />
+            <img src="/images/logo-80.webp?v=2" alt="" width={20} height={20} className="w-5 h-5 rounded object-contain" />
             <span className="font-display font-bold tracking-tight text-foreground">SecScan.us</span>
           </div>
           <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
