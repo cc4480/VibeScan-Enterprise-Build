@@ -130,6 +130,6 @@ describe("an address that a library gives as an example is not an exposed intern
 
   it("still reports a configured internal host", () => {
     expect(names(`const cfg={host:"10.1.2.80",port:5432}`)).toContain("Internal IP Address Exposed");
-    expect(names(`{url:"192.168.4.20"}`)).toContain("Internal IP Address Exposed");
+    expect(names(`{url:"10.4.0.20"}`)).toContain("Internal IP Address Exposed");
   });
 });
