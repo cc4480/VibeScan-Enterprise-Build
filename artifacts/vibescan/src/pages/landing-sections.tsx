@@ -63,11 +63,11 @@ function HeroVideo({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement | 
   );
 }
 
-/** The page background that moves with the hero video. The playing video is drawn, a few times a second, into a tiny
- *  canvas that is stretched across the whole viewport and blurred, so the blues, teals, greens and limes of the animation
- *  spread behind the page as it plays: the swirl brightens, the glow follows. One video is decoded, not two, nothing extra
- *  is downloaded, and the canvas is 48 x 54 pixels. It draws nothing for visitors who ask for reduced motion, while the tab
- *  is hidden, or until the video has a frame; the static gradient from the layout is what shows then. */
+/** The page background: the hero video, playing again behind the whole page. The hero video is the only one that is decoded
+ *  and downloaded; every frame it shows is also drawn (about 30 a second, at half its size) into a canvas that covers the
+ *  viewport and is only lightly softened, so the same animation plays big behind the page, frame for frame in step with the
+ *  one in the hero, and cannot drift from it. It draws nothing for visitors who ask for reduced motion, while the tab is
+ *  hidden or the video is paused, or until the video has a frame; the static palette gradient from the layout shows then. */
 function VideoAmbientBackdrop({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement | null> }) {
   const reduce = useReducedMotion();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -82,12 +82,12 @@ function VideoAmbientBackdrop({ videoRef }: { videoRef: React.RefObject<HTMLVide
     let last = 0;
     const draw = (now: number) => {
       raf = requestAnimationFrame(draw);
-      // About 12 frames a second is plenty for a glow that is blurred to a haze.
-      if (now - last < 80 || document.visibilityState !== "visible") return;
+      // About 30 frames a second, so the background plays smoothly with the video and does not step.
+      if (now - last < 33 || document.visibilityState !== "visible") return;
       last = now;
       if (video.readyState < 2 || video.paused) return;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      canvas.style.opacity = "1";
+      canvas.style.opacity = "0.7";
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
@@ -98,14 +98,14 @@ function VideoAmbientBackdrop({ videoRef }: { videoRef: React.RefObject<HTMLVide
     <div
       aria-hidden="true"
       className="pointer-events-none fixed inset-0 z-[-1] overflow-hidden"
-      style={{ maskImage: "radial-gradient(90% 75% at 50% 32%, black 25%, transparent 100%)", WebkitMaskImage: "radial-gradient(90% 75% at 50% 32%, black 25%, transparent 100%)" }}
+      style={{ maskImage: "radial-gradient(95% 80% at 50% 34%, black 35%, rgba(0,0,0,0.35) 70%, transparent 100%)", WebkitMaskImage: "radial-gradient(95% 80% at 50% 34%, black 35%, rgba(0,0,0,0.35) 70%, transparent 100%)" }}
     >
       <canvas
         ref={canvasRef}
-        width={48}
-        height={54}
-        className="h-full w-full transition-opacity duration-1000"
-        style={{ opacity: 0, filter: "blur(48px) saturate(1.35)", transform: "scale(1.25)", mixBlendMode: "screen" }}
+        width={424}
+        height={480}
+        className="h-full w-full object-cover transition-opacity duration-1000"
+        style={{ opacity: 0, filter: "blur(5px) saturate(1.3) contrast(1.1)", transform: "scale(1.06)", mixBlendMode: "screen" }}
       />
     </div>
   );
