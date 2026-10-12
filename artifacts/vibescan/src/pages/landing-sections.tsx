@@ -9,10 +9,9 @@ import { cn } from "@/lib/utils";
  *  which is what browsers allow without a click. The still shield image is the
  *  poster, so it shows while the video loads, when autoplay is refused, and
  *  for anyone with prefers-reduced-motion, who never gets the video started. */
-function HeroVideo() {
+function HeroVideo({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement | null> }) {
   const reduce = useReducedMotion();
   const base = import.meta.env.BASE_URL;
-  const ref = useRef<HTMLVideoElement>(null);
 
   // React sets `muted` as a property but never writes the attribute, and the
   // browser's autoplay check reads the attribute, so autoplay alone is refused.
@@ -20,7 +19,7 @@ function HeroVideo() {
   // muted video while its tab is in the background, so play() runs again when
   // the tab becomes visible. A refusal just leaves the poster showing.
   useEffect(() => {
-    const video = ref.current;
+    const video = videoRef.current;
     if (!video || reduce) return;
     video.defaultMuted = true;
     video.muted = true;
@@ -36,7 +35,7 @@ function HeroVideo() {
       document.removeEventListener("visibilitychange", start);
       video.removeEventListener("pause", start);
     };
-  }, [reduce]);
+  }, [reduce, videoRef]);
 
   return (
     <motion.div
@@ -46,7 +45,7 @@ function HeroVideo() {
       transition={{ duration: 0.8, ease: [0.2, 0.8, 0.2, 1] }}
     >
       <video
-        ref={ref}
+        ref={videoRef}
         className="h-full w-full object-cover"
         src={`${base}videos/secscan-universe-v2.mp4`}
         poster={`${base}images/hero-shield.webp`}
@@ -64,8 +63,57 @@ function HeroVideo() {
   );
 }
 
+/** The page background that moves with the hero video. The playing video is drawn, a few times a second, into a tiny
+ *  canvas that is stretched across the whole viewport and blurred, so the blues, teals, greens and limes of the animation
+ *  spread behind the page as it plays: the swirl brightens, the glow follows. One video is decoded, not two, nothing extra
+ *  is downloaded, and the canvas is 48 x 54 pixels. It draws nothing for visitors who ask for reduced motion, while the tab
+ *  is hidden, or until the video has a frame; the static gradient from the layout is what shows then. */
+function VideoAmbientBackdrop({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement | null> }) {
+  const reduce = useReducedMotion();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    if (!canvas || !video || reduce) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    let raf = 0;
+    let last = 0;
+    const draw = (now: number) => {
+      raf = requestAnimationFrame(draw);
+      // About 12 frames a second is plenty for a glow that is blurred to a haze.
+      if (now - last < 80 || document.visibilityState !== "visible") return;
+      last = now;
+      if (video.readyState < 2 || video.paused) return;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.style.opacity = "1";
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [reduce, videoRef]);
+
+  if (reduce) return null;
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none fixed inset-0 z-[-1] overflow-hidden"
+      style={{ maskImage: "radial-gradient(90% 75% at 50% 32%, black 25%, transparent 100%)", WebkitMaskImage: "radial-gradient(90% 75% at 50% 32%, black 25%, transparent 100%)" }}
+    >
+      <canvas
+        ref={canvasRef}
+        width={48}
+        height={54}
+        className="h-full w-full transition-opacity duration-1000"
+        style={{ opacity: 0, filter: "blur(48px) saturate(1.35)", transform: "scale(1.25)", mixBlendMode: "screen" }}
+      />
+    </div>
+  );
+}
+
 /** The hero: headline, subhead and the two calls to action. */
 export function HeroSection() {
+  const videoRef = useRef<HTMLVideoElement>(null);
   const containerVariants = {
     hidden: { opacity: 0 },
     show: {
@@ -81,6 +129,7 @@ export function HeroSection() {
 
   return (
     <section className="relative pt-12 pb-20 lg:pt-24 lg:pb-32 overflow-hidden">
+      <VideoAmbientBackdrop videoRef={videoRef} />
       <div className="absolute inset-0 z-0">
         {/* Decorative, so alt="" (screen readers skip it). WebP at 28 KB —
             the PNG it replaced was 991 KB and the largest thing on the page. */}
@@ -104,7 +153,7 @@ export function HeroSection() {
           animate="show"
           className="max-w-3xl mx-auto text-center flex flex-col items-center"
         >
-          <HeroVideo />
+          <HeroVideo videoRef={videoRef} />
 
           <motion.div variants={itemVariants} className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary text-sm font-medium mb-8">
             <Activity className="w-4 h-4" />
