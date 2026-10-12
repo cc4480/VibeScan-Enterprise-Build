@@ -17,10 +17,38 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col relative overflow-hidden">
-      {/* Background ambient glow */}
-      <div className="fixed inset-0 pointer-events-none z-[-1] overflow-hidden">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/5 blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] rounded-full bg-blue-500/5 blur-[100px]" />
+      {/* Background: the hero video's palette (deep blue, teal, emerald, a trace of lime) over the navy page colour, with a
+          sparse starfield like the one in the video, so the page and the video do not clash. Decorative only. */}
+      <div
+        className="fixed inset-0 pointer-events-none z-[-1] overflow-hidden"
+        aria-hidden="true"
+        style={{
+          backgroundImage: [
+            "radial-gradient(50% 38% at 50% 24%, hsl(var(--video-teal) / 0.38), transparent 72%)",
+            "radial-gradient(70% 55% at 8% 0%, hsl(var(--video-blue) / 0.85), transparent 70%)",
+            "radial-gradient(55% 45% at 95% 18%, hsl(var(--video-teal) / 0.42), transparent 70%)",
+            "radial-gradient(60% 50% at 12% 100%, hsl(var(--primary) / 0.22), transparent 70%)",
+            "radial-gradient(40% 35% at 92% 100%, hsl(var(--video-lime) / 0.09), transparent 70%)",
+            "linear-gradient(180deg, hsl(var(--video-navy)) 0%, hsl(var(--background)) 60%)",
+          ].join(", "),
+        }}
+      >
+        <div
+          className="absolute inset-0 opacity-25"
+          style={{
+            backgroundImage:
+              "radial-gradient(1px 1px at 20px 30px, rgba(190,255,235,.55), transparent), radial-gradient(1px 1px at 120px 110px, rgba(190,235,255,.45), transparent), radial-gradient(1.5px 1.5px at 170px 50px, rgba(190,255,235,.5), transparent)",
+            backgroundSize: "211px 173px",
+          }}
+        />
+        <div
+          className="absolute inset-0 opacity-15"
+          style={{
+            backgroundImage:
+              "radial-gradient(1px 1px at 60px 90px, rgba(200,255,225,.5), transparent), radial-gradient(1.5px 1.5px at 230px 160px, rgba(170,230,255,.45), transparent)",
+            backgroundSize: "317px 251px",
+          }}
+        />
       </div>
 
       <header

@@ -92,9 +92,9 @@ export function HeroSection() {
           height={768}
           fetchPriority="high"
           decoding="async"
-          className="w-full h-full object-cover opacity-30 mix-blend-screen"
+          className="w-full h-full object-cover opacity-50 mix-blend-screen"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-background/10 via-background/80 to-background" />
+        <div className="absolute inset-0 bg-gradient-to-b from-background/0 via-background/60 to-background" />
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
