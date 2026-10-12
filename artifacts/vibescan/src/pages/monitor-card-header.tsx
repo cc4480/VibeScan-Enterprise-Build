@@ -4,12 +4,13 @@ import { cn } from "@/lib/utils";
 import { MonitorPauseButton } from "@/components/monitor-pause-button";
 import { type MonitorSubscription } from "@/lib/monitor-api";
 import { relativeTime, formatMs } from "./monitor-format";
+import { siteStatus, STATUS_TONE } from "./monitor-card-sections";
 
 /** The card's top row: site, status, badges and the scan / pause / cancel actions. */
 export function SubscriptionHeader({ sub, card }: { sub: MonitorSubscription; card: SubscriptionCardState }) {
   const { cancelling, scanning, days, isActive, isDown, handleScanNow, handleCancel, toggleDrawer } = card;
   return (
-    <div className="flex items-start justify-between gap-4 mb-4">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 mb-4">
       <div className="flex items-center gap-3 min-w-0">
         <div className={cn(
           "w-2 h-2 rounded-full shrink-0 mt-1",
@@ -21,24 +22,15 @@ export function SubscriptionHeader({ sub, card }: { sub: MonitorSubscription; ca
               href={sub.targetUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-semibold text-foreground hover:text-primary transition-colors flex items-center gap-1 truncate max-w-xs"
+              className="font-semibold text-foreground hover:text-primary transition-colors flex items-center gap-1 truncate max-w-[16rem] sm:max-w-xs"
             >
               {sub.targetUrl}
               <ExternalLink className="w-3 h-3 shrink-0" />
             </a>
-            <span className={cn(
-              "px-2 py-0.5 rounded-full text-xs font-semibold border",
-              isActive
-                ? "bg-green-400/10 border-green-400/20 text-green-400"
-                : "bg-zinc-400/10 border-zinc-400/20 text-zinc-400",
-            )}>
-              {sub.status === "active" ? "Active" : sub.status === "cancelled" ? "Cancelled" : "Expired"}
+            {/* One pill for the site's state: Healthy, Needs attention, Down, Scanning, Paused, Getting started. */}
+            <span className={cn("px-2 py-0.5 rounded-full text-xs font-semibold border", STATUS_TONE[siteStatus(sub).tone])}>
+              {siteStatus(sub).label}
             </span>
-            {isActive && sub.pausedAt && (
-              <span className="px-2 py-0.5 rounded-full text-xs font-semibold border bg-amber-400/10 border-amber-400/20 text-amber-400" title="No scans, uptime checks or alerts until you resume">
-                Paused
-              </span>
-            )}
           </div>
           <p className="text-xs text-muted-foreground mt-1">
             Checked {relativeTime(sub.lastPulseAt)}
@@ -48,7 +40,7 @@ export function SubscriptionHeader({ sub, card }: { sub: MonitorSubscription; ca
         </div>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+      <div className="flex items-center gap-2 shrink-0 flex-wrap sm:justify-end">
         {sub.regressionCount > 0 && (
           <button
             onClick={() => toggleDrawer("regressions")}

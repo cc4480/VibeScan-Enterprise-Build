@@ -194,6 +194,15 @@ export function SubscriptionLinks({ sub, card }: { sub: MonitorSubscription; car
         )}
       </div>
       <div className="flex items-center gap-3">
+        {sub.pulseTimeline.length > 0 && (
+          <button
+            onClick={() => toggleDrawer("uptime")}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {drawer === "uptime" ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            48-hour detail
+          </button>
+        )}
         {historyPoints.length > 0 && (
           <button
             onClick={() => toggleDrawer("history")}

@@ -50,7 +50,7 @@ export default function MonitorPage() {
   const inactive = subscriptions?.filter((s) => s.status !== "active") ?? [];
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-10 space-y-8">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 space-y-6">
       {/* Header */}
       <div>
         <Link href="/dashboard" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors">
@@ -68,49 +68,29 @@ export default function MonitorPage() {
           reading eight cards to find the one that needs attention. */}
       {!isLoading && subscriptions && <PortfolioSummary subs={subscriptions} />}
 
-      {/* How it works */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {[
-          {
-            icon: Gauge,
-            title: "Hourly Checks",
-            desc: "Every monitored URL is checked once an hour: is it up, how fast did it answer, is the certificate still valid, and did any security header disappear.",
-            color: "text-primary",
-            bg: "bg-primary/10",
-          },
-          {
-            icon: RefreshCw,
-            title: "Adaptive Deep Scans",
-            desc: "Full scans follow your risk grade: A every 14 days, B and C every 7, D and F every 3. A deep scan is heavy, so it is scheduled — not run hourly.",
-            color: "text-green-400",
-            bg: "bg-green-400/10",
-          },
-          {
-            icon: ShieldAlert,
-            title: "CVE Alerts + EPSS",
-            desc: "The NVD feed is checked hourly against your detected stack and enriched with EPSS exploit probability. A new match triggers an immediate rescan.",
-            color: "text-indigo-400",
-            bg: "bg-indigo-400/10",
-          },
-          {
-            icon: TrendingDown,
-            title: "Regressions & Drift",
-            desc: "Each scan is compared with the last, and each hourly check with the one before. Anything that weakens your posture is emailed and posted to your webhook.",
-            color: "text-orange-400",
-            bg: "bg-orange-400/10",
-          },
-        ].map((item) => (
-          <div key={item.title} className="glass-card p-5 rounded-2xl flex gap-4">
-            <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0", item.bg, item.color)}>
-              <item.icon className="w-4 h-4" />
+      {/* How it works: one collapsed line, so the data is the first thing on the page and the explanation is there when wanted. */}
+      <details className="group glass-card rounded-2xl px-5 py-3.5 text-sm">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-semibold text-muted-foreground hover:text-foreground">
+          <span className="flex items-center gap-2"><Gauge className="h-4 w-4 text-primary" /> How monitoring works</span>
+          <span className="text-xs font-normal group-open:hidden">hourly checks · adaptive deep scans · CVE alerts · regression detection</span>
+        </summary>
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { icon: Gauge, title: "Hourly checks", desc: "Every URL is checked once an hour: is it up, how fast did it answer, is the certificate valid, and did a security header disappear.", color: "text-primary", bg: "bg-primary/10" },
+            { icon: RefreshCw, title: "Adaptive deep scans", desc: "Full scans follow the grade: A every 14 days, B and C every 7, D and F every 3. Deep scans are heavy, so they are scheduled, not hourly.", color: "text-emerald-300", bg: "bg-emerald-400/10" },
+            { icon: ShieldAlert, title: "CVE alerts + EPSS", desc: "The NVD feed is checked hourly against the software detected on your site and enriched with EPSS exploit probability. A new match triggers a rescan.", color: "text-teal-300", bg: "bg-teal-400/10" },
+            { icon: TrendingDown, title: "Regressions & drift", desc: "Each scan is compared with the last. Anything that weakens your posture is emailed and posted to your webhook.", color: "text-amber-300", bg: "bg-amber-400/10" },
+          ].map((item) => (
+            <div key={item.title} className="flex gap-3">
+              <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", item.bg, item.color)}><item.icon className="h-4 w-4" /></div>
+              <div>
+                <h3 className="mb-0.5 text-sm font-semibold">{item.title}</h3>
+                <p className="text-xs leading-relaxed text-muted-foreground">{item.desc}</p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-semibold text-sm mb-1">{item.title}</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">{item.desc}</p>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </details>
 
       <AddSubscriptionForm onSuccess={handleAdded} />
 
@@ -128,9 +108,9 @@ export default function MonitorPage() {
       )}
 
       {!isLoading && active.length > 0 && (
-        <div className="space-y-4">
+        <div className="space-y-5">
           <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-green-400" /> Active ({active.length})
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Active sites ({active.length})
           </h2>
           <AnimatePresence>
             {active.map((sub) => (

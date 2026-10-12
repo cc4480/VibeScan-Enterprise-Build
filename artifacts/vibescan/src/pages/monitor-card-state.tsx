@@ -19,7 +19,8 @@ export function useSubscriptionCard(sub: MonitorSubscription, onCancel: (id: str
   const alertsQuery = useQuery({
     queryKey: ["monitor-alerts", sub.id],
     queryFn: () => listCveAlerts(sub.id),
-    enabled: drawer === "cve",
+    // Loaded as soon as the site has any, so the card can list the worst of them without a click.
+    enabled: drawer === "cve" || sub.alertCount > 0,
   });
 
   const historyQuery = useQuery({
@@ -31,7 +32,7 @@ export function useSubscriptionCard(sub: MonitorSubscription, onCancel: (id: str
   const regressionQuery = useQuery({
     queryKey: ["monitor-regressions", sub.id],
     queryFn: () => getRecentRegressions(sub.id),
-    enabled: drawer === "regressions",
+    enabled: drawer === "regressions" || sub.regressionCount > 0,
   });
 
   const pulseQuery = useQuery({
