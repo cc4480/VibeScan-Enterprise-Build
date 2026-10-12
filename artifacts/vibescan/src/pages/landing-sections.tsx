@@ -5,7 +5,7 @@ import { ShieldAlert, Key, Globe, CheckCircle2, ArrowRight, Activity, Code2, Zap
 import { cn } from "@/lib/utils";
 
 /** The hero video above the headline: the SecScan universe animation, an
- *  848x960 loop of about 10 seconds (~4.7 MB). It autoplays muted and inline,
+ *  848x960 loop of about 7 seconds (~4.6 MB), video track only. It autoplays muted and inline,
  *  which is what browsers allow without a click. The still shield image is the
  *  poster, so it shows while the video loads, when autoplay is refused, and
  *  for anyone with prefers-reduced-motion, who never gets the video started. */
@@ -29,7 +29,13 @@ function HeroVideo() {
     };
     start();
     document.addEventListener("visibilitychange", start);
-    return () => document.removeEventListener("visibilitychange", start);
+    // There are no controls, so any pause while the tab is showing came from
+    // the browser, not the visitor. Start it again.
+    video.addEventListener("pause", start);
+    return () => {
+      document.removeEventListener("visibilitychange", start);
+      video.removeEventListener("pause", start);
+    };
   }, [reduce]);
 
   return (
