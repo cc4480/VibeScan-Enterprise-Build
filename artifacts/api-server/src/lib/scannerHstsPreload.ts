@@ -1,68 +1,50 @@
-import { scanFetch } from "./http";
+import { isIP } from "node:net";
 
+/** Names that cannot be on a public preload list, so there is nothing to ask about and no reason to send them anywhere. */
+const NEVER_PRELOADED = /(^|\.)(local|localhost|internal|intranet|lan|home|corp|test|example|invalid)$/i;
 
 /**
- * Checks whether a hostname appears to be on the HSTS preload list.
+ * Whether browsers already treat this host as HTTPS-only before the first request, because it is on the
+ * HSTS preload list that ships inside every major browser. That is what makes the Strict-Transport-Security
+ * header optional for the host, so only a preloaded host is spared the "Missing HSTS" finding.
  *
- * Uses the hstspreload.org submission-tracking API. Note: this API only knows
- * about domains submitted through their website. Domains hardcoded in Chrome's
- * preload list (google.com, youtube.com, etc.) are not tracked there and will
- * return "unknown". For those, we fall back to a behavioral signal: if the
- * HTTP version of the domain serves content without redirecting to HTTPS, the
- * site is likely relying on browser preloading.
+ * It is asked of hstspreload.org's status API for the EXACT host. The API answers "preloaded" for a host that
+ * is on the list itself or sits under a listed parent that includes its subdomains (docs.github.com is covered by
+ * github.com), and the answer for a host under a parent that does NOT include subdomains is "unknown", which
+ * stripping "www." and asking about the apex got wrong.
  *
- * Returns true to SUPPRESS the HSTS finding; false to allow it (at MEDIUM).
- * Always fails-safe: any network error returns false so the check still runs.
+ * Only "preloaded" counts; "pending" (submitted, not yet shipped), "rejected" and "unknown" do not. Any failure
+ * to get an answer also means "not preloaded", so the finding is still raised: a preloaded host sends the
+ * header anyway, because the list only accepts hosts that do.
+ *
+ * Two things this used to do and no longer does, both found by repeating a 50-site sweep (2026-10-10) in which
+ * no site got a "Missing HSTS" finding although six verifiably send no such header and are not listed:
+ *
+ *  1. Suppress the finding when `http://<host>/` redirects to HTTPS. A redirect is the thing HSTS exists to
+ *     back up: the first visit still goes over plain HTTP, where it can be stripped. Almost every site
+ *     redirects, so this suppressed almost every finding.
+ *  2. Suppress it for a hardcoded set of 40 names "built into Chrome". Checked against Chromium's list
+ *     (net/http/transport_security_state_static.json, 95,147 entries, fetched 2026-10-11), 23 of those 40 are
+ *     not on it: google.com, apple.com, microsoft.com, linkedin.com, x.com, shopify.com, box.com, outlook.com,
+ *     office.com, live.com, appspot.com, github.io and others (amazon.com is not listed, only www.amazon.com).
+ *     The API already says "preloaded" for the 17 that are, so the set only added wrong answers. Google's
+ *     own subdomains that are listed, such as mail.google.com and accounts.google.com, come back from the
+ *     API as "preloaded" when asked about directly.
  */
-// Domains hardcoded in Chrome's built-in HSTS preload list that are NOT
-// tracked by hstspreload.org's submission API (which only knows about
-// user-submitted entries, not Chrome's built-in set).
-const CHROME_BUILTIN_PRELOADED = new Set([
-  "google.com", "youtube.com", "gmail.com", "android.com", "appspot.com",
-  "blogger.com", "chromium.org", "googleapis.com", "googlesyndication.com",
-  "googleusercontent.com", "gstatic.com", "ytimg.com", "doubleclick.net",
-  "apple.com", "icloud.com", "github.com", "github.io", "githubusercontent.com",
-  "facebook.com", "instagram.com", "whatsapp.com", "twitter.com", "x.com",
-  "linkedin.com", "microsoft.com", "live.com", "outlook.com", "office.com",
-  "paypal.com", "amazon.com", "stripe.com", "cloudflare.com",
-  "wordpress.com", "shopify.com", "dropbox.com", "box.com",
-  "tumblr.com", "medium.com", "reddit.com", "wikipedia.org",
-]);
-
 export async function isHstsPreloaded(hostname: string): Promise<boolean> {
-  const apex = hostname.replace(/^www\./, "");
+  const host = hostname.trim().toLowerCase().replace(/\.$/, "");
+  if (!host || isIP(host) || !host.includes(".") || NEVER_PRELOADED.test(host)) return false;
 
-  // Fast path: known Chrome built-in preloaded domains not tracked by hstspreload.org
-  if (CHROME_BUILTIN_PRELOADED.has(apex)) return true;
-
-  // ── hstspreload.org tracking API ─────────────────────────────────────────
-  // This API only tracks domains submitted via their form. Domains natively
-  // hardcoded in Chrome (google.com, youtube.com, etc.) return "unknown".
-  let apiKnows = false;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 5_000);
   try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 5_000);
-    const res = await fetch(
-      `https://hstspreload.org/api/v2/status?domain=${encodeURIComponent(apex)}`,
-      { signal: ctrl.signal },
-    );
+    const res = await fetch(`https://hstspreload.org/api/v2/status?domain=${encodeURIComponent(host)}`, { signal: ctrl.signal });
+    if (!res.ok) return false;
+    const json = (await res.json()) as { status?: string };
+    return json.status === "preloaded";
+  } catch {
+    return false;
+  } finally {
     clearTimeout(timer);
-    if (res.ok) {
-      const json = (await res.json()) as { status?: string };
-      if (json.status === "preloaded") return true;  // confirmed on list
-      if (json.status === "pending")   return false; // submitted, not yet live
-      // status === "unknown" — domain may still be natively preloaded; fall through
-      apiKnows = json.status === "preloaded" || json.status === "pending";
-    }
-  } catch { /* fall through */ }
-
-  if (apiKnows) return false;
-
-  // ── Behavioral fallback for natively preloaded domains ───────────────────
-  // If http:// traffic automatically upgrades to https://, the domain is
-  // enforcing HTTPS one way or another — suppress the HSTS finding.
-  const httpRes = await scanFetch(`http://${apex}/`, { timeoutMs: 5_000 });
-  if (httpRes?.finalUrl.startsWith("https://")) return true;
-
-  return false;
+  }
 }

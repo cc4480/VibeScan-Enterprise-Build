@@ -17,7 +17,7 @@ import { analyzeCookies } from "./scannerCookies";
 import { technologiesWithVersions } from "./scannerTech";
 import {
   sessionLostFinding, interceptedFinding, activeProbesSkippedFinding, splitInterceptedFindings, withheldEntry,
-  markInterceptedTestsNotRun,
+  markInterceptedTestsNotRun, capFindingsReadFromErrorPage,
   platformGateFinding, rootErrorFinding, landedElsewhereFinding, type WithheldFinding,
 } from "./scannerCoverage";
 import { activeProbesStillAllowed } from "./activeScopeGuard";
@@ -164,15 +164,18 @@ async function runScanInner(
   const vulnerabilities: ScanVulnerability[] = [];
 
   const page: PageContext = { finalUrl, html, rawHeaders, isHttps };
-  vulnerabilities.push(...(await transportFindings(page)));
-  vulnerabilities.push(...cspFindings(page));
-  vulnerabilities.push(...headerFindings(page));
-
-  // ── Cookie analysis ───────────────────────────────────────────────────
   const setCookie = headerVal(rawHeaders, "set-cookie");
-  vulnerabilities.push(...analyzeCookies(initial.setCookies ?? [], setCookie));
-
-  vulnerabilities.push(...pageFindings(page));
+  // Everything the first response itself says: transport, CSP, headers, cookies, page content.
+  const readFromStartPage = [
+    ...(await transportFindings(page)),
+    ...cspFindings(page),
+    ...headerFindings(page),
+    ...analyzeCookies(initial.setCookies ?? [], setCookie),
+    ...pageFindings(page),
+  ];
+  // When that response was an error page (and not a refusal, which is withheld below as an
+  // interception) it describes the error page, not the app: shown as information, not graded.
+  vulnerabilities.push(...(initial.status >= 400 ? capFindingsReadFromErrorPage(readFromStartPage, initial.status) : readFromStartPage));
 
   // Pages the crawler will visit. Was 20 for deep scans and 0 (no crawl) for
   // basic ones; with one tier there is one budget.

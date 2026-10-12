@@ -82,11 +82,14 @@ describe("runScan when something other than the app answers", () => {
     expect(r.vulnerabilities.some((v) => v.name === "Browser Rendering Was Not Used")).toBe(false);
   }, 60_000);
 
-  it("says when the start page was an error response, and keeps the findings", async () => {
+  it("says when the start page was an error response, and reports what it read from it as information", async () => {
+    // This test used to say "and keeps the findings" at full severity, which gave elastic.co a HIGH Missing
+    // Content-Security-Policy read from an HTTP 406 page. They are kept, as information (scanner.errorStart.test.ts).
     const url = await serve((_req, res) => { res.writeHead(502, { "content-type": "text/html" }); res.end("<html><body><h1>Bad gateway</h1><p>The upstream did not answer in time.</p></body></html>".repeat(30)); });
     const r = await runScan(url, "deep", false);
     expect(r.intercepted).toBe(false);
     expect(r.vulnerabilities.find((v) => v.name === "Scan started from an error response")?.evidence).toMatch(/HTTP 502/);
+    expect(r.vulnerabilities.find((v) => /Missing Content-Security-Policy/.test(v.name))?.severity).toBe("info");
   }, 60_000);
 
   it("records checks that had nothing to test as not tested, with the reason", async () => {

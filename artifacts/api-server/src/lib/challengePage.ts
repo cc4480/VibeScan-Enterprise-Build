@@ -153,6 +153,19 @@ const HEADER_SIGNALS: { vendor: string; header: string; re: RegExp; label: strin
   { vendor: "Vercel", header: "x-vercel-mitigated", re: /challenge|deny|block/i, label: "x-vercel-mitigated response header" },
 ];
 
+/**
+ * The statuses an edge or a firewall answers with when it turns a request away: forbidden, too many
+ * requests, unavailable, unavailable for legal reasons, and the two that a request's own shape provokes,
+ * bad request and not acceptable. 406 was missing. www.elastic.co (Fastly) answered the scanner's
+ * request with HTTP 406 and the 20-byte body "406 Not Acceptable", and the scan went on to report that
+ * response's missing Content-Security-Policy (HIGH), missing X-Frame-Options, missing cache headers,
+ * no structured data and no Open Graph tags: five claims that are false of the real page (2026-10-10;
+ * reproduced 2026-10-11 with curl by sending the scanner's Cache-Control and Pragma headers, which is
+ * what provokes it). 404 and the 5xx statuses are not here: they say the page or the server is
+ * missing, not that the request was refused.
+ */
+const REFUSAL_STATUSES = new Set([400, 403, 406, 429, 451, 503]);
+
 function titleOf(html: string): string | null {
   const m = /<title\b[^>]*>([\s\S]{0,200}?)<\/title\s*>/i.exec(html);
   return m ? (m[1] ?? "").replace(/\s+/g, " ").trim() : null;
@@ -204,10 +217,10 @@ export function detectChallengePage(
     }
   }
 
-  // A bare 403/503 with almost no body is an interception even when no vendor
+  // A bare refusal with almost no body is an interception even when no vendor
   // signed it. Anything with real content is left alone: an empty-ish error
   // page is not something a site publishes as its homepage.
-  if ((status === 403 || status === 503 || status === 429) && html.replace(/\s+/g, "").length < 2_000) {
+  if (REFUSAL_STATUSES.has(status) && html.replace(/\s+/g, "").length < 2_000) {
     return { isChallenge: true, vendor: null, signal: `HTTP ${status} with a ${html.length}-byte body` };
   }
 
