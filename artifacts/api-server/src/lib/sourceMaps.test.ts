@@ -60,6 +60,21 @@ describe("checkSourceMaps — reports a genuinely exposed map", () => {
     expect(vulns[0]!.evidence).toMatch(/sourcesContent/);
   });
 
+  it("reads a map larger than the default 5 MiB body limit whole: the app's own code sits after the libraries, past the old cut", async () => {
+    const big = JSON.stringify({
+      version: 3,
+      sources: ["node_modules/some-lib/index.js", "src/app.ts", "src/secret-logic.ts"],
+      sourcesContent: ["x".repeat(6 * 1024 * 1024), "export const a = 1;", "const KEY = 'hunter2';"],
+      mappings: "AAAA",
+    });
+    expect(big.length).toBeGreaterThan(5 * 1024 * 1024);
+    serve({ "https://example.com/assets/app.js.map": { body: big } });
+    const vulns = await checkSourceMaps(page("/assets/app.js"), "https://example.com/");
+    expect(vulns).toHaveLength(1);
+    expect(vulns[0]!.severity).toBe("high");
+    expect(vulns[0]!.evidence).toMatch(/Source files mapped: 3/);
+  });
+
   it("follows a sourceMappingURL comment in the bundle trailer", async () => {
     serve({
       "https://example.com/assets/app.js": { body: "//# sourceMappingURL=app.abc123.map", ct: "application/javascript" },

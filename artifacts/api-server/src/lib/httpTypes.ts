@@ -107,6 +107,12 @@ export type ScanFetchOptions = RequestInit & {
    * `credentials` field meaning something entirely different.
    */
   as?: IdentityOverride;
+  /**
+   * Most decoded bytes of the response to keep, where the default (MAX_BODY_BYTES, 5 MiB) is too small for what the
+   * caller needs to read whole: a source map with embedded source grows with the application and passes 5 MiB in
+   * an ordinary app, and a truncated map is not valid JSON.
+   */
+  maxBodyBytes?: number;
 };
 
 export type Outcome = { ok: true; result: HttpResult } | { ok: false; error: string };

@@ -89,8 +89,8 @@ export async function readBodyMarked(
   return { body: out, truncated: false };
 }
 
-export async function readResponse(res: Response, redirected: boolean): Promise<HttpResult> {
-  const { body, truncated } = await readBodyMarked(res);
+export async function readResponse(res: Response, redirected: boolean, maxBytes?: number): Promise<HttpResult> {
+  const { body, truncated } = await readBodyMarked(res, maxBytes);
   const headers: Record<string, string> = {};
   // Defensive: scanFetch's contract is "returns null on failure, never throws",
   // and reading the response happens outside the fetch try/catch. A runtime that

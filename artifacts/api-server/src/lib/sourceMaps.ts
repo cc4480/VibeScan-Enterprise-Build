@@ -22,6 +22,8 @@ import { scanFetch } from "./http";
 
 const TIMEOUT_MS = 8_000;
 const MAX_JS_FILES = 8;
+const MAX_MAP_BYTES = 40 * 1024 * 1024;
+const MAP_TIMEOUT_MS = 20_000;
 const TRAILER_BYTES = 512;
 
 function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
@@ -37,7 +39,10 @@ async function tryFetch(
   const headers: Record<string, string> = {};
   if (rangeHeader) headers["Range"] = rangeHeader;
 
-  const res = await scanFetch(url, { headers, timeoutMs: TIMEOUT_MS });
+  // A whole map has to be read to be judged (which sources are the site's own, whether source text is embedded), and a map with
+  // embedded source passes the default 5 MiB body limit in an ordinary app. The trailer read of a script is a Range request
+  // and stays small.
+  const res = await scanFetch(url, { headers, timeoutMs: rangeHeader ? TIMEOUT_MS : MAP_TIMEOUT_MS, ...(rangeHeader ? {} : { maxBodyBytes: MAX_MAP_BYTES }) });
   // 206 is expected when a Range header was sent, so it counts alongside 2xx.
   if (!res || (res.status < 200 || res.status >= 300) && res.status !== 206) return null;
   return { ok: true, body: res.body, ct: res.headers["content-type"] ?? "" };

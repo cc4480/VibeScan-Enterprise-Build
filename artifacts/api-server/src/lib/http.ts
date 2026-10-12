@@ -69,6 +69,7 @@ async function perform(url: string, options: ScanFetchOptions): Promise<Outcome>
     redirect = "follow",
     headers: callerHeaders,
     as: identity,
+    maxBodyBytes,
     ...rest
   } = options;
   // Distinguishes "no override" from an explicit null meaning "send anonymous".
@@ -143,7 +144,7 @@ async function perform(url: string, options: ScanFetchOptions): Promise<Outcome>
     // Stop when the caller asked to see redirects, when this is not one, or
     // when it is one the server left un-followable.
     if (redirect === "manual" || !isRedirect || !location) {
-      const result = await readResponse(res, redirected);
+      const result = await readResponse(res, redirected, maxBodyBytes);
       clearTimeout(timer);
       // res.url is empty on a manual-mode response in some runtimes; fall back
       // to the URL actually requested so callers always get a usable value.

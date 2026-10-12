@@ -3,7 +3,7 @@ import http from "node:http";
 import { createHash } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { runWithScanHttp } from "./http";
-import { scanContent, scanJavaScriptForSecrets } from "./jsScanner";
+import { scanContent, scanJavaScriptForSecrets, lazyChunkUrls, MAX_LAZY_CHUNKS, collectFirstPartyJavaScript } from "./jsScanner";
 
 /**
  * The secret scanner reading a whole production bundle.
@@ -158,5 +158,53 @@ describe("chunks the page only preloads (TanStack Start and other code-splitting
   it("clean twin: the same split page with only the public key reports nothing, and a stylesheet link is not read as script", async () => {
     const found = await scanSplit({ "/assets/entry.js": "var a=1;", "/assets/index-keys.js": appWith({}), "/assets/supa.js": "x", "/assets/app.css": `a{--k:"${SERVICE}"}` }, page);
     expect(found).toEqual([]);
+  });
+});
+
+describe("code-split routes: a key that sits only in a chunk the entry script loads with import()", () => {
+  const ADMIN_ASSET = "/assets/Admin-3fa9c1.js";
+  const entry = (loader: string) => bundle(`const sM="https://${REF}.supabase.co",aM="${ANON}",Tn=cO(sM,aM);${loader}`, 60_000);
+  const dynamic = `const Admin=lazy(()=>import("./Admin-3fa9c1.js"));`;
+  const viteDeps = `const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/Admin-3fa9c1.js"])))=>i.map(i=>d[i]);const Admin=lazy(()=>__vitePreload(()=>import("./Admin-3fa9c1.js"),__vite__mapDeps([0])));`;
+
+  async function scanSite(entryJs: string, chunks: Record<string, string>) {
+    const srv = http.createServer((req, res) => {
+      const body = req.url === "/assets/index.js" ? entryJs : chunks[req.url ?? ""];
+      if (body !== undefined) res.writeHead(200, { "content-type": "application/javascript" }).end(body);
+      else res.writeHead(404).end();
+    });
+    servers.push(srv);
+    await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+    const base = `http://127.0.0.1:${(srv.address() as AddressInfo).port}/`;
+    const html = `<html><head><script type="module" src="/assets/index.js"></script></head><body></body></html>`;
+    return runWithScanHttp({ targetUrl: base }, async () => ({ found: await scanJavaScriptForSecrets(html, base), first: await collectFirstPartyJavaScript(html, base) }));
+  }
+
+  it("finds the service_role key in the lazily loaded chunk, by import() and by the Vite preload list", async () => {
+    for (const loader of [dynamic, viteDeps]) {
+      const { found, first } = await scanSite(entry(loader), { [ADMIN_ASSET]: `const fI=cO("https://${REF}.supabase.co","${SERVICE}");export default fI;` });
+      expect(found.map((f) => f.name)).toContain("Supabase Service Role Key Exposed in JavaScript");
+      expect(first).toContain(SERVICE);
+    }
+  });
+
+  it("clean twin: the same split, the chunk holds no key, nothing is reported", async () => {
+    const { found } = await scanSite(entry(dynamic), { [ADMIN_ASSET]: `export default function Admin(){return null}` });
+    expect(found).toEqual([]);
+  });
+
+  it("without a reference in the entry script nothing is guessed (a chunk nobody loads is not read)", async () => {
+    const { found } = await scanSite(entry(""), { [ADMIN_ASSET]: `const fI=cO("https://${REF}.supabase.co","${SERVICE}");` });
+    expect(found).toEqual([]);
+  });
+
+  it("lazyChunkUrls: same host only, .js only, nothing already read, at most MAX_LAZY_CHUNKS", () => {
+    const text = `import("./a.js");import("https://cdn.other.test/x.js");import("./data.json");import("./seen.js");` +
+      Array.from({ length: 30 }, (_, i) => `import("./c${i}.js");`).join("");
+    const urls = lazyChunkUrls([{ url: "https://app.test/assets/index.js", text }], "https://app.test/", ["https://app.test/assets/seen.js"]);
+    expect(urls).toHaveLength(MAX_LAZY_CHUNKS);
+    expect(urls[0]).toBe("https://app.test/assets/a.js");
+    expect(urls.every((u) => u.startsWith("https://app.test/") && u.endsWith(".js"))).toBe(true);
+    expect(urls).not.toContain("https://app.test/assets/seen.js");
   });
 });

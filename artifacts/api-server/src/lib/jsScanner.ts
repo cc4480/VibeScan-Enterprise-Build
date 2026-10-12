@@ -96,6 +96,48 @@ function extractExternalScriptUrls(html: string, baseUrl: string): string[] {
   return [...new Set(urls)].slice(0, MAX_EXTERNAL_SCRIPTS);
 }
 
+/** Most extra chunks read per scan, on top of the scripts the page itself lists. */
+export const MAX_LAZY_CHUNKS = 12;
+
+/**
+ * Module chunks the given scripts load on demand: `import("./Admin-3fa9.js")` and the file list a Vite build writes into
+ * its preload helper (`__vite__mapDeps`). A route that is code-split (React.lazy) lives in a chunk the HTML never names,
+ * and what a lazy admin screen contains (a service_role key, an AI key) is exactly what the entry script does not. Only
+ * chunks on the host of the script that loads them, only .js/.mjs, none already read. webpack's chunk maps are not read.
+ */
+export function lazyChunkUrls(scripts: Array<{ url: string; text: string }>, pageUrl: string, known: Iterable<string>): string[] {
+  const seen = new Set(known);
+  const out: string[] = [];
+  const add = (spec: string, from: string) => {
+    if (out.length >= MAX_LAZY_CHUNKS || !/\.m?js(?:\?[^"'`\s]*)?$/i.test(spec)) return;
+    try {
+      const abs = new URL(spec, from).href;
+      if (new URL(abs).hostname !== new URL(from).hostname || seen.has(abs)) return;
+      seen.add(abs);
+      out.push(abs);
+    } catch { /* not a URL */ }
+  };
+  for (const { url, text } of scripts) {
+    for (const m of text.matchAll(/\bimport\(\s*["'`]([^"'`\s]+)["'`]\s*\)/g)) add(m[1]!, url);
+    // Vite writes the chunks a dynamic import needs as site-relative paths: m.f||(m.f=["assets/Admin-3fa9.js","assets/x.css"])
+    const list = /\.f\s*\|\|\s*\(\s*[\w$.]+\.f\s*=\s*(\[[^\]]*\])/.exec(text)?.[1];
+    if (list) {
+      try { for (const p of JSON.parse(list) as unknown[]) if (typeof p === "string") add(p.startsWith("/") ? p : new URL(p, new URL("/", pageUrl)).pathname, new URL("/", pageUrl).href); } catch { /* not JSON */ }
+    }
+  }
+  return out;
+}
+
+/** The scripts at `urls`, then the lazy chunks they load (see lazyChunkUrls), as url and text pairs. `keep` filters the chunks. */
+async function fetchWithLazyChunks(urls: string[], pageUrl: string, keep: (chunkUrl: string) => boolean = () => true): Promise<Array<{ url: string; text: string }>> {
+  const first = await Promise.allSettled(urls.map((url) => fetchScript(url)));
+  const read = urls.map((url, i) => ({ url, text: first[i]!.status === "fulfilled" ? first[i]!.value : "" }));
+  const lazy = lazyChunkUrls(read, pageUrl, urls).filter(keep);
+  if (lazy.length === 0) return read;
+  const more = await Promise.allSettled(lazy.map((url) => fetchScript(url)));
+  return [...read, ...lazy.map((url, i) => ({ url, text: more[i]!.status === "fulfilled" ? more[i]!.value : "" }))];
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SCAN FOR SECRETS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -171,13 +213,8 @@ export function scanContent(content: string): Array<{ pattern: SecretPattern; ma
  */
 export async function collectJavaScript(html: string, baseUrl: string): Promise<string> {
   const inline = extractInlineScripts(html);
-  const external = await Promise.allSettled(
-    extractExternalScriptUrls(html, baseUrl).map((url) => fetchScript(url)),
-  );
-  return [
-    inline,
-    ...external.map((r) => (r.status === "fulfilled" ? r.value : "")),
-  ].join("\n");
+  const external = await fetchWithLazyChunks(extractExternalScriptUrls(html, baseUrl), baseUrl);
+  return [inline, ...external.map((s) => s.text)].join("\n");
 }
 
 /**
@@ -189,13 +226,9 @@ export async function collectJavaScript(html: string, baseUrl: string): Promise<
 export async function collectFirstPartyJavaScript(html: string, baseUrl: string): Promise<string> {
   const urls = extractExternalScriptUrls(html, baseUrl);
   const ownHost = (() => { try { return new URL(baseUrl).hostname; } catch { return ""; } })();
-  const own = await Promise.allSettled(
-    urls.map((url) => {
-      const host = (() => { try { return new URL(url).hostname; } catch { return ""; } })();
-      return isFirstParty(ownHost, host) ? fetchScript(url) : Promise.resolve("");
-    }),
-  );
-  return [extractInlineScripts(html), ...own.map((r) => (r.status === "fulfilled" ? r.value : ""))].join("\n");
+  const hostOf = (url: string) => { try { return new URL(url).hostname; } catch { return ""; } };
+  const own = await fetchWithLazyChunks(urls.filter((url) => isFirstParty(ownHost, hostOf(url))), baseUrl, (chunk) => isFirstParty(ownHost, hostOf(chunk)));
+  return [extractInlineScripts(html), ...own.map((s) => s.text)].join("\n");
 }
 
 export async function scanJavaScriptForSecrets(
@@ -207,10 +240,9 @@ export async function scanJavaScriptForSecrets(
   const inlineFindings = scanContent(inlineContent);
 
   // 2. Fetch and scan external scripts in parallel
-  const externalUrls = extractExternalScriptUrls(html, baseUrl);
-  const externalContents = await Promise.allSettled(
-    externalUrls.map((url) => fetchScript(url)),
-  );
+  const listed = await fetchWithLazyChunks(extractExternalScriptUrls(html, baseUrl), baseUrl);
+  const externalUrls = listed.map((s) => s.url);
+  const externalContents = listed.map((s) => ({ status: "fulfilled" as const, value: s.text }));
 
   const allExternalFindings: Array<{ pattern: SecretPattern; match: string; context: string; url: string }> = [];
   const pageHost = (() => { try { return new URL(baseUrl).hostname; } catch { return ""; } })();
