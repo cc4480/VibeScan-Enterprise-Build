@@ -128,7 +128,7 @@ export async function processScanJob(job: ScanJob): Promise<void> {
       }, SCAN_HTTP_TIMEOUT_MS);
     });
     auth = await loadScanAuth(scanId, log);
-    const { scanRow, httpCredentials, reauthenticate, secondaryCredentials } = auth;
+    const { scanRow, httpCredentials, reauthenticate, secondaryCredentials, githubAccessToken } = auth;
 
     scanResult = await Promise.race([
       runScan(
@@ -152,6 +152,7 @@ export async function processScanJob(job: ScanJob): Promise<void> {
         // asked for neither, including every monitor rescan.
         {
           ...(scanRow?.githubRepoUrl ? { githubRepoUrl: scanRow.githubRepoUrl } : {}),
+          ...(githubAccessToken ? { githubAccessToken } : {}),
           ...(scanRow?.autoSecondAccount ? { autoSecondAccount: true } : {}),
           // If the target redirects elsewhere, active probing continues only on a host this user verified.
           verifyHost: (url: string) => activeProbesUnlocked(userId, url),

@@ -2,6 +2,8 @@ import type { Log } from "./workerTypes";
 import { db, scansTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { decryptCredentials, toScanHttpCredentials } from "./scanCredentials";
+import { GithubAppError, installationToken } from "./githubApp";
+import { parseGithubRepoRef } from "./githubSourceProbe";
 
 /** The sign-in a scan runs under: decrypted credentials, an optional second account, and how to renew a form login. */
 export async function loadScanAuth(scanId: string, log: Log) {
@@ -19,6 +21,7 @@ export async function loadScanAuth(scanId: string, log: Log) {
       blob: scansTable.credentialsEncrypted,
       secondBlob: scansTable.secondaryCredentialsEncrypted,
       githubRepoUrl: scansTable.githubRepoUrl,
+      githubInstallationId: scansTable.githubInstallationId,
       autoSecondAccount: scansTable.autoSecondAccount,
     })
     .from(scansTable)
@@ -59,5 +62,23 @@ export async function loadScanAuth(scanId: string, log: Log) {
     }
   }
 
-  return { scanRow, httpCredentials, reauthenticate, secondaryCredentials };
+  // A private repository the owner shared through the GitHub App. The scan row carries only the installation id,
+  // which scansCreate.ts set after checking the requester; the token is minted here for this one repository,
+  // read-only, and held in memory for this scan. It is not stored and never logged. If it cannot be had, the
+  // scan carries on reading what is public, and the report says the repository was not tested.
+  let githubAccessToken: string | undefined;
+  if (scanRow?.githubInstallationId && scanRow.githubRepoUrl) {
+    const ref = parseGithubRepoRef(scanRow.githubRepoUrl);
+    const installationId = Number(scanRow.githubInstallationId);
+    if (ref && Number.isInteger(installationId)) {
+      try {
+        githubAccessToken = (await installationToken(installationId, ref.repo)).token;
+        log.info({ via: "github-app" }, "Private repository access granted for this scan");
+      } catch (err) {
+        log.warn({ reason: err instanceof GithubAppError ? err.reason : "unknown" }, "No private repository access; reading public files only");
+      }
+    }
+  }
+
+  return { scanRow, httpCredentials, reauthenticate, secondaryCredentials, githubAccessToken };
 }
