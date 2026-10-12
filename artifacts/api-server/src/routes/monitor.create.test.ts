@@ -217,3 +217,39 @@ describe("POST /monitor/subscriptions — paying for the baseline scan", () => {
     expect(billingState.refunds[0]!.kind).toBe("scan");
   });
 });
+
+describe("POST /monitor/subscriptions — finding the scan that was already done", () => {
+  it("seeds the card from an earlier scan and says so in the response", async () => {
+    // The earlier scan is found (the lookup matches by site, see urlKey.test.ts; this test's database is a mock, so it hands back the
+    // row). A saved report is stored under the URL the scan ended on, `https://seclayer.app/` (with the slash); the monitor form sends
+    // what was typed, `https://seclayer.app`. The lookup used to demand an exact match and found nothing.
+    queuedResults.push([{ value: 0 }]); // how many sites the caller already monitors
+    queuedResults.push([]); //            no active subscription for this site yet
+    queuedResults.push([{ id: "report-1", scannedAt: new Date("2026-10-11T12:00:00Z"), data: { summary: { grade: "B" } } }]); // the earlier scan
+
+    const handle = await handlerFor("post", "/monitor/subscriptions");
+    const res = makeRes();
+    await handle(makeReq({ body: { targetUrl: "https://seclayer.app" }, params: {} }), res);
+
+    expect(res.statusCode).toBe(201);
+    const subInsert = inserted.find((v) => "targetUrl" in v && "expiresAt" in v)!;
+    expect(subInsert.lastReportId).toBe("report-1");
+    expect((subInsert.lastScanAt as Date).toISOString()).toBe("2026-10-11T12:00:00.000Z");
+    expect((res.body as { seededFrom?: { reportId: string; grade: string } }).seededFrom).toMatchObject({ reportId: "report-1", grade: "B" });
+  });
+
+  it("clean twin: a site that was never scanned is seeded from nothing, and seededFrom is null", async () => {
+    queuedResults.push([{ value: 0 }]);
+    queuedResults.push([]);
+    queuedResults.push([]);
+
+    const handle = await handlerFor("post", "/monitor/subscriptions");
+    const res = makeRes();
+    await handle(makeReq({ body: { targetUrl: "https://never-scanned.example" }, params: {} }), res);
+
+    expect(res.statusCode).toBe(201);
+    const subInsert = inserted.find((v) => "targetUrl" in v && "expiresAt" in v)!;
+    expect(subInsert.lastReportId).toBeNull();
+    expect((res.body as { seededFrom: unknown }).seededFrom).toBeNull();
+  });
+});

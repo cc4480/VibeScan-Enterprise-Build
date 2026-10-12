@@ -104,7 +104,12 @@ export async function listMonitorSubscriptions(): Promise<MonitorSubscription[]>
 export async function createMonitorSubscription(
   targetUrl: string,
   webhookUrl?: string,
-): Promise<{ subscription: MonitorSubscription; initialScanId: string | null }> {
+): Promise<{
+  subscription: MonitorSubscription;
+  initialScanId: string | null;
+  /** An earlier scan of this site that was found and is shown on the card while the baseline scan runs. */
+  seededFrom?: { reportId: string; scannedAt: string; grade: string | null } | null;
+}> {
   return customFetch("/api/monitor/subscriptions", {
     method: "POST",
     body: JSON.stringify({ targetUrl, webhookUrl: webhookUrl || undefined }),

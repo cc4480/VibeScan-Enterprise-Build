@@ -1,6 +1,7 @@
 import { type Request, type Response, type NextFunction } from "express";
 import { db, reportsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
+import { sameSite } from "../lib/urlKey";
 import { z } from "zod";
 import { rateLimitMiddleware, scanRateLimitRules } from "../lib/rateLimit";
 
@@ -17,7 +18,7 @@ export async function fetchLatestReport(userId: string, targetUrl: string) {
       data: reportsTable.data,
     })
     .from(reportsTable)
-    .where(and(eq(reportsTable.userId, userId), eq(reportsTable.targetUrl, targetUrl)))
+    .where(and(eq(reportsTable.userId, userId), sameSite(reportsTable.targetUrl, targetUrl)))
     .orderBy(desc(reportsTable.scannedAt))
     .limit(1);
   return report ?? null;

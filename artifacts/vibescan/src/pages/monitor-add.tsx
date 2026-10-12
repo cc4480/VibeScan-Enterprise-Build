@@ -32,8 +32,12 @@ export function AddSubscriptionForm({ onSuccess }: { onSuccess: () => void }) {
         url.trim(),
         webhookUrl.trim() || undefined,
       );
+      // An earlier scan of the same site is found and shown on the card; say so, with its date and grade.
+      const earlier = result.seededFrom
+        ? ` Found your earlier scan of this site (${new Date(result.seededFrom.scannedAt).toLocaleDateString()}${result.seededFrom.grade ? `, grade ${result.seededFrom.grade}` : ""}) and kept it as the starting point.`
+        : "";
       if (result.initialScanId) {
-        toast({ title: "Monitoring activated", description: `Baseline scan queued for ${url.trim()} — results will appear shortly.` });
+        toast({ title: "Monitoring activated", description: `Baseline scan queued for ${url.trim()} — results will appear shortly.${earlier}` });
       } else {
         toast({ title: "Monitoring activated", description: "Using your most recent scan results. The next full scan is scheduled from your security grade." });
       }

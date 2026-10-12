@@ -2,6 +2,7 @@ import { type IRouter } from "express";
 import { TWENTY_FOUR_HOURS_MS, fetchLatestReport } from "./monitorShared";
 import { db, monitorSubscriptionsTable, cveAlertsTable, reportsTable, monitorScoreHistoryTable, monitorRegressionsTable, certExpiryAlertsTable, monitorPulseChecksTable, scansTable } from "@workspace/db";
 import { eq, and, gte, desc, count, inArray } from "drizzle-orm";
+import { sameSite } from "../lib/urlKey";
 import { monitorExpiryApplies } from "../lib/entitlements";
 import { summariseUptime } from "../lib/monitorPulse";
 
@@ -121,7 +122,7 @@ export function registerMonitorList(router: IRouter): void {
           .where(
             and(
               eq(scansTable.userId, sub.userId),
-              eq(scansTable.targetUrl, sub.targetUrl),
+              sameSite(scansTable.targetUrl, sub.targetUrl),
               inArray(scansTable.status, ["queued", "scanning", "analyzing"]),
             ),
           )

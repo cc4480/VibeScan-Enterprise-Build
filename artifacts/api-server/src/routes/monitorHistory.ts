@@ -1,6 +1,7 @@
 import { type IRouter } from "express";
 import { db, monitorSubscriptionsTable, cveAlertsTable, reportsTable, monitorScoreHistoryTable, monitorRegressionsTable } from "@workspace/db";
 import { eq, and, desc, count, sql } from "drizzle-orm";
+import { sameSite } from "../lib/urlKey";
 import { splitScanNotes } from "../lib/scanNotes";
 
 /** Per-subscription history: scans, alerts, score history and regressions. */
@@ -45,7 +46,7 @@ export function registerMonitorHistory(router: IRouter): void {
       .where(
         and(
           eq(reportsTable.userId, req.user.id),
-          eq(reportsTable.targetUrl, sub.targetUrl),
+          sameSite(reportsTable.targetUrl, sub.targetUrl),
         ),
       )
       .orderBy(desc(reportsTable.scannedAt))

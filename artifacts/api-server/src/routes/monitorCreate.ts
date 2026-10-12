@@ -1,6 +1,7 @@
 import { type IRouter } from "express";
 import { fetchLatestReport, CreateMonitorBody, monitorRateLimit, requireMonitorAuth } from "./monitorShared";
 import { db, monitorSubscriptionsTable, scansTable } from "@workspace/db";
+import { sameSite } from "../lib/urlKey";
 import { eq, and, count } from "drizzle-orm";
 import { enqueueScan } from "../lib/queue";
 import { logger } from "../lib/logger";
@@ -105,7 +106,7 @@ export function registerMonitorCreate(router: IRouter): void {
       .where(
         and(
           eq(monitorSubscriptionsTable.userId, req.user.id),
-          eq(monitorSubscriptionsTable.targetUrl, targetUrl),
+          sameSite(monitorSubscriptionsTable.targetUrl, targetUrl),
           eq(monitorSubscriptionsTable.status, "active"),
         ),
       );
@@ -123,6 +124,14 @@ export function registerMonitorCreate(router: IRouter): void {
     // immediately shows the last grade/scan date instead of "Never".
     const existingReport = await fetchLatestReport(req.user.id, targetUrl);
     const seedReportId = existingReport?.id ?? null;
+    // Said back to the caller, so the page can tell the owner that an earlier scan of this site was found and is being shown.
+    const seededFrom = existingReport
+      ? {
+          reportId: existingReport.id,
+          scannedAt: existingReport.scannedAt,
+          grade: (existingReport.data as { summary?: { grade?: unknown } } | null)?.summary?.grade ?? null,
+        }
+      : null;
     const seedScanAt = existingReport?.scannedAt ?? null;
 
     // Charged last, after every check that could still refuse, so a refusal
@@ -207,6 +216,7 @@ export function registerMonitorCreate(router: IRouter): void {
       res.status(201).json({
         subscription: sub,
         initialScanId: scan.id,
+        seededFrom,
       });
     } catch (err) {
       logger.error({ err }, "Failed to enqueue initial monitor scan");
@@ -222,7 +232,7 @@ export function registerMonitorCreate(router: IRouter): void {
       } catch (refundErr) {
         logger.error({ err: refundErr }, "Could not refund a baseline monitor scan that failed to queue");
       }
-      res.status(201).json({ subscription: sub, initialScanId: null });
+      res.status(201).json({ subscription: sub, initialScanId: null, seededFrom });
     }
   });
 }

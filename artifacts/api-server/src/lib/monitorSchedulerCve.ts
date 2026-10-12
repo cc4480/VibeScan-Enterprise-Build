@@ -1,6 +1,7 @@
 /** The CVE watch: new matches against each subscription's technologies. */
 import { db, monitorSubscriptionsTable, cveAlertsTable, reportsTable } from "@workspace/db";
 import { eq, and, desc, inArray } from "drizzle-orm";
+import { sameSite } from "./urlKey";
 import { logger } from "./logger";
 import { fetchChangedCves, matchCvesToTechnologies, describeAffected } from "./cveMonitor";
 import { sendMonitorCveAlertEmail } from "./mailer";
@@ -125,7 +126,7 @@ export async function runCveCheck(): Promise<void> {
         .where(
           and(
             eq(reportsTable.userId, sub.userId),
-            eq(reportsTable.targetUrl, sub.targetUrl),
+            sameSite(reportsTable.targetUrl, sub.targetUrl),
           ),
         )
         .orderBy(desc(reportsTable.createdAt))

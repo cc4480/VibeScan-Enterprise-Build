@@ -1,6 +1,7 @@
 /** Certificate expiry alerts. */
 import { db, reportsTable, certExpiryAlertsTable, monitorPulseChecksTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
+import { sameSite } from "./urlKey";
 import { logger } from "./logger";
 import { sendCertExpiryEmail } from "./mailer";
 import { fireWebhook } from "./webhook";
@@ -162,7 +163,7 @@ export async function runCertExpiryCheck(): Promise<void> {
           .where(
             and(
               eq(reportsTable.userId, sub.userId),
-              eq(reportsTable.targetUrl, sub.targetUrl),
+              sameSite(reportsTable.targetUrl, sub.targetUrl),
             ),
           )
           .orderBy(desc(reportsTable.createdAt))

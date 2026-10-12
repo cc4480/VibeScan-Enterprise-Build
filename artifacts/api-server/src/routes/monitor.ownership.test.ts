@@ -71,7 +71,7 @@ describe("GET /monitor/subscriptions/:id/history — trend data", () => {
     // The route used to read `data.summary.vulnCount`, a key that has never
     // existed on a stored report (worker.ts writes `totalVulnerabilities`) —
     // every history entry, for every subscription, returned vulnCount: null.
-    queuedResults.push([{ id: "sub-1" }]); // ownership lookup
+    queuedResults.push([{ id: "sub-1", targetUrl: "https://example.com" }]); // ownership lookup
     queuedResults.push([
       {
         id: "report-1",
@@ -95,7 +95,7 @@ describe("GET /monitor/subscriptions/:id/history — trend data", () => {
   });
 
   it("counts from the list without the scan's notes when the report has one", async () => {
-    queuedResults.push([{ id: "sub-1" }]);
+    queuedResults.push([{ id: "sub-1", targetUrl: "https://example.com" }]);
     queuedResults.push([
       {
         id: "report-1", scanId: "scan-1", scannedAt: new Date("2026-09-01T00:00:00.000Z"), tier: "deep",
