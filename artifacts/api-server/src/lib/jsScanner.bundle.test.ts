@@ -133,3 +133,30 @@ describe("an address that a library gives as an example is not an exposed intern
     expect(names(`{url:"10.4.0.20"}`)).toContain("Internal IP Address Exposed");
   });
 });
+
+describe("chunks the page only preloads (TanStack Start and other code-splitting builds)", () => {
+  // The HTML has one <script src> (the entry); the chunk that holds the keys is listed as <link rel="modulepreload">.
+  async function scanSplit(chunks: Record<string, string>, html: string) {
+    const srv = http.createServer((req, res) => {
+      const body = chunks[req.url ?? ""];
+      if (body === undefined) { res.writeHead(404).end(); return; }
+      res.writeHead(200, { "content-type": "application/javascript" }).end(body);
+    });
+    servers.push(srv);
+    await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+    const base = `http://127.0.0.1:${(srv.address() as AddressInfo).port}/`;
+    return runWithScanHttp({ targetUrl: base }, () => scanJavaScriptForSecrets(html, base));
+  }
+  const page = `<html><head><link rel="modulepreload" href="/assets/index-keys.js"/><link href="/assets/supa.js" rel="modulepreload" crossorigin/><link rel="stylesheet" href="/assets/app.css"/></head>` +
+    `<body><script type="module" async src="/assets/entry.js"></script></body></html>`;
+
+  it("finds the keys in a preloaded chunk, whichever order the link's attributes are in", async () => {
+    const found = await scanSplit({ "/assets/entry.js": "var a=1;", "/assets/index-keys.js": appWith({ service: true, openai: true }), "/assets/supa.js": "var b=2;" }, page);
+    expect(found.map((f) => f.name)).toEqual(expect.arrayContaining(["Supabase Service Role Key Exposed in JavaScript", "OpenAI API Key Exposed"]));
+  });
+
+  it("clean twin: the same split page with only the public key reports nothing, and a stylesheet link is not read as script", async () => {
+    const found = await scanSplit({ "/assets/entry.js": "var a=1;", "/assets/index-keys.js": appWith({}), "/assets/supa.js": "x", "/assets/app.css": `a{--k:"${SERVICE}"}` }, page);
+    expect(found).toEqual([]);
+  });
+});

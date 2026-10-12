@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 
 const JS_FETCH_TIMEOUT_MS = 10_000;
-const MAX_EXTERNAL_SCRIPTS = 8;
+const MAX_EXTERNAL_SCRIPTS = 12;
 /**
  * Most of a script that is read, per file. This was 512,000, and a production bundle of an ordinary app is
  * larger: in a Vite build the libraries come first and the app's own code, the part that holds its keys, comes
@@ -83,6 +83,15 @@ function extractExternalScriptUrls(html: string, baseUrl: string): string[] {
       const absolute = new URL(m[1], baseUrl).href;
       urls.push(absolute);
     } catch { /* invalid URL */ }
+  }
+  // Scripts the page only PRELOADS. TanStack Start and other code-splitting builds put one script tag in the HTML (the
+  // entry) and list the other chunks as <link rel="modulepreload">; the project URL, keys and table names sit in
+  // those chunks, so a scanner that reads script tags alone never sees them. Script tags first, then the preloads.
+  for (const tag of html.match(/<link\b[^>]*>/gi) ?? []) {
+    if (!/\brel\s*=\s*["']?modulepreload\b/i.test(tag)) continue;
+    const href = /\bhref\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1];
+    if (!href) continue;
+    try { urls.push(new URL(href, baseUrl).href); } catch { /* invalid URL */ }
   }
   return [...new Set(urls)].slice(0, MAX_EXTERNAL_SCRIPTS);
 }
