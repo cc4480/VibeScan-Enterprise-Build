@@ -6,7 +6,8 @@ import type { ReportResponse, ReportPayload } from "./report-viewer-types";
 import { Vulnerability } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Shield, Globe, Plus, HelpCircle, Bell, Search } from "lucide-react";
-import { GradeRing } from "@/components/grade-ring";
+import { GradeRing, GRADE_HEX } from "@/components/grade-ring";
+import { scannedPagesLabel } from "@/lib/scanned-pages-label";
 import { SeverityLegend } from "./shared-report-components";
 import { SummaryNewFindings } from "./report-viewer-categories";
 import { DownloadPDFButton } from "./report-viewer-print";
@@ -22,6 +23,9 @@ export function ReportCover({ report, summary, pagesScanned, severityCounts, cat
   categoryCounts: Record<string, number>;
   allUnverifiedVulns: Vulnerability[];
 }) {
+  // The same rule the ring uses: a grade outside A to F means no real grade was
+  // given, which is what a bot-protection interception produces ("N/A").
+  const pagesLabel = scannedPagesLabel(pagesScanned, !(summary.grade in GRADE_HEX));
   return (
     <div className="glass-panel p-8 md:p-12 rounded-3xl mb-12 relative overflow-hidden flex flex-col md:flex-row items-center gap-12">
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[120px] pointer-events-none" />
@@ -35,10 +39,10 @@ export function ReportCover({ report, summary, pagesScanned, severityCounts, cat
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary border border-white/5 text-xs font-medium text-muted-foreground">
             <Globe className="w-3.5 h-3.5" /> {report.targetUrl}
           </div>
-          {pagesScanned != null && (
+          {pagesLabel && (
             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-500/10 border border-sky-500/20 text-xs font-medium text-sky-400/80">
               <Search className="w-3 h-3" />
-              Scanned {pagesScanned.length + 1} page{pagesScanned.length + 1 !== 1 ? "s" : ""}
+              {pagesLabel}
             </div>
           )}
         </div>
