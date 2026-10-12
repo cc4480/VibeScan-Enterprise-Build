@@ -1,4 +1,4 @@
-import { probeTables, enumerateSupabaseTables, extractTableNamesFromContent, testStorageBuckets } from "./supabase-probes-tables";
+import { probeTables, enumerateSupabaseTables, extractTableNamesFromContent, extractStorageBucketNames, testStorageBuckets } from "./supabase-probes-tables";
 import { reportServiceRoleKey, reportTableFindings } from "./supabase-probes-report";
 import { probeSupabaseAuth, probeSupabaseStorageContents } from "./baasDepth";
 import type { ScanVulnerability } from "./scanner";
@@ -39,7 +39,7 @@ export async function runSupabaseProbes(
   const { projectRef, anonKey, baseUrl } = config;
 
   await probeSupabaseAuth(baseUrl, anonKey, findings);
-  await probeSupabaseStorageContents(baseUrl, anonKey, findings);
+  await probeSupabaseStorageContents(baseUrl, anonKey, findings, extractStorageBucketNames(content));
 
   // Enumerate tables. The REST schema listing is the more complete source
   // when it works, but Supabase now restricts it to service_role on new

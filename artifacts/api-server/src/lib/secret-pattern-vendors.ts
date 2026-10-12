@@ -1,6 +1,10 @@
 import type { SecretPattern } from "./secret-pattern-data";
 import { shannonEntropy } from "./secretPlaceholders";
 
+/** One finding text for the Supabase service_role key, whether it is found by a variable name or by decoding the token (secret-pattern-jwt.ts). */
+export const SERVICE_ROLE_DESCRIPTION = "The Supabase service_role key was found in an external JavaScript file. Unlike the anon key — which is public by design — the service_role key bypasses ALL Row Level Security policies on every table, giving any visitor full admin read/write/delete access to your entire database. This is the most dangerous Supabase misconfiguration possible.";
+export const SERVICE_ROLE_SOLUTION = "Immediately rotate this key in the Supabase dashboard (Project Settings → API → Reset service_role key). Remove it from all frontend code. The service_role key belongs exclusively in server-side code (Edge Functions, your own backend). For client-side use, the anon key is correct and safe to expose.";
+
 /** Secret patterns for named vendors (cloud, payments, VCS, chat, BaaS, email, keys, Firebase). */
 export const VENDOR_SECRET_PATTERNS: SecretPattern[] = [
   // ── AWS ───────────────────────────────────────────────────────────────────
@@ -157,8 +161,8 @@ export const VENDOR_SECRET_PATTERNS: SecretPattern[] = [
     // Legacy format: literal variable name holding a service_role JWT.
     pattern: /(?:serviceRoleKey|service_role_key|SERVICE_ROLE_KEY|SUPABASE_SERVICE_ROLE_KEY)\s*[:=]\s*["'](eyJ[A-Za-z0-9._-]{40,})["']/i,
     severity: "critical", cvssScore: 10.0, cweId: "CWE-522",
-    description: "The Supabase service_role key was found in an external JavaScript file. Unlike the anon key — which is public by design — the service_role key bypasses ALL Row Level Security policies on every table, giving any visitor full admin read/write/delete access to your entire database. This is the most dangerous Supabase misconfiguration possible.",
-    solution: "Immediately rotate this key in the Supabase dashboard (Project Settings → API → Reset service_role key). Remove it from all frontend code. The service_role key belongs exclusively in server-side code (Edge Functions, your own backend). For client-side use, the anon key is correct and safe to expose.",
+    description: SERVICE_ROLE_DESCRIPTION,
+    solution: SERVICE_ROLE_SOLUTION,
   },
 
   // ── Sentry ────────────────────────────────────────────────────────────────

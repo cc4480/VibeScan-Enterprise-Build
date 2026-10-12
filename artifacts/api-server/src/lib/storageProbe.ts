@@ -236,7 +236,7 @@ export async function runStorageProbe(
   const azureBlobs = extractAzureBlobs(content);
 
   if (s3Buckets.length === 0 && gcsBuckets.length === 0 && azureBlobs.length === 0) {
-    notTested?.("no S3, Google Cloud Storage or Azure Blob bucket is referenced in the page");
+    notTested?.("no S3, Google Cloud Storage or Azure Blob bucket is referenced in the page or its JavaScript");
     return [];
   }
 

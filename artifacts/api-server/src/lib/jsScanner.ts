@@ -12,8 +12,16 @@ import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 
 const JS_FETCH_TIMEOUT_MS = 10_000;
-const MAX_EXTERNAL_SCRIPTS = 8;
-const MAX_SCRIPT_SIZE_BYTES = 512_000; // 512 KB per file
+const MAX_EXTERNAL_SCRIPTS = 12;
+/**
+ * Most of a script that is read, per file. This was 512,000, and a production bundle of an ordinary app is
+ * larger: in a Vite build the libraries come first and the app's own code, the part that holds its keys, comes
+ * last, so a cap that cuts the end cuts off exactly that part (a 761,001-byte bundle lost everything after
+ * byte 512,000: the service_role key at 756,7xx and an OpenAI key were never looked at). The transport already
+ * stops a body at MAX_BODY_BYTES, so this matches it. Reading it all costs about 50 ms a megabyte on a real
+ * bundle, and the patterns that did not scale (see secret-pattern-jwt.ts) are fixed.
+ */
+const MAX_SCRIPT_SIZE_BYTES = MAX_BODY_BYTES;
 
 function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
   return { id: randomUUID(), ...partial };
@@ -26,6 +34,7 @@ function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
 import { type SecretPattern, SECRET_PATTERNS } from "./secret-pattern-data";
 import { isPlaceholderToken } from "./secretPlaceholders";
 import { scanFetch, oncePerScan } from "./http";
+import { MAX_BODY_BYTES } from "./httpBody";
 import { scanAiUsage } from "./aiFeatureProbe";
 import { isFirstParty } from "./sriPolicy";
 
@@ -75,6 +84,15 @@ function extractExternalScriptUrls(html: string, baseUrl: string): string[] {
       urls.push(absolute);
     } catch { /* invalid URL */ }
   }
+  // Scripts the page only PRELOADS. TanStack Start and other code-splitting builds put one script tag in the HTML (the
+  // entry) and list the other chunks as <link rel="modulepreload">; the project URL, keys and table names sit in
+  // those chunks, so a scanner that reads script tags alone never sees them. Script tags first, then the preloads.
+  for (const tag of html.match(/<link\b[^>]*>/gi) ?? []) {
+    if (!/\brel\s*=\s*["']?modulepreload\b/i.test(tag)) continue;
+    const href = /\bhref\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1];
+    if (!href) continue;
+    try { urls.push(new URL(href, baseUrl).href); } catch { /* invalid URL */ }
+  }
   return [...new Set(urls)].slice(0, MAX_EXTERNAL_SCRIPTS);
 }
 
@@ -123,7 +141,7 @@ export function scanContent(content: string): Array<{ pattern: SecretPattern; ma
     let m: RegExpExecArray | null;
     while ((m = globalPattern.exec(content)) !== null) {
       const match = m[0];
-      if (p.validate && !p.validate(match)) continue;
+      if (p.validate && !p.validate(match, content.slice(Math.max(0, m.index - 60), m.index))) continue;
       // Filler in a vendor token's shape (sk_live_xxxxxxxx, ghp_0000..., Slack's documented webhook)
       // is a template, not a credential: see secretPlaceholders.ts.
       if (!p.skipPlaceholderCheck && isPlaceholderToken(match)) continue;

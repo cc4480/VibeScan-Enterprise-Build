@@ -19,7 +19,10 @@ function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
 
 // ─── JWT Extraction ───────────────────────────────────────────────────────────
 
-const JWT_PATTERN = /eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]*/g;
+// `(?<![a-zA-Z0-9_-]eyJ)` keeps a start from sitting inside a longer run of token characters. Without it a page
+// that is only `eyJeyJeyJ…` makes every `eyJ` rescan to the end of the run, and the time grows with the square of the
+// length (30 KB took 0.9 s, 60 KB 3.7 s), on a page of up to 5 MB.
+const JWT_PATTERN = /eyJ(?<![a-zA-Z0-9_-]eyJ)[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]*/g;
 
 function extractJwts(sources: string[]): string[] {
   const seen = new Set<string>();
@@ -73,6 +76,10 @@ const AUTH_CLAIMS = [
 ];
 
 function looksLikeAuthToken(payload: JwtPayload): boolean {
+  // Supabase's anon key says `role: "anon"` and names no one. It is published on purpose and issued
+  // for ten years, so how long it lives says nothing about the app: reporting that was a MEDIUM on the
+  // clean twin of a test app. A token that also names a subject is a real session and still counts.
+  if (payload["role"] === "anon" && payload.sub === undefined) return false;
   return AUTH_CLAIMS.some((c) => payload[c] !== undefined);
 }
 

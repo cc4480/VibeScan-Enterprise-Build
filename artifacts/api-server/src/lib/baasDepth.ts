@@ -70,11 +70,23 @@ export async function probeSupabaseAuth(baseUrl: string, anonKey: string, findin
 
 // ── Supabase Storage contents ────────────────────────────────────────────────
 
-export async function probeSupabaseStorageContents(baseUrl: string, anonKey: string, findings: ScanVulnerability[]): Promise<void> {
+export async function probeSupabaseStorageContents(
+  baseUrl: string,
+  anonKey: string,
+  findings: ScanVulnerability[],
+  /**
+   * Bucket names the app's own code opens (`supabase.storage.from("avatars")`). The bucket list answers
+   * the anon key with an empty list unless a policy allows it, so a bucket whose files can be listed
+   * is usually only found by name.
+   */
+  bucketHints: string[] = [],
+): Promise<void> {
   const headers = { apikey: anonKey, Authorization: `Bearer ${anonKey}`, Accept: "application/json" };
   const list = await getJson(`${baseUrl}/storage/v1/bucket`, { headers });
-  if (!list || list.status !== 200 || !Array.isArray(list.json)) return;
-  const names = list.json.filter(isRecord).map((b) => b["name"]).filter((n): n is string => typeof n === "string").slice(0, MAX_BUCKETS);
+  const listed = list && list.status === 200 && Array.isArray(list.json)
+    ? list.json.filter(isRecord).map((b) => b["name"]).filter((n): n is string => typeof n === "string")
+    : [];
+  const names = [...new Set([...bucketHints, ...listed])].slice(0, MAX_BUCKETS);
 
   const exposed: Array<{ bucket: string; count: number; sample: string }> = [];
   for (const bucket of names) {

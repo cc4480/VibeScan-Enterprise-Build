@@ -59,6 +59,13 @@ export async function runAllProbes(
    * and cannot pin a hash on. Defaults to `html`, which is the same thing when nothing was rendered.
    */
   authoredHtml?: string,
+  /**
+   * The site's own JavaScript (see collectFirstPartyJavaScript), for the checks that read a backend's
+   * address and keys. A production build keeps those in the bundle, not in the page, so a check that
+   * is given only `html` finds nothing to test. A promise so the checks that do not need it start at
+   * once while the scripts download.
+   */
+  siteCode?: Promise<string> | string,
 ): Promise<ScanVulnerability[]> {
   const passive: Array<[string, Promise<ScanVulnerability[]>]> = [
     ["sensitive file exposure", checkSensitiveFiles(targetUrl)],
@@ -74,6 +81,11 @@ export async function runAllProbes(
     ["security.txt", checkSecurityTxt(targetUrl)],
   ];
 
+  // The page plus the site's own scripts, for the Supabase check only: the other checks do not wait for the scripts.
+  const pageAndScripts = async () => {
+    try { return `${html}\n${(await siteCode) ?? ""}`; } catch { return html; }
+  };
+
   // Checks that can say they had nothing to test; read once the check settles.
   const supabaseNotTested: { value?: string } = {};
   const notTestedReasons = new Map([["Supabase RLS", supabaseNotTested]]);
@@ -84,7 +96,7 @@ export async function runAllProbes(
         ["active CORS", checkActiveCors(targetUrl)],
         ["open redirect", checkOpenRedirect(targetUrl)],
         // Reads rows out of the target's Supabase instance.
-        ["Supabase RLS", checkSupabaseRLS(html, (r) => { supabaseNotTested.value = r; })],
+        ["Supabase RLS", checkSupabaseRLS(pageAndScripts(), (r) => { supabaseNotTested.value = r; })],
       ]
     : [];
 

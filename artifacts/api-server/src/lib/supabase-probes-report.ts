@@ -2,13 +2,29 @@ import { vuln } from "./supabase-probes-core";
 import { extractServiceRoleKey } from "./supabase-probes-config";
 import type { ScanVulnerability } from "./scanner";
 
+/** What the Supabase check calls a service_role key it found in the page or its scripts. */
+export const SERVICE_ROLE_FROM_CHECK = "Supabase Service Role Key Exposed in Client-Side Code";
+/** What the secret scanner calls the same key (it also says which script held it). */
+export const SERVICE_ROLE_FROM_SCRIPTS = "Supabase Service Role Key Exposed in JavaScript";
+
+/**
+ * The secret scanner and the Supabase check each find a leaked service_role key, now that both read the
+ * bundle, and each reports it. One key is one finding: when the scanner has it (and it says which script
+ * held it), the check's copy is dropped.
+ */
+export function withoutRepeatedServiceRole(fromCheck: ScanVulnerability[], fromScripts: ScanVulnerability[]): ScanVulnerability[] {
+  return fromScripts.some((f) => f.name === SERVICE_ROLE_FROM_SCRIPTS)
+    ? fromCheck.filter((f) => f.name !== SERVICE_ROLE_FROM_CHECK)
+    : fromCheck;
+}
+
 /** A service-role key in client code bypasses Row Level Security entirely. */
 export function reportServiceRoleKey(content: string, findings: ScanVulnerability[]): void {
   const serviceKey = extractServiceRoleKey(content);
   if (serviceKey) {
     const short = serviceKey.slice(0, 12) + "…" + serviceKey.slice(-6);
     findings.push(vuln({
-      name: "Supabase Service Role Key Exposed in Client-Side Code",
+      name: SERVICE_ROLE_FROM_CHECK,
       severity: "critical",
       category: "Exposed Secrets / Credentials",
       description:
@@ -38,8 +54,11 @@ export function reportServiceRoleKey(content: string, findings: ScanVulnerabilit
 
 /** What the anonymous read and write tests found across the tables. */
 export interface TableProbeResults {
+  /** Tables whose rows are personal, secret or per-user (or whose class could not be told, in older callers). */
   openReadTables: string[];
   publicReadTables: string[];
+  /** Tables that returned rows but whose name and sampled columns say neither public nor sensitive. */
+  unclassifiedReadTables?: string[];
   emptyTables: string[];
   publicColumns: Map<string, string>;
   openWriteTables: string[];
@@ -52,6 +71,7 @@ export function reportTableFindings(
   findings: ScanVulnerability[],
 ): void {
   const { openReadTables, publicReadTables, emptyTables, publicColumns, openWriteTables, unconfirmedWrites, tables, projectRef, baseUrl } = results;
+  const unclassifiedReadTables = results.unclassifiedReadTables ?? [];
   // Report open read tables (data returned)
   if (openReadTables.length > 0) {
     findings.push(vuln({
@@ -118,6 +138,36 @@ export function reportTableFindings(
       cweId: null,
       cvssScore: 0,
       confidence: 60,
+    }));
+  }
+
+  // Rows came back, and nothing in the table's name or the sampled row says they are personal, secret or
+  // per-user (no email, token, password or owner column such as user_id), nor that they are catalogue
+  // content. That is a question for the owner, not a vulnerability: a table of announcements, a changelog or a
+  // list of countries looks exactly like this, and so does a table that should have been locked.
+  if (unclassifiedReadTables.length > 0) {
+    findings.push(vuln({
+      name: "Supabase Tables Readable Without Authentication (Not Classified)",
+      severity: "info",
+      category: "Broken Access Control",
+      description:
+        `${unclassifiedReadTables.length} Supabase table(s) return rows to the public anon key. Their names and the ` +
+        "columns of the sampled row do not mark them as personal, secret or per-user data (no email, token, " +
+        "password or owner column such as user_id), so this is not reported as a vulnerability, and nothing marks " +
+        "them as public catalogue content either. Whether anyone should be able to read them depends on what " +
+        "they hold. Confirm that each is meant to be readable by every visitor and that no draft, hidden or " +
+        "per-user rows are in it.",
+      evidence:
+        `Tables: ${unclassifiedReadTables.join(", ")}\n` +
+        `Sampled columns (${unclassifiedReadTables[0]}): ${publicColumns.get(unclassifiedReadTables[0]!) ?? ""}\n` +
+        `GET ${baseUrl}/rest/v1/${unclassifiedReadTables[0]}?select=*&limit=1 → HTTP 200 with rows`,
+      solution:
+        "If any of these tables should not be public, enable RLS and add a SELECT policy. " +
+        "For intentionally public content, restrict the policy to published rows " +
+        "(e.g. USING (published = true)) and keep write policies authenticated-only.",
+      cweId: null,
+      cvssScore: 0,
+      confidence: 40,
     }));
   }
 
