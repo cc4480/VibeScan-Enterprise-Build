@@ -180,13 +180,16 @@ export async function scanRepository(source: RepoSource, ref: RepoRef): Promise<
 
   const cap = leftOutByCap + overBytes;
   const coverage: RepoCoverage = { treeFiles: opened.tree.length, chosen: chosen.length, read: files.length, bytesRead, leftOutByCap: cap, tooLarge, truncatedTree: opened.truncated, failedReads, byCheck };
-  if (opened.truncated || cap > 0 || tooLarge > 0 || failedReads > 0 || (deps.considered > deps.looked)) {
+  // Files in the repository but none of a kind these checks read (a Python or Go project, say): nothing was tested.
+  const nothingRead = chosen.length === 0;
+  if (nothingRead || opened.truncated || cap > 0 || tooLarge > 0 || failedReads > 0 || (deps.considered > deps.looked)) {
     findings.push(repoFinding({
       ref, path: "(repository)", name: "GitHub source scan covered only part of the repository",
       severity: "info", category: "Scan Coverage", cweId: null, cvssScore: 0, confidence: 100,
       description: "The source-code scan reads a bounded, prioritised set of files and could not read all of the repository. Nothing found in the files it did read is a statement about the rest, so this result should not be read as a clean scan of the repository.",
       detail: [
         `Files read: ${files.length} of ${chosen.length} chosen (${opened.tree.length} in the repository, ${(bytesRead / 1e6).toFixed(1)} MB read)`,
+        ...(nothingRead ? ["No file in the repository is of a kind these checks read (JavaScript/TypeScript source, config and env files, SQL migrations, CI workflows, npm manifests), so nothing was tested"] : []),
         ...(cap > 0 ? [`Left out by the file and size limits: ${cap}`] : []),
         ...(tooLarge > 0 ? [`Over the ${MAX_FILE_BYTES / 1000} KB per-file limit: ${tooLarge}`] : []),
         ...(failedReads > 0 ? [`Could not be downloaded: ${failedReads}`] : []),

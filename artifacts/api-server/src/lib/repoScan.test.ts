@@ -151,6 +151,8 @@ describe("dangerous code patterns", () => {
       f(".env.example", `VITE_SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here`),
       f("src/lib/supabase.ts", `createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY)`),
       f("supabase/functions/x/index.ts", `Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")`),
+      // The name inside a string is documentation or a pattern list, not a read of the variable.
+      f("src/lib/patterns.ts", `{ description: "Never name a variable VITE_DATABASE_URL or VITE_SERVICE_ROLE_KEY; the build inlines it." }`),
     ], ref)).toEqual([]);
   });
 
@@ -252,6 +254,13 @@ describe("scanRepository", () => {
     const out = await scanRepository(memorySource(clean), ref);
     expect(out.findings).toEqual([]);
     expect(out.checks!.every((c) => c.files > 0)).toBe(true);
+  });
+
+  it("a repository with no file of a kind these checks read says nothing was tested, not that it is clean", async () => {
+    const out = await scanRepository(memorySource({ "app/main.py": "print(1)", "app/util.py": "x = 1", "README.md": "hi" }), ref);
+    const note = out.findings.find((v) => v.name === "GitHub source scan covered only part of the repository")!;
+    expect(note.evidence).toContain("nothing was tested");
+    expect(out.coverage).toMatchObject({ chosen: 0, read: 0 });
   });
 
   it("says a check had nothing to look at, rather than that it passed", async () => {

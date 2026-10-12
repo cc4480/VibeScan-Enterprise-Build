@@ -18,6 +18,8 @@ export const isEnvFilePath = (p: string) => /(?:^|\/)\.env(?:\.[\w.-]+)?$/i.test
 /** A client-exposed prefix on a name that says it is a secret. */
 const CLIENT_SECRET_NAME =
   /\b((?:VITE|NEXT_PUBLIC|REACT_APP|EXPO_PUBLIC|GATSBY|NUXT_PUBLIC|PUBLIC)_[A-Z0-9_]*(?:SERVICE_ROLE|SECRET|PRIVATE_?KEY|PASSWORD|PASSWD|ADMIN_?(?:KEY|TOKEN)|DB_URL|DATABASE_URL)[A-Z0-9_]*)\b/;
+/** The same name, read from the environment: import.meta.env.NAME, process.env.NAME, env["NAME"]. */
+const CLIENT_SECRET_READ = new RegExp(String.raw`\benv\s*(?:\.|\[\s*["'])` + CLIENT_SECRET_NAME.source);
 /** Names that merely mention the words and are public by design. */
 const PUBLIC_BY_DESIGN_NAME = /(?:PUBLISHABLE|ANON|PUBLIC_KEY|CLIENT_ID|SITE_KEY|RECAPTCHA|TURNSTILE|MEASUREMENT|SENTRY_DSN)/i;
 
@@ -38,9 +40,10 @@ const RULES: Rule[] = [
     name: "Secret Exposed Through a Client-Side Environment Prefix",
     test: (path, text) => {
       if (!isCodePath(path) && !isEnvFilePath(path)) return null;
-      const m = CLIENT_SECRET_NAME.exec(text);
+      const m = (isEnvFilePath(path) ? CLIENT_SECRET_NAME : CLIENT_SECRET_READ).exec(text);
       if (!m || PUBLIC_BY_DESIGN_NAME.test(m[1]!)) return null;
-      // In an env file the name must carry a value; in code, a reference to the name is the flaw.
+      // In an env file the name must carry a value; in code, reading the variable is the flaw. The name inside a
+      // string or comment (a scanner's own pattern list, documentation) reads nothing, so it is not one.
       if (isEnvFilePath(path)) {
         const line = new RegExp(`^\\s*${m[1]}\\s*=\\s*["']?([^\\s"']{8,})`, "m").exec(text);
         if (!line || isPlaceholderToken(line[1]!) || /^(?:your|changeme|example|todo|xxx)/i.test(line[1]!)) return null;
