@@ -48,6 +48,30 @@ export function ConfirmedFindings({ confirmedVulns, viewMode, groupedConfirmedVu
   );
 }
 
+/**
+ * Findings the owner has re-checked and verified as fixed. Collapsed by default: they are
+ * done, so they stay out of the way, but they are not hidden, and each card still shows
+ * the "Fixed and verified" result.
+ */
+export function FixedFindings({ fixedVulns, rootUrl }: { fixedVulns: Vulnerability[]; rootUrl: string }) {
+  return (
+    <details className="group rounded-xl border border-green-500/20 bg-green-500/[0.04]">
+      <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-2.5">
+        <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+        <span className="text-sm font-bold text-green-400">Fixed since this scan</span>
+        <span className="ml-auto text-xs text-green-400/60 font-medium">
+          {fixedVulns.length} finding{fixedVulns.length !== 1 ? "s" : ""} — verified by a re-check
+        </span>
+      </summary>
+      <div className="space-y-4 px-2 pb-3 pt-1">
+        {fixedVulns.map((v, i) => (
+          <VulnCard key={v.id} vuln={v} index={i} rootUrl={rootUrl} />
+        ))}
+      </div>
+    </details>
+  );
+}
+
 export function UnverifiedFindings({ unverifiedVulns, viewMode, groupedUnverifiedVulns, rootUrl }: {
   unverifiedVulns: Vulnerability[];
   viewMode: ViewMode;

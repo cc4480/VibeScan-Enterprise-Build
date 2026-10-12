@@ -5,7 +5,7 @@ import type { ReportCopyData } from "./report-viewer-copy";
 import type { ReportResponse, ReportPayload } from "./report-viewer-types";
 import { Vulnerability } from "@workspace/api-client-react";
 import { Link } from "wouter";
-import { Shield, Globe, Plus, HelpCircle, Bell, Search } from "lucide-react";
+import { Shield, Globe, Plus, HelpCircle, Bell, Search, CheckCircle2 } from "lucide-react";
 import { GradeRing, GRADE_HEX } from "@/components/grade-ring";
 import { scannedPagesLabel } from "@/lib/scanned-pages-label";
 import { SeverityLegend } from "./shared-report-components";
@@ -15,13 +15,15 @@ import { CopyReportButton } from "./report-viewer-copy";
 import { ShareButton } from "./report-viewer-share";
 
 /** The cover: grade ring, target, executive summary and the severity legend. */
-export function ReportCover({ report, summary, pagesScanned, severityCounts, categoryCounts, allUnverifiedVulns }: {
+export function ReportCover({ report, summary, pagesScanned, severityCounts, categoryCounts, allUnverifiedVulns, fixedNotice }: {
   report: ReportResponse;
   summary: NonNullable<ReportPayload["summary"]>;
   pagesScanned: ReportPayload["pagesScanned"];
   severityCounts: SeverityCounts;
   categoryCounts: Record<string, number>;
   allUnverifiedVulns: Vulnerability[];
+  /** Set when findings have been verified fixed since the scan; says what did and did not change. */
+  fixedNotice?: string | null;
 }) {
   // The same rule the ring uses: a grade outside A to F means no real grade was
   // given, which is what a bot-protection interception produces ("N/A").
@@ -53,6 +55,12 @@ export function ReportCover({ report, summary, pagesScanned, severityCounts, cat
         <div className="mt-5">
           <SeverityLegend counts={severityCounts} />
         </div>
+        {fixedNotice && (
+          <div className="mt-3 inline-flex items-start gap-2 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/25 text-xs text-green-300 text-left">
+            <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            {fixedNotice}
+          </div>
+        )}
         <SummaryNewFindings categories={categoryCounts} />
         {allUnverifiedVulns.length > 0 && (
           <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-xs text-amber-300">

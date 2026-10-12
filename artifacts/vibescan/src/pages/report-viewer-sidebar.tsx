@@ -1,3 +1,4 @@
+import { outdatedAnalysisNote } from "@/lib/fixed-findings";
 import type { ReportPayload, AiAnalysisData } from "./report-viewer-types";
 import { Vulnerability } from "@workspace/api-client-react";
 import { Server, Lock, Activity, Filter } from "lucide-react";
@@ -74,7 +75,9 @@ export function CategoryBreakdownCard({ sortedCategories, categoryCounts, visibl
 }
 
 /** The written analysis: overall risk, priorities, quick wins, compliance notes. */
-export function AiAnalysisCard({ aiAnalysis }: { aiAnalysis: AiAnalysisData }) {
+/** `fixedCount`: findings verified fixed since the scan; the analysis was written before them. */
+export function AiAnalysisCard({ aiAnalysis, fixedCount = 0 }: { aiAnalysis: AiAnalysisData; fixedCount?: number }) {
+  const outdated = outdatedAnalysisNote(fixedCount);
   return (
     <div className="glass-card rounded-2xl p-6 border-t-4 border-t-primary">
       <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
@@ -85,6 +88,7 @@ export function AiAnalysisCard({ aiAnalysis }: { aiAnalysis: AiAnalysisData }) {
         <div>
           <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Overall Risk</h4>
           <p className="text-sm">{aiAnalysis.overallRisk}</p>
+          {outdated && <p className="mt-2 text-xs text-amber-300/80">{outdated}</p>}
         </div>
 
         <div>
