@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { Vulnerability } from "@workspace/api-client-react";
 import { getCategoryMeta, SEVERITY_ORDER } from "./report-viewer-data";
 import { VulnCard } from "./report-viewer-vuln";
+import { NEW_CATEGORY_LABELS } from "@/lib/summary-category-labels";
 
 // ─── Grouped category section ─────────────────────────────────────────────────
 
@@ -97,25 +98,6 @@ export function CategoryPill({
 
 // ─── Summary new-findings callout ─────────────────────────────────────────────
 
-export const NEW_CATEGORY_LABELS: Record<string, string> = {
-  "Email Security":                  "email spoofing risks",
-  "Source Code Exposure":            "exposed source code",
-  "Credential Exposure":             "exposed credentials",
-  "Data Exposure":                   "exposed data files",
-  "Exposed Secrets / Credentials":   "hardcoded secrets in JavaScript",
-  "CORS Misconfiguration":           "CORS bypass issues",
-  "Unvalidated Redirects":           "open redirect vulnerabilities",
-  "HTTP Security":                   "dangerous HTTP methods",
-  "Supply Chain Security":           "supply chain weaknesses",
-  "Session Management":              "JWT / session token weaknesses",
-  "Brute Force Protection":          "missing rate limiting",
-  "DNS Security":                    "DNS security issues",
-  "Information Disclosure":          "information disclosure (robots.txt, error pages, exposed files)",
-  "Transport Security":              "transport security issues (HTTP redirect, HSTS)",
-  "UI Security":                     "UI security gaps (clickjacking protection)",
-  "Security Header Inconsistency":   "header inconsistencies across pages",
-  "Outdated Software / Known CVE":   "outdated software with known CVEs",
-};
 
 export function SummaryNewFindings({ categories }: { categories: Record<string, number> }) {
   const notable = Object.entries(NEW_CATEGORY_LABELS)
