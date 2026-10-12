@@ -4,14 +4,16 @@ import { ReportLoading, ReportLoadFailure, UndoToast } from "./report-viewer-sta
 import { ReportCover, ReportActionButtons, MonitorCta, ScanAnotherCta } from "./report-viewer-cover";
 import { VerifyBanner } from "./report-viewer-verify";
 import { FindingsHeading, SeverityBadges, SortViewToggles, CategoryFilterPills, AccuracyBar } from "./report-viewer-filters";
-import { ConfirmedFindings, UnverifiedFindings, EmptyFindings, ScanNotes } from "./report-viewer-findings";
+import { ConfirmedFindings, FixedFindings, UnverifiedFindings, EmptyFindings, ScanNotes } from "./report-viewer-findings";
 import { CategoryBreakdownCard, AiAnalysisCard, TechProfileCard } from "./report-viewer-sidebar";
 import { useGetReport, getGetReportQueryKey, useGetCurrentAuthUser } from "@workspace/api-client-react";
 import { useRoute, Link } from "wouter";
 import { ArrowLeft } from "lucide-react";
 import { ReportChangesCard } from "@/components/report-changes-card";
 import type { ScanChanges } from "@/lib/report-changes";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useVerifications } from "@/lib/use-verifications";
+import { fixedFindingIds, fixedNotice, latestFixDate, subtractFixed } from "@/lib/fixed-findings";
 import { useSeo } from "@/lib/seo";
 import { ComplianceCard, CoverageCard, type CoverageTest } from "./shared-report-components";
 import { ReportTestsContext, WithheldCard, type Interception } from "./report-viewer-provenance";
@@ -52,12 +54,16 @@ export default function ReportViewer() {
     dismissedFps, vulnFpMap, optimisticDismissKeys, undoToast, setUndoToast, undoToastTimerRef, dismissFinding, undismissFinding,
   } = useReportDismissals(report?.targetUrl, vulnerabilities);
 
+  // Re-check results: findings verified fixed leave the open lists (see lib/fixed-findings.ts).
+  const verifications = useVerifications(reportId).data?.verifications;
+  const fixedIds = useMemo(() => fixedFindingIds(verifications), [verifications]);
+
   // All hooks must come before any early returns
   const {
-    findings, scanNotes, categoryCounts, sortedCategories, visibleVulns, dismissedCount, filteredVulns, confirmedVulns,
+    findings, scanNotes, fixedVulns, categoryCounts, sortedCategories, visibleVulns, dismissedCount, filteredVulns, confirmedVulns,
     unverifiedVulns, groupedConfirmedVulns, groupedUnverifiedVulns, allConfirmedVulns, allUnverifiedVulns,
     confirmedSeverityCounts, unverifiedSeverityCounts,
-  } = useVulnGroups({ vulnerabilities, sortBy, activeCategory, dismissedFps, vulnFpMap, optimisticDismissKeys });
+  } = useVulnGroups({ vulnerabilities, sortBy, activeCategory, dismissedFps, vulnFpMap, optimisticDismissKeys, fixedIds });
 
   if (isLoading) return <ReportLoading />;
   if (error || !report || !summary) {
@@ -76,13 +82,18 @@ export default function ReportViewer() {
   // What changed since the last scan of this site (computed by the server; absent for a first scan).
   const changes = (report.data as { changes?: ScanChanges | null }).changes ?? null;
 
-  const severityCounts = {
-    critical: summary.critical,
-    high: summary.high,
-    medium: summary.medium,
-    low: summary.low,
-    info: summary.info,
-  };
+  // The scan's own counts, less what has since been verified fixed. The grade is not recomputed.
+  const severityCounts = subtractFixed(
+    {
+      critical: summary.critical,
+      high: summary.high,
+      medium: summary.medium,
+      low: summary.low,
+      info: summary.info,
+    },
+    fixedVulns,
+  );
+  const fixedCover = fixedNotice(fixedVulns.length, latestFixDate(verifications));
 
   const copyData: ReportCopyData = {
     targetUrl: report.targetUrl,
@@ -182,6 +193,7 @@ export default function ReportViewer() {
         severityCounts={severityCounts}
         categoryCounts={categoryCounts}
         allUnverifiedVulns={allUnverifiedVulns}
+        fixedNotice={fixedCover}
       />
 
       {/* What is waiting on domain verification, directly under the grade: the coverage card
@@ -208,6 +220,7 @@ export default function ReportViewer() {
           {unverifiedVulns.length > 0 && (
             <UnverifiedFindings unverifiedVulns={unverifiedVulns} viewMode={viewMode} groupedUnverifiedVulns={groupedUnverifiedVulns} rootUrl={report.targetUrl} />
           )}
+          {fixedVulns.length > 0 && <FixedFindings fixedVulns={fixedVulns} rootUrl={report.targetUrl} />}
           <EmptyFindings filteredVulns={filteredVulns} activeCategory={activeCategory} vulnerabilities={findings} scanNotes={scanNotes} />
           {scanNotes.length > 0 && <ScanNotes scanNotes={scanNotes} rootUrl={report.targetUrl} />}
         </div>
@@ -229,7 +242,7 @@ export default function ReportViewer() {
           )}
 
           {/* AI Analysis */}
-          {aiAnalysis && <AiAnalysisCard aiAnalysis={aiAnalysis} />}
+          {aiAnalysis && <AiAnalysisCard aiAnalysis={aiAnalysis} fixedCount={fixedVulns.length} />}
 
           {/* Compliance mapping — which controls these findings are evidence
               for. Same component the shared report uses; renders nothing when

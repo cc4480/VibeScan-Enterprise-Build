@@ -141,18 +141,30 @@ export function useVulnGroups(input: {
   dismissedFps: Set<string>;
   vulnFpMap: Map<string, string>;
   optimisticDismissKeys: Set<string>;
+  /** Ids of findings whose latest re-check says fixed. They leave the open lists and counts. */
+  fixedIds?: ReadonlySet<string>;
 }) {
   const { vulnerabilities, sortBy, activeCategory, dismissedFps, vulnFpMap, optimisticDismissKeys } = input;
+  const fixedIds = input.fixedIds;
   const { findings, notes } = useMemo(() => splitScanNotes(vulnerabilities), [vulnerabilities]);
-  const sortedVulns = useMemo(() => sortVulns(findings, sortBy), [findings, sortBy]);
+  const allSortedVulns = useMemo(() => sortVulns(findings, sortBy), [findings, sortBy]);
+  // Verified fixed: shown in their own section, not in the open lists or counts below.
+  const fixedVulns = useMemo(
+    () => (fixedIds && fixedIds.size > 0 ? allSortedVulns.filter((v) => fixedIds.has(v.id)) : []),
+    [allSortedVulns, fixedIds],
+  );
+  const sortedVulns = useMemo(
+    () => (fixedVulns.length > 0 ? allSortedVulns.filter((v) => !fixedIds!.has(v.id)) : allSortedVulns),
+    [allSortedVulns, fixedVulns, fixedIds],
+  );
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const v of findings) {
+    for (const v of sortedVulns) {
       counts[v.category] = (counts[v.category] ?? 0) + 1;
     }
     return counts;
-  }, [findings]);
+  }, [sortedVulns]);
 
   const sortedCategories = useMemo(
     () => Object.entries(categoryCounts).sort((a, b) => b[1] - a[1]).map(([c]) => c),
@@ -229,7 +241,7 @@ export function useVulnGroups(input: {
   }, [allUnverifiedVulns]);
 
   return {
-    findings, scanNotes, sortedVulns, categoryCounts, sortedCategories, visibleVulns, dismissedCount, filteredVulns, confirmedVulns,
+    findings, scanNotes, sortedVulns, fixedVulns, categoryCounts, sortedCategories, visibleVulns, dismissedCount, filteredVulns, confirmedVulns,
     unverifiedVulns, groupedConfirmedVulns, groupedUnverifiedVulns, allConfirmedVulns, allUnverifiedVulns,
     confirmedSeverityCounts, unverifiedSeverityCounts,
   };

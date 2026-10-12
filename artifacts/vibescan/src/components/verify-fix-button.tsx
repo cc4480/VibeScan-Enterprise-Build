@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useParams } from "wouter";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { CheckCircle2, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { anyPending, refusalMessage, viewOf, type VerificationStatus } from "@/lib/verify-fix";
+import { refusalMessage, viewOf } from "@/lib/verify-fix";
+import { useVerifications } from "@/lib/use-verifications";
 
 const TONE: Record<string, string> = {
   idle: "border-white/10 bg-white/[0.02]",
@@ -25,13 +26,7 @@ export function VerifyFixButton({ findingId }: { findingId: string }) {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const query = useQuery({
-    queryKey: ["verifications", reportId],
-    queryFn: () => customFetch<{ verifications: VerificationStatus[] }>(`/api/reports/${reportId}/verifications`),
-    enabled: Boolean(reportId),
-    // Poll only while a check is running.
-    refetchInterval: (q) => (anyPending(q.state.data?.verifications) ? 3000 : false),
-  });
+  const query = useVerifications(reportId);
   const status = query.data?.verifications.find((v) => v.findingId === findingId);
   const view = viewOf(status, starting);
 
