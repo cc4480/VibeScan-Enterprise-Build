@@ -72,8 +72,10 @@ export const GENERIC_SECRET_PATTERNS: SecretPattern[] = [
     severity: "low", cvssScore: 3.1, cweId: "CWE-200",
     description: "An internal/private IP address was found referenced in JavaScript source code in a configuration context. This reveals internal network topology, making lateral movement easier if an attacker gains any foothold.",
     solution: "Remove internal IP references from client-side code. Replace hardcoded IPs with environment-variable-driven configuration on the server side. Review your build process to ensure internal infrastructure details don't leak into production bundles.",
-    validate: (m) => {
-      // Skip clearly benign/example contexts
+    validate: (m, before = "") => {
+      // Skip clearly benign/example contexts. The match is only the quote and the address, so what
+      // says "example" is the field name just before it (`example:"10.1.2.80"` in a library's metadata).
+      if (/\b(?:examples?|samples?|demo|placeholder|e\.g\.?|eg)\W{0,3}$/i.test(before)) return false;
       if (/example|sample|demo|placeholder|comment|doc|test/i.test(m)) return false;
       if (/192\.168\.1\.(1|0|255)\b/.test(m) && /(?:gateway|router|default)/i.test(m)) return false;
       return true;

@@ -16,7 +16,9 @@ export interface SecretPattern {
   solution: string;
   cweId: string;
   // Return false to suppress a match (false positive filter)
-  validate?: (match: string) => boolean;
+  // `before` is up to 60 characters of the text that precedes the match, for validators that
+  // need to see what the value is the value OF (an `example:` field, say).
+  validate?: (match: string, before?: string) => boolean;
   /**
    * Set for patterns that recognise a value by the NAME it is assigned to (password, secret, apiKey)
    * rather than by a vendor's token format. In a third party's script that name is the vendor's own

@@ -118,3 +118,18 @@ describe("a service_role key is recognised by its role claim, not by what it is 
     expect(hits).toEqual(["Hardcoded JWT Token in Source"]);
   });
 });
+
+describe("an address that a library gives as an example is not an exposed internal host", () => {
+  // squarespace.com, once whole bundles were read: Sentry's semantic-convention metadata inside its first-party bundle.
+  const names = (code: string) => scanContent(code).map((h) => h.pattern.name);
+
+  it("skips example: and sample: values", () => {
+    expect(names(`{key:"net.host.ip",visibility:"public",example:"10.1.2.80",aliases:["net.host.ip"]}`)).not.toContain("Internal IP Address Exposed");
+    expect(names(`sample: '192.168.4.20'`)).not.toContain("Internal IP Address Exposed");
+  });
+
+  it("still reports a configured internal host", () => {
+    expect(names(`const cfg={host:"10.1.2.80",port:5432}`)).toContain("Internal IP Address Exposed");
+    expect(names(`{url:"192.168.4.20"}`)).toContain("Internal IP Address Exposed");
+  });
+});

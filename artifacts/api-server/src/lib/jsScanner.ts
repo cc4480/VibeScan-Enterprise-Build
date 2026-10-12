@@ -132,7 +132,7 @@ export function scanContent(content: string): Array<{ pattern: SecretPattern; ma
     let m: RegExpExecArray | null;
     while ((m = globalPattern.exec(content)) !== null) {
       const match = m[0];
-      if (p.validate && !p.validate(match)) continue;
+      if (p.validate && !p.validate(match, content.slice(Math.max(0, m.index - 60), m.index))) continue;
       // Filler in a vendor token's shape (sk_live_xxxxxxxx, ghp_0000..., Slack's documented webhook)
       // is a template, not a credential: see secretPlaceholders.ts.
       if (!p.skipPlaceholderCheck && isPlaceholderToken(match)) continue;
