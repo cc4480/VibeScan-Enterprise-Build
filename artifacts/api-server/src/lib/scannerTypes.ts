@@ -110,6 +110,8 @@ export interface RunScanExtras {
    * per scan, supplied by the user.
    */
   githubRepoUrl?: string;
+  /** GitHub App installation token for a private repository the owner connected. In memory only; never stored. */
+  githubAccessToken?: string;
   /**
    * Explicit, scan-by-scan opt-in for the active race-condition probe (see
    * raceConditionProbe.ts for why this is not on by default). Defaults to

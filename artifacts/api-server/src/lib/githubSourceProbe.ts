@@ -56,7 +56,7 @@ function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
 }
 
 /** A GitHub answer, fully read: the body is part of the request and runs under the same timeout. */
-interface GithubReply {
+export interface GithubReply {
   ok: boolean;
   status: number;
   rateLimitRemaining: string | null;
@@ -64,7 +64,7 @@ interface GithubReply {
   data: unknown;
 }
 
-async function githubGet(url: string, as: "json" | "text", timeoutMs: number): Promise<GithubReply | null> {
+export async function githubGet(url: string, as: "json" | "text", timeoutMs: number, extraHeaders: Record<string, string> = {}): Promise<GithubReply | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   // The abort rejects a real body read, but not every Response implementation, so it is raced explicitly.
@@ -72,7 +72,7 @@ async function githubGet(url: string, as: "json" | "text", timeoutMs: number): P
   deadline.catch(() => {});
   try {
     const res = await fetch(url, {
-      headers: { Accept: "application/vnd.github+json", "User-Agent": "SecScan" },
+      headers: { Accept: "application/vnd.github+json", "User-Agent": "SecScan", ...extraHeaders },
       signal: controller.signal,
     });
     const data = await Promise.race([as === "json" ? res.json() : res.text(), deadline]).catch((err: unknown) => {
@@ -110,7 +110,7 @@ interface TreeEntry {
  * answers 403 (and 451, 401), and calling that "rate limited" is a false statement about it. A 403
  * with no evidence either way keeps the old reading, since a limit is by far its commonest cause.
  */
-function whyNotOk(res: GithubReply, missing: GithubScanOutcome["status"]): GithubScanOutcome["status"] {
+export function whyNotOk(res: GithubReply, missing: GithubScanOutcome["status"]): GithubScanOutcome["status"] {
   if (res.status === 404) return missing;
   if (res.status === 429) return "rate_limited";
   if (res.status === 403) {
