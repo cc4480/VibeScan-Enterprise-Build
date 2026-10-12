@@ -25,7 +25,11 @@ export async function buildReport(input: {
   // grade becomes the sentinel the report and dashboard render as "coverage
   // incomplete".
   const intercepted = scanResult.intercepted;
-  const grade = gradeForResult(riskScore, intercepted);
+  // A start page that was itself an error (404, 500...) describes the error page, not the app: its page-level
+  // findings are capped to information (capFindingsReadFromErrorPage), so a letter grade would read "good" for a
+  // site that was never looked at. The findings that were made stay in the report; the grade does not.
+  const startedOnError = !intercepted && typeof scanResult.statusCode === "number" && scanResult.statusCode >= 400;
+  const grade = gradeForResult(riskScore, intercepted || startedOnError);
 
   // The scan's own notes stay in the stored list, so they travel with the report, but they are not
   // findings about the site: none of the counts below includes them (see scanNotes.ts). They are Info,
@@ -55,6 +59,11 @@ export async function buildReport(input: {
         : interceptionKind === "app not running"
           ? `Check that the app is deployed and running at this address, then re-scan.`
           : `To grade the site, allow the scanner through the challenge (by source IP or User-Agent) or verify domain ownership, then re-scan.`)
+    : startedOnError
+    ? `The scan of ${(() => { try { return new URL(targetUrl).hostname; } catch { return targetUrl; } })()} started on an error page ` +
+      `(HTTP ${scanResult.statusCode}), so no grade could be assigned: what the page-level checks read was the error page, not the app. ` +
+      `The checks that do not depend on that page (DNS, email authentication, mail transport, and what the crawl and probes reached) are reported below. ` +
+      `This is an incomplete result, not a clean one. Scan an address that serves the app, such as its home page, to get a grade.`
     : buildExecutiveSummary(
         grade,
         riskScore,

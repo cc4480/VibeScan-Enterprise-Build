@@ -54,6 +54,17 @@ describe("buildReport counts findings about the site, not the scan's own notes",
     expect(out.executiveSummary).toContain("identified 1 security finding, none of them critical or high");
   });
 
+  it("does not grade a scan that started on an error page, and says why; the same findings on a 200 page are graded", async () => {
+    const findings = [vuln("a", "low")];
+    const err = await build(findings, { statusCode: 404 });
+    expect(err.grade).toBe("N/A");
+    expect(err.executiveSummary).toContain("started on an error page (HTTP 404)");
+    expect(err.reportData.summary.totalVulnerabilities).toBe(1);
+    const ok = await build(findings, { statusCode: 200 });
+    expect(ok.grade).not.toBe("N/A");
+    expect(ok.executiveSummary).not.toContain("error page");
+  });
+
   it("reports no findings for a scan a sign-in page answered, and still does not grade it", async () => {
     const out = await build([note("n1"), note("n2")], { intercepted: true, interception: { kind: "sign-in wall", vendor: null } });
     expect(out.reportData.summary).toMatchObject({ totalVulnerabilities: 0, info: 0, grade: "N/A", intercepted: true });

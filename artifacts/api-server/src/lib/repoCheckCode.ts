@@ -25,7 +25,8 @@ const PUBLIC_BY_DESIGN_NAME = /(?:PUBLISHABLE|ANON|PUBLIC_KEY|CLIENT_ID|SITE_KEY
 
 interface Rule {
   name: string;
-  test: (path: string, text: string) => { detail: string } | null;
+  /** `deliberate`: the code around the match says the pattern is intended; reported as information, not as a flaw. */
+  test: (path: string, text: string) => { detail: string; deliberate?: string } | null;
   severity: ScanVulnerability["severity"];
   category: string;
   cweId: string;
@@ -93,7 +94,13 @@ const RULES: Rule[] = [
     test: (path, text) => {
       if (!isCodePath(path)) return null;
       const m = /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*["']?0/.exec(text);
-      return m ? { detail: `Code: ${m[0]}` } : null;
+      if (!m) return null;
+      // A probe that reads the certificate, or a comment beside the line saying it is on purpose, is not the flaw this
+      // rule is about (trusting a server without checking who it is). The comment has to be within a few lines.
+      const lines = text.slice(0, m.index).split("\n");
+      const near = [...lines.slice(-6), ...text.slice(m.index).split("\n").slice(0, 3)].join("\n");
+      const said = /\b(?:deliberate(?:ly)?|intentional(?:ly)?|on purpose|self-signed|observed,? not trusted|cert(?:ificate)? is (?:observed|inspected|being (?:read|checked)))\b|getPeerCertificate/i.exec(near);
+      return { detail: `Code: ${m[0]}`, ...(said ? { deliberate: said[0] } : {}) };
     },
     severity: "medium", category: "Transport Security", cweId: "CWE-295", cvssScore: 5.9, confidence: 75,
     description: "Certificate verification is switched off for outgoing connections, so anyone able to intercept the traffic can impersonate the server the code talks to and read or change what it sends, including credentials.",
@@ -122,8 +129,10 @@ export function codePatternFindings(files: RepoFile[], ref: RepoRef): ScanVulner
       const key = `${rule.name}|${f.path}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push(repoFinding({ ref, path: f.path, name: rule.name, severity: rule.severity, category: rule.category, cweId: rule.cweId,
-        cvssScore: rule.cvssScore, confidence: rule.confidence, description: rule.description, detail: hit.detail, solution: rule.solution }));
+      out.push(repoFinding({ ref, path: f.path, name: rule.name, severity: hit.deliberate ? "info" : rule.severity, category: rule.category, cweId: rule.cweId,
+        cvssScore: hit.deliberate ? 0 : rule.cvssScore, confidence: hit.deliberate ? 40 : rule.confidence, description: rule.description,
+        detail: hit.deliberate ? `${hit.detail}\nNearby code says this is intended ("${hit.deliberate}"), so it is shown as information. Check that the connection never carries credentials or data an attacker could use.` : hit.detail,
+        solution: rule.solution }));
     }
   }
   return out;

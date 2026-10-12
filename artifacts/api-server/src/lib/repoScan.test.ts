@@ -156,6 +156,20 @@ describe("dangerous code patterns", () => {
     ], ref)).toEqual([]);
   });
 
+  it("TLS verification off: a flaw when nothing says otherwise, information when the code beside it says it is deliberate or reads the certificate", () => {
+    const bare = codePatternFindings([f("src/api.ts", `const agent = new https.Agent({ rejectUnauthorized: false });\nawait fetch(url, { agent, headers: { Authorization: token } });`)], ref);
+    expect(bare.map((v) => v.severity)).toEqual(["medium"]);
+    const said = codePatternFindings([
+      f("src/probe.ts", `// The cert is observed, not trusted: this host is operator-scoped.\nrejectUnauthorized: false,`),
+      f("src/expiry.ts", `const socket = tls.connect({ host, port, rejectUnauthorized: false }, () => { const c = socket.getPeerCertificate(); });`),
+    ], ref);
+    expect(said.map((v) => v.severity)).toEqual(["info", "info"]);
+    expect(said[0]!.evidence).toContain("shown as information");
+    // A comment far from the line does not excuse it.
+    const far = codePatternFindings([f("src/a.ts", `// deliberate choice of library\n${"const x = 1;\n".repeat(20)}rejectUnauthorized: false`)], ref);
+    expect(far.map((v) => v.severity)).toEqual(["medium"]);
+  });
+
   it("flags eval on request data, SQL built from it, wildcard CORS with credentials, TLS verification off", () => {
     const out = codePatternFindings([
       f("server/a.ts", "app.post('/x', (req, res) => { eval(req.body.code) })"),
