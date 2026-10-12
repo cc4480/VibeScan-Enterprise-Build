@@ -332,3 +332,72 @@ describe("a table whose name says nothing", () => {
     expect(out[0]!.confidence).toBeLessThanOrEqual(40);
   });
 });
+
+describe("what the first Lovable-shaped repository showed was missing", () => {
+  const sev = (v: Array<{ severity: string }>) => v.map((x) => x.severity);
+
+  it("a public insert-only policy (a contact form) is low; an open update, delete or all-commands policy stays high", () => {
+    const form = supabaseMigrationFindings([f("supabase/migrations/1_a.sql",
+      `create table public.contact_messages (id int, message text);\nalter table public.contact_messages enable row level security;\ncreate policy "Anyone can send a message" on public.contact_messages for insert to anon, authenticated with check (true);`)], ref);
+    expect(names(form)).toEqual([`Supabase Policy Lets Anyone Insert "contact_messages"`]);
+    expect(sev(form)).toEqual(["low"]);
+    const open = supabaseMigrationFindings([f("supabase/migrations/1_a.sql",
+      `create table public.notes (id int);\nalter table public.notes enable row level security;\ncreate policy "all" on public.notes for all to anon using (true) with check (true);\ncreate policy "upd" on public.notes for update to anon using (true);`)], ref);
+    expect(sev(open)).toEqual(["high", "high"]);
+  });
+
+  it("SECURITY DEFINER without a pinned search_path is reported; pinned before or after the body, or SECURITY INVOKER, is not", () => {
+    const bad = supabaseMigrationFindings([f("supabase/migrations/1_a.sql",
+      `create or replace function public.handle_new_user() returns trigger language plpgsql security definer as $$ begin insert into public.profiles(id) values (new.id); return new; end; $$;`)], ref);
+    expect(names(bad)).toEqual(["Supabase Function Runs With Its Owner's Rights and No Pinned search_path"]);
+    expect(bad[0]!.evidence).toContain("handle_new_user");
+    const fine = supabaseMigrationFindings([
+      f("supabase/migrations/1_a.sql", `create function public.a() returns trigger language plpgsql security definer set search_path = '' as $$ begin return new; end; $$;`),
+      f("supabase/migrations/2_b.sql", `create function public.b() returns trigger as $fn$ begin return new; end; $fn$ language plpgsql security definer set search_path = public;`),
+      f("supabase/migrations/3_c.sql", `create function public.c() returns int language sql security invoker as $$ select 1 $$;`),
+      f("supabase/migrations/4_d.sql", `create function private.d() returns int language sql security definer as $$ select 1 $$;`),
+    ], ref);
+    expect(names(fine)).toEqual([]);
+  });
+
+  it("a view without security_invoker is reported (medium over an RLS table, low otherwise); with it, not", () => {
+    const rls = supabaseMigrationFindings([f("supabase/migrations/1_a.sql",
+      `create table public.orders (id int, user_id uuid);\nalter table public.orders enable row level security;\ncreate view public.order_summary as select id, user_id from public.orders;`)], ref);
+    expect(names(rls)).toEqual(["Supabase View Bypasses Row Level Security (no security_invoker)"]);
+    expect(sev(rls)).toEqual(["medium"]);
+    const norls = supabaseMigrationFindings([f("supabase/migrations/1_a.sql",
+      `create table public.orders (id int);\ncreate view public.v as select id from public.orders;`)], ref);
+    expect(sev(norls.filter((v) => v.name.startsWith("Supabase View")))).toEqual(["low"]);
+    const fine = supabaseMigrationFindings([f("supabase/migrations/1_a.sql",
+      `create table public.orders (id int, user_id uuid);\nalter table public.orders enable row level security;\ncreate view public.order_summary with (security_invoker = true) as select id from public.orders;`)], ref);
+    expect(names(fine)).toEqual([]);
+  });
+
+  it("a storage SELECT policy open to anon with no owner check is reported; owner-scoped, authenticated-only or insert-only is not", () => {
+    const bad = supabaseMigrationFindings([f("supabase/migrations/1_a.sql",
+      `create policy "Avatar images are publicly accessible" on storage.objects for select using (bucket_id = 'avatars');`)], ref);
+    expect(names(bad)).toEqual([`Supabase Storage Policy Lets Anyone List and Read Bucket "avatars"`]);
+    const fine = supabaseMigrationFindings([f("supabase/migrations/1_a.sql", [
+      `create policy "own" on storage.objects for select to authenticated using (bucket_id = 'avatars' and (storage.foldername(name))[1] = (select auth.uid())::text);`,
+      `create policy "up" on storage.objects for insert to authenticated with check (bucket_id = 'avatars');`,
+      `create policy "anon but owned" on storage.objects for select to anon using (bucket_id = 'x' and owner = auth.uid());`,
+    ].join("\n"))], ref);
+    expect(names(fine)).toEqual([]);
+  });
+
+  it("verify_jwt = false: a function that checks the Stripe signature is fine; one that does not is a high-severity unsigned webhook; the comment 'no signature check' does not count", () => {
+    const toml = f("supabase/config.toml", "[functions.stripe-webhook]\nverify_jwt = false\n");
+    const signed = f("supabase/functions/stripe-webhook/index.ts", `const event = await stripe.webhooks.constructEventAsync(body, req.headers.get("Stripe-Signature"), secret);`);
+    expect(ciConfigFindings([toml, signed], ref)).toEqual([]);
+    const unsigned = f("supabase/functions/stripe-webhook/index.ts", `// Accepts any POST as a Stripe event: there is no signature check.\nconst event = await req.json();`);
+    const out = ciConfigFindings([toml, unsigned], ref);
+    expect(names(out)).toEqual(["Webhook Edge Function Accepts Unsigned Requests"]);
+    expect(sev(out)).toEqual(["high"]);
+    // Not a webhook by name, no auth in code: the generic finding. Code not read: the generic finding too.
+    const inv = f("supabase/config.toml", "[functions.get-invoice]\nverify_jwt = false\n");
+    expect(names(ciConfigFindings([inv, f("supabase/functions/get-invoice/index.ts", `const { data } = await admin.from("invoices").select("*");`)], ref))).toEqual(["Supabase Edge Functions Configured Without JWT Verification"]);
+    expect(names(ciConfigFindings([inv], ref))).toEqual(["Supabase Edge Functions Configured Without JWT Verification"]);
+    // The caller's JWT resolved to a user is authentication.
+    expect(ciConfigFindings([inv, f("supabase/functions/get-invoice/index.ts", `const { data: u } = await supabase.auth.getUser();`)], ref)).toEqual([]);
+  });
+});

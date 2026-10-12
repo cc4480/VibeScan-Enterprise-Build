@@ -101,16 +101,57 @@ export function functionsWithoutJwt(toml: string): string[] {
   return names;
 }
 
-function supabaseConfigFindings(f: RepoFile, ref: RepoRef): ScanVulnerability[] {
+/** `supabase/functions/<name>/index.ts` (or .js, .mjs): the code of an edge function. */
+export const isFunctionCodePath = (p: string) => /(?:^|\/)supabase\/functions\/[\w-]+\/index\.[mc]?[jt]sx?$/i.test(p);
+
+const withoutComments = (code: string) => code.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:"'])\/\/[^\n]*/g, "$1");
+
+/**
+ * The function checks who is calling: a webhook signature, an HMAC compared in constant time, or the caller's own JWT
+ * resolved to a user. Looked for in code with the comments taken out, so "there is no signature check" does not count.
+ */
+export function authenticatesCaller(code: string): boolean {
+  return /constructEvent(?:Async)?\s*\(|webhooks\s*\.\s*verify|verifyWebhook|\bsvix\b|timingSafeEqual|createHmac|\bhmac\b|x-hub-signature|stripe-signature|x-signature|\.auth\s*\.\s*getUser\s*\(|\bjwt\s*\.\s*verify|jwtVerify|verifyJwt/i
+    .test(withoutComments(code));
+}
+
+const WEBHOOK_NAME = /webhook|hook|stripe|paddle|clerk|svix|github|polar|lemon/i;
+
+/** supabase/config.toml: functions with verify_jwt = false, judged by what their own code does where it was read. */
+function supabaseConfigFindings(f: RepoFile, ref: RepoRef, files: RepoFile[]): ScanVulnerability[] {
   const names = functionsWithoutJwt(f.content);
   if (names.length === 0) return [];
-  return [repoFinding({
-    ref, path: f.path, name: "Supabase Edge Functions Configured Without JWT Verification",
-    severity: "medium", category: "Broken Access Control", cweId: "CWE-306", cvssScore: 6.5, confidence: 55, wstgId: "WSTG-ATHZ-01",
-    description: `${names.length} edge function(s) have verify_jwt = false: ${names.join(", ")}. Supabase then lets anyone call them without signing in. That is intended for webhooks that authenticate another way (a Stripe signature, say) and a hole for anything else, such as a function that returns a user's records by id.`,
-    detail: `Functions: ${names.join(", ")}`,
-    solution: "Remove verify_jwt = false unless the function authenticates the caller itself. For webhooks, verify the provider's signature in the function and keep verify_jwt = false only there; for the rest, leave JWT verification on and check the user inside.",
-  })];
+  const root = f.path.replace(/supabase\/config\.toml$/i, "");
+  const codeOf = (n: string) => files.find((x) => isFunctionCodePath(x.path) && x.path.toLowerCase().startsWith(`${root}supabase/functions/${n}/index.`.toLowerCase()));
+  const authenticated: string[] = [];
+  const unsignedWebhooks: string[] = [];
+  const open: string[] = [];
+  for (const n of names) {
+    const code = codeOf(n);
+    if (code && authenticatesCaller(code.content)) authenticated.push(n);
+    else if (code && WEBHOOK_NAME.test(n)) unsignedWebhooks.push(n);
+    else open.push(n);
+  }
+  const out: ScanVulnerability[] = [];
+  if (unsignedWebhooks.length > 0) {
+    out.push(repoFinding({
+      ref, path: f.path, name: "Webhook Edge Function Accepts Unsigned Requests",
+      severity: "high", category: "Broken Authentication", cweId: "CWE-345", cvssScore: 8.1, confidence: 70, wstgId: "WSTG-ATHN-04",
+      description: `${unsignedWebhooks.join(", ")} ${unsignedWebhooks.length === 1 ? "is a webhook endpoint" : "are webhook endpoints"} with verify_jwt = false, and its code does not verify the sender's signature. Anyone who can reach the URL can send a forged event (a payment marked paid, a user marked subscribed) and the function acts on it.`,
+      detail: `Functions: ${unsignedWebhooks.join(", ")}\nNo signature check found in: ${unsignedWebhooks.map((n) => `supabase/functions/${n}/index.ts`).join(", ")}`,
+      solution: "Verify the provider's signature before reading the body: for Stripe, stripe.webhooks.constructEventAsync(rawBody, req.headers.get('Stripe-Signature'), webhookSecret), and refuse the request when it throws.",
+    }));
+  }
+  if (open.length > 0) {
+    out.push(repoFinding({
+      ref, path: f.path, name: "Supabase Edge Functions Configured Without JWT Verification",
+      severity: "medium", category: "Broken Access Control", cweId: "CWE-306", cvssScore: 6.5, confidence: 55, wstgId: "WSTG-ATHZ-01",
+      description: `${open.length} edge function(s) have verify_jwt = false and no check of the caller was found in their code: ${open.join(", ")}. Supabase then lets anyone call them without signing in. That is intended for webhooks that authenticate another way (a Stripe signature, a shared secret), and not for functions that read or change a user's data.`,
+      detail: `Functions: ${open.join(", ")}${authenticated.length ? `\nChecked their own caller in code (not listed above): ${authenticated.join(", ")}` : ""}`,
+      solution: "Remove verify_jwt = false unless the function authenticates the caller itself. For webhooks, verify the provider's signature in the function and keep verify_jwt = false only there; for the rest, leave JWT verification on and resolve the user with supabase.auth.getUser().",
+    }));
+  }
+  return out;
 }
 
 export function ciConfigFindings(files: RepoFile[], ref: RepoRef): ScanVulnerability[] {
@@ -118,7 +159,7 @@ export function ciConfigFindings(files: RepoFile[], ref: RepoRef): ScanVulnerabi
   for (const f of files) {
     if (isWorkflowPath(f.path)) out.push(...workflowFindings(f, ref));
     else if (isDockerfilePath(f.path)) out.push(...dockerFindings(f, ref));
-    else if (isSupabaseConfigPath(f.path)) out.push(...supabaseConfigFindings(f, ref));
+    else if (isSupabaseConfigPath(f.path)) out.push(...supabaseConfigFindings(f, ref, files));
   }
   return out;
 }

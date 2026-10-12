@@ -86,6 +86,106 @@ export function policies(files: RepoFile[]): Policy[] {
   return out;
 }
 
+
+/** Everything after `create function ... (` up to the end of the statement, with the dollar-quoted body in the middle left out. */
+function functionAttributes(after: string): string {
+  const open = /\$(\w*)\$/.exec(after);
+  if (!open) return after.split(";")[0] ?? "";
+  const tag = open[0];
+  const close = after.indexOf(tag, open.index + tag.length);
+  if (close < 0) return after.slice(0, open.index);
+  return `${after.slice(0, open.index)} ${(after.slice(close + tag.length).split(";")[0] ?? "")}`;
+}
+
+/** SECURITY DEFINER functions in the public schema whose definition does not pin `search_path` (Supabase database linter 0011). */
+export function definerFunctionsWithoutSearchPath(files: RepoFile[]): Array<{ name: string; file: string }> {
+  const out: Array<{ name: string; file: string }> = [];
+  for (const f of files.filter((x) => isMigrationPath(x.path))) {
+    const sql = stripSqlComments(f.content);
+    for (const m of sql.matchAll(/create\s+(?:or\s+replace\s+)?function\s+(?:"?(\w+)"?\s*\.\s*)?"?(\w+)"?\s*\(/gi)) {
+      if ((m[1] ?? "public").toLowerCase() !== "public") continue;
+      const attrs = functionAttributes(sql.slice(m.index! + m[0].length));
+      if (/security\s+definer/i.test(attrs) && !/set\s+search_path/i.test(attrs)) out.push({ name: m[2]!, file: f.path });
+    }
+  }
+  return out;
+}
+
+/** Views in the public schema created without `security_invoker`, so they run with their owner's rights and skip RLS (linter 0010). */
+export function viewsWithoutInvoker(files: RepoFile[], states: Map<string, TableState>): Array<{ name: string; file: string; readsRlsTable: boolean }> {
+  const out: Array<{ name: string; file: string; readsRlsTable: boolean }> = [];
+  const ordered = files.filter((f) => isMigrationPath(f.path)).sort((a, b) => a.path.localeCompare(b.path));
+  for (const f of ordered) {
+    for (const stmt of stripSqlComments(f.content).split(";")) {
+      const m = /^\s*create\s+(?:or\s+replace\s+)?view\s+(?:"?(\w+)"?\s*\.\s*)?"?(\w+)"?\s*(?:\([^)]*\)\s*)?(?:with\s*\(([^)]*)\)\s*)?as\s+([\s\S]*)$/i.exec(stmt);
+      if (!m || (m[1] ?? "public").toLowerCase() !== "public") continue;
+      if (/security_invoker\s*(?:=\s*)?(?:true|on|1)\b/i.test(m[3] ?? "")) continue;
+      const reads = [...m[4]!.matchAll(/\b(?:from|join)\s+(?:"?public"?\s*\.\s*)?"?(\w+)"?/gi)].map((r) => r[1]!.toLowerCase());
+      out.push({ name: m[2]!, file: f.path, readsRlsTable: reads.some((t) => states.get(t)?.rls === true) });
+    }
+  }
+  return out;
+}
+
+/** `create policy ... on storage.objects` that lets the anon role (or everyone) list and read a bucket with no check of the owner. */
+export function openStoragePolicies(files: RepoFile[]): Array<{ policy: string; bucket: string | null; file: string }> {
+  const out: Array<{ policy: string; bucket: string | null; file: string }> = [];
+  for (const f of files.filter((x) => isMigrationPath(x.path))) {
+    for (const stmt of stripSqlComments(f.content).split(";")) {
+      const m = /^\s*create\s+policy\s+(?:"([^"]+)"|(\w+))\s+on\s+"?storage"?\s*\.\s*"?objects"?([\s\S]*)$/i.exec(stmt);
+      if (!m) continue;
+      const rest = m[3] ?? "";
+      const command = /\bfor\s+(all|select|insert|update|delete)\b/i.exec(rest)?.[1]?.toLowerCase() ?? "all";
+      if (command !== "select" && command !== "all") continue;
+      const to = /\bto\s+([\w",\s]+?)(?=\s+(?:using|with)\b|$)/i.exec(rest)?.[1];
+      const roles = to ? to.split(",").map((r) => r.replace(/"/g, "").trim().toLowerCase()).filter(Boolean) : ["public"];
+      if (!roles.some((r) => r === "anon" || r === "public")) continue;
+      if (/auth\s*\.\s*(?:uid|jwt)\s*\(|\bowner(?:_id)?\b/i.test(rest)) continue;
+      out.push({ policy: m[1] ?? m[2] ?? "", bucket: /bucket_id\s*=\s*'([^']+)'/i.exec(rest)?.[1] ?? null, file: f.path });
+    }
+  }
+  return out;
+}
+
+function databaseHygieneFindings(files: RepoFile[], ref: RepoRef): ScanVulnerability[] {
+  const out: ScanVulnerability[] = [];
+  const definers = definerFunctionsWithoutSearchPath(files);
+  if (definers.length > 0) {
+    out.push(repoFinding({
+      ref, path: definers[0]!.file,
+      name: "Supabase Function Runs With Its Owner's Rights and No Pinned search_path",
+      severity: "low", category: "Broken Access Control", cweId: "CWE-250", cvssScore: 3.7, confidence: 60, wstgId: "WSTG-ATHZ-02",
+      description: `${definers.length} SECURITY DEFINER function(s) in the public schema do not set search_path: ${definers.map((d) => d.name).join(", ")}. They run with their owner's privileges, and without a pinned search_path a caller who can create objects in a schema earlier on the path can make the function call their object instead. This is Supabase database linter rule 0011.`,
+      detail: `Functions: ${definers.map((d) => d.name).join(", ")}\nIn: ${[...new Set(definers.map((d) => d.file))].slice(0, 4).join(", ")}`,
+      solution: "Add SET search_path = '' to the function and schema-qualify every object it uses (public.profiles, not profiles). Use SECURITY INVOKER where owner rights are not needed.",
+    }));
+  }
+  const views = viewsWithoutInvoker(files, tableStates(files));
+  if (views.length > 0) {
+    const reachesRls = views.some((v) => v.readsRlsTable);
+    out.push(repoFinding({
+      ref, path: views[0]!.file,
+      name: "Supabase View Bypasses Row Level Security (no security_invoker)",
+      severity: reachesRls ? "medium" : "low", category: "Broken Access Control", cweId: "CWE-862", cvssScore: reachesRls ? 6.5 : 3.1, confidence: reachesRls ? 60 : 40, wstgId: "WSTG-ATHZ-01",
+      description: `${views.length} view(s) in the public schema are created without security_invoker: ${views.map((v) => v.name).join(", ")}. A view runs with its owner's rights, so it returns every row of the tables it reads whatever the caller's RLS policies say, and the Supabase API exposes public views like tables. ${reachesRls ? "At least one reads a table that has RLS on, so the view opens it up." : "The tables they read have no RLS in these migrations, so here the view adds no new exposure."} This is Supabase database linter rule 0010.`,
+      detail: `Views: ${views.map((v) => v.name).join(", ")}\nIn: ${[...new Set(views.map((v) => v.file))].slice(0, 4).join(", ")}`,
+      solution: "Create the view WITH (security_invoker = true) (Postgres 15 and later), or revoke access from anon and authenticated and expose the data through a function.",
+    }));
+  }
+  const storage = openStoragePolicies(files);
+  if (storage.length > 0) {
+    const buckets = [...new Set(storage.map((s) => s.bucket).filter((b): b is string => !!b))];
+    out.push(repoFinding({
+      ref, path: storage[0]!.file,
+      name: `Supabase Storage Policy Lets Anyone List and Read ${buckets.length ? `Bucket "${buckets.join('", "')}"` : "Storage Objects"}`,
+      severity: "medium", category: "Broken Access Control", cweId: "CWE-200", cvssScore: 5.3, confidence: 55, wstgId: "WSTG-ATHZ-01",
+      description: `The policy "${storage[0]!.policy}" on storage.objects lets the anon role (or everyone) SELECT${buckets.length ? ` objects in ${buckets.join(", ")}` : ""} with no check of who owns the file. A SELECT policy is what lets a client list a bucket's contents, not only fetch a file whose name it already knows, so anyone with the public key can enumerate every file name and read each file.`,
+      detail: `Policy: ${storage[0]!.policy}${buckets.length ? `\nBucket: ${buckets.join(", ")}` : ""}\nIn: ${[...new Set(storage.map((s) => s.file))].slice(0, 4).join(", ")}`,
+      solution: "If the files are public assets, a public bucket serves them by URL without any SELECT policy: remove the policy. If they are per-user, scope it: TO authenticated USING (bucket_id = 'x' AND (storage.foldername(name))[1] = (select auth.uid())::text).",
+    }));
+  }
+  return out;
+}
 export function supabaseMigrationFindings(files: RepoFile[], ref: RepoRef): ScanVulnerability[] {
   const migrations = files.filter((f) => isMigrationPath(f.path));
   if (migrations.length === 0) return [];
@@ -118,7 +218,19 @@ export function supabaseMigrationFindings(files: RepoFile[], ref: RepoRef): Scan
     const toSignedIn = p.roles.includes("authenticated");
     const writes = p.command !== "select";
     const kind = classifyExposure(p.table, []);
-    if (toAnon && writes) {
+    if (toAnon && p.command === "insert") {
+      // An open insert with no way to read rows back is how a contact or waitlist form works. It is still unauthenticated
+      // write access (spam, storage abuse), so it is reported, but low whatever the table is called: what the table's
+      // name says about its contents matters for reading rows, and this policy opens none.
+      findings.push(repoFinding({
+        ref, path: p.file,
+        name: `Supabase Policy Lets Anyone Insert "${p.table}"`,
+        severity: "low", category: "Broken Access Control", cweId: "CWE-862", cvssScore: 3.1, confidence: 50, wstgId: "WSTG-ATHZ-01",
+        description: `The policy "${p.name}" on public.${p.table} lets ${p.roles.join(", ")} (including the public anon key) INSERT rows with a condition that is simply true. That is the usual setup for a public form, and it means anyone can add rows without signing in: add rate limiting or a CAPTCHA, and keep SELECT closed (this policy does not open it).`,
+        detail: `Policy: ${p.name}\nTable: public.${p.table}\nFor: insert  To: ${p.roles.join(", ")}  Condition: true`,
+        solution: "If the table should only take rows from signed-in users, change the role to authenticated and check the owner: WITH CHECK ((select auth.uid()) = user_id). For a public form, keep it and put a rate limit or CAPTCHA in front.",
+      }));
+    } else if (toAnon && writes) {
       findings.push(repoFinding({
         ref, path: p.file,
         name: `Supabase Policy Lets Anyone ${p.command === "all" ? "Read and Write" : p.command[0]!.toUpperCase() + p.command.slice(1)} "${p.table}"`,
@@ -147,5 +259,6 @@ export function supabaseMigrationFindings(files: RepoFile[], ref: RepoRef): Scan
       }));
     }
   }
+  findings.push(...databaseHygieneFindings(files, ref));
   return findings;
 }

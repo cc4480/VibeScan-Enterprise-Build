@@ -17,7 +17,7 @@ import { configFinding } from "./githubFindings";
 import { NOT_SCANNED, type GithubScanOutcome } from "./githubSourceProbeOutcome";
 import { repoFinding, NOT_THE_PROJECTS_OWN, type RepoFile, type RepoRef } from "./repoFinding";
 import { supabaseMigrationFindings, isMigrationPath } from "./repoCheckSupabase";
-import { ciConfigFindings, isWorkflowPath, isDockerfilePath, isSupabaseConfigPath } from "./repoCheckCi";
+import { ciConfigFindings, isWorkflowPath, isDockerfilePath, isSupabaseConfigPath, isFunctionCodePath } from "./repoCheckCi";
 import { codePatternFindings, isCodePath, isEnvFilePath } from "./repoCheckCode";
 import { dependencyFindings, isManifestPath, isLockfilePath } from "./repoCheckDeps";
 import type { RepoSource, TreeFile } from "./repoSource";
@@ -168,7 +168,7 @@ export async function scanRepository(source: RepoSource, ref: RepoRef): Promise<
 
   run("repository secrets", (f) => isCandidatePath(f.path) || isEnvFilePath(f.path) || isMigrationPath(f.path), (fs) => secretFindings(fs, ref));
   run("Supabase migrations (RLS and policies)", (f) => isMigrationPath(f.path), (fs) => supabaseMigrationFindings(fs, ref));
-  run("CI and configuration", (f) => isWorkflowPath(f.path) || isDockerfilePath(f.path) || isSupabaseConfigPath(f.path), (fs) => ciConfigFindings(fs, ref));
+  run("CI and configuration", (f) => isWorkflowPath(f.path) || isDockerfilePath(f.path) || isSupabaseConfigPath(f.path) || isFunctionCodePath(f.path), (fs) => ciConfigFindings(fs, ref));
   run("dangerous code patterns", (f) => isCodePath(f.path) || isEnvFilePath(f.path), (fs) => codePatternFindings(fs, ref));
 
   const deps = await dependencyFindings(files).catch(() => ({ findings: [] as ScanVulnerability[], considered: 0, looked: 0, source: null as string | null }));
