@@ -5,7 +5,7 @@ import { ShieldAlert, Key, Globe, CheckCircle2, ArrowRight, Activity, Code2, Zap
 import { cn } from "@/lib/utils";
 
 /** The hero video above the headline: the SecScan universe animation, an
- *  848x960 loop of about 7 seconds (~4.6 MB), video track only. It autoplays muted and inline,
+ *  848x960 loop of 10 seconds (~2.2 MB), video track only. It autoplays muted and inline,
  *  which is what browsers allow without a click. The still shield image is the
  *  poster, so it shows while the video loads, when autoplay is refused, and
  *  for anyone with prefers-reduced-motion, who never gets the video started. */
@@ -48,7 +48,7 @@ function HeroVideo() {
       <video
         ref={ref}
         className="h-full w-full object-cover"
-        src={`${base}videos/secscan-universe.mp4`}
+        src={`${base}videos/secscan-universe-v2.mp4`}
         poster={`${base}images/hero-shield.webp`}
         width={848}
         height={960}

@@ -63,7 +63,7 @@ export function GradeRing({ grade, score, size = "md" }: { grade: string; score:
         <span className={cn("font-black font-display leading-none", s.letter, graded ? getGradeColor(grade) : "text-muted-foreground")}>
           {graded ? grade : "—"}
         </span>
-        <span className={cn("font-medium text-muted-foreground uppercase tracking-widest", s.sub, s.rowGap)}>
+        <span className={cn("font-medium text-muted-foreground uppercase tracking-widest text-center leading-tight px-3", s.sub, s.rowGap)}>
           {graded ? `Risk ${score}` : size === "lg" ? "Coverage incomplete" : "Incomplete"}
         </span>
       </div>
