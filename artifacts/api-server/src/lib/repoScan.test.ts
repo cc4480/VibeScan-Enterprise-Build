@@ -312,6 +312,31 @@ describe("scanRepository", () => {
     expect(tooLarge).toBe(1);
   });
 
+  it("leaves deliberately vulnerable test targets out, but still reads env files committed inside them", () => {
+    const { chosen } = chooseFiles([
+      // The layout of a real security tool's repository: a sample Supabase app with RLS off on purpose.
+      { path: "test-targets/tier3-baas-supabase/supabase/migrations/0001_schema.sql", size: 10 },
+      { path: "test-targets/tier3-baas-supabase/supabase/config.toml", size: 10 },
+      { path: "test_targets/app/server.ts", size: 10 },
+      { path: "vuln-fixtures/db.sql", size: 10 },
+      { path: "vulnerable-app/index.js", size: 10 },
+      { path: "test-targets/tier3-baas-supabase/.env", size: 10 },
+      // The project's own files are still chosen.
+      { path: "supabase/migrations/0001_init.sql", size: 10 },
+      { path: "server/db.ts", size: 10 },
+    ]);
+    expect(chosen.map((c) => c.path).sort()).toEqual([
+      "server/db.ts",
+      "supabase/migrations/0001_init.sql",
+      "test-targets/tier3-baas-supabase/.env",
+    ]);
+  });
+
+  it("does not mistake an ordinary directory whose name merely contains 'target' for a test target", () => {
+    const { chosen } = chooseFiles([{ path: "src/targets/list.ts", size: 10 }, { path: "src/retargets.ts", size: 10 }]);
+    expect(chosen.map((c) => c.path).sort()).toEqual(["src/retargets.ts", "src/targets/list.ts"]);
+  });
+
   it("a repository that cannot be opened is not a clean one", async () => {
     const out = await scanRepository(memorySource({}, { status: "not_public_or_missing" }), ref);
     expect(out).toMatchObject({ status: "not_public_or_missing", findings: [], filesRead: 0 });
