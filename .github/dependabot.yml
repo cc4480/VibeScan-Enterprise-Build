@@ -32,3 +32,8 @@ updates:
       # breaking change is reviewed on its own.
       npm-minor-and-patch:
         update-types: ["minor", "patch"]
+    # Major version bumps are skipped: each one needs its own tested upgrade, not an
+    # automatic PR. Security updates are separate and still open for any version.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
