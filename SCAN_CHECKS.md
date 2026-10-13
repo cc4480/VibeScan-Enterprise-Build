@@ -7,7 +7,7 @@ Every finding the scanner can emit, read out of `artifacts/api-server/src/lib`. 
 complete list; [SCAN_COVERAGE.md](SCAN_COVERAGE.md) is the readable one, grouped by module with
 the Basic/Deep tier and the methodology behind each group.
 
-**327 findings across 61 modules**, in 38 categories. 85 critical, 78 high, 60 medium, 34 low, 70 info.
+**352 findings across 65 modules**, in 40 categories. 86 critical, 87 high, 69 medium, 36 low, 74 info.
 
 A finding is a distinct name the scanner can put in a report, which is not the same as a check
 type: the data-table modules below define many findings from one piece of detection logic —
@@ -27,24 +27,24 @@ module does. `none` — neither, so no test exercises it at all.
 | `structuredData.ts` | 9 | 285 | 36 | direct |
 | `crawler-data.ts` | 8 | 181 | 35 | direct |
 | `probesHttp.ts` | 7 | 240 | 2 | direct |
+| `scannerCoverage.ts` | 7 | 242 | 1 | direct |
 | `scannerCspChecks.ts` | 7 | 155 | 10 | direct |
 | `scannerHeaderChecks.ts` | 7 | 142 | 3 | direct |
-| `jwtAnalysis.ts` | 6 | 267 | 9 | direct |
-| `scannerCoverage.ts` | 6 | 216 | 1 | direct |
+| `jwtAnalysis.ts` | 6 | 274 | 9 | direct |
 | `storageProbe.ts` | 5 | 254 | 11 | direct |
 | `firebase-probes.ts` | 4 | 301 | 8 | direct |
-| `baasDepth.ts` | 3 | 148 | 11 | direct |
+| `probesSupabase.ts` | 4 | 176 | 1 | direct |
+| `baasDepth.ts` | 3 | 160 | 11 | direct |
 | `isolationHeaders.ts` | 3 | 77 | 4 | direct |
 | `mailTls.ts` | 3 | 139 | 13 | direct |
-| `probesSupabase.ts` | 3 | 164 | 1 | direct |
 | `aiFeatureProbe.ts` | 2 | 152 | 21 | direct |
 | `baasProbes.ts` | 2 | 166 | 11 | direct |
 | `graphqlExtra.ts` | 2 | 105 | 8 | direct |
 | `graphqlProbe.ts` | 2 | 256 | 12 | direct |
 | `injectionExtra.ts` | 2 | 132 | 9 | direct |
 | `injectionProbe.ts` | 2 | 270 | 13 | direct |
-| `scanner.ts` | 2 | 391 | 6 | direct |
-| `sourceMaps.ts` | 2 | 236 | 19 | direct |
+| `scanner.ts` | 2 | 395 | 14 | direct |
+| `sourceMaps.ts` | 2 | 241 | 20 | direct |
 | `supabase-probes.ts` | 2 | 104 | 7 | direct |
 | `apiDocsProbe.ts` | 1 | 129 | 9 | direct |
 | `crossAccountStep.ts` | 1 | 172 | 16 | direct |
@@ -54,18 +54,22 @@ module does. `none` — neither, so no test exercises it at all.
 | `pathTraversal.ts` | 1 | 195 | 4 | direct |
 | `promptInjectionProbe.ts` | 1 | 214 | 26 | direct |
 | `raceConditionProbe.ts` | 1 | 181 | 21 | direct |
+| `repoScan.ts` | 1 | 204 | 39 | direct |
 | `ssrfProbe.ts` | 1 | 200 | 7 | direct |
 | `workerSideChecks.ts` | 1 | 186 | 11 | direct |
 | `probes-data-vcs.ts` | 24 | 244 | — | indirect, via probes-data.test.ts (split from probes-data) |
 | `probes-data-config.ts` | 23 | 273 | — | indirect, via probes-data.test.ts (split from probes-data) |
-| `secret-pattern-vendors.ts` | 21 | 247 | — | indirect, via secret-pattern-data.test.ts (split from secret-pattern-data) |
+| `secret-pattern-vendors.ts` | 21 | 251 | — | indirect, via secret-pattern-data.test.ts (split from secret-pattern-data) |
 | `subdomain-service-data.ts` | 19 | 172 | — | indirect, via subdomainTakeover.test.ts |
 | `probes-data-server.ts` | 17 | 180 | — | indirect, via probes-data.test.ts (split from probes-data) |
 | `probes-data-infra.ts` | 14 | 148 | — | indirect, via probes-data.test.ts (split from probes-data) |
 | `dnsChecksMail.ts` | 8 | 205 | — | indirect, via dnsChecks.test.ts (split from dnsChecks) |
+| `supabase-probes-report.ts` | 8 | 284 | — | indirect, via supabase-probes.test.ts (split from supabase-probes) |
 | `apiProbeFindings.ts` | 7 | 215 | — | indirect, via apiProbe.test.ts (split from apiProbe) |
-| `secret-pattern-generic.ts` | 7 | 144 | — | indirect, via secret-pattern-data.test.ts (split from secret-pattern-data) |
-| `supabase-probes-report.ts` | 7 | 234 | — | indirect, via supabase-probes.test.ts (split from supabase-probes) |
+| `repoCheckCi.ts` | 7 | 166 | — | indirect, via repoScan.test.ts |
+| `repoCheckSupabase.ts` | 7 | 265 | — | indirect, via repoScan.test.ts |
+| `secret-pattern-generic.ts` | 7 | 146 | — | indirect, via secret-pattern-data.test.ts (split from secret-pattern-data) |
+| `repoCheckCode.ts` | 6 | 140 | — | indirect, via repoScan.test.ts |
 | `scannerCookies.ts` | 6 | 205 | — | indirect, via scanner.test.ts (split from scanner) |
 | `crawlerHeaders.ts` | 5 | 203 | — | indirect, via crawler.test.ts (split from crawler) |
 | `cveCheckLocal.ts` | 5 | 225 | — | indirect, via cveCheck.test.ts (split from cveCheck) |
@@ -73,14 +77,14 @@ module does. `none` — neither, so no test exercises it at all.
 | `accessControlFindings.ts` | 3 | 129 | — | indirect, via accessControlProbe.test.ts |
 | `probesFiles.ts` | 3 | 266 | — | indirect, via probes.test.ts (split from probes) |
 | `probesPage.ts` | 3 | 244 | — | indirect, via probes.test.ts (split from probes) |
-| `scannerTransportChecks.ts` | 3 | 70 | — | indirect, via scanner.test.ts (split from scanner) |
+| `scannerTransportChecks.ts` | 3 | 74 | — | indirect, via scanner.test.ts (split from scanner) |
+| `secret-pattern-jwt.ts` | 3 | 113 | — | indirect, via secret-pattern-generic.test.ts |
 | `baasProbesPocketbase.ts` | 2 | 133 | — | indirect, via baasProbes.test.ts (split from baasProbes) |
 | `crawlerCookies.ts` | 2 | 184 | — | indirect, via crawler.test.ts (split from crawler) |
 | `scannerPageChecks.ts` | 2 | 56 | — | indirect, via scanner.test.ts (split from scanner) |
-| `secret-pattern-jwt.ts` | 2 | 81 | — | indirect, via secret-pattern-generic.test.ts |
 | `workerAi.ts` | 2 | 100 | — | indirect, via worker.test.ts (split from worker) |
 | `bannerRules.ts` | 1 | 112 | — | indirect, via cveCheckLocal.test.ts, cveCheckVersions.test.ts |
-| `githubFindings.ts` | 1 | 60 | — | indirect, via githubSourceProbe.test.ts |
+| `githubFindings.ts` | 1 | 60 | — | indirect, via githubSourceProbe.test.ts, repoScan.test.ts |
 | `probesSri.ts` | 1 | 79 | — | indirect, via probes.test.ts (split from probes) |
 
 ## Findings by module
@@ -128,7 +132,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `baasDepth.ts`
 
-*3 findings · 148 lines · 11 tests.*
+*3 findings · 160 lines · 11 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -324,7 +328,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `jwtAnalysis.ts`
 
-*6 findings · 267 lines · 9 tests.*
+*6 findings · 274 lines · 9 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -519,13 +523,14 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `probesSupabase.ts`
 
-*3 findings · 164 lines · 1 tests.*
+*4 findings · 176 lines · 1 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
 | Supabase Tables Exposed — Row Level Security (RLS) Disabled | Critical | Database Security | 9.8 | CWE-862 | WSTG-ATHZ-01 |
 | Supabase Detected — Verify Row Level Security (RLS) | Info | Database Security | 0 | — | WSTG-ATHZ-01 |
 | Supabase Public Content Tables Readable Without Authentication | Info | Database Security | 0 | — | WSTG-ATHZ-01 |
+| Supabase Tables Readable Without Authentication (Not Classified) | Info | Database Security | 0 | — | WSTG-ATHZ-01 |
 
 ### `promptInjectionProbe.ts`
 
@@ -564,9 +569,58 @@ module does. `none` — neither, so no test exercises it at all.
 | RDP Exposed on Port 3389 | High | Exposed Service | 8.1 | CWE-284 | — |
 | Docker API (TLS) Exposed on Port 2376 | Medium | Exposed Service | 5.9 | CWE-284 | — |
 
+### `repoCheckCi.ts`
+
+*7 findings · 166 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| Dockerfile Bakes a Credential Into the Image | High | Exposed Secrets / Credentials | 7.5 | CWE-798 | — |
+| GitHub Actions Shell Step Interpolates Attacker-Controlled Text | High | CI/CD Security | 8.1 | CWE-78 | — |
+| GitHub Actions Workflow Runs Pull-Request Code With Repository Secrets | High | CI/CD Security | 8.8 | CWE-94 | — |
+| Webhook Edge Function Accepts Unsigned Requests | High | Broken Authentication | 8.1 | CWE-345 | WSTG-ATHN-04 |
+| GitHub Actions Step Prints a Secret | Medium | CI/CD Security | 5.5 | CWE-532 | — |
+| GitHub Actions Workflow Requests write-all Permissions | Medium | CI/CD Security | 5.9 | CWE-250 | — |
+| Supabase Edge Functions Configured Without JWT Verification | Medium | Broken Access Control | 6.5 | CWE-306 | WSTG-ATHZ-01 |
+
+### `repoCheckCode.ts`
+
+*6 findings · 140 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| eval or new Function on Request Data | High | Injection | 9 | CWE-95 | — |
+| _(dynamic name)_ | High | Injection | 8.6 | CWE-89 | — |
+| Secret Exposed Through a Client-Side Environment Prefix | High | Exposed Secrets / Credentials | 8.1 | CWE-540 | — |
+| AI Provider Key Used Directly in Browser Code | Medium | AI Feature Security | 5.3 | CWE-522 | — |
+| _(dynamic name)_ | Medium | Security Misconfiguration | 6.5 | CWE-942 | — |
+| TLS Certificate Verification Disabled | Medium | Transport Security | 5.9 | CWE-295 | — |
+
+### `repoCheckSupabase.ts`
+
+*7 findings · 265 lines · no test file.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| Supabase Policy Lets Anyone ${p.command === "all" ? "Read and Write" : p.command[0]!.toUpperCase() + p.command.slice(1)} "${p.table}" | High | Broken Access Control | 8.1 | CWE-862 | WSTG-ATHZ-01 |
+| Supabase Tables Created Without Row Level Security | High | Broken Access Control | 8.1 | CWE-862 | WSTG-ATHZ-01 |
+| Supabase Policy Lets Every Signed-In User Reach All Rows of "${p.table}" | Medium | Broken Access Control | 6.5 | CWE-639 | WSTG-ATHZ-04 |
+| Supabase Storage Policy Lets Anyone List and Read ${buckets.length ?  | Medium | Broken Access Control | 5.3 | CWE-200 | WSTG-ATHZ-01 |
+| Supabase View Bypasses Row Level Security (no security_invoker) | Medium / Low | Broken Access Control | 6.5 | CWE-862 | WSTG-ATHZ-01 |
+| Supabase Function Runs With Its Owner's Rights and No Pinned search_path | Low | Broken Access Control | 3.7 | CWE-250 | WSTG-ATHZ-02 |
+| Supabase Policy Lets Anyone Insert "${p.table}" | Low | Broken Access Control | 3.1 | CWE-862 | WSTG-ATHZ-01 |
+
+### `repoScan.ts`
+
+*1 findings · 204 lines · 39 tests.*
+
+| Finding | Severity | Category | CVSS | CWE | WSTG |
+|---|---|---|---:|---|---|
+| GitHub source scan covered only part of the repository | Info | Scan Coverage | 0 | — | — |
+
 ### `scanner.ts`
 
-*2 findings · 391 lines · 6 tests.*
+*2 findings · 395 lines · 14 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -588,11 +642,12 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `scannerCoverage.ts`
 
-*6 findings · 216 lines · 1 tests.*
+*7 findings · 242 lines · 1 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
 | Active security testing was skipped for this scan | Info | Scan Coverage | — | — | — |
+| _(dynamic name)_ | Info | — | 0 | — | — |
 | Scan followed a redirect to a different site | Info | Scan Coverage | — | — | — |
 | Scan reached a sign-in page, not the app / The hosting platform answered, not the app | Info | Scan Coverage | — | — | — |
 | Scan session expired before the scan finished | Info | Scan Coverage | — | — | — |
@@ -638,11 +693,11 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `scannerTransportChecks.ts`
 
-*3 findings · 70 lines · no test file.*
+*3 findings · 74 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
-| No HTTPS / Plaintext HTTP | Critical | Transport Security | 9.1 | CWE-319 | WSTG-CRYP-01 |
+| _(dynamic name)_ | Critical | Transport Security | 9.1 | CWE-319 | WSTG-CRYP-01 |
 | Missing HTTP Strict-Transport-Security (HSTS) | Medium | Transport Security | 5.3 | CWE-523 | WSTG-CONF-07 |
 | HSTS max-age Too Short | Low | Transport Security | 3.1 | CWE-523 | WSTG-CONF-07 |
 
@@ -660,7 +715,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `secret-pattern-generic.ts`
 
-*7 findings · 144 lines · no test file · emitted by `jsScanner.ts`.*
+*7 findings · 146 lines · no test file · emitted by `jsScanner.ts`.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -674,16 +729,17 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `secret-pattern-jwt.ts`
 
-*2 findings · 81 lines · no test file.*
+*3 findings · 113 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
+| Supabase Service Role Key Exposed in JavaScript | Critical | — | 10 | CWE-522 | — |
 | Hardcoded JWT Token in Source | High | — | 8.1 | CWE-798 | — |
 | JWT-Shaped Publishable Key in Client Code (verify it is not a credential) | Info | — | 0 | CWE-798 | — |
 
 ### `secret-pattern-vendors.ts`
 
-*21 findings · 247 lines · no test file · emitted by `jsScanner.ts`.*
+*21 findings · 251 lines · no test file · emitted by `jsScanner.ts`.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -711,7 +767,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `sourceMaps.ts`
 
-*2 findings · 236 lines · 19 tests.*
+*2 findings · 241 lines · 20 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -791,15 +847,16 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `supabase-probes-report.ts`
 
-*7 findings · 234 lines · no test file.*
+*8 findings · 284 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
-| Supabase Service Role Key Exposed in Client-Side Code | Critical | Exposed Secrets / Credentials | 10 | CWE-522 | WSTG-CONF-04 |
+| _(dynamic name)_ | Critical | Exposed Secrets / Credentials | 10 | CWE-522 | WSTG-CONF-04 |
 | Supabase Tables Accept Unauthenticated Writes | Critical | Broken Access Control | 9.3 | CWE-284 | WSTG-ATHZ-01 |
 | Supabase Tables Readable Without Authentication (CVE-2025-48757) | Critical | Broken Access Control | 9.3 | CWE-284 | WSTG-ATHZ-01 |
 | Supabase Backend Detected — RLS Appears Configured | Info | Technology Fingerprint | 0 | — | — |
 | Supabase Public Content Tables Readable Without Authentication | Info | Information Disclosure | 0 | — | — |
+| Supabase Tables Readable Without Authentication (Not Classified) | Info | Broken Access Control | 0 | — | — |
 | Supabase Tables Returned Empty Results To Anonymous Requests (Inconclusive) | Info | Broken Access Control | 0 | — | — |
 | Supabase Write Access Not Confirmed (Inconclusive Probe Response) | Info | Broken Access Control | 0 | — | — |
 
@@ -848,5 +905,5 @@ finding literals are uniform; the assumptions are:
 - Its name comes from `name:` in the same literal, or in a constant it spreads (`...NOTE`) — or `header:`, for the header-gap table whose names are composed at the emit site.
 - A ternary severity or name means the check emits two variants (session vs non-session cookies, for example).
 
-Every finding resolved to a name, so none of these currently fails.
+**5 findings could not be named** — an assumption above no longer holds, and the parser needs a look.
 
