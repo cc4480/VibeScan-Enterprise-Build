@@ -16,11 +16,27 @@ import { createSign } from "node:crypto";
 
 export interface GithubAppConfig { appId: string; privateKey: string; slug: string | null }
 
+/**
+ * A PEM as it arrives from an environment variable, which hosting dashboards mangle in predictable ways: quotes pasted
+ * along with the value, line breaks written as the two characters \n, or line breaks flattened into spaces. The base64
+ * body is rebuilt on 64-character lines inside the BEGIN/END markers, which is the form Node expects.
+ */
+export function normalisePem(raw: string): string {
+  let key = raw.trim();
+  if (key.length >= 2 && ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'")))) key = key.slice(1, -1).trim();
+  if (key.includes("\\n")) key = key.replace(/\\n/g, "\n");
+  const m = key.match(/^(-----BEGIN [A-Z ]+-----)([\s\S]*?)(-----END [A-Z ]+-----)$/);
+  if (!m) return key;
+  const body = (m[2] ?? "").replace(/\s+/g, "");
+  if (!body) return key;
+  return `${m[1]}\n${body.match(/.{1,64}/g)!.join("\n")}\n${m[3]}\n`;
+}
+
 export function githubAppConfig(env: NodeJS.ProcessEnv = process.env): GithubAppConfig | null {
   const appId = env["GITHUB_APP_ID"]?.trim();
   const key = env["GITHUB_APP_PRIVATE_KEY"]?.trim();
   if (!appId || !key) return null;
-  return { appId, privateKey: key.includes("\\n") ? key.replace(/\\n/g, "\n") : key, slug: env["GITHUB_APP_SLUG"]?.trim() || null };
+  return { appId, privateKey: normalisePem(key), slug: env["GITHUB_APP_SLUG"]?.trim() || null };
 }
 
 const b64url = (b: Buffer | string) => Buffer.from(b).toString("base64url");

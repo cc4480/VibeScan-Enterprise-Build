@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { generateKeyPairSync, createVerify } from "node:crypto";
-import { githubAppConfig, signAppJwt, installationToken, installUrl, GithubAppError } from "./githubApp";
+import { githubAppConfig, normalisePem, signAppJwt, installationToken, installUrl, GithubAppError } from "./githubApp";
 import { githubInstallationSource } from "./repoSource";
 
 // A throwaway key made for the test; nothing here is a GitHub credential.
@@ -92,5 +92,37 @@ describe("githubInstallationSource", () => {
     }));
     try { expect(await publicGithubSource({ owner: "acme", repo: "secret" }).open()).toEqual({ ok: false, status: "not_public_or_missing" }); }
     finally { vi.unstubAllGlobals(); }
+  });
+});
+
+describe("normalisePem", () => {
+  it("leaves a well-formed key unchanged", () => {
+    expect(normalisePem(privateKey)).toBe(privateKey);
+  });
+
+  it("restores a key whose line breaks were flattened into spaces", () => {
+    const flattened = privateKey.trim().replace(/\n/g, " ");
+    expect(normalisePem(flattened)).toBe(privateKey);
+  });
+
+  it("restores a key with its line breaks lost altogether", () => {
+    const joined = privateKey.trim().replace(/\n/g, "");
+    expect(normalisePem(joined)).toBe(privateKey);
+  });
+
+  it("removes quotes that were pasted along with the value", () => {
+    expect(normalisePem(`"${privateKey.trim()}"`)).toBe(privateKey);
+    expect(normalisePem(`'${privateKey.trim().replace(/\n/g, "\\n")}'`)).toBe(privateKey);
+  });
+
+  it("produces a key that can sign, from each of those mangled forms", () => {
+    for (const mangled of [privateKey.trim().replace(/\n/g, " "), `"${privateKey.trim()}"`]) {
+      const c = githubAppConfig({ GITHUB_APP_ID: "1", GITHUB_APP_PRIVATE_KEY: mangled })!;
+      expect(() => signAppJwt(c)).not.toThrow();
+    }
+  });
+
+  it("returns text with no PEM markers untouched, so a wrong value still fails visibly", () => {
+    expect(normalisePem("  not a key  ")).toBe("not a key");
   });
 });

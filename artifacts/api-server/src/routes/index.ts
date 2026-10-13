@@ -27,6 +27,7 @@ import v1Router from "./v1";
 import verifyRouter from "./verify";
 import oauthPublicRouter from "./oauthPublic";
 import oauthConsentRouter from "./oauthConsent";
+import githubAccessRouter from "./githubAccess";
 
 const router: IRouter = Router();
 
@@ -58,5 +59,6 @@ router.use(v1Router);
 router.use(verifyRouter);
 router.use(oauthPublicRouter);
 router.use(oauthConsentRouter);
+router.use(githubAccessRouter);
 
 export default router;

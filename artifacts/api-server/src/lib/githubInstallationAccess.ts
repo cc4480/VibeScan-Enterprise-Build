@@ -15,7 +15,7 @@
  *
  *   GITHUB_INSTALLATION_OWNERS="170782825=owner@example.com;98765=a@example.com,b@example.com"
  */
-import { githubAppConfig, signAppJwt, type GithubAppConfig } from "./githubApp";
+import { GithubAppError, githubAppConfig, installationToken, signAppJwt, type GithubAppConfig } from "./githubApp";
 
 /** installation id -> lower-cased emails allowed to use it. Malformed entries are dropped, not guessed at. */
 export function parseInstallationOwners(raw: string | undefined): Map<number, Set<string>> {
@@ -77,4 +77,70 @@ export async function installationForRepo(input: {
   } catch {
     return null;
   }
+}
+
+/** What each step of getting private-repository access did, with nothing secret in it. */
+export interface AccessDiagnosis {
+  /** The account the server sees. Echoed back to the person who is signed in as it. */
+  signedInAs: string | null;
+  /** GITHUB_INSTALLATION_OWNERS holds at least one usable entry. */
+  ownersConfigured: boolean;
+  /** This account is listed as an owner of some installation. Everything below runs only when it is. */
+  listed: boolean;
+  /** GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY are both set. */
+  appConfigured?: boolean;
+  /** The private key could sign the App's JWT. False means the key was pasted in a form it cannot read. */
+  keySigns?: boolean;
+  /** GitHub's answer to "which installation covers this repository?". */
+  lookup?: { status: number | "unreachable" | "skipped"; installationId: number | null; coveredByOwnedInstallation: boolean };
+  /** Whether a read-only token for just this repository could be minted, or why not. Never the token. */
+  token?: "minted" | GithubAppError["reason"] | "skipped";
+}
+
+/**
+ * Walks the same steps a scan does and says where it stops. Reaches GitHub only for an account that is listed as an
+ * owner, so it cannot be used by anyone else to probe installations. Never returns, or logs, the key or a token.
+ */
+export async function diagnoseAccess(input: {
+  email: string | null | undefined;
+  repo: RepoCoordinates;
+  env?: NodeJS.ProcessEnv;
+  fetchFn?: typeof fetch;
+}): Promise<AccessDiagnosis> {
+  const env = input.env ?? process.env;
+  const fetchFn = input.fetchFn ?? fetch;
+  const owners = parseInstallationOwners(env["GITHUB_INSTALLATION_OWNERS"]);
+  const mine = installationsOwnedBy(input.email, owners);
+  const out: AccessDiagnosis = { signedInAs: input.email ?? null, ownersConfigured: owners.size > 0, listed: mine.length > 0 };
+  if (!out.listed) return out;
+
+  const cfg = githubAppConfig(env);
+  out.appConfigured = cfg !== null;
+  if (!cfg) return out;
+  try { signAppJwt(cfg); out.keySigns = true; } catch { out.keySigns = false; return out; }
+
+  let installationId: number | null = null;
+  try {
+    const res = await fetchFn(
+      `https://api.github.com/repos/${encodeURIComponent(input.repo.owner)}/${encodeURIComponent(input.repo.repo)}/installation`,
+      {
+        headers: { Authorization: `Bearer ${signAppJwt(cfg)}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "SecScan" },
+        signal: AbortSignal.timeout(8_000),
+      },
+    );
+    const body = res.ok ? ((await res.json().catch(() => null)) as { id?: unknown } | null) : null;
+    installationId = typeof body?.id === "number" ? body.id : null;
+    out.lookup = { status: res.status, installationId, coveredByOwnedInstallation: installationId !== null && mine.includes(installationId) };
+  } catch {
+    out.lookup = { status: "unreachable", installationId: null, coveredByOwnedInstallation: false };
+    return out;
+  }
+  if (!out.lookup.coveredByOwnedInstallation || installationId === null) { out.token = "skipped"; return out; }
+  try {
+    await installationToken(installationId, input.repo.repo, cfg, fetchFn);
+    out.token = "minted";
+  } catch (err) {
+    out.token = err instanceof GithubAppError ? err.reason : "github_unavailable";
+  }
+  return out;
 }

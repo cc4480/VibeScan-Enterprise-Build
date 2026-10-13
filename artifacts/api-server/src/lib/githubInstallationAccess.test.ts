@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { generateKeyPairSync } from "node:crypto";
-import { installationForRepo, installationsOwnedBy, parseInstallationOwners } from "./githubInstallationAccess";
+import { diagnoseAccess, installationForRepo, installationsOwnedBy, parseInstallationOwners } from "./githubInstallationAccess";
 
 // A throwaway key made for the test; nothing here is a GitHub credential.
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { type: "pkcs8", format: "pem" }, publicKeyEncoding: { type: "spki", format: "pem" } });
@@ -82,5 +82,60 @@ describe("installationForRepo", () => {
 
   it("is null when no owners are configured at all", async () => {
     expect(await installationForRepo({ email: "owner@example.com", repo, env: {}, cfg, fetchFn: answer(200, { id: 1001 }) })).toBeNull();
+  });
+});
+
+describe("diagnoseAccess", () => {
+  const env = { GITHUB_INSTALLATION_OWNERS: OWNERS, GITHUB_APP_ID: "123456", GITHUB_APP_PRIVATE_KEY: privateKey };
+  const routes = (lookup: Response, tokenRes: Response) =>
+    vi.fn(async (url: string | URL | Request) => (String(url).endsWith("/installation") ? lookup : tokenRes)) as unknown as typeof fetch;
+  const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
+
+  it("says only that the account is not listed, and never contacts GitHub, for anyone else", async () => {
+    const fetchFn = answer(200, { id: 1001 });
+    const d = await diagnoseAccess({ email: "stranger@example.com", repo, env, fetchFn });
+    expect(d).toEqual({ signedInAs: "stranger@example.com", ownersConfigured: true, listed: false });
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it("reports a missing owners variable as not configured", async () => {
+    const d = await diagnoseAccess({ email: "owner@example.com", repo, env: {}, fetchFn: answer(200, {}) });
+    expect(d).toMatchObject({ ownersConfigured: false, listed: false });
+  });
+
+  it("stops at the App credentials when they are missing", async () => {
+    const d = await diagnoseAccess({ email: "owner@example.com", repo, env: { GITHUB_INSTALLATION_OWNERS: OWNERS }, fetchFn: answer(200, {}) });
+    expect(d).toMatchObject({ listed: true, appConfigured: false });
+    expect(d.lookup).toBeUndefined();
+  });
+
+  it("stops when the private key cannot sign", async () => {
+    // Assembled from pieces so no key-shaped literal sits in the source: PEM markers around text that is not a key.
+    const badKey = ["-----BEGIN ", "PRIVATE KEY-----", "\nbm90IGEgcmVhbCBrZXk=\n", "-----END ", "PRIVATE KEY-----"].join("");
+    const d = await diagnoseAccess({ email: "owner@example.com", repo, env: { ...env, GITHUB_APP_PRIVATE_KEY: badKey }, fetchFn: answer(200, {}) });
+    expect(d).toMatchObject({ appConfigured: true, keySigns: false });
+    expect(d.lookup).toBeUndefined();
+  });
+
+  it("walks the whole way to a minted token, without returning it", async () => {
+    const d = await diagnoseAccess({ email: "owner@example.com", repo, env, fetchFn: routes(json(200, { id: 1001 }), json(201, { token: "TOKEN-VALUE-MUST-NOT-APPEAR", expires_at: "2030-01-01T00:00:00Z" })) });
+    expect(d).toMatchObject({ listed: true, appConfigured: true, keySigns: true, lookup: { status: 200, installationId: 1001, coveredByOwnedInstallation: true }, token: "minted" });
+    expect(JSON.stringify(d)).not.toContain("TOKEN-VALUE-MUST-NOT-APPEAR");
+    expect(JSON.stringify(d)).not.toContain("BEGIN");
+  });
+
+  it("shows when the App is not installed on the repository", async () => {
+    const d = await diagnoseAccess({ email: "owner@example.com", repo, env, fetchFn: routes(json(404, {}), json(201, {})) });
+    expect(d).toMatchObject({ lookup: { status: 404, installationId: null, coveredByOwnedInstallation: false }, token: "skipped" });
+  });
+
+  it("shows when GitHub names an installation the account does not own", async () => {
+    const d = await diagnoseAccess({ email: "owner@example.com", repo, env, fetchFn: routes(json(200, { id: 9999 }), json(201, {})) });
+    expect(d).toMatchObject({ lookup: { installationId: 9999, coveredByOwnedInstallation: false }, token: "skipped" });
+  });
+
+  it("gives the reason when a token cannot be minted", async () => {
+    const d = await diagnoseAccess({ email: "owner@example.com", repo, env, fetchFn: routes(json(200, { id: 1001 }), json(422, {})) });
+    expect(d.token).toBe("repository_not_shared");
   });
 });
