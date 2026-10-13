@@ -18,7 +18,7 @@ export function registerScanTools(server: McpServer, httpReq: Request, user: Tok
         "Start a SecScan security scan of a web application the user owns or is authorised to test. " +
         "Returns a scan_id; most scans finish in under a minute — then call get_scan_status with wait_seconds, or get_report. " +
         "Active tests (injection, XSS, SSRF…) run only on domains the user has verified; others get passive checks. " +
-        "Optionally also reads a public GitHub repository for committed secrets (github_repo); that only contacts GitHub, never the site. " +
+        "Optionally also reads a GitHub repository's source (github_repo): any public one, or a private one the user connected at secscan.us. That only contacts GitHub, never the site. " +
         "Each scan uses one of the user's free scans, plan scans or credits.",
       inputSchema: {
         url: z.string().min(1).max(2048).describe("The URL to scan, e.g. https://example.com"),
@@ -26,7 +26,7 @@ export function registerScanTools(server: McpServer, httpReq: Request, user: Tok
           .string()
           .max(300)
           .optional()
-          .describe("Optional public GitHub repository to check for committed secrets, e.g. https://github.com/owner/repo. Public repositories only."),
+          .describe("Optional GitHub repository to read, e.g. https://github.com/owner/repo. Public, or private if the user connected it under Connect GitHub on secscan.us."),
       },
       annotations: { openWorldHint: true },
     },

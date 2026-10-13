@@ -1,6 +1,6 @@
 import { type IRouter } from "express";
 import { LoginBody, attempts, isRateLimited, maskEmail, publicUser, startSession } from "./accountShared";
-import { db, usersTable, scansTable, creditsTable, monitorSubscriptionsTable, dismissedFindingsTable, reportSharesTable, domainVerificationsTable, authTokensTable, pendingLoginsTable, billingSubscriptionsTable, purchaseIntentsTable, apiTokensTable, feedbackTable, findingVerificationsTable, oauthCodesTable, oauthRefreshTokensTable } from "@workspace/db";
+import { db, usersTable, scansTable, creditsTable, monitorSubscriptionsTable, dismissedFindingsTable, reportSharesTable, domainVerificationsTable, githubInstallationsTable, authTokensTable, pendingLoginsTable, billingSubscriptionsTable, purchaseIntentsTable, apiTokensTable, feedbackTable, findingVerificationsTable, oauthCodesTable, oauthRefreshTokensTable } from "@workspace/db";
 import { stripe } from "../lib/stripe";
 import { eq } from "drizzle-orm";
 import { hashPassword, verifyPassword, needsRehash, dummyHash } from "../lib/password";
@@ -226,6 +226,7 @@ export function registerAccountSession(router: IRouter): void {
       await db.delete(reportSharesTable).where(eq(reportSharesTable.userId, userId));
       await db.delete(dismissedFindingsTable).where(eq(dismissedFindingsTable.userId, userId));
       await db.delete(domainVerificationsTable).where(eq(domainVerificationsTable.userId, userId));
+      await db.delete(githubInstallationsTable).where(eq(githubInstallationsTable.userId, userId));
       await db.delete(creditsTable).where(eq(creditsTable.userId, userId));
       await db.delete(billingSubscriptionsTable).where(eq(billingSubscriptionsTable.userId, userId));
       // Tokens die with the account: a token outliving it would authenticate as

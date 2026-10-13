@@ -191,6 +191,26 @@ export const insertReportSchema = createInsertSchema(reportsTable).omit({
 export type InsertReport = typeof reportsTable.$inferInsert;
 export type Report = typeof reportsTable.$inferSelect;
 
+/**
+ * GitHub App installations an account has proven it can use, for scanning private repositories.
+ *
+ * A row is written only by the Connect GitHub callback, after GitHub itself listed the installation for the signed-in
+ * person's own GitHub authorisation (GET /user/installations). An installation id is not a secret, so it is never
+ * taken from a request: this table is what a scan checks before it reads a private repository. The GitHub user token
+ * used to prove it is discarded straight after; nothing here is a credential.
+ */
+export const githubInstallationsTable = pgTable("github_installations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: text("user_id").notNull(),
+  installationId: text("installation_id").notNull(),
+  /** The GitHub account or organisation the app is installed on, for showing to the person. */
+  accountLogin: text("account_login"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_github_installations_user_installation").on(table.userId, table.installationId),
+  index("idx_github_installations_user").on(table.userId),
+]);
+
 export const dismissedFindingsTable = pgTable("dismissed_findings", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull(),

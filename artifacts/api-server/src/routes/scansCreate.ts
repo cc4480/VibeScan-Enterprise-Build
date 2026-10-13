@@ -6,6 +6,7 @@ import { CreateScanBody } from "@workspace/api-zod";
 import { normaliseGithubRepoInput } from "../lib/githubRepoInput";
 import { parseGithubRepoRef } from "../lib/githubSourceProbe";
 import { installationForRepo } from "../lib/githubInstallationAccess";
+import { linkedInstallationIds } from "../lib/githubLinks";
 import { enqueueScan } from "../lib/queue";
 import { validateCredentials, encryptCredentials, sameAccountInput } from "../lib/scanCredentials";
 import { checkScanTarget } from "../lib/ssrfGuard";
@@ -75,7 +76,11 @@ export async function createScanHandler(req: Request, res: Response): Promise<vo
   // also the answer to every doubt or failure, leaves the scan reading only what is public.
   const repoRef = githubRepoUrl ? parseGithubRepoRef(githubRepoUrl) : null;
   const githubInstallationId = repoRef
-    ? await installationForRepo({ email: req.user.email, repo: { owner: repoRef.owner, repo: repoRef.repo } })
+    ? await installationForRepo({
+        email: req.user.email,
+        repo: { owner: repoRef.owner, repo: repoRef.repo },
+        linked: await linkedInstallationIds(req.user.id),
+      })
     : null;
 
   // The automatic second account tests a login against a new account, so it means nothing without

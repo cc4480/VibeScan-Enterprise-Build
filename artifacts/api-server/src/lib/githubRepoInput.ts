@@ -10,7 +10,7 @@ export type GithubRepoInput =
   | { ok: false; error: string };
 
 // Kept short: the scan form shows at most 120 characters of a server error.
-export const GITHUB_REPO_ERROR = "Not a public GitHub repository. Use https://github.com/owner/repo, or leave it empty.";
+export const GITHUB_REPO_ERROR = "Not a GitHub repository. Use https://github.com/owner/repo, or leave it empty.";
 
 /** Empty or missing means "no source scan"; anything else has to be a recognisable repository. */
 export function normaliseGithubRepoInput(raw: string | null | undefined): GithubRepoInput {

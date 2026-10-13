@@ -53,12 +53,17 @@ export interface RepoCoordinates { owner: string; repo: string }
 export async function installationForRepo(input: {
   email: string | null | undefined;
   repo: RepoCoordinates;
+  /** Installations this account connected through Connect GitHub (proven by GitHub at the time, see githubConnect.ts). */
+  linked?: readonly number[];
   env?: NodeJS.ProcessEnv;
   cfg?: GithubAppConfig | null;
   fetchFn?: typeof fetch;
 }): Promise<number | null> {
   const env = input.env ?? process.env;
-  const candidates = installationsOwnedBy(input.email, parseInstallationOwners(env["GITHUB_INSTALLATION_OWNERS"]));
+  const candidates = [...new Set([
+    ...installationsOwnedBy(input.email, parseInstallationOwners(env["GITHUB_INSTALLATION_OWNERS"])),
+    ...(input.linked ?? []),
+  ])];
   if (candidates.length === 0) return null;
   const cfg = input.cfg === undefined ? githubAppConfig(env) : input.cfg;
   if (!cfg) return null;
@@ -110,13 +115,15 @@ export interface AccessDiagnosis {
 export async function diagnoseAccess(input: {
   email: string | null | undefined;
   repo: RepoCoordinates;
+  /** Installations this account connected through Connect GitHub. */
+  linked?: readonly number[];
   env?: NodeJS.ProcessEnv;
   fetchFn?: typeof fetch;
 }): Promise<AccessDiagnosis> {
   const env = input.env ?? process.env;
   const fetchFn = input.fetchFn ?? fetch;
   const owners = parseInstallationOwners(env["GITHUB_INSTALLATION_OWNERS"]);
-  const mine = installationsOwnedBy(input.email, owners);
+  const mine = [...new Set([...installationsOwnedBy(input.email, owners), ...(input.linked ?? [])])];
   const out: AccessDiagnosis = { signedInAs: input.email ?? null, ownersConfigured: owners.size > 0, listed: mine.length > 0 };
   if (!out.ownersConfigured) {
     out.ownersVariable = (env["GITHUB_INSTALLATION_OWNERS"] ?? "").trim() === "" ? "missing" : "unreadable";

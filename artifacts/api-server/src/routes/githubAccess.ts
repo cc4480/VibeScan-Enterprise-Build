@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { parseGithubRepoRef } from "../lib/githubSourceProbe";
 import { diagnoseAccess } from "../lib/githubInstallationAccess";
+import { linkedInstallationIds } from "../lib/githubLinks";
 
 const router: IRouter = Router();
 
@@ -19,7 +20,7 @@ router.get("/github/access-check", async (req, res) => {
     res.status(400).json({ error: "Pass ?repo=https://github.com/owner/repo" });
     return;
   }
-  res.json(await diagnoseAccess({ email: req.user.email, repo: { owner: ref.owner, repo: ref.repo } }));
+  res.json(await diagnoseAccess({ email: req.user.email, repo: { owner: ref.owner, repo: ref.repo }, linked: await linkedInstallationIds(req.user.id) }));
 });
 
 export default router;
