@@ -89,6 +89,8 @@ export interface AccessDiagnosis {
   ownersConfigured: boolean;
   /** Why not, when it does not: the variable is absent from this server, or present but not in the installation=email form. */
   ownersVariable?: "missing" | "unreadable";
+  /** Names of the GITHUB_* variables the server can see, when the owners variable is not usable. Never values. */
+  githubVariableNamesSeen?: string[];
   /** This account is listed as an owner of some installation. Everything below runs only when it is. */
   listed: boolean;
   /** GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY are both set. */
@@ -116,7 +118,11 @@ export async function diagnoseAccess(input: {
   const owners = parseInstallationOwners(env["GITHUB_INSTALLATION_OWNERS"]);
   const mine = installationsOwnedBy(input.email, owners);
   const out: AccessDiagnosis = { signedInAs: input.email ?? null, ownersConfigured: owners.size > 0, listed: mine.length > 0 };
-  if (!out.ownersConfigured) out.ownersVariable = (env["GITHUB_INSTALLATION_OWNERS"] ?? "").trim() === "" ? "missing" : "unreadable";
+  if (!out.ownersConfigured) {
+    out.ownersVariable = (env["GITHUB_INSTALLATION_OWNERS"] ?? "").trim() === "" ? "missing" : "unreadable";
+    // Names only, never values: shows whether the server sees the variable under the exact name we expect.
+    out.githubVariableNamesSeen = Object.keys(env).filter((k) => k.startsWith("GITHUB_")).sort();
+  }
   if (!out.listed) return out;
 
   const cfg = githubAppConfig(env);
