@@ -184,7 +184,9 @@ router.post("/checkout/subscription", async (req, res): Promise<void> => {
             currency: "usd",
             unit_amount: plan.amountCents,
             recurring: { interval: "month" },
-            product_data: { name: plan.name, description: plan.description },
+            // Stripe Tax needs a product tax code; without one checkout is refused as an invalid line item.
+            // txcd_10103001 is Stripe's code for SaaS, business use.
+            product_data: { name: plan.name, description: plan.description, tax_code: "txcd_10103001" },
           },
         },
       ],
