@@ -92,6 +92,8 @@ function pairsOn(text: string, line: number): Pair[] {
 
   // KEY=VALUE, KEY: VALUE, 'KEY': 'VALUE', "Key": "value", anywhere on the line.
   for (const m of text.matchAll(/(?:^|[\s,{(])["'`]?([A-Za-z_][\w.\-]*)["'`]?\s*[:=]\s*("[^"]*"|'[^']*'|`[^`]*`|[^\s,;#}{)"']+)/g)) {
+    // ${VAR:?message} and ${VAR:-default} are shell interpolation, not KEY: VALUE; the inside is a reference, never a secret.
+    if (text[m.index!] === "{" && text[m.index! - 1] === "$") continue;
     pairs.push({ key: m[1]!, value: unquote(m[2]!), line });
   }
   return pairs;

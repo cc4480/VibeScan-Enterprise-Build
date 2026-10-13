@@ -11,6 +11,20 @@ const keys = (path: string, content: string): string[] => scanConfigSecrets(path
 
 const REAL = "Kq8Zr2Lm9Vb3Xt7Nc4Wd6Hs1Jp5Ae0Uo";
 
+describe("scanConfigSecrets: shell interpolation is a reference", () => {
+  it("does not read the inside of ${VAR:?message} or ${VAR:-default} as a value", () => {
+    const compose = [
+      "services:",
+      "  db:",
+      "    environment:",
+      "      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}",
+      "      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set}",
+      "      API_TOKEN: ${API_TOKEN:-fallbackvalue123}",
+    ].join("\n");
+    expect(scanConfigSecrets("docker-compose.yml", compose)).toEqual([]);
+  });
+});
+
 describe("scanConfigSecrets: real values in real syntaxes", () => {
   it("reads an unquoted .env", () => {
     expect(keys(".env", `PORT=3000\nJWT_SECRET=${REAL}\nDB_PASSWORD=Vt8Hq3ZmLk2Rw9Xc\nAPI_KEY=b7f3c9a1e2d84f6a9c0b5e7d3a1f8c2e\n`)).toEqual([
