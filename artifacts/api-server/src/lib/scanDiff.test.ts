@@ -173,3 +173,37 @@ describe("verdictFor: the verdict on one finding after a fix", () => {
     for (const bad of [null, undefined, "x", {}]) expect(() => verdictFor(bad, bad, asked)).not.toThrow();
   });
 });
+
+describe("diffScans: a repository finding is fixed only if its file was read again", () => {
+  const SRC = "GitHub source code secrets";
+  const tests = [t(HEADERS), t(SRC)];
+  const RLS = "Supabase Tables Created Without Row Level Security";
+  const repoEvidence = (file: string) => `Repository: acme/app\nFile: ${file}\nTables: admin_config`;
+  const PARTIAL = { name: "GitHub source scan covered only part of the repository", severity: "info", category: "Scan Coverage", evidence: "Repository: acme/app\nFile: (repository)" };
+
+  it("does not call it fixed when its file is now left out as a test target", () => {
+    const fixture = f(RLS, "high", "Broken Access Control", repoEvidence("test-targets/tier3/supabase/migrations/0001.sql"));
+    const c = diffScans(prev(scan([fixture], tests)), { data: scan([], tests) });
+    expect(c.fixed).toEqual([]);
+    expect(c.notRechecked.map((x) => x.name)).toEqual([RLS]);
+  });
+
+  it("does not call it fixed when this scan read only part of the repository", () => {
+    const own = f(RLS, "high", "Broken Access Control", repoEvidence("supabase/migrations/0001.sql"));
+    const c = diffScans(prev(scan([own], tests)), { data: scan([PARTIAL], tests) });
+    expect(c.fixed).toEqual([]);
+    expect(c.notRechecked.map((x) => x.name)).toEqual([RLS]);
+  });
+
+  it("still calls it fixed when the whole repository was read and the file is the project's own", () => {
+    const own = f(RLS, "high", "Broken Access Control", repoEvidence("supabase/migrations/0001.sql"));
+    const c = diffScans(prev(scan([own], tests)), { data: scan([], tests) });
+    expect(c.fixed.map((x) => x.name)).toEqual([RLS]);
+    expect(c.notRechecked).toEqual([]);
+  });
+
+  it("leaves findings that are not from a repository alone, even in a partial repository scan", () => {
+    const c = diffScans(prev(scan([f(CSP, "high")], tests)), { data: scan([PARTIAL], tests) });
+    expect(c.fixed.map((x) => x.name)).toEqual([CSP]);
+  });
+});

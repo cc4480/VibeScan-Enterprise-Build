@@ -59,6 +59,11 @@ export const scansTable = pgTable("scans", {
   // normalised https://github.com/owner/repo URL. Not a secret (the repository is public),
   // so unlike the credentials it stays after the scan and the report can say what was read.
   githubRepoUrl: text("github_repo_url"),
+  // The GitHub App installation this scan may read the repository through, when the repository is private
+  // and its owner has shared it with SecScan. Set only after the requester was checked against the
+  // installation (githubInstallationAccess.ts); never taken from the request. An installation id is not a
+  // secret: the access token it yields is minted by the worker for one scan and is never stored.
+  githubInstallationId: text("github_installation_id"),
   // The requester's explicit opt-in to let the scan create a disposable second account through the
   // target's public signup form (autoSecondAccount.ts). Off unless asked for, and only meaningful
   // when credentials were supplied, since the test compares them with the new account.

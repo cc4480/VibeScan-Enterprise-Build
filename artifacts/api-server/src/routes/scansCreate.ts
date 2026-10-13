@@ -4,6 +4,8 @@ import { db, scansTable, usersTable } from "@workspace/db";
 import { eq, and, gte, count } from "drizzle-orm";
 import { CreateScanBody } from "@workspace/api-zod";
 import { normaliseGithubRepoInput } from "../lib/githubRepoInput";
+import { parseGithubRepoRef } from "../lib/githubSourceProbe";
+import { installationForRepo } from "../lib/githubInstallationAccess";
 import { enqueueScan } from "../lib/queue";
 import { validateCredentials, encryptCredentials, sameAccountInput } from "../lib/scanCredentials";
 import { checkScanTarget } from "../lib/ssrfGuard";
@@ -66,6 +68,15 @@ export async function createScanHandler(req: Request, res: Response): Promise<vo
     return;
   }
   const githubRepoUrl = repoInput.url;
+
+  // Whether this scan may read the repository through the GitHub App (a private repository its owner shared).
+  // Decided here from the signed-in account and GitHub's own answer, never from anything in the request body:
+  // an installation id is not a secret, so accepting one would let any user name someone else's. Null, which is
+  // also the answer to every doubt or failure, leaves the scan reading only what is public.
+  const repoRef = githubRepoUrl ? parseGithubRepoRef(githubRepoUrl) : null;
+  const githubInstallationId = repoRef
+    ? await installationForRepo({ email: req.user.email, repo: { owner: repoRef.owner, repo: repoRef.repo } })
+    : null;
 
   // The automatic second account tests a login against a new account, so it means nothing without
   // one. Said plainly rather than silently dropped: an API caller who set it expects it to happen.
@@ -258,6 +269,7 @@ export async function createScanHandler(req: Request, res: Response): Promise<vo
       secondaryCredentialsEncrypted,
       credentialsAuthorizedAt,
       githubRepoUrl,
+      githubInstallationId: githubInstallationId === null ? null : String(githubInstallationId),
       autoSecondAccount,
       // Recorded so a scan that fails later is refunded to the same place.
       paidWith,

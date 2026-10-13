@@ -1,0 +1,1 @@
+ALTER TABLE "scans" ADD COLUMN "github_installation_id" text;

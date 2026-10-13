@@ -45,5 +45,12 @@ export function repoFinding(i: RepoFindingInput): ScanVulnerability {
   } as ScanVulnerability;
 }
 
-/** Files under a directory the project does not own (dependencies, build output, fixtures). */
-export const NOT_THE_PROJECTS_OWN = /(?:^|\/)(?:node_modules|vendor|third_party|dist|build|out|coverage|\.next|\.git|\.turbo|__tests__|__mocks__|__fixtures__|fixtures?|testdata)\//i;
+/**
+ * Files under a directory the project does not own (dependencies, build output, fixtures).
+ *
+ * Includes deliberately vulnerable test targets (test-targets/, vuln-fixtures/, vulnerable-app/): a scanner
+ * or security tool keeps sample apps with RLS switched off on purpose, and reporting those as the project's
+ * own HIGH findings is a false alarm about code that never ships. Env files are still read wherever they sit
+ * (see repoScan.ts), because a real key committed into a fixture is still a real leak.
+ */
+export const NOT_THE_PROJECTS_OWN = /(?:^|\/)(?:node_modules|vendor|third_party|dist|build|out|coverage|\.next|\.git|\.turbo|__tests__|__mocks__|__fixtures__|fixtures?|testdata|test[-_]?targets?|vuln(?:erable)?[-_]?(?:fixtures?|apps?|targets?))\//i;
