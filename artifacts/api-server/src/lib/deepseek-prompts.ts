@@ -18,12 +18,13 @@ Rules for agentFixPrompt:
 - Tool-neutral: never name an AI tool, and never use a tool's own commands, slash commands, @-mentions, mode names or UI steps
 - Self-contained, plain text with markdown headings, not wrapped in a code fence. It must make sense with no other context
 - Open with: "I ran an automated security scan on ${domain} and found the issues below. Please fix them in this project's codebase. If you cannot read or edit files here, give me the exact change to make for each issue instead."
-- One section per finding: a heading "### <number>. <Finding name> (<SEVERITY>)", then "Problem:" (one sentence), "Fix:" (the exact change: code, config lines or a setting), "Where to look:" (what to search for and which kind of file; call a file name likely, never invent a path) and "Check:" (one way to confirm it is fixed, such as a header to look for or a request that should now fail)
+- One section per finding: a heading "### <number>. <Finding name> (<SEVERITY>)", then four labelled lines, each starting a new line: "Problem:" (one sentence), "Fix:" (the exact change: code, config lines or a setting), "Where to look:" (what to search for and which kind of file; call a file name likely, never invent a path) and "Check:" (one way to confirm it is fixed, such as a header to look for or a request that should now fail)
+- Every section has all four labels, with no exceptions. With more than 8 findings, merge closely related ones into one section (name each finding in it) so there are never more than 8 sections; shorten the wording, never drop a label
 - Most severe first. An exposed secret is always first, and the instruction is to rotate it as well as remove it
 - Ask for the smallest change that fixes each issue, to search the whole project for the same insecure pattern and fix every place, to leave unrelated code alone, and to add a package only if a fix needs one
 - If a finding does not apply to how the project is built, tell the assistant to say so rather than guess
 - Close with: "When you are done, list each file you changed and what you changed, anything you could not fix and why, and run the project's build or tests if it has them."
-- Keep under 3500 characters
+- Keep under 4500 characters
 
 STACK NOTES (facts about this site's stack, for the assistant; leave out any that do not help with a finding):
 ${stackNotes(agent)}`;
