@@ -83,7 +83,7 @@ export async function runAiStage(input: {
           severity: "info",
           category: "Scan Coverage",
           description:
-            "Every security check ran and the findings below are complete — but the written analysis that normally accompanies them (the plain-English risk summary, the prioritised fixes and the per-agent fix prompts) could not be generated for this scan. " + why.reason + " A fix prompt has been built from the findings instead, without the AI writer's summary. This says nothing about your site: it is a gap in the explanation, not in the testing.",
+            "Every security check ran and the findings below are complete — but the written analysis that normally accompanies them (the plain-English risk summary, the prioritised fixes and the fix prompt) could not be generated for this scan. " + why.reason + " A fix prompt has been built from the findings instead, without the AI writer's summary. This says nothing about your site: it is a gap in the explanation, not in the testing.",
           evidence: why.evidence,
           solution:
             "Re-run the scan to get the written analysis. The findings themselves do not change — only the commentary on them is missing — so you can also act on the list below, or use the fix prompt built from them.",

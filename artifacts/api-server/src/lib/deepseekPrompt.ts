@@ -101,7 +101,7 @@ Return a JSON object with EXACTLY these five fields:
     "<0 to 2 items: findings above whose fix takes under 5 minutes — e.g. adding a response header. Empty array if none qualify. Max 150 chars.>"
   ],
   "complianceNotes": "<1-2 sentences on OWASP Top 10 or regulatory (GDPR/PCI-DSS) implications, or null if none apply>",
-  "agentFixPrompt": "<Follow the Fix Prompt Instructions above EXACTLY. Generate the fix prompt formatted specifically for the detected agent target. Self-contained and paste-ready.>"
+  "agentFixPrompt": "<Follow the Fix Prompt Instructions above EXACTLY. One universal, tool-neutral prompt that works pasted into any AI coding tool. Self-contained and paste-ready.>"
 }
 
 Rules:
@@ -113,7 +113,7 @@ Rules:
 - topPriorities must be specific: what to change, not just what is wrong
 - quickWins are changes under 5 minutes
 - Keep overallRisk, each topPriorities item, and each quickWins item under 150 characters
-- The agentFixPrompt MUST follow the Fix Prompt Instructions for the detected agent — not a generic format
+- The agentFixPrompt MUST follow the Fix Prompt Instructions: tool-neutral, never naming an AI tool or using one tool's own commands
 - If an exposed secret was found, it MUST be the first topPriority and first agentFixPrompt item
 - Return ONLY the JSON object — no markdown fences, no preamble, no explanation`;
 }

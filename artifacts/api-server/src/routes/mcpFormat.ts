@@ -111,7 +111,7 @@ export function formatReport(
       lines.push("Top priorities:", ...ai.topPriorities.map((p: string, i: number) => `${i + 1}. ${p}`), "");
     }
     if (ai?.agentFixPrompt) {
-      lines.push("Fix prompt (written for this codebase's AI editor — act on it directly):", String(ai.agentFixPrompt), "");
+      lines.push("Fix prompt (tool-neutral, written to work in any AI coding tool — act on it directly):", String(ai.agentFixPrompt), "");
     }
   }
 

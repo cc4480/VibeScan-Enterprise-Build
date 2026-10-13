@@ -34,7 +34,7 @@ you own or have permission to test.
   data exposure, rate limiting and mass assignment
 - Assigns a letter grade (A through F) with a numeric risk score (0–100)
 - Generates plain-English reports via AI that explain findings and prioritise fixes
-- Provides per-agent fix prompts tailored to Cursor, Claude Code, Lovable, Bolt and Replit AI
+- Provides one universal fix prompt that works pasted into any AI coding tool (Claude Code, Cursor, Codex, GitHub Copilot, Grok Build, Lovable, Bolt, Replit and others)
 - Offers continuous monitoring (the SecScan Unlimited plan): hourly uptime and header checks, rescans on a schedule set by your grade, and hourly CVE matching
 
 ## Who SecScan is for

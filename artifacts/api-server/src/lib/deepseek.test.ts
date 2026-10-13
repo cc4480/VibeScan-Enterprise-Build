@@ -49,9 +49,22 @@ describe("detectAgentEnvironment", () => {
     expect(detectAgentEnvironment(["Astro", "Netlify"], "https://a.example.com")).toBe("generic");
   });
 
-  it("gives every environment its own instructions, and the hosted one never invites editing server files", async () => {
+  it("writes one tool-neutral prompt for every environment: same rules, only the stack notes differ", async () => {
     const { agentPromptInstructions } = await import("./deepseek-prompts.js");
-    for (const e of ["vercel", "netlify", "firebase", "hosted"] as const) expect(agentPromptInstructions(e, "x.com")).toContain("AGENT TARGET");
+    const envs = ["lovable", "nextjs", "bolt", "wordpress", "supabase", "vercel", "netlify", "firebase", "hosted", "generic"] as const;
+    const rules = (e: (typeof envs)[number]) => agentPromptInstructions(e, "x.com").split("STACK NOTES")[0];
+    for (const e of envs) {
+      expect(rules(e)).toBe(rules("generic"));
+      const text = agentPromptInstructions(e, "x.com");
+      expect(text).toContain("Tool-neutral");
+      expect(text).toContain("Claude Code, Cursor, Codex");
+      for (const tool of ["AGENT TARGET", "@workspace", "/edit", "Composer"]) expect(text).not.toContain(tool);
+    }
+  });
+
+  it("gives every host environment its own stack notes, and the hosted one never invites editing server files", async () => {
+    const { agentPromptInstructions } = await import("./deepseek-prompts.js");
+    for (const e of ["vercel", "netlify", "firebase", "hosted"] as const) expect(agentPromptInstructions(e, "x.com")).toContain("STACK NOTES");
     expect(agentPromptInstructions("hosted", "x.com")).toContain("Never suggest editing server files");
     expect(agentPromptInstructions("firebase", "x.com")).toContain("designed to be public");
   });

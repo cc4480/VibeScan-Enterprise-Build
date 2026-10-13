@@ -76,8 +76,9 @@ function buildPrompt(targetUrl: string, main: ScanVulnerability[], lower: ScanVu
   const parts: string[] = [
     `Please fix the following security findings in my web app (${targetUrl}).`,
     "",
-    "They come from an automated black-box scan. Work through them in order, most severe first. For each one make the smallest change that fixes it and leave unrelated code alone. " +
-      "If a finding does not apply to how this app is built, say so instead of guessing. Do not add a package unless a fix needs one.",
+    "They come from an automated black-box scan. Work through them in order, most severe first. For each one make the smallest change that fixes it, search the whole project for the same insecure pattern and fix every place, and leave unrelated code alone. " +
+      "If a finding does not apply to how this app is built, say so instead of guessing. Do not add a package unless a fix needs one. " +
+      "If you cannot read or edit files here, give me the exact change to make for each finding instead.",
   ];
   const platform = platformLine(agent);
   if (platform) parts.push("", platform);
@@ -99,7 +100,7 @@ function buildPrompt(targetUrl: string, main: ScanVulnerability[], lower: ScanVu
   if (hidden > 0) {
     parts.push("", `${hidden} further finding${hidden === 1 ? " is" : "s are"} listed in the full report.`);
   }
-  parts.push("", "When you are done, list what you changed for each finding, and anything you skipped and why.");
+  parts.push("", "When you are done, list each file you changed and what you changed for each finding, anything you could not fix and why, and run the project's build or tests if it has them.");
   return parts.join("\n");
 }
 

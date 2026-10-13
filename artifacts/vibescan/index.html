@@ -13,7 +13,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <title>SecScan.us — Black-Box Security Scanning for Vibe Coders</title>
-    <meta name="description" content="Paste a URL and get a plain-English security report, usually in under a minute. OWASP Top 10-aligned checks, AI-powered analysis, per-agent fix prompts. 3 free scans every month." />
+    <meta name="description" content="Paste a URL and get a plain-English security report, usually in under a minute. OWASP Top 10-aligned checks, AI-powered analysis, one fix prompt that works in any AI coding tool. 3 free scans every month." />
     <meta name="keywords" content="website vulnerability scanner, web application security scanner, black-box security scan, DAST scanner, OWASP Top 10 scanner, security scan for vibe coded apps, AI generated app security, Lovable security scan, Bolt.new security scan, Cursor app security check, Replit app security, Supabase RLS checker, Firebase security rules test, exposed API keys scanner, security headers checker, CSP checker, HSTS check, CORS misconfiguration test, IDOR test, broken access control scanner, SQL injection scanner, XSS scanner, API security testing, GraphQL introspection check, subdomain takeover check, TLS SSL grade, CVE monitoring, continuous security monitoring, MCP security scanner, security scan from Claude Code, penetration testing for developers, SecScan" />
     <!-- max-image-preview:large opts into full-size thumbnails in Google
          Discover and rich results; the snippet limits remove the default
@@ -29,7 +29,7 @@
     <meta property="og:url" content="https://secscan.us/" />
     <meta property="og:site_name" content="SecScan.us" />
     <meta property="og:title" content="SecScan.us — Black-Box Security Scanning for Vibe Coders" />
-    <meta property="og:description" content="Paste a URL and get a plain-English security report, usually in under a minute. OWASP Top 10-aligned checks, AI-powered analysis, per-agent fix prompts." />
+    <meta property="og:description" content="Paste a URL and get a plain-English security report, usually in under a minute. OWASP Top 10-aligned checks, AI-powered analysis, one fix prompt that works in any AI coding tool." />
     <meta property="og:image" content="https://secscan.us/opengraph.jpg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -102,7 +102,7 @@
           "@id": "https://secscan.us/#webpage",
           "url": "https://secscan.us/",
           "name": "SecScan.us — Black-Box Security Scanning for Vibe Coders",
-          "description": "Paste a URL and get a plain-English security report, usually in under a minute. OWASP Top 10-aligned checks, AI-powered analysis, per-agent fix prompts.",
+          "description": "Paste a URL and get a plain-English security report, usually in under a minute. OWASP Top 10-aligned checks, AI-powered analysis, one fix prompt that works in any AI coding tool.",
           "isPartOf": { "@id": "https://secscan.us/#website" },
           "about": { "@id": "https://secscan.us/#organization" },
           "breadcrumb": {
@@ -138,7 +138,7 @@
             "Supabase RLS exposure check",
             "Technology fingerprinting",
             "AI plain-English reports",
-            "Per-agent fix prompts (Cursor, Claude Code, Lovable, Bolt, Replit AI)",
+            "A universal fix prompt that works in Claude Code, Cursor, Codex, Copilot, Grok Build, Lovable, Bolt, Replit and any other AI coding tool",
             "Letter-grade security score (A–F)",
             "Continuous monitoring with CVE feed",
             "Firebase and Supabase security rule and storage exposure checks",
@@ -185,7 +185,7 @@
               "@type": "HowToStep",
               "position": 3,
               "name": "Get your report",
-              "text": "Usually within a minute, receive a plain-English security report with a letter grade (A–F), risk score, vulnerability list, and actionable fix steps tailored to your AI coding tool."
+              "text": "Usually within a minute, receive a plain-English security report with a letter grade (A–F), risk score, vulnerability list, and actionable fix steps in one prompt that works in any AI coding tool."
             }
           ]
         },
@@ -229,15 +229,15 @@
               "name": "What does a scan include?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Every scan is a full scan and there are no tiers. It covers security headers, TLS, cookies and CORS, technology fingerprinting and known-CVE matching, JavaScript secret scanning, injection and path traversal probing, API surface discovery and testing, access control comparison between two accounts, Supabase and Firebase rules, reconnaissance including open ports and subdomains, AI analysis, and per-agent fix prompts for Cursor, Claude Code, Lovable, Bolt and Replit AI."
+                "text": "Every scan is a full scan and there are no tiers. It covers security headers, TLS, cookies and CORS, technology fingerprinting and known-CVE matching, JavaScript secret scanning, injection and path traversal probing, API surface discovery and testing, access control comparison between two accounts, Supabase and Firebase rules, reconnaissance including open ports and subdomains, AI analysis, and one universal fix prompt that works in any AI coding tool."
               }
             },
             {
               "@type": "Question",
-              "name": "What does the per-agent fix prompt do?",
+              "name": "What does the fix prompt do?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "After every scan, SecScan generates a ready-to-paste prompt for your specific AI coding tool. Each prompt is pre-formatted with the vulnerability context and the exact fix instructions so you can paste it directly into Cursor, Claude Code, Lovable, Bolt, or Replit AI and get working code."
+                "text": "After every scan, SecScan generates one ready-to-paste prompt that works in any AI coding tool: Claude Code, Cursor, Codex, GitHub Copilot, Windsurf, Grok Build, Gemini, ChatGPT, Lovable, Bolt, Replit, v0 and others. It carries the vulnerability context and the exact fix for each finding, so you paste it into whichever tool you use. A tool that can edit your files applies the fixes; a chat-only tool replies with the exact change to make for each one."
               }
             },
             {
@@ -276,7 +276,7 @@
       <h1>SecScan — black-box security scanning for vibe coders</h1>
       <p>Paste a URL for a web application you own or are authorised to test and get a plain-English security report, usually in under a minute — no installs, agents or code changes required. Every scan is a full scan; there are no tiers.</p>
       <p>Checks are aligned with the OWASP Top 10: security headers, TLS/HSTS, cookie flags, CORS misconfiguration, exposed secrets and config files, known-CVE component versions, Supabase/Firebase rules exposure, injection (reflected XSS, SQL injection, path traversal), and API surface discovery with missing-authentication, IDOR, BFLA and mass-assignment testing.</p>
-      <p>Reports are generated by AI with a letter grade (A–F), a numeric risk score, and per-agent fix prompts tailored to Cursor, Claude Code, Lovable, Bolt and Replit AI. Every account gets 3 free scans every month. SecScan Unlimited ($19/month) gives unlimited full scans (fair use: up to 5 scans an hour and 20 a day per account) and watches up to 5 sites around the clock — hourly checks, grade-based rescans and hourly CVE matching.</p>
+      <p>Reports are generated by AI with a letter grade (A–F), a numeric risk score, and one universal fix prompt that works in Claude Code, Cursor, Codex, Copilot, Grok Build, Lovable, Bolt, Replit and any other AI coding tool. Every account gets 3 free scans every month. SecScan Unlimited ($19/month) gives unlimited full scans (fair use: up to 5 scans an hour and 20 a day per account) and watches up to 5 sites around the clock — hourly checks, grade-based rescans and hourly CVE matching.</p>
       <p>SecScan needs JavaScript to run a scan interactively. These pages read fine without it:</p>
       <nav>
         <ul>

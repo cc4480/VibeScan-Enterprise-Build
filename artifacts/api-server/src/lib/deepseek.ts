@@ -3,8 +3,9 @@
  * Model: DEEPSEEK_MODEL (default deepseek-flash, i.e. DeepSeek-V4.1-Flash)
  * Endpoint: https://api.deepseek.com/v1/chat/completions
  *
- * Per-agent fix routing: detects the user's build tool from the scanned
- * technology stack and generates fix prompts formatted for that specific tool.
+ * One universal fix prompt for every AI coding tool. The scanned technology stack is
+ * detected only to add stack notes (where fixes live on that platform); the prompt
+ * itself names no tool.
  */
 
 import type { AgentEnvironment } from "./deepseek-prompts";

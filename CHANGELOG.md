@@ -3,6 +3,23 @@
 Notable changes to the SecScan engine. Commit messages carry the full reasoning
 for each change; this collects what shipped and why it mattered.
 
+## 2026-10-13
+
+### Changed
+
+- **One universal fix prompt for every AI coding tool.** The report's fix prompt used to be
+  written differently for each detected platform (Lovable, Bolt, Next.js for "Cursor or Claude
+  Code", WordPress and so on), and the report page wrapped it again per tool, one wrapper telling
+  Claude Code to use a `/edit` command that does not exist. A report cannot know which assistant
+  its reader pastes into, and the reader may use several (Claude Code, Cursor, Codex, GitHub
+  Copilot, Windsurf, Grok Build, Gemini, ChatGPT, Lovable, Bolt, Replit, v0). The prompt now names
+  no tool and uses none of a tool's commands, @-mentions or modes. Each finding has Problem, Fix,
+  Where to look and Check; a secret comes first with a rotate instruction; the close asks for a
+  list of changes, what could not be fixed, and a build or test run. What the scan detects about the
+  stack is kept, but only as short STACK NOTES (where fixes live on that platform), the same facts
+  as before. The report card shows one prompt with one Copy button and no tool picker. The
+  template fallback and the MCP report text say the same. `detectedAgent` stays in the API.
+
 ## 2026-10-05
 
 ### Changed
