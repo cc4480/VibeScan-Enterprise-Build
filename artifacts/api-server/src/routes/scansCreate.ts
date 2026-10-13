@@ -12,6 +12,7 @@ import { validateCredentials, encryptCredentials, sameAccountInput } from "../li
 import { checkScanTarget } from "../lib/ssrfGuard";
 import { TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE } from "../lib/freeTrial";
 import { refundFailedScan, chargeScan, refundCharge } from "../lib/billing";
+import { zodMessage } from "../lib/zodMessage";
 
 // ── Abuse and cost control ───────────────────────────────────────────────────
 // A scan is expensive in a way an API request normally is not: it launches a
@@ -56,7 +57,7 @@ export async function createScanHandler(req: Request, res: Response): Promise<vo
 
   const parsed = CreateScanBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: zodMessage(parsed.error) });
     return;
   }
 

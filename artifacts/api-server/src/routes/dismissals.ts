@@ -3,6 +3,7 @@ import { db, dismissedFindingsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { findingFingerprint, canonicalizeTargetUrl } from "../lib/fingerprint";
+import { zodMessage } from "../lib/zodMessage";
 
 const router: IRouter = Router();
 
@@ -59,7 +60,7 @@ router.post("/dismissals", async (req, res): Promise<void> => {
 
   const parsed = DismissBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: zodMessage(parsed.error) });
     return;
   }
 
