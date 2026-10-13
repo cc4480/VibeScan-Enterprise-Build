@@ -28,7 +28,7 @@
     "drizzle-orm": "catalog:",
     "express": "^5",
     "openid-client": "^6.8.8",
-    "pg-boss": "^12.37.0",
+    "pg-boss": "^12.37.1",
     "pino": "^9",
     "pino-http": "^10",
     "playwright": "^1.64.0",
@@ -42,13 +42,13 @@
     "@types/express": "^5.0.6",
     "@types/node": "catalog:",
     "@types/supertest": "^7.2.1",
-    "@vitest/coverage-v8": "^4.1.8",
+    "@vitest/coverage-v8": "^4.1.11",
     "esbuild": "^0.28.2",
     "esbuild-plugin-pino": "^2.3.3",
     "http-proxy-middleware": "^3.0.7",
     "pino-pretty": "^13",
     "supertest": "^7.3.1",
-    "thread-stream": "3.1.0",
-    "vitest": "^4.1.8"
+    "thread-stream": "3.2.0",
+    "vitest": "^4.1.11"
   }
 }
