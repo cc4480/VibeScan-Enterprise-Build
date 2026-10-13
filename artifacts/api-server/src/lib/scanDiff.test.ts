@@ -195,6 +195,21 @@ describe("diffScans: a repository finding is fixed only if its file was read aga
     expect(c.notRechecked.map((x) => x.name)).toEqual([RLS]);
   });
 
+  it("calls it fixed in a partial scan that recorded reading its file", () => {
+    const own = f(RLS, "high", "Broken Access Control", repoEvidence("supabase/migrations/0001.sql"));
+    const partial = { ...PARTIAL, repoFilesRead: ["README.md", "supabase/migrations/0001.sql"] };
+    const c = diffScans(prev(scan([own], tests)), { data: scan([partial], tests) });
+    expect(c.fixed.map((x) => x.name)).toEqual([RLS]);
+  });
+
+  it("does not call it fixed in a partial scan whose recorded list lacks its file", () => {
+    const own = f(RLS, "high", "Broken Access Control", repoEvidence("supabase/migrations/0001.sql"));
+    const partial = { ...PARTIAL, repoFilesRead: ["README.md"] };
+    const c = diffScans(prev(scan([own], tests)), { data: scan([partial], tests) });
+    expect(c.fixed).toEqual([]);
+    expect(c.notRechecked.map((x) => x.name)).toEqual([RLS]);
+  });
+
   it("still calls it fixed when the whole repository was read and the file is the project's own", () => {
     const own = f(RLS, "high", "Broken Access Control", repoEvidence("supabase/migrations/0001.sql"));
     const c = diffScans(prev(scan([own], tests)), { data: scan([], tests) });

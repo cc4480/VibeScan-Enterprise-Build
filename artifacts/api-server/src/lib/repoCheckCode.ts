@@ -93,7 +93,11 @@ const RULES: Rule[] = [
     name: "TLS Certificate Verification Disabled",
     test: (path, text) => {
       if (!isCodePath(path)) return null;
-      const m = /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*["']?0/.exec(text);
+      // The first match in code: the same words in a comment explain the setting, they are not the setting.
+      const m = [...text.matchAll(/rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*["']?0/g)].find((x) => {
+        const lineStart = text.lastIndexOf("\n", x.index! - 1) + 1;
+        return !/^\s*(?:\/\/|\/\*|\*|#)/.test(text.slice(lineStart, x.index!));
+      });
       if (!m) return null;
       // A probe that reads the certificate, or a comment beside the line saying it is on purpose, is not the flaw this
       // rule is about (trusting a server without checking who it is). The comment has to be within a few lines.

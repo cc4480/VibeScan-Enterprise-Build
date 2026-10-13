@@ -165,6 +165,17 @@ describe("dangerous code patterns", () => {
     ], ref);
     expect(said.map((v) => v.severity)).toEqual(["info", "info"]);
     expect(said[0]!.evidence).toContain("shown as information");
+    // The setting named in a comment first, then used where the certificate is read: judged by the code line, not the comment.
+    const commentFirst = codePatternFindings([f("server/tlsProbe.ts", [
+      "// rejectUnauthorized:false so we can still INSPECT an expired cert (that's the point)",
+      "const socket = tls.connect(",
+      "  { host, port, rejectUnauthorized: false },",
+      "  () => { const cert = socket.getPeerCertificate(); },",
+      ");",
+    ].join("\n"))], ref);
+    expect(commentFirst.map((v) => v.severity)).toEqual(["info"]);
+    // Only a comment names it: nothing is switched off.
+    expect(codePatternFindings([f("src/n.ts", "// never set rejectUnauthorized: false in production\nconst x = 1;")], ref)).toEqual([]);
     // A comment far from the line does not excuse it.
     const far = codePatternFindings([f("src/a.ts", `// deliberate choice of library\n${"const x = 1;\n".repeat(20)}rejectUnauthorized: false`)], ref);
     expect(far.map((v) => v.severity)).toEqual(["medium"]);

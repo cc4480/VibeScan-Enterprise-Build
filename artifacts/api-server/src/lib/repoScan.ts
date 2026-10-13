@@ -183,7 +183,8 @@ export async function scanRepository(source: RepoSource, ref: RepoRef): Promise<
   // Files in the repository but none of a kind these checks read (a Python or Go project, say): nothing was tested.
   const nothingRead = chosen.length === 0;
   if (nothingRead || opened.truncated || cap > 0 || tooLarge > 0 || failedReads > 0 || (deps.considered > deps.looked)) {
-    findings.push(repoFinding({
+    // `repoFilesRead` lets a later scan's diff tell that a file was opened again even though this scan was partial.
+    const notice = repoFinding({
       ref, path: "(repository)", name: "GitHub source scan covered only part of the repository",
       severity: "info", category: "Scan Coverage", cweId: null, cvssScore: 0, confidence: 100,
       description: "The source-code scan reads a bounded, prioritised set of files and could not read all of the repository. Nothing found in the files it did read is a statement about the rest, so this result should not be read as a clean scan of the repository.",
@@ -197,7 +198,8 @@ export async function scanRepository(source: RepoSource, ref: RepoRef): Promise<
         ...(deps.considered > deps.looked ? [`Dependencies looked up: ${deps.looked} of ${deps.considered}`] : []),
       ].join("\n"),
       solution: "Re-run the scan, or check the files it did not reach by hand.",
-    }));
+    });
+    findings.push({ ...notice, repoFilesRead: files.map((f) => f.path) } as ScanVulnerability);
   }
   return { findings, status: "scanned", filesRead: files.length, skipped: cap, truncated: opened.truncated, coverage, checks, via: source.via };
 }

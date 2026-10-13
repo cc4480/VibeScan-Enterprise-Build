@@ -116,14 +116,18 @@ export function diffScans(
   }
 
   // Whether this scan read only part of the repository (the coverage notice is filtered out of `now`, so read raw).
-  const repoPartial = rawVulnerabilities(current.data).some((v) => str(v["name"]) === REPO_PARTIAL_NOTICE);
+  const partialNotice = rawVulnerabilities(current.data).find((v) => str(v["name"]) === REPO_PARTIAL_NOTICE);
+  const repoPartial = partialNotice !== undefined;
+  // The files a partial scan did open, when it recorded them (scans from before that was added did not).
+  const listed = partialNotice?.["repoFilesRead"];
+  const filesRead = Array.isArray(listed) ? new Set(listed.filter((p): p is string => typeof p === "string")) : null;
 
   const fixed: FindingRef[] = [];
   const notRechecked: FindingRef[] = [];
   for (const v of before.vulnerabilities) {
     if (nowFp.has(fp(v))) continue;
     const test = testFor(str(v["name"]));
-    const checkedAgain = haveLedgers && (test ? ranNow.has(test) : noLongerRun.length === 0) && repoFileReadAgain(v, repoPartial);
+    const checkedAgain = haveLedgers && (test ? ranNow.has(test) : noLongerRun.length === 0) && repoFileReadAgain(v, repoPartial, filesRead);
     (checkedAgain ? fixed : notRechecked).push(ref(v));
   }
 
@@ -155,12 +159,14 @@ function rawVulnerabilities(data: unknown): Array<Record<string, unknown>> {
  * the rule changed), or when this scan read only part of the repository, so nobody can say the file was opened.
  * Findings not from a repository are unaffected. Exported for tests.
  */
-export function repoFileReadAgain(finding: Record<string, unknown>, repoPartial: boolean): boolean {
+export function repoFileReadAgain(finding: Record<string, unknown>, repoPartial: boolean, filesRead: ReadonlySet<string> | null = null): boolean {
   const evidence = str(finding["evidence"]);
   if (!evidence.startsWith("Repository: ")) return true;
   const file = /^File: (.+)$/m.exec(evidence)?.[1]?.trim() ?? "";
   if (file && file !== "(repository)" && NOT_THE_PROJECTS_OWN.test(file) && !isEnvFilePath(file)) return false;
-  return !repoPartial;
+  if (!repoPartial) return true;
+  // A partial scan still opened some files: if this finding's file is one of them, it was read again.
+  return filesRead !== null && file !== "" && file !== "(repository)" && filesRead.has(file);
 }
 
 const ORDER = ["critical", "high", "medium", "low", "info"];
