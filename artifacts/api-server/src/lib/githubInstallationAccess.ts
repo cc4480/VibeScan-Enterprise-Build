@@ -20,7 +20,9 @@ import { GithubAppError, githubAppConfig, installationToken, signAppJwt, type Gi
 /** installation id -> lower-cased emails allowed to use it. Malformed entries are dropped, not guessed at. */
 export function parseInstallationOwners(raw: string | undefined): Map<number, Set<string>> {
   const owners = new Map<number, Set<string>>();
-  for (const entry of (raw ?? "").split(";")) {
+  // Dashboards sometimes keep the quotes a value was pasted with; they are never part of it.
+  const text = (raw ?? "").trim().replace(/^(["'])([\s\S]*)\1$/, "$2");
+  for (const entry of text.split(";")) {
     const [idPart, emailsPart, ...extra] = entry.split("=");
     if (extra.length > 0 || idPart === undefined || emailsPart === undefined) continue;
     const idText = idPart.trim();
@@ -85,6 +87,8 @@ export interface AccessDiagnosis {
   signedInAs: string | null;
   /** GITHUB_INSTALLATION_OWNERS holds at least one usable entry. */
   ownersConfigured: boolean;
+  /** Why not, when it does not: the variable is absent from this server, or present but not in the installation=email form. */
+  ownersVariable?: "missing" | "unreadable";
   /** This account is listed as an owner of some installation. Everything below runs only when it is. */
   listed: boolean;
   /** GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY are both set. */
@@ -112,6 +116,7 @@ export async function diagnoseAccess(input: {
   const owners = parseInstallationOwners(env["GITHUB_INSTALLATION_OWNERS"]);
   const mine = installationsOwnedBy(input.email, owners);
   const out: AccessDiagnosis = { signedInAs: input.email ?? null, ownersConfigured: owners.size > 0, listed: mine.length > 0 };
+  if (!out.ownersConfigured) out.ownersVariable = (env["GITHUB_INSTALLATION_OWNERS"] ?? "").trim() === "" ? "missing" : "unreadable";
   if (!out.listed) return out;
 
   const cfg = githubAppConfig(env);

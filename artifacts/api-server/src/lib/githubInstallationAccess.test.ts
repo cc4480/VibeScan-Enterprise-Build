@@ -139,3 +139,28 @@ describe("diagnoseAccess", () => {
     expect(d.token).toBe("repository_not_shared");
   });
 });
+
+describe("owners variable handling", () => {
+  it("accepts a value that still carries the quotes it was pasted with", () => {
+    expect([...parseInstallationOwners('"1001=owner@example.com"').keys()]).toEqual([1001]);
+    expect([...parseInstallationOwners("'1001=owner@example.com'").keys()]).toEqual([1001]);
+  });
+
+  it("does not strip quotes that are not a matching pair around the whole value", () => {
+    expect(parseInstallationOwners('"1001=owner@example.com').size).toBe(0);
+  });
+
+  it("tells a missing variable from one that is present but unreadable", async () => {
+    const missing = await diagnoseAccess({ email: "owner@example.com", repo, env: {}, fetchFn: answer(200, {}) });
+    expect(missing).toMatchObject({ ownersConfigured: false, ownersVariable: "missing" });
+    for (const bad of ["170782825", "owner@example.com", "170782825:owner@example.com", "abc=owner@example.com"]) {
+      const d = await diagnoseAccess({ email: "owner@example.com", repo, env: { GITHUB_INSTALLATION_OWNERS: bad }, fetchFn: answer(200, {}) });
+      expect(d).toMatchObject({ ownersConfigured: false, ownersVariable: "unreadable" });
+    }
+  });
+
+  it("leaves the field out when the variable reads fine", async () => {
+    const d = await diagnoseAccess({ email: "stranger@example.com", repo, env: { GITHUB_INSTALLATION_OWNERS: OWNERS }, fetchFn: answer(200, {}) });
+    expect(d.ownersVariable).toBeUndefined();
+  });
+});
