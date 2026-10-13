@@ -23,6 +23,8 @@
 import { CATALOG, catalogFor } from "./checkCatalog";
 import { findingFingerprint } from "./fingerprint";
 import type { TestRecord } from "./testLedger";
+import { NOT_THE_PROJECTS_OWN } from "./repoFinding";
+import { isEnvFilePath } from "./repoCheckCode";
 
 export interface FindingRef {
   name: string;
@@ -113,12 +115,15 @@ export function diffScans(
     (couldHaveExisted ? firstSeen : added).push(ref(v));
   }
 
+  // Whether this scan read only part of the repository (the coverage notice is filtered out of `now`, so read raw).
+  const repoPartial = rawVulnerabilities(current.data).some((v) => str(v["name"]) === REPO_PARTIAL_NOTICE);
+
   const fixed: FindingRef[] = [];
   const notRechecked: FindingRef[] = [];
   for (const v of before.vulnerabilities) {
     if (nowFp.has(fp(v))) continue;
     const test = testFor(str(v["name"]));
-    const checkedAgain = haveLedgers && (test ? ranNow.has(test) : noLongerRun.length === 0);
+    const checkedAgain = haveLedgers && (test ? ranNow.has(test) : noLongerRun.length === 0) && repoFileReadAgain(v, repoPartial);
     (checkedAgain ? fixed : notRechecked).push(ref(v));
   }
 
@@ -134,6 +139,28 @@ export function diffScans(
     noLongerRun,
     differentAccess: Boolean(previous.credentialed) !== Boolean(current.credentialed),
   };
+}
+
+/** The repository scan's notice that it read only part of the repository (repoScan.ts). */
+const REPO_PARTIAL_NOTICE = "GitHub source scan covered only part of the repository";
+
+function rawVulnerabilities(data: unknown): Array<Record<string, unknown>> {
+  const d = (typeof data === "object" && data !== null ? data : {}) as Record<string, unknown>;
+  return Array.isArray(d["vulnerabilities"]) ? (d["vulnerabilities"] as Array<Record<string, unknown>>).filter((v) => typeof v === "object" && v !== null) : [];
+}
+
+/**
+ * For a finding read from a repository's source, the test running again is not enough to call it fixed: the FILE has
+ * to have been read again. It was not when the repository scan now leaves that file out (a test fixture, say, after
+ * the rule changed), or when this scan read only part of the repository, so nobody can say the file was opened.
+ * Findings not from a repository are unaffected. Exported for tests.
+ */
+export function repoFileReadAgain(finding: Record<string, unknown>, repoPartial: boolean): boolean {
+  const evidence = str(finding["evidence"]);
+  if (!evidence.startsWith("Repository: ")) return true;
+  const file = /^File: (.+)$/m.exec(evidence)?.[1]?.trim() ?? "";
+  if (file && file !== "(repository)" && NOT_THE_PROJECTS_OWN.test(file) && !isEnvFilePath(file)) return false;
+  return !repoPartial;
 }
 
 const ORDER = ["critical", "high", "medium", "low", "info"];

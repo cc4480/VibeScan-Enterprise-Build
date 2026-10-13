@@ -56,7 +56,7 @@ export function changeGroups(c: ScanChanges): ChangeGroup[] {
       key: "notRechecked",
       label: `${c.notRechecked.length} not re-checked`,
       tone: "neutral",
-      note: "Found last time, but the test behind them did not run this time. That is not the same as fixed.",
+      note: "Found last time, but not checked again this time: the test behind them did not run, or the file they were in was not read. That is not the same as fixed.",
       items: c.notRechecked,
     },
   ];
