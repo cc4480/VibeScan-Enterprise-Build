@@ -19,6 +19,8 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
 Disallow: /api/
 
 Sitemap: https://secscan.us/sitemap.xml
@@ -43,6 +45,8 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
 Disallow: /api/
 
 User-agent: OAI-SearchBot
@@ -59,6 +63,8 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
 Disallow: /api/
 
 User-agent: ChatGPT-User
@@ -75,6 +81,8 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
 Disallow: /api/
 
 User-agent: ClaudeBot
@@ -91,6 +99,8 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
 Disallow: /api/
 
 User-agent: Claude-Web
@@ -107,6 +117,8 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
 Disallow: /api/
 
 User-agent: anthropic-ai
@@ -123,6 +135,8 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
 Disallow: /api/
 
 User-agent: PerplexityBot
@@ -139,6 +153,8 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
 Disallow: /api/
 
 User-agent: Perplexity-User
@@ -155,6 +171,8 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
 Disallow: /api/
 
 User-agent: Google-Extended
@@ -171,6 +189,8 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
 Disallow: /api/
 
 User-agent: Applebot
@@ -187,6 +207,8 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
 Disallow: /api/
 
 User-agent: Applebot-Extended
@@ -203,6 +225,8 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
 Disallow: /api/
 
 User-agent: Amazonbot
@@ -219,6 +243,8 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
 Disallow: /api/
 
 User-agent: CCBot
@@ -235,6 +261,8 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
 Disallow: /api/
 
 User-agent: DuckAssistBot
@@ -251,6 +279,8 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
 Disallow: /api/
 
 User-agent: meta-externalagent
@@ -267,6 +297,8 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
 Disallow: /api/
 
 User-agent: MistralAI-User
@@ -283,4 +315,6 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
 Disallow: /api/
