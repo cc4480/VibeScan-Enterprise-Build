@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { registerAccountSignup } from "./accountSignup";
 import { registerAccountSession } from "./accountSession";
+import { registerAccountDelete } from "./accountDelete";
 import { registerAccountRecovery } from "./accountRecovery";
 
 /**
@@ -26,6 +27,7 @@ const router: IRouter = Router();
 
 registerAccountSignup(router);
 registerAccountSession(router);
+registerAccountDelete(router);
 registerAccountRecovery(router);
 
 export default router;
