@@ -7,6 +7,11 @@ for each change; this collects what shipped and why it mattered.
 
 ### Reports
 
+- **A long list of findings no longer shows blank gaps.** Each finding card faded in from invisible, and a browser pauses
+  animations in a tab that is not showing, so a report with dozens of findings opened in the background (the progress
+  page opens it when the scan finishes) showed empty space where cards were waiting to animate. Only the first eight
+  cards fade in now; the rest are there at once.
+
 - **The live scan terminal shows what a repository scan is doing, with real numbers.** A repository read (alone, or
   added to a website scan) now reports its steps as they happen: the file listing ("624 files found, 544 to read, left
   alone: 4 binary files, 76 in vendored or fixture folders"), the reading in about ten stages ("300 of 544 read, 2.1 MB"),

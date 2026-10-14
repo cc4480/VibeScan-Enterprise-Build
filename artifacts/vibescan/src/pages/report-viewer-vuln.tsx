@@ -12,6 +12,9 @@ import { DismissalsContext, vulnUniqueKey, getCategoryMeta, parseTechVersion, ex
 
 // ─── Vuln card ────────────────────────────────────────────────────────────────
 
+/** How many finding cards fade in on load; the rest render at once. */
+export const FADE_IN_CARDS = 8;
+
 export function VulnCard({
   vuln,
   index,
@@ -53,7 +56,10 @@ export function VulnCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      // Only the first screenful fades in. A card that starts invisible stays blank until its animation runs, and a browser
+      // pauses animations in a tab that is not showing (a report opened from the progress page while you are elsewhere), so on
+      // a list of dozens the rest would sit as empty gaps. Cards further down are simply there.
+      initial={index < FADE_IN_CARDS ? { opacity: 0, y: 20 } : false}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(0.05 * index, 0.4) }}
       className="glass-card rounded-xl overflow-hidden border border-white/5"
