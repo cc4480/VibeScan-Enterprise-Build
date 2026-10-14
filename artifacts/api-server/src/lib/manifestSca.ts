@@ -205,17 +205,19 @@ function findingFor(
     ? ids.join(", ")
     : vulns.map((v) => v.id).slice(0, 6).join(", ");
 
-  const plural = vulns.length === 1 ? "advisory" : "advisories";
+  // OSV often lists one issue twice (a GitHub advisory and a PYSEC record for the same CVE): count the issues, not the records.
+  const issues = new Set(vulns.map((v) => cveIds(v)[0] ?? v.id)).size;
+  const plural = issues === 1 ? "advisory" : "advisories";
   return {
     id: randomUUID(),
     name: `Vulnerable dependency: ${pkg.name} ${pkg.version}`,
     severity,
     category: "Vulnerable Components",
     description: ctx.repository
-      ? `${pkg.name} ${pkg.version} has ${vulns.length} known ${plural} against it (${idList}). The version was read from ${source} in the repository ${ctx.repository}, so this is what the project installs, not a guess from a fingerprint. ` +
+      ? `${pkg.name} ${pkg.version} has ${issues} known ${plural} against it (${idList}). The version was read from ${source} in the repository ${ctx.repository}, so this is what the project installs, not a guess from a fingerprint. ` +
         (pkg.dev ? "It is a development dependency only (not installed in production), so it is rated one step lower. " : "") +
         (worst.v.summary ? `The most severe: ${worst.v.summary}` : "")
-      : `${pkg.name} ${pkg.version} has ${vulns.length} known ${plural} against it (${idList}). ` +
+      : `${pkg.name} ${pkg.version} has ${issues} known ${plural} against it (${idList}). ` +
         `This is not inferred from a fingerprint: the version was read from ${source}, ` +
         `which this site publishes, so the same list is available to anyone who looks. ` +
         (worst.v.summary ? `The most severe: ${worst.v.summary}` : ""),

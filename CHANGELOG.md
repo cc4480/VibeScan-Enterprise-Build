@@ -12,6 +12,8 @@ for each change; this collects what shipped and why it mattered.
   CI or development file it is now information ("looks like a development default"), while a generated-looking password in the
   same file is still high and a `.env` is not treated as a development file. fetch's `credentials: "same-origin"` (and the
   other mode words) was reported as a credential; it no longer is.
+- **Advisories are counted once.** OSV lists most issues twice (a GitHub advisory and a PYSEC record for the same CVE), so a
+  finding said "31 known advisories" for a package with about 16. It now counts distinct issues.
 - **A scan interrupted by a deploy is retried within about two minutes.** A deploy restarts the server and kills the scans
   running on it; they used to sit "scanning" until a two-hour expiry let them retry (one repository scan that had already read
   all its files showed as running for 17 minutes and counting). Every scan job now carries a heartbeat, so a dead worker is

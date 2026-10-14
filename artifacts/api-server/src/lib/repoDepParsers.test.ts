@@ -161,3 +161,15 @@ describe("findings from several ecosystems", () => {
     expect(out.findings[0]!.solution).toMatch(/stop serving/i);
   });
 });
+
+describe("counting advisories", () => {
+  it("counts an issue once when OSV lists it as both a GitHub advisory and a PYSEC record", async () => {
+    osv.answers = new Map([["PyPI:pyjwt@2.10.1", [
+      { id: "GHSA-aaaa-1", aliases: ["CVE-2026-1111", "PYSEC-2026-1"], summary: "One", severity: [{ type: "CVSS_V3", score: "7.5" }] },
+      { id: "PYSEC-2026-1", aliases: ["CVE-2026-1111", "GHSA-aaaa-1"], summary: "One", severity: [{ type: "CVSS_V3", score: "7.5" }] },
+      { id: "GHSA-bbbb-2", aliases: ["CVE-2026-2222"], summary: "Two", severity: [{ type: "CVSS_V3", score: "5.5" }] },
+    ]]]);
+    const out = await dependencyFindings([{ path: "requirements.txt", content: "PyJWT==2.10.1\n" }], { owner: "acme", repo: "app" });
+    expect(out.findings[0]!.description).toContain("has 2 known advisories");
+  });
+});
