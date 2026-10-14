@@ -18,6 +18,14 @@ for each change; this collects what shipped and why it mattered.
   walked folder by folder instead. The dependency check no longer stops at 150 packages (ceiling 5,000), looks up 12 at a
   time, and reads every package-lock.json in the repository instead of the first.
 
+- **Fewer false positives now that every file is read.** Reading all files turned a security tool's own test fixtures
+  into four "critical" findings and a grade of F. A secret-shaped value in a test, mock, example or docs file is now
+  shown as information under its own name ("in a test or example file"), as is one whose surrounding code calls it
+  forged, fake, dummy, a fixture, an example or a probe. The config-secret reader, built for config files, no longer
+  reports a shell command (`$(openssl rand -hex 32)`), a function call or an environment read (`clean(process.env.X)`)
+  as a value, and in source files it accepts only quoted literals. The Source code section now says how many files were
+  left alone on purpose (binary files, vendored and fixture folders), so "read 544 of 624" explains itself.
+
 - **A "Source code" section in the report when a repository was scanned.** The repository scan always ran its
   five checks, but the saved report kept only "ran, 0 findings", so a clean repository left no trace of what
   was read. The test record now keeps the repository, how it was read (public, or through the GitHub App),

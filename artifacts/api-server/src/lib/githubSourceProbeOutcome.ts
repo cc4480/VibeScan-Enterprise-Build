@@ -19,7 +19,7 @@ export interface GithubScanOutcome {
   /** How much of the repository was looked at (the repository scanner fills these in). */
   coverage?: {
     treeFiles: number; chosen: number; read: number; bytesRead: number; leftOutByCap: number;
-    tooLarge: number; truncatedTree: boolean; failedReads: number;
+    tooLarge: number; truncatedTree: boolean; failedReads: number; notRead?: { binary: number; vendored: number };
     /** Files read, by what they were read for. */
     byCheck?: Record<string, number>;
   };
@@ -72,7 +72,7 @@ export function sourceRecord(outcome: GithubScanOutcome, ref: { owner: string; r
     ...(c
       ? {
           treeFiles: c.treeFiles, chosen: c.chosen, bytesRead: c.bytesRead, leftOut: c.leftOutByCap,
-          tooLarge: c.tooLarge, failedReads: c.failedReads, truncatedTree: c.truncatedTree,
+          tooLarge: c.tooLarge, failedReads: c.failedReads, truncatedTree: c.truncatedTree, ...(c.notRead ? { notRead: c.notRead } : {}),
         }
       : {}),
     ...(outcome.checks ? { checks: outcome.checks } : {}),

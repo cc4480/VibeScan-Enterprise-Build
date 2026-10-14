@@ -15,7 +15,7 @@ import { scanConfigSecrets } from "./configSecrets";
 import { isCandidatePath, prioritise } from "./githubCandidates";
 import { configFinding } from "./githubFindings";
 import { NOT_SCANNED, type GithubScanOutcome } from "./githubSourceProbeOutcome";
-import { repoFinding, NOT_THE_PROJECTS_OWN, type RepoFile, type RepoRef } from "./repoFinding";
+import { repoFinding, NOT_THE_PROJECTS_OWN, isTestOrExamplePath, asTestFileFinding, namesItselfFake, type RepoFile, type RepoRef } from "./repoFinding";
 import { supabaseMigrationFindings, isMigrationPath } from "./repoCheckSupabase";
 import { ciConfigFindings, isWorkflowPath, isDockerfilePath, isSupabaseConfigPath, isFunctionCodePath } from "./repoCheckCi";
 import { codePatternFindings, isCodePath, isEnvFilePath } from "./repoCheckCode";
@@ -66,17 +66,20 @@ export interface RepoCoverage {
   /** Chosen files that could not be downloaded. */
   failedReads: number;
   byCheck: Record<Why, number>;
+  /** Files left alone on purpose: not text (images, fonts, archives), or inside a folder that is not the project's own. */
+  notRead: { binary: number; vendored: number };
 }
 
 /** What a repository scan returns: the outcome the scanner records, with its coverage and per-check results (see GithubScanOutcome). */
 export type RepoScanOutcome = GithubScanOutcome;
 
-export function chooseFiles(tree: TreeFile[]): { chosen: Array<TreeFile & { why: Why }>; tooLarge: number } {
+export function chooseFiles(tree: TreeFile[]): { chosen: Array<TreeFile & { why: Why }>; tooLarge: number; notRead: { binary: number; vendored: number } } {
   const byClass = new Map<Why, Array<TreeFile & { why: Why }>>();
   let tooLarge = 0;
+  const notRead = { binary: 0, vendored: 0 };
   for (const f of tree) {
     const why = classify(f.path);
-    if (!why) continue;
+    if (!why) { if (isBinaryPath(f.path)) notRead.binary++; else notRead.vendored++; continue; }
     const limit = isLockfilePath(f.path) ? MAX_LOCKFILE_BYTES : MAX_FILE_BYTES;
     if (f.size > limit) { tooLarge++; continue; }
     (byClass.get(why) ?? byClass.set(why, []).get(why)!).push({ ...f, why });
@@ -86,7 +89,7 @@ export function chooseFiles(tree: TreeFile[]): { chosen: Array<TreeFile & { why:
     const list = byClass.get(why) ?? [];
     chosen.push(...(why === "secrets" ? prioritise(list) : why === "code" ? [...list].sort((a, b) => codeRank(a.path) - codeRank(b.path) || a.path.localeCompare(b.path)) : [...list].sort((a, b) => a.path.localeCompare(b.path))));
   }
-  return { chosen, tooLarge };
+  return { chosen, tooLarge, notRead };
 }
 
 async function mapLimit<T, R>(items: T[], limit: number, fn: (x: T) => Promise<R>): Promise<R[]> {
@@ -109,19 +112,22 @@ function secretFindings(files: RepoFile[], ref: RepoRef): ScanVulnerability[] {
       const key = `${hit.pattern.name}|${f.path}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push(repoFinding({
+      const soften = isTestOrExamplePath(f.path)
+        ? (v: ScanVulnerability) => asTestFileFinding(v, "test-file")
+        : namesItselfFake(hit.context) ? (v: ScanVulnerability) => asTestFileFinding(v, "named-fake") : (v: ScanVulnerability) => v;
+      out.push(soften(repoFinding({
         ref, path: f.path, name: `${hit.pattern.name} (in source repository)`,
         severity: hit.pattern.severity, category: "Exposed Secrets / Credentials", cweId: hit.pattern.cweId, cvssScore: hit.pattern.cvssScore ?? 0, confidence: 85, wstgId: "WSTG-CONF-04",
         description: `A credential matching "${hit.pattern.name}" is committed in ${f.path}. Anyone who can read the repository can read it, and it stays in the Git history after it is deleted from the file.`,
         detail: `Match (redacted): ${redactSecret(hit.match)}\nContext: ...${redactContext(hit.context, hit.match).slice(0, 200)}...`,
         solution: `Rotate the credential now: removing it from the file does not remove it from Git history. ${hit.pattern.solution}`,
-      }));
+      })));
     }
     for (const hit of scanConfigSecrets(f.path, f.content)) {
       const key = `config|${f.path}|${hit.key}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push(configFinding(ref, f.path, hit));
+      out.push(isTestOrExamplePath(f.path) ? asTestFileFinding(configFinding(ref, f.path, hit)) : configFinding(ref, f.path, hit));
     }
   }
   return out;
@@ -136,7 +142,7 @@ export async function scanRepository(source: RepoSource, ref: RepoRef): Promise<
   if (!opened.ok) return NOT_SCANNED(opened.status);
   if (opened.tree.length === 0) return { findings: [], status: "empty", filesRead: 0, via: source.via };
 
-  const { chosen, tooLarge } = chooseFiles(opened.tree);
+  const { chosen, tooLarge, notRead } = chooseFiles(opened.tree);
   const files: RepoFile[] = []; // only what is kept to the end
   const readPaths: string[] = [];
   const findings: ScanVulnerability[] = [];
@@ -193,7 +199,7 @@ export async function scanRepository(source: RepoSource, ref: RepoRef): Promise<
 
   // No count or byte limit exists any more; the field stays so records and reports made before keep their meaning.
   const cap = 0;
-  const coverage: RepoCoverage = { treeFiles: opened.tree.length, chosen: chosen.length, read: readPaths.length, bytesRead, leftOutByCap: cap, tooLarge, truncatedTree: opened.truncated, failedReads, byCheck };
+  const coverage: RepoCoverage = { treeFiles: opened.tree.length, chosen: chosen.length, read: readPaths.length, bytesRead, leftOutByCap: cap, tooLarge, truncatedTree: opened.truncated, failedReads, byCheck, notRead };
   // Files in the repository but none of a kind these checks read (a Python or Go project, say): nothing was tested.
   const nothingRead = chosen.length === 0;
   if (nothingRead || opened.truncated || cap > 0 || tooLarge > 0 || failedReads > 0 || (deps.considered > deps.looked)) {

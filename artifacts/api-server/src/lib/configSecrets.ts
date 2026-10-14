@@ -56,6 +56,8 @@ function isSecretValue(raw: string, example: boolean): boolean {
   if (/^https?:\/\//i.test(value) && !/@/.test(value)) return false;
   if (/^django-insecure-/i.test(value)) return false; // startproject's generated development key
   if (value.includes("://")) return false; // a database URL: the URL pattern owns that one
+  if (/[()]/.test(value)) return false; // a call or a shell command ($(openssl rand -hex 32), clean(process.env.X)): code, not a value
+  if (/(?:process\.env|import\.meta\.env|os\.environ|getenv|System\.getenv)/i.test(value)) return false;
   if (isPublicByDesignValue(value)) return false; // AIza, pk.ey, pk_live_, anon JWT: shipped to browsers on purpose
   if (looksLikeReference(value) || looksLikeAName(value) || isPlaceholderToken(value) || isTrivialPassword(value)) return false;
   const entropy = shannonEntropy(value);
@@ -66,7 +68,13 @@ interface Pair {
   key: string;
   value: string;
   line: number;
+  /** The value was written in quotes. */
+  quoted: boolean;
 }
+
+/** Files that are configuration, where an unquoted KEY=VALUE is how a secret is written. Elsewhere only a quoted literal is one. */
+const isConfigSyntax = (path: string): boolean =>
+  /(?:^|\/)(?:\.env(?:\.[\w.-]+)?|\.(?:npmrc|netrc|pypirc)|wp-config\.php|(?:local_)?settings\.py|master\.key)$|\.(?:ya?ml|json|toml|ini|cfg|conf|properties|tfvars|env|example|sample|template|tmpl|dist)$|(?:^|\/)(?:docker-)?compose[^/]*\.ya?ml$/i.test(path);
 
 const unquote = (v: string): string => v.replace(/^(["'`])(.*)\1$/, "$2").replace(/[,;]+$/, "");
 
@@ -78,23 +86,23 @@ function pairsOn(text: string, line: number): Pair[] {
 
   // .npmrc: //registry.example.org/:_authToken=VALUE (begins with // like a comment, so first)
   const npm = /^\/\/[^\s=]+_(?:authToken|password|auth)\s*=\s*(\S+)/.exec(trimmed);
-  if (npm) return [{ key: trimmed.slice(0, trimmed.indexOf("=")).trim(), value: unquote(npm[1]!), line }];
+  if (npm) return [{ key: trimmed.slice(0, trimmed.indexOf("=")).trim(), value: unquote(npm[1]!), line, quoted: false }];
 
   if (trimmed.startsWith("#") || trimmed.startsWith("--") || trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*")) return pairs;
 
   // PHP: define('DB_PASSWORD', 'value');
   for (const m of text.matchAll(/define\(\s*["']([A-Za-z_]\w*)["']\s*,\s*["']([^"']*)["']/g)) {
-    pairs.push({ key: m[1]!, value: m[2]!, line });
+    pairs.push({ key: m[1]!, value: m[2]!, line, quoted: true });
   }
   // .netrc: password VALUE
   const netrc = /^password\s+(\S+)/i.exec(trimmed);
-  if (netrc) pairs.push({ key: "password", value: unquote(netrc[1]!), line });
+  if (netrc) pairs.push({ key: "password", value: unquote(netrc[1]!), line, quoted: false });
 
   // KEY=VALUE, KEY: VALUE, 'KEY': 'VALUE', "Key": "value", anywhere on the line.
   for (const m of text.matchAll(/(?:^|[\s,{(])["'`]?([A-Za-z_][\w.\-]*)["'`]?\s*[:=]\s*("[^"]*"|'[^']*'|`[^`]*`|[^\s,;#}{)"']+)/g)) {
     // ${VAR:?message} and ${VAR:-default} are shell interpolation, not KEY: VALUE; the inside is a reference, never a secret.
     if (text[m.index!] === "{" && text[m.index! - 1] === "$") continue;
-    pairs.push({ key: m[1]!, value: unquote(m[2]!), line });
+    pairs.push({ key: m[1]!, value: unquote(m[2]!), line, quoted: /^["'`]/.test(m[2]!) });
   }
   return pairs;
 }
@@ -118,6 +126,7 @@ function* jsonLeaves(node: unknown, path: string[] = []): Generator<[string, str
 
 export function scanConfigSecrets(path: string, content: string): ConfigSecretHit[] {
   const example = isExampleFile(path);
+  const configFile = isConfigSyntax(path);
   const hits: ConfigSecretHit[] = [];
   const seen = new Set<string>();
   const add = (key: string, value: string, line: number) => {
@@ -146,7 +155,8 @@ export function scanConfigSecrets(path: string, content: string): ConfigSecretHi
   }
 
   content.split(/\r?\n/).forEach((text, i) => {
-    for (const { key, value, line } of pairsOn(text, i + 1)) {
+    for (const { key, value, line, quoted } of pairsOn(text, i + 1)) {
+      if (!quoted && !configFile) continue; // in code, `token = getToken` is an expression, not a committed value
       const inString = connectionStringPassword(value);
       if (inString !== null && isSecretValue(inString, example)) add(`${key} (Password)`, inString, line);
       else if (holdsSecret(key) && isSecretValue(value, example)) add(key, value, line);

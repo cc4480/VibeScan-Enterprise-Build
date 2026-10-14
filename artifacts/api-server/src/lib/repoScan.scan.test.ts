@@ -99,6 +99,38 @@ describe("scanRepository", () => {
     expect(names(out.findings).some((n) => /Stripe/i.test(n) && /source repository/.test(n))).toBe(true);
   });
 
+  it("shows a secret-shaped value in a test file as information, apart from the same kind of value in code that ships", async () => {
+    const key = 'const k = "sk_live_Zk3pQ8vXw2LmN7rT9yBcD4fG";\n';
+    const out = await scanRepository(memorySource({ "server/pay.test.ts": key, "docs/guide.md": key, "app/pay.py": key }), ref);
+    const stripe = out.findings.filter((v) => /Stripe/i.test(v.name));
+    const shipped = stripe.filter((v) => /in source repository/.test(v.name));
+    const fake = stripe.filter((v) => /test or example file/.test(v.name));
+    expect(shipped).toHaveLength(1);
+    expect(shipped[0]!.severity).toBe("critical");
+    expect(shipped[0]!.evidence).toContain("app/pay.py");
+    expect(fake).toHaveLength(2);
+    expect(fake.every((v) => v.severity === "info")).toBe(true);
+    expect(fake.map((v) => v.evidence).join(" ")).toContain("server/pay.test.ts");
+  });
+
+  it("shows a value its own code calls forged, dummy or a probe as information, and a plain one as before", async () => {
+    const out = await scanRepository(memorySource({
+      "server/probe.ts": 'const FORGED = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJwcm9iZSJ9.c2lnbmF0dXJlLXByb2Jl";\n',
+      "server/auth.ts": 'const session = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbiJ9.c2lnbmF0dXJlLWFkbWlu";\n',
+    }), ref);
+    const jwt = out.findings.filter((v) => /JWT/i.test(v.name));
+    expect(jwt.find((v) => /deliberately fake/.test(v.name))?.severity).toBe("info");
+    expect(jwt.find((v) => /in source repository/.test(v.name))?.severity).toBe("high");
+  });
+
+  it("counts the files it leaves alone on purpose, by reason, so the report can say why", async () => {
+    const out = await scanRepository(memorySource({
+      "src/a.ts": "export const a = 1;", "static/logo.png": "x", "static/hero.jpg": "x", "assets/font.woff2": "x",
+      "node_modules/x/index.js": "x", "dist/app.js": "x",
+    }), ref);
+    expect(out.coverage).toMatchObject({ treeFiles: 6, read: 1, notRead: { binary: 3, vendored: 2 } });
+  });
+
   it("a repository with only binary files says nothing was tested, not that it is clean", async () => {
     const out = await scanRepository(memorySource({ "static/logo.png": "x", "assets/font.woff2": "y" }), ref);
     const note = out.findings.find((v) => v.name === "GitHub source scan covered only part of the repository")!;

@@ -150,3 +150,22 @@ describe("scanConfigSecrets: public-by-design keys and dev passwords", () => {
     expect(keys(".env", env)).toEqual(["STRIPE_SECRET_KEY", "DB_PASSWORD", "SUPABASE_SERVICE_ROLE_KEY", "ALGOLIA_ADMIN_API_KEY"]);
   });
 });
+
+describe("code and shell commands are not committed secrets", () => {
+  it("does not read a command substitution in a CI file as a value", () => {
+    expect(keys(".github/workflows/ci.yml", "env:\n  ENCRYPTION_KEY: $(openssl rand -hex 32)\n")).toEqual([]);
+  });
+
+  it("does not read a function call or an environment read in source as a value", () => {
+    expect(keys("server/config.ts", "  healthDetailToken: clean(process.env.HEALTH_DETAIL_TOKEN),\n  apiToken: process.env.API_TOKEN ?? '',\n")).toEqual([]);
+  });
+
+  it("in source code, reads a quoted literal but not a bare expression", () => {
+    expect(keys("src/pay.ts", `const apiSecret = "${REAL}";\n`)).toEqual(["apiSecret"]);
+    expect(keys("src/pay.ts", `const authToken = ${REAL};\n`)).toEqual([]);
+  });
+
+  it("in a config file, still reads an unquoted value", () => {
+    expect(keys("deploy/app.env", `API_SECRET=${REAL}\n`)).toEqual(["API_SECRET"]);
+  });
+});

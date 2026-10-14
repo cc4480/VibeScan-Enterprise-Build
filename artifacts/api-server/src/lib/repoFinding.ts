@@ -45,6 +45,30 @@ export function repoFinding(i: RepoFindingInput): ScanVulnerability {
   } as ScanVulnerability;
 }
 
+/** A test, mock, example or documentation file: a secret-shaped value there is far more often a fake than a leak. */
+export const isTestOrExamplePath = (p: string) =>
+  /(?:^|\/)(?:__tests__|__mocks__|tests?|spec|e2e|cypress|mocks?|examples?|samples?|docs?)\//i.test(p) ||
+  /\.(?:test|spec)\.[a-z0-9]+$/i.test(p) ||
+  /(?:^|\/)(?:test|spec)[-_.][^/]*$/i.test(p);
+
+/** The code around a match calls it a fake: FORGED_TOKEN, dummyKey, a fixture, an example, a probe. */
+export const namesItselfFake = (context: string): boolean => /(?:forged|fake|dummy|bogus|mock|fixture|placeholder|example|sample|probe)/i.test(context);
+
+/**
+ * The same finding, shown as information under its own name. Its own name, so that it is never merged into (and never
+ * hides, or is hidden by) a finding of the same kind in a file that ships.
+ */
+export function asTestFileFinding(v: ScanVulnerability, why: "test-file" | "named-fake" = "test-file"): ScanVulnerability {
+  return {
+    ...v,
+    name: v.name.replace(" (in source repository)", why === "test-file" ? " (in a test or example file)" : " (a value that looks deliberately fake)"),
+    severity: "info",
+    cvssScore: 0,
+    confidence: 40,
+    description: `${v.description} ${why === "test-file" ? "It is in a test, mock, example or documentation file" : "The code around it names it as fake (forged, dummy, fixture, example, probe)"}, where a fake value is the usual reason, so it is shown as information. If the value is a real credential, treat it as exposed.`,
+  } as ScanVulnerability;
+}
+
 /**
  * Files under a directory the project does not own (dependencies, build output, fixtures).
  *

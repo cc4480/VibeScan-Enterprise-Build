@@ -32,6 +32,8 @@ export interface SourceScanRecord {
   bytesRead?: number;
   /** Candidate files left out by the file and size limits, over the per-file limit, or not downloadable. */
   leftOut?: number;
+  /** Files left alone on purpose: binary files, and folders that are not the project's own. */
+  notRead?: { binary: number; vendored: number };
   tooLarge?: number;
   failedReads?: number;
   /** GitHub cut the repository's file list short. */
@@ -270,7 +272,7 @@ export function sourceLines(tests: unknown, findings: ReadonlyArray<{ name?: unk
     (f) => typeof f.evidence === "string" && f.evidence.startsWith("Repository: ") && f.name !== "GitHub source scan covered only part of the repository",
   );
   const out = [
-    `${head}: read ${s?.read ?? 0} file${s?.read === 1 ? "" : "s"}${s?.treeFiles != null ? ` of ${s.treeFiles} in the repository` : ""}${s?.via === "github-app" ? ", through the connected GitHub App" : s?.via ? ", as a public repository" : ""}.`,
+    `${head}: read ${s?.read ?? 0} file${s?.read === 1 ? "" : "s"}${s?.treeFiles != null ? ` of ${s.treeFiles} in the repository` : ""}${s?.via === "github-app" ? ", through the connected GitHub App" : s?.via ? ", as a public repository" : ""}.${s?.notRead && s.notRead.binary + s.notRead.vendored > 0 ? ` Left alone on purpose: ${s.notRead.binary} binary file${s.notRead.binary === 1 ? "" : "s"} (images, fonts, archives), ${s.notRead.vendored} in vendored or fixture folders (node_modules, dist, build, fixtures).` : ""}`,
     ...(s?.checks ?? []).map(
       (c) => `- ${c.name}: ${c.files === 0 ? (c.note ?? "nothing of this kind to read") : `${c.files} file${c.files === 1 ? "" : "s"} read, ${c.findings} finding${c.findings === 1 ? "" : "s"}`}`,
     ),

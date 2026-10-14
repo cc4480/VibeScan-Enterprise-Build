@@ -17,6 +17,8 @@ export interface SourceRecord {
   read?: number;
   bytesRead?: number;
   leftOut?: number;
+  /** Files left alone on purpose: binary files, and folders that are not the project's own. */
+  notRead?: { binary: number; vendored: number };
   tooLarge?: number;
   failedReads?: number;
   truncatedTree?: boolean;
@@ -59,7 +61,11 @@ export function readSummary(s: SourceRecord): string {
   const read = s.read ?? 0;
   const of = s.treeFiles != null ? ` of ${s.treeFiles} in the repository` : "";
   const size = s.bytesRead != null ? ` (${mb(s.bytesRead)})` : "";
-  return `Read ${read} file${read === 1 ? "" : "s"}${size}${of}.`;
+  const left =
+    s.notRead && s.notRead.binary + s.notRead.vendored > 0
+      ? ` Left alone on purpose: ${s.notRead.binary} binary file${s.notRead.binary === 1 ? "" : "s"} (images, fonts, archives), ${s.notRead.vendored} in vendored or fixture folders (node_modules, dist, build, fixtures).`
+      : "";
+  return `Read ${read} file${read === 1 ? "" : "s"}${size}${of}.${left}`;
 }
 
 /** What was left unread, as short phrases; empty when the whole selection was read. */
