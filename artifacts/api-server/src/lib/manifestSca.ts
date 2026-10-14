@@ -48,7 +48,7 @@ export interface ManifestPackage {
 const MAX_PACKAGES = 60;
 
 /** Concurrent OSV lookups. OSV is public and free; this stays polite. */
-const OSV_CONCURRENCY = 6;
+const OSV_CONCURRENCY = 12;
 
 /**
  * A dependency range pinned to a single exact version, or null.

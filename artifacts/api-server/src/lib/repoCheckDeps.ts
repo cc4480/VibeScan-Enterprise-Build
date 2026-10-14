@@ -6,14 +6,14 @@
  * OSV lookup and finding builder as the exposed-manifest check (manifestSca.ts).
  *
  * Direct dependencies from package.json come first (those are the ones the owner chose and can update); the
- * lockfile's transitive packages fill what is left of a fixed budget, so a big lockfile costs a bounded number of lookups.
+ * lockfile's transitive packages follow, from every lockfile in the repository (a monorepo has several).
  */
 import { scaFromManifest, exactVersion, type ManifestPackage } from "./manifestSca";
 import type { RepoFile } from "./repoFinding";
 import type { ScanVulnerability } from "./scanner";
 
-/** Lookups per repository. OSV answers one package at a time here. */
-export const MAX_PACKAGES = 150;
+/** A safety ceiling on lookups per repository, far above any real project (a large monorepo has a few thousand packages). */
+export const MAX_PACKAGES = 5000;
 
 export const isManifestPath = (p: string) => /(?:^|\/)package\.json$/i.test(p) && !/(?:^|\/)node_modules\//.test(p);
 export const isLockfilePath = (p: string) => /(?:^|\/)package-lock\.json$/i.test(p) && !/(?:^|\/)node_modules\//.test(p);
@@ -48,10 +48,10 @@ export function lockedPackages(body: string): ManifestPackage[] {
 }
 
 export async function dependencyFindings(files: RepoFile[]): Promise<{ findings: ScanVulnerability[]; considered: number; looked: number; source: string | null }> {
-  const lock = files.find((f) => isLockfilePath(f.path));
+  const locks = files.filter((f) => isLockfilePath(f.path));
   const manifests = files.filter((f) => isManifestPath(f.path));
   const direct = manifests.flatMap((m) => directDependencies(m.content));
-  const locked = lock ? lockedPackages(lock.content) : [];
+  const locked = locks.flatMap((l) => lockedPackages(l.content));
   const seen = new Set<string>();
   const ordered: ManifestPackage[] = [];
   // A direct dependency is looked up at the version the lockfile resolved, when there is one (it is the installed one).
@@ -62,7 +62,7 @@ export async function dependencyFindings(files: RepoFile[]): Promise<{ findings:
   }
   if (ordered.length === 0) return { findings: [], considered: 0, looked: 0, source: null };
   const budget = ordered.slice(0, MAX_PACKAGES);
-  const source = lock?.path ?? manifests[0]!.path;
+  const source = locks[0]?.path ?? manifests[0]!.path;
   const findings = await scaFromManifest(budget, source);
   return { findings, considered: ordered.length, looked: budget.length, source };
 }

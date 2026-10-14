@@ -15,7 +15,8 @@ for each change; this collects what shipped and why it mattered.
   count or total-bytes cap; one file over 10 MB is listed as skipped. Memory stays flat on any size: files are read
   in batches of 100, the per-file checks run and release each batch, and only migrations, CI files and manifests are
   kept for the checks that need them side by side. A repository whose file list GitHub cuts off at 100,000 entries is
-  walked folder by folder instead.
+  walked folder by folder instead. The dependency check no longer stops at 150 packages (ceiling 5,000), looks up 12 at a
+  time, and reads every package-lock.json in the repository instead of the first.
 
 - **A "Source code" section in the report when a repository was scanned.** The repository scan always ran its
   five checks, but the saved report kept only "ran, 0 findings", so a clean repository left no trace of what
