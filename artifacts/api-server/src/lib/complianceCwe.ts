@@ -77,6 +77,11 @@ export const CWE_CONTROLS_INJECTION_SECRETS: Record<string, ControlRef[]> = {
     { framework: "asvs", control: "V5.1.2", title: "Mass assignment / parameter binding controlled" },
     { framework: "iso27001", control: "A.8.28", title: "Secure coding" },
   ],
+  "CWE-506": [
+    { framework: "asvs", control: "V14.2.4", title: "Third-party components come from trusted, maintained repositories" },
+    { framework: "pci", control: "6.3.2", title: "Inventory of third-party software components maintained" },
+    { framework: "iso27001", control: "A.5.21", title: "Managing information security in the ICT supply chain" },
+  ],
   "CWE-1395": [
     { framework: "asvs", control: "V14.2.1", title: "Dependencies free of known vulnerabilities" },
     { framework: "pci", control: "6.3.3", title: "Third-party components patched" },
