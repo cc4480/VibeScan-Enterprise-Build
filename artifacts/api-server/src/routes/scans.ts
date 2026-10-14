@@ -20,6 +20,12 @@ const STATUS_PROGRESS: Record<string, number> = {
   failed: 0,
 };
 
+/** Rows returned by GET /scans: 200 unless asked for fewer or more, never above 500. */
+function listLimit(raw: unknown): number {
+  const n = Number.parseInt(String(raw ?? ""), 10);
+  return Number.isFinite(n) ? Math.min(Math.max(n, 1), 500) : 200;
+}
+
 router.get("/scans", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) {
     res.status(401).json({ error: "Unauthorized" });
@@ -32,7 +38,10 @@ router.get("/scans", async (req, res): Promise<void> => {
       .from(scansTable)
       // Re-checks of a single finding (origin "verify") are not scans the person asked for; they appear on the finding.
       .where(and(eq(scansTable.userId, req.user.id), ne(scansTable.origin, "verify")))
-      .orderBy(desc(scansTable.createdAt));
+      .orderBy(desc(scansTable.createdAt))
+      // Newest first and bounded: an account that scans on a schedule for a year would otherwise
+      // download every row on each page load. ?limit= up to 500.
+      .limit(listLimit(req.query["limit"]));
 
     // Batch-fetch reports for all complete scans to avoid N+1
     const completeScanIds = scans

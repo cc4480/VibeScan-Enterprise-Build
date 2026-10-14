@@ -55,7 +55,7 @@ async function handler(method: "get" | "post" | "delete", path: string): Promise
     stack: { route?: { path: string; methods: Record<string, boolean>; stack: { handle: Handler }[] } }[];
   };
   const layer = router.stack.find((l) => l.route?.path === path && l.route.methods[method])!;
-  return layer.route!.stack[0]!.handle;
+  return layer.route!.stack[layer.route!.stack.length - 1]!.handle;
 }
 
 function fakeRes() {

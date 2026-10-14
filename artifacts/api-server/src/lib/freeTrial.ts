@@ -1,5 +1,9 @@
-import { db, scansTable } from "@workspace/db";
-import { and, count, eq, gte, or, sql } from "drizzle-orm";
+import { createHmac } from "node:crypto";
+import { db, scansTable, usersTable, deletedAccountTrialsTable } from "@workspace/db";
+import { and, count, eq, gte, lt, or, sql } from "drizzle-orm";
+
+/** Either the pool or an open transaction. */
+type Executor = Pick<typeof db, "select" | "insert" | "delete">;
 
 /**
  * The free-scan allowance, and the one place that decides whether it is spent.
@@ -51,8 +55,8 @@ export const TRIAL_LIMIT_CODE = "trial_exhausted";
  * for and then lock them out with a message claiming they used their free
  * scans themselves. `scans.origin` is what separates the two.
  */
-export async function trialScansUsedBy(userId: string, now: Date = new Date()): Promise<number> {
-  const [row] = await db
+export async function trialScansUsedBy(userId: string, now: Date = new Date(), exec: Executor = db): Promise<number> {
+  const [row] = await exec
     .select({ n: count() })
     .from(scansTable)
     // A scan the user started, OR any scan paid for with a free scan — so a
@@ -65,7 +69,43 @@ export async function trialScansUsedBy(userId: string, now: Date = new Date()): 
         gte(scansTable.createdAt, freeScanPeriodStart(now)),
       ),
     );
-  return row?.n ?? 0;
+  return (row?.n ?? 0) + (await carriedUsage(userId, now, exec));
+}
+
+/**
+ * A keyed hash of an address, for remembering a deleted account's usage without keeping the
+ * address. Keyed with ENCRYPTION_KEY so the table cannot be matched against a list of emails.
+ */
+export function trialEmailKey(email: string): string {
+  return createHmac("sha256", process.env["ENCRYPTION_KEY"] ?? "secscan-trial").update(email.trim().toLowerCase()).digest("hex");
+}
+
+/** Free scans an earlier, since-deleted account at this address already used this month. */
+async function carriedUsage(userId: string, now: Date, exec: Executor): Promise<number> {
+  const [user] = await exec.select({ email: usersTable.email }).from(usersTable).where(eq(usersTable.id, userId));
+  if (!user?.email) return 0;
+  const [row] = await exec
+    .select({ used: deletedAccountTrialsTable.scansUsed, periodStart: deletedAccountTrialsTable.periodStart })
+    .from(deletedAccountTrialsTable)
+    .where(eq(deletedAccountTrialsTable.emailHash, trialEmailKey(user.email)));
+  return row && row.periodStart.getTime() === freeScanPeriodStart(now).getTime() ? row.used : 0;
+}
+
+/**
+ * Called as an account is deleted, inside the deletion's transaction and before its rows go: keeps
+ * how many free scans this month's allowance has already spent, so deleting and registering again
+ * does not reset it. Earlier months' entries are dropped, since they no longer affect anything.
+ */
+export async function carryTrialUsage(tx: Executor, userId: string, email: string | null | undefined): Promise<void> {
+  const now = new Date();
+  await tx.delete(deletedAccountTrialsTable).where(lt(deletedAccountTrialsTable.periodStart, freeScanPeriodStart(now)));
+  if (!email) return;
+  const used = await trialScansUsedBy(userId, now, tx);
+  if (used <= 0) return;
+  await tx
+    .insert(deletedAccountTrialsTable)
+    .values({ emailHash: trialEmailKey(email), periodStart: freeScanPeriodStart(now), scansUsed: Math.min(used, FREE_TRIAL_SCAN_LIMIT) })
+    .onConflictDoUpdate({ target: deletedAccountTrialsTable.emailHash, set: { periodStart: freeScanPeriodStart(now), scansUsed: Math.min(used, FREE_TRIAL_SCAN_LIMIT) } });
 }
 
 export async function trialScansExhausted(userId: string): Promise<boolean> {
@@ -80,37 +120,49 @@ export class TrialExhaustedError extends Error {
   }
 }
 
+/** Thrown by insertScanRow when the account's daily scan limit was reached by requests arriving together. */
+export class DailyLimitError extends Error {
+  constructor() {
+    super("daily_limit");
+    this.name = "DailyLimitError";
+  }
+}
+
 /**
- * Create a scan row, holding the free allowance to its limit.
+ * Create a scan row, holding the free allowance and the daily limit to their limits.
  *
- * chargeScan decides "free" by counting scan rows, but the row is written some time later, so
- * requests arriving together all counted the same rows, all got "free", and all inserted. For a
- * free scan this takes a per-user advisory lock, counts again, and inserts under that lock; the
- * next request for the same user waits for the commit and counts this row. The lock is
- * transaction-scoped, so it cannot outlive the insert, and it is per user, so no one else waits.
+ * chargeScan decides "free" by counting scan rows, and the daily limit is a count too, but the row
+ * is written some time later, so requests arriving together all counted the same rows and all
+ * inserted. Where either limit applies this takes a per-user advisory lock, counts again, and
+ * inserts under that lock; the next request for the same user waits for the commit and counts this
+ * row. The lock is transaction-scoped, so it cannot outlive the insert, and per user, so no one
+ * else waits.
  *
- * Any other kind of payment already took something (a credit, an included scan) atomically and
- * is inserted as before. Throws TrialExhaustedError when the free scan is no longer available;
- * nothing was taken for a free scan, so there is nothing to refund.
+ * Throws TrialExhaustedError or DailyLimitError. For a free scan nothing was taken, so there is
+ * nothing to refund; for a credit or included scan the caller refunds, as for any other refusal.
  */
-export async function insertScanRow(values: typeof scansTable.$inferInsert): Promise<typeof scansTable.$inferSelect> {
-  if (values.paidWith !== "free") {
+export async function insertScanRow(
+  values: typeof scansTable.$inferInsert,
+  opts: { dailyMax?: number } = {},
+): Promise<typeof scansTable.$inferSelect> {
+  const isFree = values.paidWith === "free";
+  if (!isFree && opts.dailyMax === undefined) {
     const [row] = await db.insert(scansTable).values(values).returning();
     return row!;
   }
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`free-scan:${values.userId}`}))`);
-    const [used] = await tx
-      .select({ n: count() })
-      .from(scansTable)
-      .where(
-        and(
-          eq(scansTable.userId, values.userId),
-          or(eq(scansTable.origin, "user"), eq(scansTable.paidWith, "free")),
-          gte(scansTable.createdAt, freeScanPeriodStart()),
-        ),
-      );
-    if ((used?.n ?? 0) >= FREE_TRIAL_SCAN_LIMIT) throw new TrialExhaustedError();
+    if (isFree && (await trialScansUsedBy(values.userId, new Date(), tx)) >= FREE_TRIAL_SCAN_LIMIT) {
+      throw new TrialExhaustedError();
+    }
+    if (opts.dailyMax !== undefined) {
+      const since = new Date(Date.now() - 24 * 60 * 60_000);
+      const [today] = await tx
+        .select({ n: count() })
+        .from(scansTable)
+        .where(and(eq(scansTable.userId, values.userId), gte(scansTable.createdAt, since)));
+      if ((today?.n ?? 0) >= opts.dailyMax) throw new DailyLimitError();
+    }
     const [row] = await tx.insert(scansTable).values(values).returning();
     return row!;
   });

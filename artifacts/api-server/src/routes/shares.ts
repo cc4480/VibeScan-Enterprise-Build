@@ -5,8 +5,13 @@ import { z } from "zod";
 import { createReportShare, hashShareToken } from "../lib/reportShare";
 import { UUID_ANY } from "./accountShared";
 import { withNoteFreeTotals } from "../lib/reportTotals";
+import { rateLimitMiddleware } from "../lib/rateLimit";
 
 const router: IRouter = Router();
+
+// Public and unauthenticated: bound what one address can ask of the database. Tokens are 256 random bits,
+// so this is about load rather than guessing.
+const shareReadLimit = rateLimitMiddleware({ rules: [{ windowMs: 60_000, max: 120, label: "minute" }], name: "share-read" });
 
 const CreateShareBody = z.object({
   expiresIn: z.enum(["7d", "30d", "never"]).default("never"),
@@ -173,7 +178,7 @@ router.delete("/reports/:id/shares/:shareId", async (req, res): Promise<void> =>
 });
 
 // ── GET /api/share/:token — public share endpoint (no auth required) ──────────
-router.get("/share/:token", async (req, res): Promise<void> => {
+router.get("/share/:token", shareReadLimit, async (req, res): Promise<void> => {
   const token = Array.isArray(req.params.token) ? req.params.token[0] : req.params.token;
 
   try {

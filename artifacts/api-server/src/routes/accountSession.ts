@@ -9,6 +9,7 @@ import { LOGIN_CODE_TTL_MS, normalizeLoginCode } from "../lib/loginCode";
 import { abandonLoginChallenges, issueLoginChallenge, redeemLoginChallenge } from "../lib/pendingLogin";
 import { sendLoginCode } from "../lib/mailer";
 import { clientIp } from "../lib/clientIp";
+import { carryTrialUsage } from "../lib/freeTrial";
 
 /** Sign-in with an emailed code, sign-out, and deleting the account. */
 
@@ -234,6 +235,9 @@ export function registerAccountSession(router: IRouter): void {
       // One transaction: a failure part-way must not leave a half-erased account (the subscription is
       // already cancelled by now, so the retry has to be able to finish the job).
       await db.transaction(async (tx) => {
+        // Before the scans go: remembers this month's free scans already used, so registering again
+        // at the same address does not reset the allowance (lib/freeTrial.ts).
+        await carryTrialUsage(tx, userId, req.user.email);
         await tx.delete(scansTable).where(eq(scansTable.userId, userId));
         await tx.delete(monitorSubscriptionsTable).where(eq(monitorSubscriptionsTable.userId, userId));
         await tx.delete(reportSharesTable).where(eq(reportSharesTable.userId, userId));

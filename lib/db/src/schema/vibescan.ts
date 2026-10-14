@@ -211,6 +211,17 @@ export const githubInstallationsTable = pgTable("github_installations", {
   index("idx_github_installations_user").on(table.userId),
 ]);
 
+/**
+ * Free scans used this month by an account that has since been deleted, so deleting and re-registering
+ * does not hand out a fresh allowance. Holds a keyed hash of the address, never the address, and only
+ * for the month it applies to: rows from earlier months are deleted as they are met.
+ */
+export const deletedAccountTrialsTable = pgTable("deleted_account_trials", {
+  emailHash: text("email_hash").primaryKey(),
+  periodStart: timestamp("period_start", { withTimezone: true }).notNull(),
+  scansUsed: integer("scans_used").notNull(),
+});
+
 export const dismissedFindingsTable = pgTable("dismissed_findings", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull(),

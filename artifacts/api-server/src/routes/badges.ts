@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, reportsTable, reportBadgesTable } from "@workspace/db";
 import { eq, and, isNull } from "drizzle-orm";
 import { UUID_ANY } from "./accountShared";
+import { rateLimitMiddleware } from "../lib/rateLimit";
 import { APP_ORIGIN } from "../lib/appOrigin";
 import {
   badgeSnippets,
@@ -15,6 +16,9 @@ import {
 } from "../lib/reportBadge";
 
 const router: IRouter = Router();
+
+// Embedded on other sites, so the address is the reader's. Generous: a README with a few badges is normal.
+const badgeReadLimit = rateLimitMiddleware({ rules: [{ windowMs: 60_000, max: 300, label: "minute" }], name: "badge-read" });
 
 /** Owner-only: the report must exist and belong to the caller. Returns null after answering. */
 async function ownedReport(
@@ -93,7 +97,7 @@ router.delete("/reports/:id/badge", async (req, res): Promise<void> => {
 // sends have to be overridden: CORP same-origin would stop a badge loading on any
 // other site, and no-store would send every README view to the database. The body
 // is an SVG with no script, and the CSP below allows nothing but its own inline style.
-router.get("/badge/:file", async (req, res): Promise<void> => {
+router.get("/badge/:file", badgeReadLimit, async (req, res): Promise<void> => {
   const raw = req.params["file"];
   const file = Array.isArray(raw) ? raw[0] : raw;
   const token = file?.endsWith(".svg") ? file.slice(0, -4) : "";

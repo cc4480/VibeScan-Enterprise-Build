@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { APP_ORIGIN } from "./appOrigin";
 
 if (!process.env.STRIPE_SECRET_KEY) {
   console.warn("STRIPE_SECRET_KEY is not set — Stripe features will be unavailable");
@@ -60,14 +61,12 @@ export const CREDITS_MAP: Record<string, number> = {
 export const PACKS_ON_SALE: readonly string[] = [];
 
 export function getOrigin(req: { headers: Record<string, string | string[] | undefined> }): string {
-  // The configured origin wins. The headers below are client-influenced, and
-  // this builds the URLs Stripe sends a paying customer back to — a forged
-  // X-Forwarded-Host would bounce them somewhere else after they paid.
-  const configured = process.env["APP_ORIGIN"]?.trim().replace(/\/+$/, "");
-  if (configured) return configured;
-  const proto = req.headers["x-forwarded-proto"] || "https";
-  const host = req.headers["x-forwarded-host"] || req.headers["host"] || "localhost";
-  return `${proto}://${host}`;
+  // Always the configured origin (APP_ORIGIN, defaulting to the production site). These URLs are
+  // where Stripe sends a paying customer back to, and the request's own headers are client-influenced:
+  // a forged X-Forwarded-Host would bounce them somewhere else after they paid. The parameter is kept
+  // so callers need no change.
+  void req;
+  return APP_ORIGIN;
 }
 
 /**

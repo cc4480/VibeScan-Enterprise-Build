@@ -10,7 +10,7 @@ import { linkedInstallationIds } from "../lib/githubLinks";
 import { enqueueScan } from "../lib/queue";
 import { validateCredentials, encryptCredentials, sameAccountInput } from "../lib/scanCredentials";
 import { checkScanTarget } from "../lib/ssrfGuard";
-import { TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE, TrialExhaustedError, insertScanRow } from "../lib/freeTrial";
+import { TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE, TrialExhaustedError, DailyLimitError, insertScanRow } from "../lib/freeTrial";
 import { refundFailedScan, chargeScan, refundCharge } from "../lib/billing";
 import { zodMessage } from "../lib/zodMessage";
 
@@ -277,8 +277,18 @@ export async function createScanHandler(req: Request, res: Response): Promise<vo
       autoSecondAccount,
       // Recorded so a scan that fails later is refunded to the same place.
       paidWith,
-    });
+    }, { dailyMax });
   } catch (err) {
+    // Requests that arrived together with this one used up the daily limit.
+    if (err instanceof DailyLimitError) {
+      await refundIfCharged();
+      res.status(429).json({
+        error: quotaRow?.passwordHash
+          ? `Daily scan limit reached (${dailyMax}). It resets 24 hours after each scan.`
+          : `Daily scan limit reached (${dailyMax}). Create an account for a higher limit.`,
+      });
+      return;
+    }
     // The free scans were used up by requests that arrived together with this one.
     if (err instanceof TrialExhaustedError) {
       res.status(403).json({ error: TRIAL_LIMIT_MESSAGE, code: TRIAL_LIMIT_CODE });

@@ -17,16 +17,28 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 const dbState: { rows: unknown[]; lastWhere: unknown } = { rows: [], lastWhere: null };
 
 vi.mock("@workspace/db", () => {
+  // lastWhere is the scan-count query's filter; the lookups for a deleted account's carried usage
+  // (users, deleted_account_trials) answer with no rows and must not overwrite it.
+  let from: unknown = null;
   const chain = {
-    from: () => chain,
+    from: (t: unknown) => {
+      from = t;
+      return chain;
+    },
     where: (w: unknown) => {
-      dbState.lastWhere = w;
-      return Promise.resolve(dbState.rows);
+      if (from === scansTable) {
+        dbState.lastWhere = w;
+        return Promise.resolve(dbState.rows);
+      }
+      return Promise.resolve([]);
     },
   };
+  const scansTable = { userId: "user_id", origin: "origin", paidWith: "paid_with", createdAt: "created_at" };
   return {
     db: { select: () => chain },
-    scansTable: { userId: "user_id", origin: "origin", paidWith: "paid_with", createdAt: "created_at" },
+    scansTable,
+    usersTable: { id: "id", email: "email" },
+    deletedAccountTrialsTable: { emailHash: "email_hash", periodStart: "period_start", scansUsed: "scans_used" },
   };
 });
 
@@ -36,6 +48,8 @@ vi.mock("drizzle-orm", () => ({
   or: (...a: unknown[]) => ({ op: "or", args: a }),
   gte: (col: unknown, val: unknown) => ({ op: "gte", col, val }),
   count: () => ({ op: "count" }),
+  lt: (col: unknown, val: unknown) => ({ op: "lt", col, val }),
+  sql: () => ({ op: "sql" }),
 }));
 
 const saved = process.env["FREE_TRIAL_SCAN_LIMIT"];
