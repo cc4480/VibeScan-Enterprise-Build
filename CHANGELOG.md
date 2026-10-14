@@ -7,6 +7,12 @@ for each change; this collects what shipped and why it mattered.
 
 ### Accuracy
 
+- **Five more Supabase checks.** A policy or function that decides access from `user_metadata` (every user can edit their
+  own, so anyone can grant themselves the role), a SECURITY DEFINER function that anyone with the public key can call through
+  `/rest/v1/rpc` (no caller check, no REVOKE; low confidence, so "needs verification"), a table with a password or card-number
+  column, a public bucket named like private files (invoices, documents, receipts), and, in `config.toml`, anonymous sign-ins
+  (which make every "TO authenticated" policy apply to anonymous visitors) and unconfirmed email sign-ups. Each has a clean twin.
+
 - **Twelve more code rules for the repository scan.** A JWT signed or verified with a literal secret (and the jose
   equivalent); a verifier that accepts the `none` algorithm; Prisma's unsafe raw queries built by interpolation; a shell
   command, a file path, a fetched URL or a redirect target taken from request data; `Math.random` used for a token or code; MD5

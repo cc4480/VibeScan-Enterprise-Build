@@ -17,6 +17,7 @@ import { configFinding } from "./githubFindings";
 import { NOT_SCANNED, type GithubScanOutcome } from "./githubSourceProbeOutcome";
 import { repoFinding, NOT_THE_PROJECTS_OWN, isTestOrExamplePath, asTestFileFinding, namesItselfFake, type RepoFile, type RepoRef } from "./repoFinding";
 import { supabaseMigrationFindings, isMigrationPath } from "./repoCheckSupabase";
+import { supabaseExtraFindings } from "./repoCheckSupabaseExtra";
 import { ciConfigFindings, isWorkflowPath, isDockerfilePath, isSupabaseConfigPath, isFunctionCodePath } from "./repoCheckCi";
 import { isInfraPath } from "./repoCheckInfra";
 import { codePatternFindings, isCodePath, isEnvFilePath } from "./repoCheckCode";
@@ -196,7 +197,7 @@ export async function scanRepository(source: RepoSource, ref: RepoRef, opts: { o
   };
 
   record("repository secrets", secrets.files, secrets.found);
-  run("Supabase migrations (RLS and policies)", (f) => isMigrationPath(f.path), (fs) => supabaseMigrationFindings(fs, ref));
+  run("Supabase migrations (RLS and policies)", (f) => isMigrationPath(f.path), (fs) => [...supabaseMigrationFindings(fs, ref), ...supabaseExtraFindings(fs, ref)]);
   run("CI and configuration", (f) => isWorkflowPath(f.path) || isDockerfilePath(f.path) || isSupabaseConfigPath(f.path) || isFunctionCodePath(f.path) || isInfraPath(f.path), (fs) => ciConfigFindings(fs, ref));
   record("dangerous code patterns", code.files, code.found);
 

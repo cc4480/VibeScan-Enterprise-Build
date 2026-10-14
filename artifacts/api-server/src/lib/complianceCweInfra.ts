@@ -122,6 +122,12 @@ export const CWE_CONTROLS_INFRASTRUCTURE: Record<string, ControlRef[]> = {
     { framework: "iso27001", control: "A.5.15", title: "Access control" },
     { framework: "soc2", control: "CC6.1", title: "Logical access — authentication enforced" },
   ],
+  "CWE-287": [
+    { framework: "asvs", control: "V2.1.1", title: "Authentication enforced for every account, with verified identifiers" },
+    { framework: "pci", control: "8.3.1", title: "Strong authentication required for access" },
+    { framework: "iso27001", control: "A.5.17", title: "Authentication information" },
+    { framework: "soc2", control: "CC6.1", title: "Logical access — authentication enforced" },
+  ],
   "CWE-307": [
     { framework: "asvs", control: "V2.2.1", title: "Anti-automation controls on authentication" },
     { framework: "pci", control: "8.3.4", title: "Invalid authentication attempts are limited" },
