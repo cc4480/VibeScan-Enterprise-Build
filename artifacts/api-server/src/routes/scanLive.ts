@@ -12,7 +12,8 @@ import { and, eq } from "drizzle-orm";
 import { db, scansTable } from "@workspace/db";
 import { isTestRecord } from "../lib/testLedger";
 import { resolveTest } from "../lib/checkOutcomes";
-import { TOTAL_CHECKS } from "../lib/checkCatalog";
+import { REPO_TOTAL_CHECKS, WEBSITE_TOTAL_CHECKS } from "../lib/checkCatalog";
+import { repoOnlyAddress } from "../lib/repoOnlyScan";
 
 const router: IRouter = Router();
 
@@ -28,7 +29,7 @@ router.get("/scans/:id/live", async (req, res): Promise<void> => {
     return;
   }
   const [scan] = await db
-    .select({ status: scansTable.status, liveTests: scansTable.liveTests })
+    .select({ status: scansTable.status, liveTests: scansTable.liveTests, targetUrl: scansTable.targetUrl })
     .from(scansTable)
     .where(and(eq(scansTable.id, rawId), eq(scansTable.userId, req.user.id)));
 
@@ -42,7 +43,9 @@ router.get("/scans/:id/live", async (req, res): Promise<void> => {
   // Each test comes with the checks inside it and what became of each (checkOutcomes.ts),
   // and the total a full scan carries, so the page can show that the two add up.
   const records = Array.isArray(scan.liveTests) ? scan.liveTests.filter(isTestRecord) : [];
-  res.json({ status: scan.status, totalChecks: TOTAL_CHECKS, tests: records.map(resolveTest) });
+  // A repository-only scan runs the repository checks and nothing else, so its total is that list alone.
+  const totalChecks = repoOnlyAddress(scan.targetUrl) ? REPO_TOTAL_CHECKS : WEBSITE_TOTAL_CHECKS;
+  res.json({ status: scan.status, totalChecks, tests: records.map(resolveTest) });
 });
 
 export default router;

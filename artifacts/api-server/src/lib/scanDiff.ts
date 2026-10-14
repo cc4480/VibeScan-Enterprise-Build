@@ -22,7 +22,8 @@
  */
 import { CATALOG, catalogFor } from "./checkCatalog";
 import { findingFingerprint } from "./fingerprint";
-import type { TestRecord } from "./testLedger";
+import { SOURCE_TEST_NAME, type TestRecord } from "./testLedger";
+import { CATALOG_REPO } from "./checkCatalogRepo";
 import { NOT_THE_PROJECTS_OWN } from "./repoFinding";
 import { isEnvFilePath } from "./repoCheckCode";
 
@@ -83,6 +84,8 @@ export function testFor(findingName: string): string | null {
 const ranKeys = (tests: TestRecord[]): Set<string> => {
   const out = new Set<string>();
   for (const t of tests) if (t.status === "ran") out.add(catalogFor(t.name)?.test ?? t.name);
+  // A repository scan runs its groups inside the one ledger test that reads the source, so that test running means each group ran.
+  if (out.has(SOURCE_TEST_NAME)) for (const t of CATALOG_REPO) out.add(t.test);
   return out;
 };
 

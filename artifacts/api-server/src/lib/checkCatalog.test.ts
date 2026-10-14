@@ -6,7 +6,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { moduleSource } from "../testing/moduleSource";
-import { CATALOG, TOTAL_CHECKS, catalogFor } from "./checkCatalog";
+import { CATALOG, REPO_TOTAL_CHECKS, TOTAL_CHECKS, WEBSITE_TOTAL_CHECKS, catalogFor } from "./checkCatalog";
 
 const LIB = __dirname;
 const src = (file: string) => moduleSource(LIB, file);
@@ -18,7 +18,11 @@ describe("the catalog matches the scanner's source", () => {
     // and the active race-condition probe. 143 → 144: the TLS grade note that says why a grade
     // is below A. 144 → 156: the scanner's own TLS configuration check, which replaces the SSL Labs
     // grade as the default (the two SSL Labs checks stay listed; they run only with SSLLABS_ENABLED).
-    expect(TOTAL_CHECKS).toBe(156);
+    // 156 → 211: the repository scan's own checks (secrets, Supabase migrations, CI and configuration,
+    // code patterns, dependencies), which the catalog did not list before. Counted from checkCatalogRepo.ts.
+    expect(WEBSITE_TOTAL_CHECKS).toBe(156);
+    expect(REPO_TOTAL_CHECKS).toBe(55);
+    expect(TOTAL_CHECKS).toBe(211);
     expect(CATALOG.flatMap((t) => t.checks)).toHaveLength(TOTAL_CHECKS);
   });
 
@@ -79,7 +83,11 @@ describe("every test the scanner records is accounted for", () => {
   });
 
   it("has no catalog test that no scan ever records", () => {
-    const recorded = [...families, ...httpProbes, ...named];
+    // The repository scan records its groups as steps of its own (repoScan.ts), not through the ledger families.
+    const repoScan = src("repoScan.ts");
+    const repoSteps = [...repoScan.matchAll(/(?:record|run)\("([^"]+)"/g)].map((m) => m[1]!);
+    const repoDeps = [...repoScan.matchAll(/name: "(dependency vulnerabilities \(OSV\))"/g)].map((m) => m[1]!);
+    const recorded = [...families, ...httpProbes, ...named, ...repoSteps, ...repoDeps];
     const orphans = CATALOG.filter((t) => !recorded.some((n) => catalogFor(n)?.test === t.test)).map((t) => t.test);
     expect(orphans).toEqual([]);
   });

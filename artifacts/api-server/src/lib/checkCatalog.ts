@@ -21,13 +21,22 @@
 import type { CatalogTest } from "./checkCatalogTypes";
 import { CATALOG_HTTP } from "./checkCatalogHttp";
 import { CATALOG_SURFACE } from "./checkCatalogSurface";
+import { CATALOG_REPO } from "./checkCatalogRepo";
 
 export * from "./checkCatalogTypes";
 
-export const CATALOG: CatalogTest[] = [...CATALOG_HTTP, ...CATALOG_SURFACE];
+/** What a website scan runs. A repository-only scan runs CATALOG_REPO instead (lib/repoOnlyScan.ts). */
+export const WEBSITE_CATALOG: CatalogTest[] = [...CATALOG_HTTP, ...CATALOG_SURFACE];
 
-/** The number of checks a full scan carries. Derived, so it cannot drift from the list. */
-export const TOTAL_CHECKS = CATALOG.reduce((n, t) => n + t.checks.length, 0);
+export const CATALOG: CatalogTest[] = [...WEBSITE_CATALOG, ...CATALOG_REPO];
+
+const countChecks = (tests: CatalogTest[]) => tests.reduce((n, t) => n + t.checks.length, 0);
+
+/** The number of checks a website scan carries, and a repository scan. Derived, so they cannot drift from the lists. */
+export const WEBSITE_TOTAL_CHECKS = countChecks(WEBSITE_CATALOG);
+export const REPO_TOTAL_CHECKS = countChecks(CATALOG_REPO);
+/** Every check the catalog lists, website and repository together. */
+export const TOTAL_CHECKS = countChecks(CATALOG);
 
 /** A ledger record's checks, or none when the test is a step with no findings of its own (DNS lookups). */
 export function catalogFor(recordName: string): CatalogTest | null {

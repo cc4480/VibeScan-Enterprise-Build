@@ -6,6 +6,12 @@ for each change; this collects what shipped and why it mattered.
 ## 2026-10-14
 
 ### Accuracy
+- **The check catalog now lists the repository scan's checks.** Before, the catalog held only the website checks (156), so the
+  repository checks (secrets, Supabase migrations, CI and configuration, code patterns, dependencies: 55) were on the public
+  coverage page but not in the catalog the scanner's tests verify. `checkCatalogRepo.ts` lists them, each with a needle the
+  test finds in its source. A website scan reports 156 checks and a repository-only scan 55 (`scanLive.ts`), not one total for
+  both. A repository finding's test is the repository group it belongs to, and a repository scan's source test counts each
+  group as run, so a finding is still called fixed when its file was read again (`scanDiff.ts`).
 - A CSP with `default-src 'self'` (or `'none'`) is no longer reported as missing `object-src`: object-src falls back to default-src. It is flagged only when nothing restricts it or the effective list allows `*`, `data:` or a whole scheme; severity is now low, matching the catalog.
 
 - **Two false positives in existing checks, found by reading the RFCs against our code.** HSTS: a quoted `max-age="31536000"`
