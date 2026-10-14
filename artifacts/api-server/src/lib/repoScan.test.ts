@@ -113,13 +113,13 @@ describe("CI and configuration", () => {
   });
 
   it("flags a Dockerfile that bakes a credential in, never writing the value out", () => {
-    const out = ciConfigFindings([f("Dockerfile", "FROM node:22\nENV STRIPE_SECRET_KEY=sk_live_Zk3pQ8vXw2LmN7rT9yBc\n")], ref);
+    const out = ciConfigFindings([f("Dockerfile", "FROM node:22\nENV STRIPE_SECRET_KEY=sk_live_Zk3pQ8vXw2LmN7rT9yBc\nUSER node\n")], ref);
     expect(names(out)).toEqual(["Dockerfile Bakes a Credential Into the Image"]);
     expect(out[0]!.evidence).not.toContain("Zk3pQ8vXw2LmN7rT9yBc");
   });
 
   it("clean twin: ordinary ENV lines, a secret passed at run time, placeholders", () => {
-    const df = "FROM node:22\nENV NODE_ENV=production\nARG API_TOKEN\nENV SESSION_SECRET=$SESSION_SECRET\nENV DB_PASSWORD=changeme-in-dev\n";
+    const df = "FROM node:22\nENV NODE_ENV=production\nARG API_TOKEN\nENV SESSION_SECRET=$SESSION_SECRET\nENV DB_PASSWORD=changeme-in-dev\nUSER node\n";
     expect(ciConfigFindings([f("Dockerfile", df)], ref)).toEqual([]);
   });
 

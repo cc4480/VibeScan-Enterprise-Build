@@ -18,6 +18,7 @@ import { NOT_SCANNED, type GithubScanOutcome } from "./githubSourceProbeOutcome"
 import { repoFinding, NOT_THE_PROJECTS_OWN, isTestOrExamplePath, asTestFileFinding, namesItselfFake, type RepoFile, type RepoRef } from "./repoFinding";
 import { supabaseMigrationFindings, isMigrationPath } from "./repoCheckSupabase";
 import { ciConfigFindings, isWorkflowPath, isDockerfilePath, isSupabaseConfigPath, isFunctionCodePath } from "./repoCheckCi";
+import { isInfraPath } from "./repoCheckInfra";
 import { codePatternFindings, isCodePath, isEnvFilePath } from "./repoCheckCode";
 import { dependencyFindings, isManifestPath, isLockfilePath } from "./repoCheckDeps";
 import type { RepoSource, TreeFile } from "./repoSource";
@@ -42,7 +43,7 @@ function classify(path: string): Why | null {
   if (NOT_THE_PROJECTS_OWN.test(path) && !isEnvFilePath(path)) return null;
   if (isCandidatePath(path)) return isMigrationPath(path) ? "migration" : "secrets";
   if (isMigrationPath(path)) return "migration";
-  if (isWorkflowPath(path) || isDockerfilePath(path) || isSupabaseConfigPath(path)) return "ci";
+  if (isWorkflowPath(path) || isDockerfilePath(path) || isSupabaseConfigPath(path) || isInfraPath(path)) return "ci";
   if (isManifestPath(path) || isLockfilePath(path)) return "manifest";
   if (isCodePath(path)) return "code";
   // Everything else that is text (documentation, styles, scripts in other languages, data, tests) is read for secrets.
@@ -137,7 +138,7 @@ function secretFindings(files: RepoFile[], ref: RepoRef): ScanVulnerability[] {
 
 /** Files a check needs alongside others (a table in one migration, its policy in the next), so they are kept to the end. */
 const keptToTheEnd = (p: string) =>
-  isMigrationPath(p) || isWorkflowPath(p) || isDockerfilePath(p) || isSupabaseConfigPath(p) || isFunctionCodePath(p) || isManifestPath(p) || isLockfilePath(p);
+  isMigrationPath(p) || isWorkflowPath(p) || isDockerfilePath(p) || isSupabaseConfigPath(p) || isFunctionCodePath(p) || isInfraPath(p) || isManifestPath(p) || isLockfilePath(p);
 
 export async function scanRepository(source: RepoSource, ref: RepoRef, opts: { onProgress?: (e: RepoProgress) => void } = {}): Promise<RepoScanOutcome> {
   const onProgress = opts.onProgress;
@@ -196,7 +197,7 @@ export async function scanRepository(source: RepoSource, ref: RepoRef, opts: { o
 
   record("repository secrets", secrets.files, secrets.found);
   run("Supabase migrations (RLS and policies)", (f) => isMigrationPath(f.path), (fs) => supabaseMigrationFindings(fs, ref));
-  run("CI and configuration", (f) => isWorkflowPath(f.path) || isDockerfilePath(f.path) || isSupabaseConfigPath(f.path) || isFunctionCodePath(f.path), (fs) => ciConfigFindings(fs, ref));
+  run("CI and configuration", (f) => isWorkflowPath(f.path) || isDockerfilePath(f.path) || isSupabaseConfigPath(f.path) || isFunctionCodePath(f.path) || isInfraPath(f.path), (fs) => ciConfigFindings(fs, ref));
   record("dangerous code patterns", code.files, code.found);
 
   const deps = await dependencyFindings(files, ref).catch(() => ({ findings: [] as ScanVulnerability[], considered: 0, looked: 0, source: null as string | null }));

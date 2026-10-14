@@ -55,6 +55,20 @@ export const CWE_CONTROLS_INFRASTRUCTURE: Record<string, ControlRef[]> = {
     { framework: "iso27001", control: "A.5.15", title: "Access control" },
     { framework: "soc2", control: "CC6.1", title: "Logical access restricted to authorised users" },
   ],
+  "CWE-494": [
+    { framework: "asvs", control: "V10.3.2", title: "Integrity protections for code and components loaded" },
+    { framework: "iso27001", control: "A.5.21", title: "Managing information security in the ICT supply chain" },
+  ],
+  "CWE-829": [
+    { framework: "asvs", control: "V10.3.2", title: "Integrity protections for code and components loaded" },
+    { framework: "pci", control: "6.3.2", title: "Inventory of third-party software components maintained" },
+    { framework: "iso27001", control: "A.5.21", title: "Managing information security in the ICT supply chain" },
+  ],
+  "CWE-668": [
+    { framework: "asvs", control: "V1.14.1", title: "Components of differing trust levels segregated" },
+    { framework: "pci", control: "1.4.1", title: "Controls between trusted and untrusted networks" },
+    { framework: "iso27001", control: "A.8.20", title: "Networks security" },
+  ],
   "CWE-862": [
     { framework: "asvs", control: "V4.1.3", title: "Authorisation checked on every request" },
     { framework: "pci", control: "7.2.1", title: "Access assigned by need-to-know" },

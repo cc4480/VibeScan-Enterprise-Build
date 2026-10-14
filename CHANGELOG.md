@@ -7,6 +7,14 @@ for each change; this collects what shipped and why it mattered.
 
 ### Accuracy
 
+- **The repository scan checks Firebase rules, Docker, compose and third-party Actions.** Firebase rules that let
+  anyone write (`allow write: if true`, or the starter test mode that opens everything until a date) are critical; rules
+  that let anyone read are high on a wildcard path and medium on a named one; Realtime Database rules are read the same way.
+  Compose: a privileged service, the Docker socket mounted, a database port published to every interface. Dockerfile: a
+  download piped into a shell, no non-root user in the last stage, an unpinned base image (the last two at low confidence,
+  so the report lists them under "needs verification"). Actions: third-party actions on a mutable tag instead of a commit
+  SHA, and `secrets: inherit`. Each rule has a clean twin that must report nothing.
+
 - **Twenty-nine more secret formats are recognised.** AI providers (Groq, OpenRouter, xAI, Perplexity, Together AI,
   Hugging Face, Pinecone), developer infrastructure (npm and PyPI publish tokens, DigitalOcean, PlanetScale, Doppler, Pulumi,
   Neon, Supabase management tokens, Databricks, Netlify, Atlassian, Linear, Notion, Figma), payments and commerce (Shopify,

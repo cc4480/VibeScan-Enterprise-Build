@@ -8,6 +8,7 @@
  */
 import { repoFinding, type RepoFile, type RepoRef } from "./repoFinding";
 import { isPlaceholderToken } from "./secretPlaceholders";
+import { infraFindings, dockerHygieneFindings, actionsHygieneFindings, isInfraPath } from "./repoCheckInfra";
 import type { ScanVulnerability } from "./scanner";
 
 export const isWorkflowPath = (p: string) => /(?:^|\/)\.github\/workflows\/[\w.-]+\.ya?ml$/i.test(p);
@@ -157,9 +158,10 @@ function supabaseConfigFindings(f: RepoFile, ref: RepoRef, files: RepoFile[]): S
 export function ciConfigFindings(files: RepoFile[], ref: RepoRef): ScanVulnerability[] {
   const out: ScanVulnerability[] = [];
   for (const f of files) {
-    if (isWorkflowPath(f.path)) out.push(...workflowFindings(f, ref));
-    else if (isDockerfilePath(f.path)) out.push(...dockerFindings(f, ref));
+    if (isWorkflowPath(f.path)) out.push(...workflowFindings(f, ref), ...actionsHygieneFindings(f, ref));
+    else if (isDockerfilePath(f.path)) out.push(...dockerFindings(f, ref), ...dockerHygieneFindings(f, ref));
     else if (isSupabaseConfigPath(f.path)) out.push(...supabaseConfigFindings(f, ref, files));
+    else if (isInfraPath(f.path)) out.push(...infraFindings(f, ref));
   }
   return out;
 }
