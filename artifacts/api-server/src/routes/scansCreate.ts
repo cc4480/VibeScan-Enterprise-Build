@@ -8,7 +8,7 @@ import { parseGithubRepoRef } from "../lib/githubSourceProbe";
 import { installationForRepo } from "../lib/githubInstallationAccess";
 import { linkedInstallationIds } from "../lib/githubLinks";
 import { enqueueScan } from "../lib/queue";
-import { validateCredentials, encryptCredentials, sameAccountInput } from "../lib/scanCredentials";
+import { prepareScanCredentials } from "./scansCredentials";
 import { checkScanTarget } from "../lib/ssrfGuard";
 import { TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE, TrialExhaustedError, DailyLimitError, insertScanRow } from "../lib/freeTrial";
 import { refundFailedScan, chargeScan, refundCharge } from "../lib/billing";
@@ -156,91 +156,14 @@ export async function createScanHandler(req: Request, res: Response): Promise<vo
     return;
   }
 
-  // ── Credentials for an authenticated scan ──────────────────────────────────
-  // Validated before the scan is queued so a bad login is reported now rather
-  // than as a mysteriously empty report later. Encrypted immediately; the
-  // plaintext never reaches the database or the job payload.
-  let credentialsEncrypted: string | null = null;
-  let secondaryCredentialsEncrypted: string | null = null;
-  let credentialsAuthorizedAt: Date | null = null;
-
-  if (credentials) {
-    // A credentialed scan means holding a customer's live login. An anonymous
-    // identity is a UUID in localStorage, auto-accepted on sight — no password,
-    // no second factor, nothing to revoke — so anyone who copies that string
-    // becomes the user and inherits the stored credential. Storing a production
-    // password against that is not a risk worth taking for the convenience of
-    // skipping registration, so credentials require a real, verified account.
-    // Anonymous users keep full access to unauthenticated scanning.
-    const [account] = await db
-      .select({
-        passwordHash: usersTable.passwordHash,
-        emailVerifiedAt: usersTable.emailVerifiedAt,
-      })
-      .from(usersTable)
-      .where(eq(usersTable.id, req.user.id))
-      .limit(1);
-
-    if (!account?.passwordHash) {
-      await refundIfCharged();
-      res.status(403).json({
-        error:
-          "Authenticated scanning needs a registered account. Create one to " +
-          "store login details for a scan — your existing scans stay with you.",
-      });
-      return;
-    }
-
-    if (!account.emailVerifiedAt) {
-      await refundIfCharged();
-      res.status(403).json({
-        error:
-          "Verify your email address before storing login details for a scan.",
-      });
-      return;
-    }
-
-    const check = validateCredentials(credentials);
-    if (!check.ok) {
-      await refundIfCharged();
-      res.status(400).json({ error: check.error });
-      return;
-    }
-    credentialsEncrypted = encryptCredentials(credentials);
-    credentialsAuthorizedAt = new Date();
-    // Logged without the credentials themselves — see the redaction list in
-    // lib/logger.ts.
-    req.log.info({ mode: credentials.mode }, "Credentialed scan requested");
-
-    // A second account unlocks access-control testing. It is only meaningful
-    // alongside the first — comparing one account against nothing proves
-    // nothing about authorisation between users.
-    if (secondaryCredentials) {
-      const secondCheck = validateCredentials(secondaryCredentials);
-      if (!secondCheck.ok) {
-        await refundIfCharged();
-        res.status(400).json({ error: `Second account: ${secondCheck.error}` });
-        return;
-      }
-      if (sameAccountInput(credentials, secondaryCredentials)) {
-        await refundIfCharged();
-        res.status(400).json({
-          error:
-            "Second account: this is the same account as the first. Two sign-ins for one user would " +
-            "always see the same records, so the comparison could prove nothing. Supply a different account.",
-        });
-        return;
-      }
-      secondaryCredentialsEncrypted = encryptCredentials(secondaryCredentials);
-      req.log.info("Access-control testing enabled — second account supplied");
-    }
-  } else if (secondaryCredentials) {
+  // The stored logins, checked and encrypted before the scan is queued (scansCredentials.ts).
+  const prepared = await prepareScanCredentials(req.user.id, credentials, secondaryCredentials, req.log);
+  if (!prepared.ok) {
     await refundIfCharged();
-    res.status(400).json({
-      error: "A second account only works alongside a first one. Add primary credentials too.",
-    });
+    res.status(prepared.status).json({ error: prepared.error });
     return;
   }
+  const { credentialsEncrypted, secondaryCredentialsEncrypted, credentialsAuthorizedAt } = prepared;
 
   // Registered accounts get the higher allowance: they are attributable and
   // recoverable in a way an anonymous UUID is not.
