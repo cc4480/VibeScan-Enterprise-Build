@@ -1,6 +1,7 @@
 import type { PrintableReportData } from "./report-viewer-print";
 import { useReportDismissals, useVulnGroups } from "./report-viewer-hooks";
 import { ReportLoading, ReportLoadFailure, UndoToast } from "./report-viewer-states";
+import { isRepoOnlyReport } from "@/lib/repo-only-report";
 import { ReportCover, ReportActionButtons, MonitorCta, ScanAnotherCta } from "./report-viewer-cover";
 import { VerifyBanner } from "./report-viewer-verify";
 import { FindingsHeading, SeverityBadges, SortViewToggles, CategoryFilterPills, AccuracyBar } from "./report-viewer-filters";
@@ -76,6 +77,8 @@ export default function ReportViewer() {
   const compliance = (report.data as { compliance?: ComplianceData | null }).compliance ?? null;
   // What ran and what was skipped; absent on reports from before test records.
   const coverageTests = (report.data as { tests?: CoverageTest[] | null }).tests ?? null;
+  // A repository scanned alone has no pages, technologies, certificate or site to monitor: those parts are left out.
+  const repoOnly = isRepoOnlyReport(report.targetUrl, coverageTests);
   // Findings the scan produced and did not report, and what answered instead of the app (if anything).
   const withheld = (report.data as { withheld?: unknown }).withheld;
   const interception = (report.data as { interception?: Interception | null }).interception ?? null;
@@ -189,7 +192,7 @@ export default function ReportViewer() {
       <ReportCover
         report={report}
         summary={summary}
-        pagesScanned={pagesScanned}
+        pagesScanned={repoOnly ? undefined : pagesScanned}
         severityCounts={severityCounts}
         categoryCounts={categoryCounts}
         allUnverifiedVulns={allUnverifiedVulns}
@@ -228,7 +231,7 @@ export default function ReportViewer() {
         {/* Right Col: OWASP + Category sidebar + AI + Tech */}
         <div className="space-y-8">
           {/* OWASP Top 10 breakdown */}
-          <OwaspBreakdown vulnerabilities={visibleVulns} tests={coverageTests} />
+          {!repoOnly && <OwaspBreakdown vulnerabilities={visibleVulns} tests={coverageTests} />}
 
           {sortedCategories.length > 0 && (
             <CategoryBreakdownCard
@@ -265,19 +268,19 @@ export default function ReportViewer() {
           )}
 
           {/* Software Inventory */}
-          <SoftwareInventoryCard technologies={technologies ?? []} vulnerabilities={vulnerabilities} />
+          {!repoOnly && <SoftwareInventoryCard technologies={technologies ?? []} vulnerabilities={vulnerabilities} />}
 
           {/* Pages Scanned */}
-          <PagesScannedCard rootUrl={report.targetUrl} pagesScanned={pagesScanned ?? []} probedNotFound={probedNotFound ?? []} />
+          {!repoOnly && <PagesScannedCard rootUrl={report.targetUrl} pagesScanned={pagesScanned ?? []} probedNotFound={probedNotFound ?? []} />}
 
           {/* Reconnaissance */}
           {recon && <ReconCard recon={recon} />}
 
-          <TechProfileCard tlsGrade={tlsGrade} server={server} technologies={technologies} />
+          {!repoOnly && <TechProfileCard tlsGrade={tlsGrade} server={server} technologies={technologies} />}
         </div>
       </div>
 
-      <MonitorCta />
+      {!repoOnly && <MonitorCta />}
 
       <ScanAnotherCta>
         <ReportActionButtons copyData={copyData} pdfData={pdfData} reportId={reportId} />

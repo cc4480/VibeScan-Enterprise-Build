@@ -17,8 +17,10 @@ export async function buildReport(input: {
   reconRunResult: ReconRunResult;
   aiAnalysis: Awaited<ReturnType<typeof analyseFindings>>["analysis"] | null;
   autoSuppressedCount: number;
+  /** owner/repo, for a scan of a repository alone (lib/repoOnlyScan.ts): there is no site to probe or describe. */
+  repository?: string;
 }) {
-  const { scanResult, targetUrl, tests, reconRunResult, aiAnalysis, autoSuppressedCount } = input;
+  const { scanResult, targetUrl, tests, reconRunResult, aiAnalysis, autoSuppressedCount, repository } = input;
   const riskScore = computeRiskScore(scanResult.vulnerabilities);
   // A scan a bot-protection layer answered must NOT be graded — see
   // gradeForResult. The score stays computed and stored for the record; the
@@ -44,7 +46,11 @@ export async function buildReport(input: {
   );
 
   const interceptionKind = scanResult.interception?.kind ?? "bot challenge";
-  const executiveSummary = intercepted
+  const executiveSummary = repository
+    ? `Source code scan of ${repository}: ${findings.length === 0 ? "nothing was found in the files that were read" : `${findings.length} finding${findings.length === 1 ? "" : "s"}`}, ` +
+      `graded ${grade} with a risk score of ${riskScore}/100. This read the repository's files for secrets, database rules, CI settings, ` +
+      `risky code patterns and vulnerable dependencies. It did not test any running site, so it says nothing about how an app built from this code behaves once deployed.`
+    : intercepted
     ? `The scan of ${(() => { try { return new URL(targetUrl).hostname; } catch { return targetUrl; } })()} ` +
       (interceptionKind === "sign-in wall"
         ? `reached a sign-in page${scanResult.interception?.vendor ? ` run by ${scanResult.interception.vendor}` : ""} rather than the app, so no grade could be assigned. `
@@ -73,7 +79,7 @@ export async function buildReport(input: {
       );
 
   // Probe TLS cert expiry for https:// targets (non-blocking, failures are soft)
-  const cert = await probeCertDates(scanResult.finalUrl || targetUrl).catch(() => null);
+  const cert = repository ? null : await probeCertDates(scanResult.finalUrl || targetUrl).catch(() => null);
 
   const reportData = {
     targetUrl: scanResult.finalUrl || targetUrl,

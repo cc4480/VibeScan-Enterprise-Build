@@ -7,6 +7,15 @@ for each change; this collects what shipped and why it mattered.
 
 ### Reports
 
+- **Scan a GitHub repository on its own, with no website.** The scan page has a "GitHub repository only" choice
+  (a private repository works through the connected GitHub App, as before). A repository address where the website
+  goes is read as a repository-only scan: it spends one scan, counts against the same daily limit and queue, and skips
+  every site step (page fetch, TLS, reconnaissance, probes, browser). The report is the Source code section, a grade and
+  a summary that says it did not test a running site; the website-only parts (OWASP panel, pages scanned, tech profile,
+  monitoring offer) are left out. A repository that cannot be read (private and not shared, or missing) fails the scan
+  and gives the scan back instead of reporting nothing. No database change: such a scan is the one whose address and
+  repository are the same github.com/owner/repo URL.
+
 - **The repository scan reads every text file, with no limit on repository size.** It used to open only five kinds of
   file (config and env files, SQL migrations, CI files, npm manifests, JS/TS source) and stopped at 300 files and 160
   source files, so a 624-file repository was 168 files read. Now every text file is read and checked for secrets

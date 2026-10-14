@@ -4,6 +4,7 @@ import { db, scansTable, usersTable } from "@workspace/db";
 import { eq, and, gte, count } from "drizzle-orm";
 import { CreateScanBody } from "@workspace/api-zod";
 import { normaliseGithubRepoInput } from "../lib/githubRepoInput";
+import { repoOnlyAddress } from "../lib/repoOnlyScan";
 import { parseGithubRepoRef } from "../lib/githubSourceProbe";
 import { installationForRepo } from "../lib/githubInstallationAccess";
 import { linkedInstallationIds } from "../lib/githubLinks";
@@ -61,10 +62,15 @@ export async function createScanHandler(req: Request, res: Response): Promise<vo
     return;
   }
 
-  const { targetUrl, credentials, secondaryCredentials } = parsed.data;
+  // A GitHub repository address where the website goes is a scan of that repository alone (lib/repoOnlyScan.ts):
+  // the repository is the target, there is no site to log in to, and any repository field or login sent is ignored.
+  const repoOnly = repoOnlyAddress(parsed.data.targetUrl);
+  const targetUrl = repoOnly ?? parsed.data.targetUrl;
+  const credentials = repoOnly ? undefined : parsed.data.credentials;
+  const secondaryCredentials = repoOnly ? undefined : parsed.data.secondaryCredentials;
 
   // Checked before anything is charged: a mistyped repository should be a plain 400, not a refund.
-  const repoInput = normaliseGithubRepoInput(parsed.data.githubRepoUrl);
+  const repoInput = repoOnly ? ({ ok: true, url: repoOnly } as const) : normaliseGithubRepoInput(parsed.data.githubRepoUrl);
   if (!repoInput.ok) {
     res.status(400).json({ error: repoInput.error });
     return;
@@ -87,11 +93,11 @@ export async function createScanHandler(req: Request, res: Response): Promise<vo
   // The automatic second account tests a login against a new account, so it means nothing without
   // one. Said plainly rather than silently dropped: an API caller who set it expects it to happen.
   // (A supplied second account makes it unnecessary, so it is simply not used in that case.)
-  if (parsed.data.autoSecondAccount === true && !credentials) {
+  if (!repoOnly && parsed.data.autoSecondAccount === true && !credentials) {
     res.status(400).json({ error: "autoSecondAccount needs credentials: it creates the second account to compare with the first." });
     return;
   }
-  const autoSecondAccount = parsed.data.autoSecondAccount === true && !secondaryCredentials;
+  const autoSecondAccount = !repoOnly && parsed.data.autoSecondAccount === true && !secondaryCredentials;
 
   // Free scans first, then paid credits. Spending a credit while free scans
   // remain would charge someone for something they already had.

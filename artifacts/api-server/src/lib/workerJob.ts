@@ -1,5 +1,7 @@
 import type { ScanResult } from "./scanner";
 import { loadScanAuth } from "./workerCredentials";
+import { repoOnlyAddress, isRepoOnlyScan } from "./repoOnlyScan";
+import { processRepoOnlyJob } from "./workerRepoJob";
 import { mergeSslLabs, mergeTlsCheck, mergeRecon, recordSideTests, sslLabsEnabled } from "./workerSideChecks";
 import { refineFindings } from "./workerFilters";
 import { runAiStage } from "./workerAi";
@@ -68,6 +70,15 @@ export async function processScanJob(job: ScanJob): Promise<void> {
   if (scanning.length === 0) {
     log.info("Scan row is gone (account deleted) or already failed and refunded; abandoning job before any work");
     return;
+  }
+
+  // A repository with no website (lib/repoOnlyScan.ts): none of the site work below applies to it.
+  if (repoOnlyAddress(targetUrl)) {
+    const repoAuth = await loadScanAuth(scanId, log);
+    if (isRepoOnlyScan(targetUrl, repoAuth.scanRow?.githubRepoUrl)) {
+      await processRepoOnlyJob({ scanId, userId, targetUrl, tier, githubAccessToken: repoAuth.githubAccessToken, log });
+      return;
+    }
   }
 
   // ── 2. Run header scan + TLS check in parallel ─────────────────────────

@@ -1,6 +1,7 @@
 /** The printable report and its PDF download. */
 
 import type { Vulnerability } from "@workspace/api-client-react";
+import { isRepoOnlyReport } from "@/lib/repo-only-report";
 import { APP_ORIGIN } from "@/lib/origin";
 import { NO_FINDINGS_WITH_NOTES, SCAN_NOTES_BLURB, SCAN_NOTES_TITLE } from "@/lib/scan-notes";
 import { PrintCoverage, PrintSourceCode, type CoverageTest } from "./shared-report-components";
@@ -94,7 +95,7 @@ export function PrintableReport({
       <PrintWithheld withheld={withheld} interception={interception} />
 
       {/* Pages Scanned */}
-      {((): React.ReactNode => {
+      {isRepoOnlyReport(targetUrl, tests) ? null : ((): React.ReactNode => {
         const allPages = [targetUrl, ...Array.from(new Set(pagesScanned ?? []))];
         return (
           <div className="mb-8 pt-6 border-t-2 border-gray-200">
@@ -219,12 +220,14 @@ export function PrintableReport({
       )}
 
       {/* Tech Profile */}
+      {!isRepoOnlyReport(targetUrl, tests) && (
       <div className="mb-6 mt-8 pt-6 border-t-2 border-gray-200">
         <h2 className="text-lg font-bold mb-3 text-gray-900">🖥️ Tech Profile</h2>
         {tlsGrade && <p className="text-gray-700 mb-1"><strong>TLS Grade:</strong> {tlsGrade}</p>}
         {server && <p className="text-gray-700 mb-1"><strong>Server:</strong> {server}</p>}
         {technologies.length > 0 && <p className="text-gray-700"><strong>Technologies:</strong> {technologies.join(", ")}</p>}
       </div>
+      )}
 
       {/* Footer */}
       <div className="pt-4 border-t border-gray-200 text-center text-xs text-gray-400 mt-8">

@@ -5,9 +5,10 @@ import { useCreateScan } from "@workspace/api-client-react";
 import { ScanCredentialsFields, emptyCredentials, credentialsReady, emptySecondAccount, secondAccountReady, autoAccountRequested, type ScanCredentialsValue, type SecondAccountValue } from "@/components/scan-credentials-fields";
 import { secondCredentialsPayload } from "@/components/second-account";
 import { GithubRepoField, looksLikeGithubRepo } from "@/components/github-repo-field";
-import { Shield, Zap, Globe, Lock, CheckCircle2, Loader2 } from "lucide-react";
+import { Shield, Zap, Globe, Lock, CheckCircle2, Loader2, GitBranch } from "lucide-react";
 import { isTrialExhausted } from "@/lib/purchase-intent-api";
 import { ActiveTestingStatus, TrialExhaustedPanel, getFriendlyError, COVERAGE } from "./scan-form-panels";
+import { repoScanAddress } from "./scan-form-repo";
 
 export default function ScanFormPage() {
   useSeo({ title: "New Scan — SecScan.us", noindex: true });
@@ -15,12 +16,22 @@ export default function ScanFormPage() {
   const [credentials, setCredentials] = useState<ScanCredentialsValue>(emptyCredentials);
   const [secondAccount, setSecondAccount] = useState<SecondAccountValue>(emptySecondAccount);
   const [githubRepo, setGithubRepo] = useState("");
+  /** "site": scan a website (a repository can be added). "repo": scan a GitHub repository alone, no website. */
+  const [mode, setMode] = useState<"site" | "repo">("site");
   const [, setLocation] = useLocation();
+  const repoAddress = repoScanAddress(githubRepo);
 
   const createScan = useCreateScan();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (mode === "repo") {
+      // The repository is the whole target: the server reads it as a scan of that repository alone.
+      if (!repoAddress) return;
+      createScan.mutate({ data: { targetUrl: repoAddress } }, { onSuccess: (data) => setLocation(`/scan/${data.scanId}`) });
+      return;
+    }
 
     let targetUrl = url;
     if (!url.trim()) return;
@@ -81,13 +92,28 @@ export default function ScanFormPage() {
           Launch Security Scan
         </h1>
         <p className="text-muted-foreground text-lg">
-          Paste the URL of an app you own or are authorised to test.
+          {mode === "repo" ? "Choose a GitHub repository to read, with no website needed." : "Paste the URL of an app you own or are authorised to test."}
         </p>
+        <div role="tablist" aria-label="What to scan" className="inline-flex mt-6 p-1 rounded-xl bg-secondary/60 border border-white/10">
+          {([["site", "Website", Globe], ["repo", "GitHub repository only", GitBranch]] as const).map(([id, label, Icon]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={mode === id}
+              onClick={() => setMode(id)}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors ${mode === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <Icon className="w-4 h-4" /> {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="glass-panel p-6 sm:p-10 rounded-3xl">
         <form onSubmit={handleSubmit} className="flex flex-col gap-10">
           {/* URL Input */}
+          {mode === "site" && (
           <div className="flex flex-col gap-3">
             <label htmlFor="url" className="text-sm font-semibold flex items-center gap-2">
               <Globe className="w-4 h-4 text-primary" /> Target URL
@@ -111,8 +137,17 @@ export default function ScanFormPage() {
             </p>
             <ActiveTestingStatus url={url} />
           </div>
+          )}
+
+          {mode === "repo" && (
+            <p className="text-sm text-muted-foreground -mb-4">
+              Reads every text file in the repository for committed secrets, database rules, CI settings, risky code patterns and vulnerable
+              dependencies. It does not test a running site. It spends one scan, like any other.
+            </p>
+          )}
 
           {/* What a scan covers — informational, not a choice */}
+          {mode === "site" && (
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <label className="text-sm font-semibold flex items-center gap-2">
@@ -149,21 +184,24 @@ export default function ScanFormPage() {
               applications you own or are authorised to test.
             </p>
           </div>
+          )}
 
-          <GithubRepoField value={githubRepo} onChange={setGithubRepo} />
+          <GithubRepoField value={githubRepo} onChange={setGithubRepo} only={mode === "repo"} />
 
-          <ScanCredentialsFields
-            value={credentials}
-            onChange={setCredentials}
-            second={secondAccount}
-            onSecondChange={setSecondAccount}
-          />
+          {mode === "site" && (
+            <ScanCredentialsFields
+              value={credentials}
+              onChange={setCredentials}
+              second={secondAccount}
+              onSecondChange={setSecondAccount}
+            />
+          )}
 
           {/* Submit */}
           <div className="pt-6 border-t border-white/5 flex flex-col items-center gap-4">
             <button
               type="submit"
-              disabled={createScan.isPending || !url.trim() || !looksLikeGithubRepo(githubRepo)}
+              disabled={createScan.isPending || !looksLikeGithubRepo(githubRepo) || (mode === "repo" ? !repoAddress : !url.trim())}
               className="w-full sm:w-auto min-w-[260px] px-8 py-4 bg-primary text-primary-foreground text-lg font-bold rounded-xl shadow-[0_0_30px_rgba(20,184,120,0.25)] hover:shadow-[0_0_40px_rgba(20,184,120,0.4)] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 flex items-center justify-center gap-2"
             >
               {createScan.isPending ? (

@@ -24,7 +24,8 @@ export function looksLikeGithubRepo(value: string): boolean {
  * connects GitHub (a trip to GitHub's own page, where they choose which repositories SecScan may read), and the
  * repositories they shared appear here to pick from.
  */
-export function GithubRepoField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function GithubRepoField({ value, onChange, only = false }: { value: string; onChange: (v: string) => void; only?: boolean }) {
+  // `only`: the repository is the whole scan (no website), so it is the target, not an optional extra.
   const invalid = !looksLikeGithubRepo(value);
   const queryClient = useQueryClient();
   const [disconnecting, setDisconnecting] = useState<number | null>(null);
@@ -52,7 +53,7 @@ export function GithubRepoField({ value, onChange }: { value: string; onChange: 
   return (
     <div className="flex flex-col gap-3">
       <label htmlFor="github-repo" className="text-sm font-semibold flex items-center gap-2">
-        <Github className="w-4 h-4 text-primary" /> Source code check <span className="font-normal text-muted-foreground">(optional)</span>
+        <Github className="w-4 h-4 text-primary" /> {only ? "GitHub repository" : "Source code check"} {!only && <span className="font-normal text-muted-foreground">(optional)</span>}
       </label>
 
       {outcome && (
@@ -108,7 +109,7 @@ export function GithubRepoField({ value, onChange }: { value: string; onChange: 
       <p id="github-repo-help" className={invalid ? "text-xs text-red-400 ml-1" : "text-xs text-muted-foreground ml-1"}>
         {invalid
           ? "Use a repository written as https://github.com/owner/repo."
-          : "Also read a GitHub repository's source for leaked keys and risky code. Any public repository works by its address; for a private one, connect GitHub. Only GitHub is contacted for it, never your site."}
+          : `${only ? "The repository to scan." : "Also read a GitHub repository's source for leaked keys and risky code."} Any public repository works by its address; for a private one, connect GitHub. Only GitHub is contacted for it${only ? "." : ", never your site."}`}
       </p>
 
       {available && connections.length === 0 && (
