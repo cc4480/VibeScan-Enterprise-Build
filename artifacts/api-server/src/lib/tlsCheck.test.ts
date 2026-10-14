@@ -107,7 +107,15 @@ describe.skipIf(!HAVE_OPENSSL)("inspectTls against local servers", () => {
       writeFileSync(ext, `subjectAltName=${o.sans}\n`);
       execFileSync("openssl", ["genrsa", "-out", keyFile, String(o.bits ?? 2048)], { stdio: "ignore" });
       execFileSync("openssl", ["req", "-new", "-key", keyFile, "-subj", "/CN=localhost", "-out", join(dir, `${name}.csr`)], { stdio: "ignore" });
-      execFileSync("openssl", ["x509", "-req", "-in", join(dir, `${name}.csr`), "-signkey", keyFile, "-days", String(o.x509Days), "-extfile", ext, "-out", certFile], { stdio: "ignore" });
+      const sign = (validity: string[]) =>
+        execFileSync("openssl", ["x509", "-req", "-in", join(dir, `${name}.csr`), "-signkey", keyFile, ...validity, "-extfile", ext, "-out", certFile], { stdio: "ignore" });
+      try {
+        sign(["-days", String(o.x509Days)]);
+      } catch {
+        // OpenSSL 3.x refuses a negative -days; it takes the dates directly instead (3.4 and later).
+        const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().replace(/[-:T]/g, "").slice(0, 14) + "Z";
+        sign(["-not_before", day(o.x509Days - 1), "-not_after", day(o.x509Days)]);
+      }
     } else {
       execFileSync("openssl", [
         "req", "-x509", "-newkey", `rsa:${o.bits ?? 2048}`, "-nodes", "-keyout", keyFile, "-out", certFile,
