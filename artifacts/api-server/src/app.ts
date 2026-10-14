@@ -274,6 +274,9 @@ if (process.env.NODE_ENV !== "production") {
 
     app.get(/.*/, (req, res) => {
       if (isSpaRoute(req.path)) {
+        // Re-checked on every visit, like every other .html file (see cachePolicy.ts). The page names the
+        // fingerprinted bundle, so a copy kept past a deploy would keep loading the old app.
+        res.setHeader("Cache-Control", staticCacheControl(shellPath));
         const meta = metaForPath(req.path);
         const root = renderedRoot.get(normalise(req.path));
         // The homepage's built metadata is already right, so with nothing to add

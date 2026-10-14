@@ -82,3 +82,13 @@ describe("serving the prerendered public pages", () => {
     expect((await request(app).get("/prerender/checks.json")).status).toBe(404);
   });
 });
+
+describe("caching of the pages themselves", () => {
+  it("re-checks every page on each visit, so a deploy is seen at once instead of an old page loading the old app", async () => {
+    for (const path of ["/", "/about", "/learn/hsts", "/learn/csp-missing", "/dashboard"]) {
+      const res = await request(app).get(path);
+      expect(res.status, path).toBe(200);
+      expect(res.headers["cache-control"], path).toBe("no-cache");
+    }
+  });
+});
