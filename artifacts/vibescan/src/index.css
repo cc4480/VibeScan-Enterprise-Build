@@ -106,6 +106,12 @@
     @apply bg-card/40 backdrop-blur-md border border-white/5 shadow-lg hover:bg-card/60 transition-colors duration-300;
   }
 
+  /* The same card without the background blur, for long lists: dozens of blurred layers on one page can make a browser
+     stop painting parts of it or flicker when it is clicked. Nothing behind these cards needs to show through blurred. */
+  .glass-flat {
+    @apply bg-card/60 border border-white/5 shadow-lg hover:bg-card/70;
+  }
+
   .text-gradient {
     @apply bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60;
   }

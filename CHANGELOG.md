@@ -7,10 +7,11 @@ for each change; this collects what shipped and why it mattered.
 
 ### Reports
 
-- **A long list of findings no longer shows blank gaps.** Each finding card faded in from invisible, and a browser pauses
-  animations in a tab that is not showing, so a report with dozens of findings opened in the background (the progress
-  page opens it when the scan finishes) showed empty space where cards were waiting to animate. Only the first eight
-  cards fade in now; the rest are there at once.
+- **A long list of findings no longer shows blank gaps or flickers.** Each finding card was a blurred "glass" layer that
+  also faded in from invisible. On a report with dozens of findings that meant dozens of blurred layers, which can make
+  a browser stop painting part of the page or flicker when it is clicked, and cards that start invisible stay blank in a
+  tab that is not showing (animations pause there). Finding cards are now flat (no background blur), only the first
+  eight fade in, and a group of more than eight information-only findings starts closed (one click opens it).
 
 - **The live scan terminal shows what a repository scan is doing, with real numbers.** A repository read (alone, or
   added to a website scan) now reports its steps as they happen: the file listing ("624 files found, 544 to read, left

@@ -62,7 +62,7 @@ export function VulnCard({
       initial={index < FADE_IN_CARDS ? { opacity: 0, y: 20 } : false}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(0.05 * index, 0.4) }}
-      className="glass-card rounded-xl overflow-hidden border border-white/5"
+      className="glass-flat rounded-xl overflow-hidden border border-white/5"
       style={{ borderLeft: `3px solid ${meta.color}` }}
     >
       <button

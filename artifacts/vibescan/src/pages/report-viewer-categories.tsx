@@ -9,6 +9,10 @@ import { NEW_CATEGORY_LABELS } from "@/lib/summary-category-labels";
 
 // ─── Grouped category section ─────────────────────────────────────────────────
 
+/** How many information-only findings a group may hold before it starts closed. */
+export const BULK_INFO_GROUP = 8;
+export const isBulkInformation = (vulns: Vulnerability[]): boolean => vulns.length > BULK_INFO_GROUP && vulns.every((v) => v.severity === "info");
+
 export function CategorySection({
   category,
   vulns,
@@ -24,7 +28,9 @@ export function CategorySection({
   globalIndex: number;
   rootUrl?: string;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  // A long group of information-only findings (the many fixture values in a repository's tests, say) starts closed: it
+  // is context, not something to act on, and dozens of open cards make the page heavy to paint. One click opens it.
+  const [open, setOpen] = useState(defaultOpen && !isBulkInformation(vulns));
   const meta = getCategoryMeta(category);
 
   const highestSeverity = vulns.reduce<string | null>((acc, v) => {
