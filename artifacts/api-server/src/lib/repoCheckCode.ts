@@ -7,13 +7,13 @@
  * The first rule is the one the Lovable-style test app planted: a secret given a client-exposed environment prefix
  * (VITE_, NEXT_PUBLIC_...) is compiled into the browser bundle for every visitor.
  */
-import { repoFinding, NOT_THE_PROJECTS_OWN, type RepoFile, type RepoRef } from "./repoFinding";
+import { repoFinding, type RepoFile, type RepoRef } from "./repoFinding";
+import { isCodePath, isEnvFilePath, type Rule } from "./repoCodePaths";
+import { MORE_RULES } from "./repoCodeRules";
 import { isPlaceholderToken } from "./secretPlaceholders";
 import type { ScanVulnerability } from "./scanner";
 
-export const isCodePath = (p: string) =>
-  /\.(?:[cm]?[jt]sx?|vue|svelte)$/i.test(p) && !/\.d\.ts$|\.min\.|\.(?:test|spec|stories)\.[cm]?[jt]sx?$/i.test(p) && !NOT_THE_PROJECTS_OWN.test(p);
-export const isEnvFilePath = (p: string) => /(?:^|\/)\.env(?:\.[\w.-]+)?$/i.test(p) && !/\.(?:example|sample|template|dist|tmpl)$/i.test(p);
+export { isCodePath, isEnvFilePath };
 
 /** A client-exposed prefix on a name that says it is a secret. */
 const CLIENT_SECRET_NAME =
@@ -22,19 +22,6 @@ const CLIENT_SECRET_NAME =
 const CLIENT_SECRET_READ = new RegExp(String.raw`\benv\s*(?:\.|\[\s*["'])` + CLIENT_SECRET_NAME.source);
 /** Names that merely mention the words and are public by design. */
 const PUBLIC_BY_DESIGN_NAME = /(?:PUBLISHABLE|ANON|PUBLIC_KEY|CLIENT_ID|SITE_KEY|RECAPTCHA|TURNSTILE|MEASUREMENT|SENTRY_DSN)/i;
-
-interface Rule {
-  name: string;
-  /** `deliberate`: the code around the match says the pattern is intended; reported as information, not as a flaw. */
-  test: (path: string, text: string) => { detail: string; deliberate?: string } | null;
-  severity: ScanVulnerability["severity"];
-  category: string;
-  cweId: string;
-  cvssScore: number;
-  confidence: number;
-  description: string;
-  solution: string;
-}
 
 const RULES: Rule[] = [
   {
@@ -121,6 +108,7 @@ const RULES: Rule[] = [
     description: "The AI provider's SDK is told to run in the browser (dangerouslyAllowBrowser). The key it needs is then shipped to every visitor, who can copy it and spend your quota.",
     solution: "Call the provider from a server route that holds the key, checks the user is signed in and rate-limits requests.",
   },
+  ...MORE_RULES,
 ];
 
 export function codePatternFindings(files: RepoFile[], ref: RepoRef): ScanVulnerability[] {

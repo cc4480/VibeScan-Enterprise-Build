@@ -136,7 +136,8 @@ describe("CI and configuration", () => {
 describe("dangerous code patterns", () => {
   it("flags a secret behind a client-exposed prefix, in an env file and in code", () => {
     const env = codePatternFindings([f(".env.production", `VITE_SUPABASE_URL=https://x.supabase.co\nVITE_SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiJ9.abc123def456\n`)], ref);
-    expect(names(env)).toEqual(["Secret Exposed Through a Client-Side Environment Prefix"]);
+    // The same file is also a committed .env that sets a secret-named variable: both are true.
+    expect(names(env)).toEqual(["Secret Exposed Through a Client-Side Environment Prefix", "Environment File Committed to the Repository"]);
     expect(env[0]!.evidence).toContain("VITE_SUPABASE_SERVICE_ROLE_KEY");
     expect(env[0]!.evidence).not.toContain("abc123def456");
     const code = codePatternFindings([f("src/lib/admin.ts", `const k = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;`)], ref);

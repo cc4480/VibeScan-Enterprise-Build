@@ -95,6 +95,10 @@ export const CWE_CONTROLS_INJECTION_SECRETS: Record<string, ControlRef[]> = {
     { framework: "iso27001", control: "A.8.24", title: "Use of cryptography — key management" },
     { framework: "soc2", control: "CC6.1", title: "Logical access — credentials protected" },
   ],
+  "CWE-338": [
+    { framework: "asvs", control: "V6.3.1", title: "Random values come from a cryptographically secure generator" },
+    { framework: "iso27001", control: "A.8.24", title: "Use of cryptography" },
+  ],
   "CWE-312": [
     { framework: "asvs", control: "V6.1.1", title: "Sensitive data not stored in cleartext" },
     { framework: "pci", control: "3.5.1", title: "Stored account data rendered unreadable" },

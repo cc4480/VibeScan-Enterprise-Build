@@ -7,6 +7,15 @@ for each change; this collects what shipped and why it mattered.
 
 ### Accuracy
 
+- **Twelve more code rules for the repository scan.** A JWT signed or verified with a literal secret (and the jose
+  equivalent); a verifier that accepts the `none` algorithm; Prisma's unsafe raw queries built by interpolation; a shell
+  command, a file path, a fetched URL or a redirect target taken from request data; `Math.random` used for a token or code; MD5
+  or SHA-1 used for a password; a session cookie with `httpOnly` or `secure` turned off; `dangerouslySetInnerHTML` with an
+  unsanitised value; a Next.js route handler that changes data or uses a service-role client with no sign-in check visible; and a
+  committed `.env` that sets secret-named variables (names listed, values never shown; public-by-design keys do not count).
+  Rules that cannot tell a flaw from a safe use from the text alone are reported at low confidence, so the report lists them under
+  "needs verification". Each has a clean twin that must report nothing.
+
 - **The repository scan checks Firebase rules, Docker, compose and third-party Actions.** Firebase rules that let
   anyone write (`allow write: if true`, or the starter test mode that opens everything until a date) are critical; rules
   that let anyone read are high on a wildcard path and medium on a named one; Realtime Database rules are read the same way.
