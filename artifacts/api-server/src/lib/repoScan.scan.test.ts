@@ -15,7 +15,7 @@ vi.mock("./cveCheck", async (orig) => {
 
 import { supabaseMigrationFindings } from "./repoCheckSupabase";
 import { ciConfigFindings } from "./repoCheckCi";
-import { scanRepository, chooseFiles, MAX_FILES } from "./repoScan";
+import { scanRepository, chooseFiles } from "./repoScan";
 import type { RepoSource } from "./repoSource";
 import type { RepoFile, RepoRef } from "./repoFinding";
 
@@ -65,7 +65,7 @@ describe("scanRepository", () => {
     expect(got.some((n) => /Stripe/i.test(n) && /source repository/.test(n))).toBe(true);
     expect(out.findings.some((v) => /lodash/.test(`${v.name} ${v.evidence ?? ""} ${v.description}`))).toBe(true);
     expect(out.checks!.map((c) => c.name)).toEqual(["repository secrets", "Supabase migrations (RLS and policies)", "CI and configuration", "dangerous code patterns", "dependency vulnerabilities (OSV)"]);
-    expect(out.coverage).toMatchObject({ treeFiles: 6, read: 5, failedReads: 0 });
+    expect(out.coverage).toMatchObject({ treeFiles: 6, read: 6, failedReads: 0 });
     // Nothing was left out, so there is no partial-coverage note.
     expect(names(out.findings)).not.toContain("GitHub source scan covered only part of the repository");
     // A secret is never written out whole.
@@ -86,8 +86,21 @@ describe("scanRepository", () => {
     expect(out.checks!.every((c) => c.files > 0)).toBe(true);
   });
 
-  it("a repository with no file of a kind these checks read says nothing was tested, not that it is clean", async () => {
-    const out = await scanRepository(memorySource({ "app/main.py": "print(1)", "app/util.py": "x = 1", "README.md": "hi" }), ref);
+  it("reads every text file, whatever its language, and checks each for secrets", async () => {
+    const src = memorySource({
+      "app/main.py": 'STRIPE = "sk_live_Zk3pQ8vXw2LmN7rT9yBcD4fG"\n',
+      "docs/README.md": "# hello",
+      "static/logo.png": "not text",
+      "assets/font.woff2": "not text",
+    });
+    const out = await scanRepository(src, ref);
+    expect([...src.reads].sort()).toEqual(["app/main.py", "docs/README.md"]);
+    expect(out.coverage).toMatchObject({ treeFiles: 4, chosen: 2, read: 2 });
+    expect(names(out.findings).some((n) => /Stripe/i.test(n) && /source repository/.test(n))).toBe(true);
+  });
+
+  it("a repository with only binary files says nothing was tested, not that it is clean", async () => {
+    const out = await scanRepository(memorySource({ "static/logo.png": "x", "assets/font.woff2": "y" }), ref);
     const note = out.findings.find((v) => v.name === "GitHub source scan covered only part of the repository")!;
     expect(note.evidence).toContain("nothing was tested");
     expect(out.coverage).toMatchObject({ chosen: 0, read: 0 });
@@ -108,20 +121,23 @@ describe("scanRepository", () => {
     expect(names(out.findings)).not.toContain("eval or new Function on Request Data");
   });
 
-  it("is bounded: a huge tree is capped, prioritised, and the cap is reported", async () => {
+  it("has no limit on the size of the repository: every file is read, the important ones first, and secrets are found at the end of a big tree", async () => {
     const many: Record<string, string> = { ".env.production": "A=1\n", "supabase/migrations/001.sql": "create table t (id int);" };
-    for (let i = 0; i < 900; i++) many[`src/deep/module${i}.ts`] = `export const v${i} = ${i};`;
+    for (let i = 0; i < 4200; i++) many[`src/deep/module${i}.ts`] = `export const v${i} = ${i};`;
+    for (let i = 0; i < 1800; i++) many[`docs/page${i}.md`] = `# page ${i}`;
+    many["zzz/last.py"] = 'KEY = "sk_live_Zk3pQ8vXw2LmN7rT9yBcD4fG"\n';
     const src = memorySource(many);
     const out = await scanRepository(src, ref);
-    expect(src.reads.length).toBeLessThanOrEqual(MAX_FILES);
+    expect(src.reads.length).toBe(Object.keys(many).length);
     expect(src.reads.slice(0, 2)).toEqual(expect.arrayContaining([".env.production", "supabase/migrations/001.sql"]));
-    expect(out.coverage!.leftOutByCap).toBeGreaterThan(500);
-    expect(out.findings.find((v) => v.name === "GitHub source scan covered only part of the repository")!.evidence).toMatch(/Left out by the file and size limits: \d+/);
+    expect(out.coverage).toMatchObject({ read: Object.keys(many).length, leftOutByCap: 0, failedReads: 0 });
+    expect(names(out.findings).some((n) => /Stripe/i.test(n) && /source repository/.test(n))).toBe(true);
+    expect(names(out.findings)).not.toContain("GitHub source scan covered only part of the repository");
   });
 
   it("skips oversize files and dependency directories instead of reading half of them", () => {
     const { chosen, tooLarge } = chooseFiles([
-      { path: "src/huge.ts", size: 5_000_000 }, { path: "node_modules/x/index.js", size: 10 }, { path: "src/ok.ts", size: 10 },
+      { path: "src/huge.ts", size: 12_000_000 }, { path: "node_modules/x/index.js", size: 10 }, { path: "src/ok.ts", size: 10 },
       { path: "package-lock.json", size: 3_000_000 }, { path: "dist/app.js", size: 10 },
     ]);
     expect(chosen.map((c) => c.path).sort()).toEqual(["package-lock.json", "src/ok.ts"]);

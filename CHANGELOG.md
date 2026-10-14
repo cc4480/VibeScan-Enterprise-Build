@@ -7,6 +7,16 @@ for each change; this collects what shipped and why it mattered.
 
 ### Reports
 
+- **The repository scan reads every text file, with no limit on repository size.** It used to open only five kinds of
+  file (config and env files, SQL migrations, CI files, npm manifests, JS/TS source) and stopped at 300 files and 160
+  source files, so a 624-file repository was 168 files read. Now every text file is read and checked for secrets
+  whatever its language (Python, Go, Markdown, scripts, tests); only binary files (images, fonts, archives),
+  lockfiles (read for dependencies only) and vendored folders such as node_modules are left out. There is no file
+  count or total-bytes cap; one file over 10 MB is listed as skipped. Memory stays flat on any size: files are read
+  in batches of 100, the per-file checks run and release each batch, and only migrations, CI files and manifests are
+  kept for the checks that need them side by side. A repository whose file list GitHub cuts off at 100,000 entries is
+  walked folder by folder instead.
+
 - **A "Source code" section in the report when a repository was scanned.** The repository scan always ran its
   five checks, but the saved report kept only "ran, 0 findings", so a clean repository left no trace of what
   was read. The test record now keeps the repository, how it was read (public, or through the GitHub App),

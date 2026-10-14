@@ -42,7 +42,7 @@ describe("a repository scan, as the ledger records it", () => {
     expect(rec).toMatchObject({ name: SOURCE_TEST_NAME, status: "ran", findings: 0 });
     expect(rec.source?.repository).toBe("acme/taskflow");
     expect(rec.source?.via).toBe("public");
-    expect(rec.source?.read).toBe(2);
+    expect(rec.source?.read).toBe(3);
     expect(rec.source?.treeFiles).toBe(3);
     expect(rec.source?.checks?.map((c) => c.name)).toEqual([
       "repository secrets",

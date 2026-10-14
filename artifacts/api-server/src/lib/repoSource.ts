@@ -26,7 +26,37 @@ export interface RepoSource {
 }
 
 interface RepoMeta { private: boolean; default_branch: string }
-interface TreeEntry { path: string; type: string; size?: number }
+interface TreeEntry { path: string; type: string; size?: number; sha?: string }
+
+/**
+ * GitHub cuts the one-request file list off at 100,000 entries. A repository that large is read folder by folder instead,
+ * so its size does not decide which files are seen. Reports truncated only if a folder could not be listed after all.
+ */
+async function walkTree(ref: RepoRef, rootSha: string, timeoutMs: number, headers: Record<string, string>): Promise<{ tree: TreeFile[]; truncated: boolean }> {
+  const tree: TreeFile[] = [];
+  let truncated = false;
+  let inFlight = 0;
+  const queue: Array<{ sha: string; prefix: string }> = [{ sha: rootSha, prefix: "" }];
+  const workers = Array.from({ length: 6 }, async () => {
+    for (;;) {
+      const next = queue.pop();
+      if (!next) { if (inFlight === 0) return; await new Promise((r) => setTimeout(r, 20)); continue; }
+      inFlight++;
+      try {
+        const res = await githubGet(`https://api.github.com/repos/${ref.owner}/${ref.repo}/git/trees/${next.sha}`, "json", timeoutMs, headers);
+        const body = res && res.ok ? (res.data as { tree?: TreeEntry[]; truncated?: boolean } | null) : null;
+        if (!body?.tree) { truncated = true; continue; }
+        if (body.truncated === true) truncated = true;
+        for (const e of body.tree) {
+          if (e.type === "blob") tree.push({ path: next.prefix + e.path, size: e.size ?? 0 });
+          else if (e.type === "tree" && e.sha) queue.push({ sha: e.sha, prefix: `${next.prefix}${e.path}/` });
+        }
+      } finally { inFlight--; }
+    }
+  });
+  await Promise.all(workers);
+  return { tree, truncated };
+}
 
 async function openRepo(ref: RepoRef, timeoutMs: number, headers: Record<string, string>, allowPrivate: boolean): Promise<OpenResult> {
   const metaRes = await githubGet(`https://api.github.com/repos/${ref.owner}/${ref.repo}`, "json", timeoutMs, headers);
@@ -39,8 +69,13 @@ async function openRepo(ref: RepoRef, timeoutMs: number, headers: Record<string,
   if (!treeRes) return { ok: false, status: "unreachable" };
   if (treeRes.status === 409) return { ok: true, branch, tree: [], truncated: false }; // no commits
   if (!treeRes.ok) return { ok: false, status: whyNotOk(treeRes, "unreadable") };
-  const tree = treeRes.data as { tree?: TreeEntry[]; truncated?: boolean } | null;
+  const tree = treeRes.data as { sha?: string; tree?: TreeEntry[]; truncated?: boolean } | null;
   if (!tree?.tree) return { ok: false, status: "unreadable" };
+  if (tree.truncated === true && tree.sha) {
+    const walked = await walkTree(ref, tree.sha, timeoutMs, headers);
+    // Use the walk only if it saw at least as much as the cut-off list did; otherwise keep the list and say it is partial.
+    if (walked.tree.length >= tree.tree.filter((e) => e.type === "blob").length) return { ok: true, branch, tree: walked.tree, truncated: walked.truncated };
+  }
   return {
     ok: true, branch, truncated: tree.truncated === true,
     tree: tree.tree.filter((e) => e.type === "blob").map((e) => ({ path: e.path, size: e.size ?? 0 })),

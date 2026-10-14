@@ -1,18 +1,18 @@
 /**
- * The repository scan: walk the file tree, read a bounded, prioritised set of files, run the checks, and say exactly
+ * The repository scan: walk the file tree, read every text file of the repository, run the checks, and say exactly
  * what was and was not read. Replaces the 25-file secrets-only read in githubSourceProbe.ts for callers that want the
  * whole picture; that module still supplies the secret patterns, the candidate list and the GitHub plumbing.
  *
- * Bounds (the scan runs inside a request budget and a memory budget, and a repository is attacker-supplied input):
- *   MAX_FILES        files read per repository
- *   MAX_FILE_BYTES   per file; a larger file is listed as skipped, not truncated into a half-read
- *   MAX_TOTAL_BYTES  bytes read per repository
- * Anything over a bound is counted and reported in the coverage note. "Nothing found" only ever means something about the
- * files that were read.
+ * There is no limit on how many files or how many bytes a repository has: every text file is read. Two bounds remain, both
+ * about one file and both reported when they bite: MAX_FILE_BYTES (a file bigger than that is a data dump, not source, and
+ * is listed as skipped rather than half-read) and the repository being unreadable. Memory stays flat however large the
+ * repository is: files are read in batches, the per-file checks (secrets, code patterns) run on each batch and let it go,
+ * and only the few kinds of file that a check needs side by side (migrations, CI, manifests) are kept to the end.
+ * "Nothing found" only ever means something about the files that were read.
  */
 import { scanContent, redactContext, redactSecret } from "./jsScanner";
 import { scanConfigSecrets } from "./configSecrets";
-import { isCandidatePath, prioritise, MAX_FILES as SECRET_FILES } from "./githubCandidates";
+import { isCandidatePath, prioritise } from "./githubCandidates";
 import { configFinding } from "./githubFindings";
 import { NOT_SCANNED, type GithubScanOutcome } from "./githubSourceProbeOutcome";
 import { repoFinding, NOT_THE_PROJECTS_OWN, type RepoFile, type RepoRef } from "./repoFinding";
@@ -23,17 +23,19 @@ import { dependencyFindings, isManifestPath, isLockfilePath } from "./repoCheckD
 import type { RepoSource, TreeFile } from "./repoSource";
 import type { ScanVulnerability } from "./scanner";
 
-export const MAX_FILES = 300;
-export const MAX_FILE_BYTES = 1_000_000;
-export const MAX_LOCKFILE_BYTES = 5_000_000;
-export const MAX_TOTAL_BYTES = 25_000_000;
-const CONCURRENCY = 6;
+export const MAX_FILE_BYTES = 10_000_000;
+export const MAX_LOCKFILE_BYTES = 25_000_000;
+const CONCURRENCY = 10;
+/** Files read, checked and released together. */
+const BATCH = 100;
 
-/** Which check wants a file, lowest number first: the cap is spent in this order. */
-type Why = "secrets" | "migration" | "ci" | "manifest" | "code";
-const PRIORITY: Record<Why, number> = { secrets: 0, migration: 1, ci: 2, manifest: 3, code: 4 };
-/** Per-class ceilings, so one kind of file cannot use the whole budget. */
-const CLASS_LIMIT: Record<Why, number> = { secrets: SECRET_FILES, migration: 100, ci: 40, manifest: 12, code: 160 };
+/** Which check wants a file, lowest number first: files are read in this order, so the ones that matter most come first. */
+type Why = "secrets" | "migration" | "ci" | "manifest" | "code" | "other";
+const PRIORITY: Record<Why, number> = { secrets: 0, migration: 1, ci: 2, manifest: 3, code: 4, other: 5 };
+
+/** Files that are not text: reading them would only produce noise. Everything else is read. */
+export const isBinaryPath = (p: string) =>
+  /\.(?:png|jpe?g|gif|webp|avif|ico|icns|bmp|tiff?|heic|psd|ai|sketch|fig|woff2?|ttf|otf|eot|mp[34]|m4[av]|mov|avi|mkv|webm|wav|ogg|flac|zip|gz|tgz|tar|rar|7z|bz2|xz|zst|pdf|exe|dll|so|dylib|bin|dat|wasm|class|jar|pyc|o|a|lib|sqlite3?|db|parquet|onnx|pt|pth|safetensors|ckpt|npy|npz)$/i.test(p);
 
 function classify(path: string): Why | null {
   if (NOT_THE_PROJECTS_OWN.test(path) && !isEnvFilePath(path)) return null;
@@ -42,6 +44,8 @@ function classify(path: string): Why | null {
   if (isWorkflowPath(path) || isDockerfilePath(path) || isSupabaseConfigPath(path)) return "ci";
   if (isManifestPath(path) || isLockfilePath(path)) return "manifest";
   if (isCodePath(path)) return "code";
+  // Everything else that is text (documentation, styles, scripts in other languages, data, tests) is read for secrets.
+  if (!isBinaryPath(path) && !NOT_THE_PROJECTS_OWN.test(path)) return "other";
   return null;
 }
 
@@ -67,7 +71,7 @@ export interface RepoCoverage {
 /** What a repository scan returns: the outcome the scanner records, with its coverage and per-check results (see GithubScanOutcome). */
 export type RepoScanOutcome = GithubScanOutcome;
 
-export function chooseFiles(tree: TreeFile[]): { chosen: Array<TreeFile & { why: Why }>; leftOutByCap: number; tooLarge: number } {
+export function chooseFiles(tree: TreeFile[]): { chosen: Array<TreeFile & { why: Why }>; tooLarge: number } {
   const byClass = new Map<Why, Array<TreeFile & { why: Why }>>();
   let tooLarge = 0;
   for (const f of tree) {
@@ -77,17 +81,12 @@ export function chooseFiles(tree: TreeFile[]): { chosen: Array<TreeFile & { why:
     if (f.size > limit) { tooLarge++; continue; }
     (byClass.get(why) ?? byClass.set(why, []).get(why)!).push({ ...f, why });
   }
-  const ordered: Array<TreeFile & { why: Why }> = [];
-  let leftOutByCap = 0;
+  const chosen: Array<TreeFile & { why: Why }> = [];
   for (const why of (Object.keys(PRIORITY) as Why[]).sort((a, b) => PRIORITY[a] - PRIORITY[b])) {
-    let list = byClass.get(why) ?? [];
-    list = why === "secrets" ? prioritise(list) : why === "code" ? [...list].sort((a, b) => codeRank(a.path) - codeRank(b.path) || a.path.localeCompare(b.path)) : [...list].sort((a, b) => a.path.localeCompare(b.path));
-    leftOutByCap += Math.max(0, list.length - CLASS_LIMIT[why]);
-    ordered.push(...list.slice(0, CLASS_LIMIT[why]));
+    const list = byClass.get(why) ?? [];
+    chosen.push(...(why === "secrets" ? prioritise(list) : why === "code" ? [...list].sort((a, b) => codeRank(a.path) - codeRank(b.path) || a.path.localeCompare(b.path)) : [...list].sort((a, b) => a.path.localeCompare(b.path))));
   }
-  const kept = ordered.slice(0, MAX_FILES);
-  leftOutByCap += ordered.length - kept.length;
-  return { chosen: kept, leftOutByCap, tooLarge };
+  return { chosen, tooLarge };
 }
 
 async function mapLimit<T, R>(items: T[], limit: number, fn: (x: T) => Promise<R>): Promise<R[]> {
@@ -103,9 +102,9 @@ function secretFindings(files: RepoFile[], ref: RepoRef): ScanVulnerability[] {
   const out: ScanVulnerability[] = [];
   const seen = new Set<string>();
   for (const f of files) {
-    // The secret patterns were written for configuration files; they run on those (and on migrations, where a key
-    // pasted into a seed script is a real leak), not on application code, where test fixtures would make them noisy.
-    if (!isCandidatePath(f.path) && !isEnvFilePath(f.path) && !isMigrationPath(f.path)) continue;
+    // Every file that was read is checked: a key pasted into application code, a script or a README leaks as surely as
+    // one in a .env file. Lockfiles are the exception (their hashes are not secrets) and are read only for dependencies.
+    if (isLockfilePath(f.path)) continue;
     for (const hit of scanContent(f.content)) {
       const key = `${hit.pattern.name}|${f.path}`;
       if (seen.has(key)) continue;
@@ -128,44 +127,62 @@ function secretFindings(files: RepoFile[], ref: RepoRef): ScanVulnerability[] {
   return out;
 }
 
+/** Files a check needs alongside others (a table in one migration, its policy in the next), so they are kept to the end. */
+const keptToTheEnd = (p: string) =>
+  isMigrationPath(p) || isWorkflowPath(p) || isDockerfilePath(p) || isSupabaseConfigPath(p) || isFunctionCodePath(p) || isManifestPath(p) || isLockfilePath(p);
+
 export async function scanRepository(source: RepoSource, ref: RepoRef): Promise<RepoScanOutcome> {
   const opened = await source.open();
   if (!opened.ok) return NOT_SCANNED(opened.status);
   if (opened.tree.length === 0) return { findings: [], status: "empty", filesRead: 0, via: source.via };
 
-  const { chosen, leftOutByCap, tooLarge } = chooseFiles(opened.tree);
-  const files: RepoFile[] = [];
+  const { chosen, tooLarge } = chooseFiles(opened.tree);
+  const files: RepoFile[] = []; // only what is kept to the end
+  const readPaths: string[] = [];
+  const findings: ScanVulnerability[] = [];
   let bytesRead = 0;
   let failedReads = 0;
-  let overBytes = 0;
-  const byCheck: Record<Why, number> = { secrets: 0, migration: 0, ci: 0, manifest: 0, code: 0 };
+  const byCheck: Record<Why, number> = { secrets: 0, migration: 0, ci: 0, manifest: 0, code: 0, other: 0 };
+  const secrets = { files: 0, found: 0 };
+  const code = { files: 0, found: 0 };
 
-  await mapLimit(chosen, CONCURRENCY, async (f) => {
-    if (bytesRead >= MAX_TOTAL_BYTES) { overBytes++; return; }
-    const text = await source.read(f.path, opened.branch);
-    if (text === null) { failedReads++; return; }
-    bytesRead += text.length;
-    byCheck[f.why]++;
-    files.push({ path: f.path, content: text });
-  });
-  files.sort((a, b) => a.path.localeCompare(b.path));
+  for (let i = 0; i < chosen.length; i += BATCH) {
+    const batch: RepoFile[] = [];
+    await mapLimit(chosen.slice(i, i + BATCH), CONCURRENCY, async (f) => {
+      const text = await source.read(f.path, opened.branch);
+      if (text === null) { failedReads++; return; }
+      bytesRead += text.length;
+      byCheck[f.why]++;
+      batch.push({ path: f.path, content: text });
+    });
+    batch.sort((a, b) => a.path.localeCompare(b.path));
+    readPaths.push(...batch.map((f) => f.path));
+
+    // The per-file checks run now, so the batch can be released.
+    const forSecrets = batch.filter((f) => !isLockfilePath(f.path));
+    if (forSecrets.length) { const found = secretFindings(forSecrets, ref); findings.push(...found); secrets.files += forSecrets.length; secrets.found += found.length; }
+    const forCode = batch.filter((f) => isCodePath(f.path) || isEnvFilePath(f.path));
+    if (forCode.length) { const found = codePatternFindings(forCode, ref); findings.push(...found); code.files += forCode.length; code.found += found.length; }
+    files.push(...batch.filter((f) => keptToTheEnd(f.path)));
+  }
 
   // Chosen files existed and none could be read: GitHub's raw host failing is not a clean repository.
-  if (chosen.length > 0 && files.length === 0) return { ...NOT_SCANNED("unreadable"), via: source.via };
+  if (chosen.length > 0 && readPaths.length === 0) return { ...NOT_SCANNED("unreadable"), via: source.via };
 
-  const findings: ScanVulnerability[] = [];
   const checks: NonNullable<RepoScanOutcome["checks"]> = [];
+  const record = (name: string, scoped: number, found: number) =>
+    checks.push({ name, files: scoped, findings: found, ...(scoped === 0 ? { note: "no matching files in the repository" } : {}) });
   const run = (name: string, scope: (f: RepoFile) => boolean, produce: (fs: RepoFile[]) => ScanVulnerability[]) => {
     const scoped = files.filter(scope);
     const found = scoped.length ? produce(scoped) : [];
     findings.push(...found);
-    checks.push({ name, files: scoped.length, findings: found.length, ...(scoped.length === 0 ? { note: "no matching files in the repository" } : {}) });
+    record(name, scoped.length, found.length);
   };
 
-  run("repository secrets", (f) => isCandidatePath(f.path) || isEnvFilePath(f.path) || isMigrationPath(f.path), (fs) => secretFindings(fs, ref));
+  record("repository secrets", secrets.files, secrets.found);
   run("Supabase migrations (RLS and policies)", (f) => isMigrationPath(f.path), (fs) => supabaseMigrationFindings(fs, ref));
   run("CI and configuration", (f) => isWorkflowPath(f.path) || isDockerfilePath(f.path) || isSupabaseConfigPath(f.path) || isFunctionCodePath(f.path), (fs) => ciConfigFindings(fs, ref));
-  run("dangerous code patterns", (f) => isCodePath(f.path) || isEnvFilePath(f.path), (fs) => codePatternFindings(fs, ref));
+  record("dangerous code patterns", code.files, code.found);
 
   const deps = await dependencyFindings(files).catch(() => ({ findings: [] as ScanVulnerability[], considered: 0, looked: 0, source: null as string | null }));
   findings.push(...deps.findings);
@@ -174,8 +191,9 @@ export async function scanRepository(source: RepoSource, ref: RepoRef): Promise<
     ...(deps.considered === 0 ? { note: "no package.json or package-lock.json with exact versions" } : deps.looked < deps.considered ? { note: `looked up ${deps.looked} of ${deps.considered} packages` } : {}),
   });
 
-  const cap = leftOutByCap + overBytes;
-  const coverage: RepoCoverage = { treeFiles: opened.tree.length, chosen: chosen.length, read: files.length, bytesRead, leftOutByCap: cap, tooLarge, truncatedTree: opened.truncated, failedReads, byCheck };
+  // No count or byte limit exists any more; the field stays so records and reports made before keep their meaning.
+  const cap = 0;
+  const coverage: RepoCoverage = { treeFiles: opened.tree.length, chosen: chosen.length, read: readPaths.length, bytesRead, leftOutByCap: cap, tooLarge, truncatedTree: opened.truncated, failedReads, byCheck };
   // Files in the repository but none of a kind these checks read (a Python or Go project, say): nothing was tested.
   const nothingRead = chosen.length === 0;
   if (nothingRead || opened.truncated || cap > 0 || tooLarge > 0 || failedReads > 0 || (deps.considered > deps.looked)) {
@@ -183,19 +201,18 @@ export async function scanRepository(source: RepoSource, ref: RepoRef): Promise<
     const notice = repoFinding({
       ref, path: "(repository)", name: "GitHub source scan covered only part of the repository",
       severity: "info", category: "Scan Coverage", cweId: null, cvssScore: 0, confidence: 100,
-      description: "The source-code scan reads a bounded, prioritised set of files and could not read all of the repository. Nothing found in the files it did read is a statement about the rest, so this result should not be read as a clean scan of the repository.",
+      description: "The source-code scan reads every text file of the repository and could not read all of it. Nothing found in the files it did read is a statement about the rest, so this result should not be read as a clean scan of the repository.",
       detail: [
-        `Files read: ${files.length} of ${chosen.length} chosen (${opened.tree.length} in the repository, ${(bytesRead / 1e6).toFixed(1)} MB read)`,
-        ...(nothingRead ? ["No file in the repository is of a kind these checks read (JavaScript/TypeScript source, config and env files, SQL migrations, CI workflows, npm manifests), so nothing was tested"] : []),
-        ...(cap > 0 ? [`Left out by the file and size limits: ${cap}`] : []),
-        ...(tooLarge > 0 ? [`Over the ${MAX_FILE_BYTES / 1000} KB per-file limit: ${tooLarge}`] : []),
+        `Files read: ${readPaths.length} of ${chosen.length} chosen (${opened.tree.length} in the repository, ${(bytesRead / 1e6).toFixed(1)} MB read)`,
+        ...(nothingRead ? ["No file in the repository is of a kind these checks read (text files of any kind, other than lockfiles, vendored folders such as node_modules, and binary files such as images), so nothing was tested"] : []),
+        ...(tooLarge > 0 ? [`Over the ${MAX_FILE_BYTES / 1_000_000} MB per-file limit, so not read: ${tooLarge}`] : []),
         ...(failedReads > 0 ? [`Could not be downloaded: ${failedReads}`] : []),
         ...(opened.truncated ? ["GitHub truncated the repository's file list, so files beyond it were never seen"] : []),
         ...(deps.considered > deps.looked ? [`Dependencies looked up: ${deps.looked} of ${deps.considered}`] : []),
       ].join("\n"),
       solution: "Re-run the scan, or check the files it did not reach by hand.",
     });
-    findings.push({ ...notice, repoFilesRead: files.map((f) => f.path) } as ScanVulnerability);
+    findings.push({ ...notice, repoFilesRead: readPaths } as ScanVulnerability);
   }
-  return { findings, status: "scanned", filesRead: files.length, skipped: cap, truncated: opened.truncated, coverage, checks, via: source.via };
+  return { findings, status: "scanned", filesRead: readPaths.length, skipped: cap, truncated: opened.truncated, coverage, checks, via: source.via };
 }
