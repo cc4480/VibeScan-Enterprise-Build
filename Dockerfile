@@ -28,6 +28,20 @@ RUN pnpm install --frozen-lockfile
 # used here so that a pre-existing type error cannot block producing an image.
 RUN pnpm -r --if-present --filter '!@workspace/mockup-sandbox' run build
 
+# Prerender the public pages (home, learn, about, bot, privacy, terms) in headless
+# Chromium, so crawlers that run no JavaScript get the page and not an empty div.
+# The browser lives only in this builder stage and is never copied into an image.
+# The whole step is best-effort: the download comes from cdn.playwright.dev, which
+# has failed mid-build before, and a missing prerender only means those pages are
+# served as they were. It must never be the reason a deploy fails.
+RUN ( for attempt in 1 2 3; do \
+        pnpm --filter @workspace/api-server exec playwright install --with-deps chromium && break; \
+        echo "playwright browser install failed (attempt $attempt/3); retrying in 15s"; \
+        sleep 15; \
+      done; \
+      pnpm --filter @workspace/api-server run prerender ) \
+    || echo "prerender skipped"
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Runtime base — everything both apps need, and nothing either one does not.

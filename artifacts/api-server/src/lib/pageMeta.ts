@@ -218,8 +218,11 @@ function applyJsonLd(html: string, meta: PageMeta, url: string): string {
  * Tags are replaced, not appended: a second <link rel="canonical"> alongside
  * the original leaves the crawler to choose, and it may choose the one being
  * overridden.
+ *
+ * `extraHtml` is trusted markup produced by our own build (the prerendered
+ * page body); it goes into the <noscript> block for readers that run no scripts.
  */
-export function applyPageMeta(html: string, meta: PageMeta): string {
+export function applyPageMeta(html: string, meta: PageMeta, extraHtml?: string): string {
   const url = `${SITE}${meta.path.replace(/\/$/, "") || "/"}`;
   let out = html.replace(
     /<link\s+rel="canonical"\s+href="[^"]*"\s*\/?>/i,
@@ -251,7 +254,8 @@ export function applyPageMeta(html: string, meta: PageMeta): string {
       const t = meta.title ? escapeAttr(meta.title) : "";
       out = out.replace(
         /(<p>SecScan needs JavaScript to run a scan interactively\. These pages read fine without it:<\/p>)/,
-        `${t ? `<h2>${t}</h2>\n      ` : ""}<p>${d}</p>\n      $1`,
+        // A function, so a `$` in the markup is never read as a replacement pattern.
+        (marker) => `${t ? `<h2>${t}</h2>\n      ` : ""}<p>${d}</p>\n      ${extraHtml ? `${extraHtml}\n      ` : ""}${marker}`,
       );
     }
   }
@@ -265,3 +269,29 @@ export function applyPageMeta(html: string, meta: PageMeta): string {
 
   return applyJsonLd(out, meta, url);
 }
+
+/**
+ * Put a page's rendered markup inside the empty app container.
+ *
+ * The fragment is what scripts/prerender-public.mjs read back out of #root in
+ * headless Chromium at build time, so a reader that runs no JavaScript gets the
+ * page itself, not an empty div. React's createRoot replaces the container's
+ * contents when it starts, so nothing here has to be reconciled — the markup is
+ * simply what the page looks like until then. Trusted: produced by our own build.
+ * Returns the HTML untouched if the shell has no empty container to fill.
+ */
+export function withRenderedRoot(html: string, fragment: string | undefined): string {
+  if (!fragment) return html;
+  // A function, so a `$` in the markup is never read as a replacement pattern.
+  return html.replace('<div id="root"></div>', () => `<div id="root">${fragment}</div>`);
+}
+
+/** Routes that have a prerendered page, and the name of its fragment file. */
+export const PRERENDERED: Record<string, string> = {
+  "/": "home",
+  "/learn": "learn",
+  "/about": "about",
+  "/bot": "bot",
+  "/privacy": "privacy",
+  "/terms": "terms",
+};

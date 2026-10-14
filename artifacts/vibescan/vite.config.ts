@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
-import type { Plugin } from "vite";
+import { createServer, type Plugin } from "vite";
 
 // index.html carries an inline <script> that repairs a half-initialised React
 // DevTools hook (added in 71fca36 — without it the dev environment fails
@@ -72,6 +72,41 @@ function applyOriginToPublicFiles(): Plugin {
   };
 }
 
+/**
+ * Writes the /learn documentation as plain HTML next to the bundle, for the API
+ * server to add to that page's <noscript> block (lib/pageMeta.ts). Crawlers that
+ * do not run JavaScript otherwise get one line of a page that is mostly content.
+ * The text comes from the same check data the page renders (src/pages/learn-static.ts).
+ * A failure here must not fail the build: the page then just serves as before.
+ */
+function prerenderStaticContent(): Plugin {
+  return {
+    name: "prerender-static-content",
+    apply: "build",
+    async closeBundle() {
+      const { mkdir, writeFile } = await import("node:fs/promises");
+      const server = await createServer({
+        configFile: false,
+        root: import.meta.dirname,
+        logLevel: "silent",
+        appType: "custom",
+        server: { middlewareMode: true, hmr: false, ws: false },
+        resolve: { alias: { "@": path.resolve(import.meta.dirname, "src") } },
+      });
+      try {
+        const mod = await server.ssrLoadModule("/src/pages/learn-static-entry.ts");
+        const dir = path.resolve(import.meta.dirname, "dist/public/prerender");
+        await mkdir(dir, { recursive: true });
+        await writeFile(path.join(dir, "learn.html"), applyOrigin(String(mod.learnStaticHtml)));
+      } catch (err) {
+        console.warn("prerender-static-content: skipped —", err instanceof Error ? err.message : err);
+      } finally {
+        await server.close();
+      }
+    },
+  };
+}
+
 function stripDevtoolsShim(): Plugin {
   return {
     name: "strip-devtools-hook-shim",
@@ -133,6 +168,7 @@ export default defineConfig({
     stripDevtoolsShim(),
     applyOriginToHtml(),
     applyOriginToPublicFiles(),
+    prerenderStaticContent(),
     react(),
     tailwindcss(),
   ],

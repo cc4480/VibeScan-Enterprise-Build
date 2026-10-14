@@ -10,7 +10,7 @@ import router from "./routes";
 import oauthMetadataRouter from "./routes/oauthMetadata";
 import { logger } from "./lib/logger";
 import { isSpaRoute } from "./lib/spaRoutes";
-import { metaForPath, applyPageMeta } from "./lib/pageMeta";
+import { metaForPath, applyPageMeta, withRenderedRoot, PRERENDERED } from "./lib/pageMeta";
 import { staticCacheControl } from "./lib/cachePolicy";
 import { authMiddleware } from "./middlewares/authMiddleware";
 import { configureTrustProxy } from "./lib/clientIp";
@@ -207,6 +207,7 @@ if (process.env.NODE_ENV !== "production") {
 
   if (existsSync(staticDir)) {
     logger.info({ staticDir }, "Production: serving static frontend");
+    app.use("/prerender", (_req, res) => res.sendStatus(404));
     app.use(
       express.static(staticDir, {
         dotfiles: "allow",
@@ -241,16 +242,40 @@ if (process.env.NODE_ENV !== "production") {
       return shellHtml;
     };
 
+    // Page bodies written at build time for crawlers that run no scripts. They are
+    // fragments, not pages: served on their own they would be thin duplicates.
+    const prerendered = (name: string): string | undefined => {
+      try {
+        return readFileSync(nodePath.join(staticDir, "prerender", `${name}.html`), "utf-8");
+      } catch {
+        return undefined;
+      }
+    };
+    const learnBody = prerendered("learn");
+    // The rendered pages from scripts/prerender-public.mjs. Any that is missing is
+    // simply served as before, so a failed prerender never breaks a page.
+    const renderedRoot = new Map(
+      Object.entries(PRERENDERED).map(([route, name]) => [route, prerendered(`${name}.root`)] as const),
+    );
+    const normalise = (p: string): string => p.replace(/\/+$/, "") || "/";
+
     app.get(/.*/, (req, res) => {
       if (isSpaRoute(req.path)) {
         const meta = metaForPath(req.path);
-        // The homepage's built metadata is already right, so it is sent as a
-        // file rather than rewritten with a copy of itself.
+        const root = renderedRoot.get(normalise(req.path));
+        // The homepage's built metadata is already right, so with nothing to add
+        // it is sent as a file rather than rewritten with a copy of itself.
         if (!meta) {
-          res.sendFile(shellPath);
+          if (!root) {
+            res.sendFile(shellPath);
+            return;
+          }
+          res.type("html").send(withRenderedRoot(shell(), root));
           return;
         }
-        res.type("html").send(applyPageMeta(shell(), meta));
+        res
+          .type("html")
+          .send(withRenderedRoot(applyPageMeta(shell(), meta, meta.path === "/learn" ? learnBody : undefined), root));
         return;
       }
       // Deliberately a minimal page with no sign-in affordance: a 404 that

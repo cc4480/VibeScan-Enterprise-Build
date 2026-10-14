@@ -16,7 +16,8 @@
     "benchmark:score": "npx tsx ./scripts/benchmark/score-consensus.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "prerender": "node ./scripts/prerender-public.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",

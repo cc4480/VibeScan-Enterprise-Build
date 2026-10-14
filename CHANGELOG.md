@@ -3,6 +3,19 @@
 Notable changes to the SecScan engine. Commit messages carry the full reasoning
 for each change; this collects what shipped and why it mattered.
 
+## 2026-10-14
+
+### SEO
+
+- **Public pages are prerendered for crawlers that run no JavaScript.** Home, `/learn`, `/about`, `/bot`,
+  `/privacy` and `/terms` were an empty `<div id="root">` until React ran, which is all most AI crawlers
+  ever saw. The Docker build now renders them in headless Chromium (`scripts/prerender-public.mjs`) and
+  the server places each page's markup in the root container. `/learn` also gets every check written out
+  in its `<noscript>` block. The step is best-effort: if the browser cannot be installed or a page fails
+  to render, that page is served as before and the build still succeeds.
+- The homepage meta description is 155 characters (was 204), and `/oauth/` and `/feedback` are in the
+  `robots.txt` Disallow list.
+
 ## 2026-10-13
 
 ### Security

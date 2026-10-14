@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { metaForPath, applyPageMeta } from "./pageMeta";
+import { readFileSync } from "node:fs";
+import { metaForPath, applyPageMeta, withRenderedRoot, PRERENDERED } from "./pageMeta";
 import { SPA_ROUTES } from "./spaRoutes";
 
 const SHELL = `<!doctype html><html><head>
@@ -88,6 +89,14 @@ describe("page metadata", () => {
     expect(html).toContain("<p>Plain-English guides to the key security checks SecScan runs");
     // Still ahead of the nav, so it doesn't look tacked on after the links.
     expect(html.indexOf("<h2>Security Documentation")).toBeLessThan(html.indexOf("<nav>"));
+  });
+
+  it("adds the prerendered body to /learn's noscript, before the nav, and keeps $ characters literal", () => {
+    const body = "<section><h2>HTTPS</h2><pre>echo $1 $& $$ $'</pre></section>";
+    const html = applyPageMeta(SHELL_WITH_NOSCRIPT, metaForPath("/learn")!, body);
+    expect(html).toContain(body);
+    expect(html.indexOf(body)).toBeLessThan(html.indexOf("<nav>"));
+    expect(applyPageMeta(SHELL_WITH_NOSCRIPT, metaForPath("/learn")!)).not.toContain("<section>");
   });
 
   it("leaves noindex routes out of the noscript rewrite", () => {
@@ -248,5 +257,36 @@ describe("visible breadcrumbs match the structured data", () => {
       expect(crumb, `${path} has no breadcrumb in pageMeta`).toBeDefined();
       expect(layout).toContain(`"${path}": "${crumb!.name}"`);
     }
+  });
+});
+
+describe("withRenderedRoot", () => {
+  const SHELL_ROOT = '<body><div id="root"></div><script src="/a.js"></script></body>';
+
+  it("fills the empty app container and leaves the rest alone", () => {
+    expect(withRenderedRoot(SHELL_ROOT, "<h1>Hi</h1>")).toBe(
+      '<body><div id="root"><h1>Hi</h1></div><script src="/a.js"></script></body>',
+    );
+  });
+
+  it("keeps $ sequences in the markup literal", () => {
+    expect(withRenderedRoot(SHELL_ROOT, "<p>$& $1 $$ $'</p>")).toContain("<p>$& $1 $$ $'</p>");
+  });
+
+  it("returns the shell unchanged when there is no fragment", () => {
+    expect(withRenderedRoot(SHELL_ROOT, undefined)).toBe(SHELL_ROOT);
+    expect(withRenderedRoot(SHELL_ROOT, "")).toBe(SHELL_ROOT);
+  });
+
+  it("does not touch a shell whose container is not empty", () => {
+    const filled = '<div id="root"><p>x</p></div>';
+    expect(withRenderedRoot(filled, "<h1>Hi</h1>")).toBe(filled);
+  });
+
+  it("names the same pages as the build script that renders them", () => {
+    const script = readFileSync(new URL("../../scripts/prerender-public.mjs", import.meta.url), "utf8");
+    const block = /const PAGES = \{([^}]*)\}/.exec(script)?.[1] ?? "";
+    const pages = Object.fromEntries([...block.matchAll(/"([^"]+)":\s*"([^"]+)"/g)].map((m) => [m[1], m[2]]));
+    expect(pages).toEqual(PRERENDERED);
   });
 });
