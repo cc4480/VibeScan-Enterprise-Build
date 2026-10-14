@@ -9,12 +9,7 @@ export { buildHtml, sendReportReadyEmail } from "./mailerReport";
 export { sendMonitorCveAlertEmail, sendRegressionAlertEmail } from "./mailerCve";
 export { sendCertExpiryEmail, sendAvailabilityEmail } from "./mailerHealth";
 export { sendDriftEmail, sendMonitorScanQueuedEmail } from "./mailerDrift";
-export {
-  sendPurchaseReceiptEmail,
-  sendEmailVerification,
-  sendLoginCode,
-  sendPasswordReset,
-  sendSignupExistingAccountEmail,
-} from "./mailerAccount";
+export { sendPurchaseReceiptEmail, sendEmailVerification } from "./mailerAccount";
+export { sendLoginCode, sendPasswordReset, sendSignupExistingAccountEmail } from "./mailerAccountAccess";
 export { setMarketingSubscription, addToMarketingAudience, sendWelcomeEmail, sendPaymentsLiveEmail } from "./mailerMarketing";
 export type { RegressionItem } from "./mailerCve";
