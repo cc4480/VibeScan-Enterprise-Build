@@ -5,6 +5,13 @@ for each change; this collects what shipped and why it mattered.
 
 ## 2026-10-14
 
+### Accuracy
+
+- **"CSP allows inline styles" is information that needs verification, not a low finding.** When a site's script rules
+  are strict and only `style-src` allows `unsafe-inline`, it cannot run JavaScript, and a front end that injects its own
+  styles at runtime often cannot drop it. It is still shown (under "Needs verification"), but no longer weighs on the grade.
+  A policy that allows `unsafe-inline` or `unsafe-eval` for scripts is still a medium finding.
+
 ### Performance
 
 - **No part of the app blurs what is behind it, and long reports paint far less.** A background blur makes the browser

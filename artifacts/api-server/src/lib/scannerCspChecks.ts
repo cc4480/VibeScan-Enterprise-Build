@@ -52,8 +52,9 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
     // or 'strict-dynamic' is ignored by browsers, and 'wasm-unsafe-eval' is not
     // 'unsafe-eval', so neither counts as weakness.
     //   • unsafe-inline / unsafe-eval in script-src → MEDIUM (XSS, scripts execute)
-    //   • unsafe-inline ONLY in style-src (script-src is clean) → LOW (CSS injection
-    //     only — can spoof UI / exfiltrate via attribute selectors, but cannot run JS)
+    //   • unsafe-inline ONLY in style-src (script-src is clean) → INFO, "needs verification" (CSS injection
+    //     only: can spoof UI, but cannot run JS, and a modern front end that injects its own styles at runtime
+    //     often cannot drop it without breaking). Shown, never hidden, but it does not weigh on the grade.
     const cspVerdict = analyzeCsp(csp);
     const scriptHasUnsafe = cspVerdict.scriptUnsafeInline || cspVerdict.scriptUnsafeEval;
     const styleOnlyUnsafe = cspVerdict.styleUnsafeInline && !scriptHasUnsafe;
@@ -73,13 +74,16 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
     } else if (styleOnlyUnsafe) {
       vulnerabilities.push(vuln({
         name: "Content-Security-Policy Allows Inline Styles (unsafe-inline in style-src)",
-        severity: "low",
+        severity: "info",
+        // Under the report's verification threshold (65), so it is listed under "Needs verification": whether it is worth
+        // removing depends on whether the site's own front end can work without it.
+        confidence: 50,
         category: "Injection Defense",
         description: "The Content-Security-Policy permits 'unsafe-inline' in style-src. Script execution is properly restricted (script-src has no unsafe-inline). CSS injection cannot execute JavaScript but can enable visual spoofing, clickjacking, and CSS-based data exfiltration via attribute selectors.",
         evidence: `GET ${finalUrl}\n${shown}\n(unsafe-inline in style-src only — script-src is clean, no JS execution risk)`,
         solution: "For the strongest defence, replace style-src 'unsafe-inline' with nonce-based or hash-based directives. For Tailwind CSS builds, all styles compile to an external stylesheet in production — unsafe-inline can usually be removed once any remaining inline style= attributes are eliminated.",
         cweId: "CWE-79",
-        cvssScore: 3.1,
+        cvssScore: 0,
         wstgId: "WSTG-CONF-12",
       }));
     }

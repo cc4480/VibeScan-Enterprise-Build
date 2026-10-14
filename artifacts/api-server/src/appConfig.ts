@@ -13,7 +13,7 @@ import { APP_ORIGIN } from "./lib/appOrigin";
 // silently breaks PDF export and some UI styling. The only correct way to
 // remove it is nonce-based CSP, which requires injecting a per-response nonce
 // into server-rendered markup — not possible while the built index.html is
-// served as a static file. Left as an accepted LOW finding (CSS-injection only;
+// served as a static file. Reported as information that needs verification (CSS-injection only;
 // script-src is clean, so no JS execution risk).
 export const FRONTEND_CSP = [
   "default-src 'self'",

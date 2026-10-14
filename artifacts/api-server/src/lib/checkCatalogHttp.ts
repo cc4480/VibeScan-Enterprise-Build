@@ -13,7 +13,7 @@ export const CATALOG_HTTP: CatalogTest[] = [
     ["high", "CSP script-src Contains Wildcard", "CSP script-src Contains Wildcard"],
     ["medium", "Content-Security-Policy is report-only (not enforced)", "Content-Security-Policy is report-only (not enforced)"],
     ["medium", "Weak Content-Security-Policy (unsafe-inline / unsafe-eval in script-src)", "Weak Content-Security-Policy (unsafe-inline / unsafe-eval in script-src)"],
-    ["low", "Content-Security-Policy Allows Inline Styles", "Content-Security-Policy Allows Inline Styles"],
+    ["info", "Content-Security-Policy Allows Inline Styles", "Content-Security-Policy Allows Inline Styles"],
     ["low", "CSP Missing object-src 'none' Directive", "CSP Missing object-src 'none' Directive"],
     ["low", "CSP Missing base-uri Directive", "CSP Missing base-uri Directive"],
     ["medium", "Missing Clickjacking Protection (X-Frame-Options)", "Missing Clickjacking Protection (X-Frame-Options)"],

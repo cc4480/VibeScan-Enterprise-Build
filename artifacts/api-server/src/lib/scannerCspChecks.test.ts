@@ -86,3 +86,22 @@ describe("cspFindings still reports what is really missing", () => {
     );
   });
 });
+
+describe("unsafe-inline in style-src alone", () => {
+  const strictScripts = { "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" };
+
+  it("is reported as information that needs verification, not as a weakness that weighs on the grade", () => {
+    const found = cspFindings(page("<html></html>", strictScripts)).find((v) => /Allows Inline Styles/.test(v.name));
+    expect(found).toBeDefined();
+    expect(found!.severity).toBe("info");
+    // Below the report's verification threshold (65), so it is listed under "Needs verification".
+    expect(found!.confidence).toBeLessThan(65);
+    expect(found!.cvssScore).toBe(0);
+  });
+
+  it("is still a medium finding when scripts themselves allow unsafe-inline", () => {
+    const weak = { "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'" };
+    const found = cspFindings(page("<html></html>", weak)).find((v) => /Weak Content-Security-Policy/.test(v.name));
+    expect(found?.severity).toBe("medium");
+  });
+});
