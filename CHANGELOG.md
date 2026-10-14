@@ -7,6 +7,22 @@ for each change; this collects what shipped and why it mattered.
 
 ### Accuracy
 
+- **The repository scan was run over fifteen well-known public projects, and every false positive it showed was fixed.**
+  Express, Flask, FastAPI's full-stack template, Vercel's subscription, chatbot and commerce templates, create-t3-app, shadcn
+  taxonomy, Gin, Laravel, Sinatra, PocketBase and supabase-js. Fixed: a template's own placeholder (`changethis`) and a
+  `{{ password }}` template variable counted as secrets; a quoted phrase or letters-only identifier in source code
+  (`"Show password"`, `"verification"`, `email_signin`, `auth.sign_in.reset_password`) counted as a secret; an Algolia DocSearch
+  key (public by design) and fetch's `credentials: "same-origin"` counted as credentials; a workflow that writes a token to a
+  file or pipes it to a tool counted as printing it; an `.env` of references counted as a committed secret; Supabase's
+  standard sign-up trigger counted as "access decided from user_metadata"; a read-only Docker socket (a reverse proxy) and a
+  database port in a compose override file rated as a medium; an IP address in a changelog. Go, Python, Ruby, Java and .NET
+  test files (`_test.go`, `_spec.rb`, `*Test.java`) and `demo/`, `playground/` and `sandbox/` folders are treated as tests, and
+  any finding whose every file is a test, example or document is shown as information. A Supabase monorepo is judged project
+  by project instead of as one pool, so a test project's tables no longer stand in for the real app's. A rule that fires in
+  many files is now one finding listing them all (low and information levels), and a dependency found only in an examples or
+  tests folder is rated one step lower. On those projects the findings above information went from dozens (24 on PocketBase,
+  about 11 on FastAPI's template) to almost none, with every genuine dependency advisory kept.
+
 - **False positives found by reviewing real repositories.** A throwaway database password that is a plain lowercase word
   (`POSTGRES_PASSWORD: complyscan` in a docker-compose or CI file) was reported as a high "hardcoded secret"; in a compose,
   CI or development file it is now information ("looks like a development default"), while a generated-looking password in the

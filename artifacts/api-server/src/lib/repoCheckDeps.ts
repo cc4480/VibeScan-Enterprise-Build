@@ -11,7 +11,7 @@
  * every lockfile in the repository (a monorepo has several). OSV's malicious-package records are reported as critical.
  */
 import { scaFromManifest, exactVersion, type ManifestPackage } from "./manifestSca";
-import type { RepoFile, RepoRef } from "./repoFinding";
+import { isTestOrExamplePath, type RepoFile, type RepoRef } from "./repoFinding";
 import type { ScanVulnerability } from "./scanner";
 import { isLockfile, isManifest, parseLockfile, parsePackageLock, parseRequirements, parseGoMod } from "./repoDepParsers";
 
@@ -51,8 +51,10 @@ function manifestPackages(file: RepoFile): ManifestPackage[] {
 export async function dependencyFindings(files: RepoFile[], ref?: Pick<RepoRef, "owner" | "repo">): Promise<{ findings: ScanVulnerability[]; considered: number; looked: number; source: string | null }> {
   const locks = files.filter((f) => isLockfile(f.path));
   const manifests = files.filter((f) => isManifest(f.path));
-  const locked = locks.flatMap((f) => parseLockfile(f.path, f.content).map((p) => ({ ...p, source: f.path })));
-  const direct = manifests.flatMap(manifestPackages);
+  // A dependency file in an examples, tests or docs folder describes a sample, not what the project installs in production.
+  const sampleOnly = (p: ManifestPackage): ManifestPackage => (p.source && isTestOrExamplePath(p.source) ? { ...p, dev: true } : p);
+  const locked = locks.flatMap((f) => parseLockfile(f.path, f.content).map((p) => sampleOnly({ ...p, source: f.path })));
+  const direct = manifests.flatMap(manifestPackages).map(sampleOnly);
 
   // A direct dependency is looked up at the version a lockfile resolved, when there is one (it is the installed one).
   const resolved = new Map<string, string>();

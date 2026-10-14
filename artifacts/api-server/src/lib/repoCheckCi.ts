@@ -59,7 +59,12 @@ function workflowFindings(f: RepoFile, ref: RepoRef): ScanVulnerability[] {
     }));
   }
 
-  if (/^\s*(?:-\s*)?run\s*:\s*.*\b(?:echo|printf|cat)\b[^\n]*\$\{\{\s*secrets\.[\w-]+\s*\}\}/im.test(text) && !/::add-mask::/.test(text)) {
+  // Printed to the log, not written to a file or piped to a tool: `echo "...${{ secrets.X }}" > ~/.npmrc` is how a token is handed over.
+  const printsSecret = text.split(/\r?\n/).some((line) => {
+    const m = /^\s*(?:-\s*)?run\s*:\s*.*\b(?:echo|printf|cat)\b[^\n]*?(\$\{\{\s*secrets\.[\w-]+\s*\}\})/i.exec(line);
+    return m !== null && !/[>|]/.test(line.slice(m.index + m[0].length));
+  });
+  if (printsSecret && !/::add-mask::/.test(text)) {
     out.push(repoFinding({
       ref, path: f.path, name: "GitHub Actions Step Prints a Secret",
       severity: "medium", category: "CI/CD Security", cweId: "CWE-532", cvssScore: 5.5, confidence: 60,

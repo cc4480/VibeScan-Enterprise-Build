@@ -47,8 +47,12 @@ export function repoFinding(i: RepoFindingInput): ScanVulnerability {
 
 /** A test, mock, example or documentation file: a secret-shaped value there is far more often a fake than a leak. */
 export const isTestOrExamplePath = (p: string) =>
-  /(?:^|\/)(?:__tests__|__mocks__|tests?|spec|e2e|cypress|mocks?|examples?|samples?|docs?)\//i.test(p) ||
+  /(?:^|\/)(?:__tests__|__mocks__|tests?|spec|e2e|cypress|mocks?|examples?|samples?|docs?|demos?|playgrounds?|sandbox(?:es)?|storybook|\.storybook)\//i.test(p) ||
+  // Test files named by language convention: Go, Python, Ruby, JVM and .NET.
+  /(?:_test\.(?:go|py|rb|exs?|rs)|_spec\.rb|(?:Test|Tests|IT|Spec)\.(?:java|kt|kts|cs|scala|swift)|\.(?:stories|story)\.[a-z0-9]+)$/.test(p) ||
   /\.(?:test|spec)\.[a-z0-9]+$/i.test(p) ||
+  // Prose: a changelog or a README mentions addresses and keys as examples.
+  /\.(?:md|mdx|markdown|rst|adoc)$/i.test(p) ||
   /(?:^|\/)(?:test|spec)[-_.][^/]*$/i.test(p);
 
 /** The code around a match calls it a fake: FORGED_TOKEN, dummyKey, a fixture, an example, a probe. */
@@ -59,13 +63,14 @@ export const namesItselfFake = (context: string): boolean => /(?:forged|fake|dum
  * hides, or is hidden by) a finding of the same kind in a file that ships.
  */
 export function asTestFileFinding(v: ScanVulnerability, why: "test-file" | "named-fake" | "dev-default" = "test-file"): ScanVulnerability {
+  const suffix = why === "test-file" ? " (in a test or example file)" : why === "dev-default" ? " (looks like a development default)" : " (a value that looks deliberately fake)";
   return {
     ...v,
-    name: v.name.replace(" (in source repository)", why === "test-file" ? " (in a test or example file)" : why === "dev-default" ? " (looks like a development default)" : " (a value that looks deliberately fake)"),
+    name: v.name.includes(" (in source repository)") ? v.name.replace(" (in source repository)", suffix) : `${v.name}${suffix}`,
     severity: "info",
     cvssScore: 0,
     confidence: 40,
-    description: `${v.description} ${why === "test-file" ? "It is in a test, mock, example or documentation file, where a fake value is the usual reason" : why === "dev-default" ? "It is a plain lowercase word in a compose, CI or development file: the throwaway password of a local or test database" : "The code around it names it as fake (forged, dummy, fixture, example, probe), where a fake value is the usual reason"}, so it is shown as information. If it protects a real database or service, change it and treat it as exposed.`,
+    description: `${v.description} ${why === "test-file" ? "It is in a test, mock, example or documentation file, where a fake value is the usual reason" : why === "dev-default" ? "It is a plain lowercase word in a compose, CI or development file: the throwaway password of a local or test database" : "The code around it names it as fake (forged, dummy, fixture, example, probe), where a fake value is the usual reason"}, so it is shown as information. If it is more than a sample (a real credential, or the setup of a live service), treat it as a real finding.`,
   } as ScanVulnerability;
 }
 

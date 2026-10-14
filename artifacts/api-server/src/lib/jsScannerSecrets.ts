@@ -54,6 +54,8 @@ export function scanContent(content: string): Array<{ pattern: SecretPattern; ma
       // Filler in a vendor token's shape (sk_live_xxxxxxxx, ghp_0000..., Slack's documented webhook)
       // is a template, not a credential: see secretPlaceholders.ts.
       if (!p.skipPlaceholderCheck && isPlaceholderToken(match)) continue;
+      // A template variable ({{ password }}, ${PASSWORD}, <%= pw %>, %(pw)s) is where a value will go, not a value.
+      if (/\{\{[^}]*\}\}|\$\{[^}]*\}|<%[^%]*%>|%\([^)]*\)s/.test(match)) continue;
 
       // Get surrounding context (2 lines before/after)
       const start = Math.max(0, m.index - 100);

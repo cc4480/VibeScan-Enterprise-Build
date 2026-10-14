@@ -110,7 +110,7 @@ const distinct = (s: string): number => new Set(s).size;
  */
 export function isPlaceholderToken(match: string): boolean {
   if (WELL_KNOWN_DOC_TOKENS.some((t) => match.includes(t))) return true;
-  if (/EXAMPLE|PLACEHOLDER|REDACTED|CHANGEME|DUMMY|NOTREAL|YOUR[_-]?(?:API[_-]?)?(?:KEY|TOKEN|SECRET)|(?:KEY|TOKEN|SECRET)[_-]?HERE/i.test(match)) {
+  if (/EXAMPLE|PLACEHOLDER|REDACTED|CHANGE[_-]?(?:ME|THIS|IT)\b|REPLACE[_-]?(?:ME|THIS)\b|DUMMY|NOTREAL|YOUR[_-]?(?:API[_-]?)?(?:KEY|TOKEN|SECRET)|(?:KEY|TOKEN|SECRET)[_-]?HERE/i.test(match)) {
     return true;
   }
   for (const part of match.split(/[^A-Za-z0-9]+/)) {

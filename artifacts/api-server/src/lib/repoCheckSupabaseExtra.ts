@@ -32,7 +32,12 @@ function userMetadataFindings(files: RepoFile[], ref: RepoRef): ScanVulnerabilit
       const p = /^\s*create\s+policy\s+(?:"([^"]+)"|(\w+))\s+on\s/i.exec(stmt);
       if (p && USER_META.test(stmt)) { hits.push({ kind: "policy", name: p[1] ?? p[2]!, file: f.path }); continue; }
       const fn = /^\s*create\s+(?:or\s+replace\s+)?function\s+(?:"?\w+"?\s*\.\s*)?"?(\w+)"?\s*\(/i.exec(stmt);
-      if (fn && USER_META.test(stmt)) hits.push({ kind: "function", name: fn[1]!, file: f.path });
+      // A trigger that copies the sign-up name or avatar out of the metadata (Supabase's own handle_new_user) decides
+      // nothing. A function is an access decision when it compares the metadata with a role or permission.
+      if (fn && USER_META.test(stmt) && !/returns\s+trigger/i.test(stmt) &&
+          /(?:user_metadata|raw_user_meta_data)[^;]{0,80}\b(?:role|admin|permission|tenant|org\w*|plan|access|is_\w+)\b/i.test(stmt)) {
+        hits.push({ kind: "function", name: fn[1]!, file: f.path });
+      }
     }
   }
   if (hits.length === 0) return [];

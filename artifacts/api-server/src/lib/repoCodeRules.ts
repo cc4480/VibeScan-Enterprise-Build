@@ -6,7 +6,7 @@
  * Source of the list: what GitHub CodeQL, Semgrep and Snyk Code flag most often in the kind of server code AI builders
  * write (Express, Next.js route handlers, Supabase edge functions), cut to the patterns that stay accurate as a regex.
  */
-import { isPlaceholderToken } from "./secretPlaceholders";
+import { isPlaceholderToken, looksLikeReference } from "./secretPlaceholders";
 import { isCodePath, isEnvFilePath, type Rule } from "./repoCodePaths";
 import { isPublicByDesignName, isPublicByDesignValue } from "./publicKeys";
 
@@ -147,7 +147,7 @@ export const MORE_RULES: Rule[] = [
       if (!isCodePath(path)) return null;
       for (const m of text.matchAll(/dangerouslySetInnerHTML=\{\{\s*__html\s*:\s*([^}]+?)\s*\}\}/g)) {
         const expr = m[1]!;
-        if (/^["'`]/.test(expr) || /JSON\.stringify|sanitiz|DOMPurify|purify|escape|xss\(|__html\s*:\s*t\(|dedent|\bcss\b/i.test(expr)) continue;
+        if (/^["'`]/.test(expr) || /^[A-Z][A-Z0-9_]*,?$/.test(expr.trim()) ||/JSON\.stringify|sanitiz|DOMPurify|purify|escape|xss\(|__html\s*:\s*t\(|dedent|\bcss\b/i.test(expr)) continue;
         return { detail: `Code: ${m[0].replace(/\s+/g, " ").slice(0, 100)}` };
       }
       return null;
@@ -174,7 +174,7 @@ export const MORE_RULES: Rule[] = [
       if (!isEnvFilePath(path)) return null;
       const SECRETISH = /SECRET|KEY|TOKEN|PASSWORD|PASSWD|PRIVATE|DATABASE_URL|DB_URL|DSN|CREDENTIAL|SERVICE_ROLE/i;
       const set = [...text.matchAll(/^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=\s*["']?([^\s"'#][^\s"']*)/gm)]
-        .filter((m) => SECRETISH.test(m[1]!) && !isPublicByDesignName(m[1]!.toLowerCase().replace(/[_.\-\s]/g, "")) && !isPublicByDesignValue(m[2]!, m[1]!) && m[2]!.length >= 6 && !isPlaceholderToken(m[2]!) && !/^(?:your|changeme|example|todo|xxx|<|\$\{?)/i.test(m[2]!) && !/^(?:true|false|null|none)$/i.test(m[2]!));
+        .filter((m) => SECRETISH.test(m[1]!) && !isPublicByDesignName(m[1]!.toLowerCase().replace(/[_.\-\s]/g, "")) && !isPublicByDesignValue(m[2]!, m[1]!) && m[2]!.length >= 6 && !isPlaceholderToken(m[2]!) && !looksLikeReference(m[2]!) && !/^(?:your|changeme|example|todo|xxx|<|\$\{?)/i.test(m[2]!) && !/^(?:true|false|null|none)$/i.test(m[2]!));
       return set.length > 0 ? { detail: `Variables set: ${set.slice(0, 6).map((m) => m[1]).join(", ")}${set.length > 6 ? ` and ${set.length - 6} more` : ""} (values not shown)` } : null;
     },
     severity: "medium", category: "Exposed Secrets / Credentials", cweId: "CWE-538", cvssScore: 6.5, confidence: 85,

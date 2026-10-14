@@ -18,6 +18,7 @@ import { NOT_SCANNED, type GithubScanOutcome } from "./githubSourceProbeOutcome"
 import { repoFinding, NOT_THE_PROJECTS_OWN, isTestOrExamplePath, asTestFileFinding, namesItselfFake, type RepoFile, type RepoRef } from "./repoFinding";
 import { supabaseMigrationFindings, isMigrationPath } from "./repoCheckSupabase";
 import { supabaseExtraFindings } from "./repoCheckSupabaseExtra";
+import { softenSamplePaths, mergeSameName } from "./repoPostProcess";
 import { ciConfigFindings, isWorkflowPath, isDockerfilePath, isSupabaseConfigPath, isFunctionCodePath } from "./repoCheckCi";
 import { isInfraPath } from "./repoCheckInfra";
 import { codePatternFindings, isCodePath, isEnvFilePath } from "./repoCheckCode";
@@ -141,6 +142,20 @@ function secretFindings(files: RepoFile[], ref: RepoRef): ScanVulnerability[] {
 const keptToTheEnd = (p: string) =>
   isMigrationPath(p) || isWorkflowPath(p) || isDockerfilePath(p) || isSupabaseConfigPath(p) || isFunctionCodePath(p) || isInfraPath(p) || isManifestPath(p) || isLockfilePath(p);
 
+/**
+ * Migrations grouped by the Supabase project they belong to (the folder that holds supabase/). A monorepo can carry
+ * several, such as the real app and a library's test projects, and judging them as one pool would let a table of one
+ * stand in for another's.
+ */
+function bySupabaseProject(files: RepoFile[]): RepoFile[][] {
+  const groups = new Map<string, RepoFile[]>();
+  for (const f of files) {
+    const root = /^(.*?)supabase\//.exec(f.path)?.[1] ?? "";
+    (groups.get(root) ?? groups.set(root, []).get(root)!).push(f);
+  }
+  return [...groups.values()];
+}
+
 export async function scanRepository(source: RepoSource, ref: RepoRef, opts: { onProgress?: (e: RepoProgress) => void } = {}): Promise<RepoScanOutcome> {
   const onProgress = opts.onProgress;
   const opened = await source.open();
@@ -197,7 +212,7 @@ export async function scanRepository(source: RepoSource, ref: RepoRef, opts: { o
   };
 
   record("repository secrets", secrets.files, secrets.found);
-  run("Supabase migrations (RLS and policies)", (f) => isMigrationPath(f.path), (fs) => [...supabaseMigrationFindings(fs, ref), ...supabaseExtraFindings(fs, ref)]);
+  run("Supabase migrations (RLS and policies)", (f) => isMigrationPath(f.path), (fs) => bySupabaseProject(fs).flatMap((project) => [...supabaseMigrationFindings(project, ref), ...supabaseExtraFindings(project, ref)]));
   run("CI and configuration", (f) => isWorkflowPath(f.path) || isDockerfilePath(f.path) || isSupabaseConfigPath(f.path) || isFunctionCodePath(f.path) || isInfraPath(f.path), (fs) => ciConfigFindings(fs, ref));
   record("dangerous code patterns", code.files, code.found);
 
@@ -207,6 +222,11 @@ export async function scanRepository(source: RepoSource, ref: RepoRef, opts: { o
     name: "dependency vulnerabilities (OSV)", files: files.filter((f) => isManifestPath(f.path) || isLockfilePath(f.path)).length, findings: deps.findings.length,
     ...(deps.considered === 0 ? { note: "no dependency file with exact versions (a lockfile, or a pinned package.json, requirements.txt or go.mod)" } : deps.looked < deps.considered ? { note: `looked up ${deps.looked} of ${deps.considered} packages` } : {}),
   });
+
+  // Report what matters, once: samples softened, repeats of a low-level finding merged.
+  const shaped = mergeSameName(softenSamplePaths(findings));
+  findings.length = 0;
+  findings.push(...shaped);
 
   for (const c of checks) onProgress?.({ kind: "check", name: c.name, files: c.files, findings: c.findings, ...(c.note ? { note: c.note } : {}) });
 

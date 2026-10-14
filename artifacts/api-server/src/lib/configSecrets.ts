@@ -36,6 +36,8 @@ export interface ConfigSecretHit {
 
 /** Files where a database or service is started for development or tests, not production. */
 const DEV_CONTEXT = /(?:^|\/)(?:docker-)?compose[^/]*\.ya?ml$|(?:^|\/)\.github\/workflows\/|(?:^|\/)\.devcontainer\/|(?:^|\/)\.gitlab-ci\.ya?ml$|(?:^|\/)\.circleci\/|\.env\.(?:dev|development|test|local|ci)\b|(?:^|\/)Makefile$|(?:^|\/)(?:dev|local|test)[\w.-]*\.(?:ya?ml|env)$/i;
+/** A phrase with spaces, or a lowercase snake/kebab identifier: words, not key material. */
+const CODE_LABEL = /\s|^[!:@#/]?[A-Za-z]{1,24}$|^[!:@#/]?[A-Za-z]+(?:[_.-][A-Za-z]+)+$/;
 /** A human word (or two joined by - or _), all lowercase and no digits: nobody generated that. */
 const PLAIN_WORD = /^[a-z]{3,}(?:[-_.][a-z]{2,})?$/;
 
@@ -67,6 +69,7 @@ function isSecretValue(raw: string, example: boolean): boolean {
   if (/^django-insecure-/i.test(value)) return false; // startproject's generated development key
   if (value.includes("://")) return false; // a database URL: the URL pattern owns that one
   if (/[()]/.test(value)) return false; // a call or a shell command ($(openssl rand -hex 32), clean(process.env.X)): code, not a value
+  if (/^[a-z][a-z_]*(?:\.[a-z][a-z_]*){2,}$/.test(value)) return false; // a dotted identifier (auth.sign_in.reset_password): a mapping key, not a value
   if (/(?:process\.env|import\.meta\.env|os\.environ|getenv|System\.getenv)/i.test(value)) return false;
   if (isPublicByDesignValue(value)) return false; // AIza, pk.ey, pk_live_, anon JWT: shipped to browsers on purpose
   if (looksLikeReference(value) || looksLikeAName(value) || isPlaceholderToken(value) || isTrivialPassword(value)) return false;
@@ -167,9 +170,15 @@ export function scanConfigSecrets(path: string, content: string): ConfigSecretHi
     }
   }
 
-  content.split(/\r?\n/).forEach((text, i) => {
+  const allLines = content.split(/\r?\n/);
+  allLines.forEach((text, i) => {
     for (const { key, value, line, quoted } of pairsOn(text, i + 1)) {
       if (!quoted && !configFile) continue; // in code, `token = getToken` is an expression, not a committed value
+      // In code, a quoted phrase ("Show password", "development key") or a lowercase identifier ("email_signin") is a
+      // label, a message or a setting name: nobody generates a secret that reads as words.
+      if (!configFile && CODE_LABEL.test(value)) continue;
+      // Algolia DocSearch is configured with a search-only key beside its index and app id: public by design.
+      if (/api[_-]?key/i.test(key) && /\bindexName\b|\bdocsearch\b/i.test([...allLines.slice(Math.max(0, i - 6), i), ...allLines.slice(i + 1, i + 7)].join("\n"))) continue;
       const inString = connectionStringPassword(value);
       if (inString !== null && isSecretValue(inString, example)) add(`${key} (Password)`, inString, line);
       else if (holdsSecret(key) && isSecretValue(value, example)) add(key, value, line);

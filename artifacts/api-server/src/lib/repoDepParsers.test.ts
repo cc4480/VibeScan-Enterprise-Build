@@ -139,7 +139,7 @@ describe("findings from several ecosystems", () => {
     const by = Object.fromEntries(out.findings.map((x) => [x.name, x]));
     expect(by["Vulnerable dependency: runtime-thing 1.0.0"]!.severity).toBe("critical");
     expect(by["Vulnerable dependency: jest-thing 1.0.0"]!.severity).toBe("medium");
-    expect(by["Vulnerable dependency: jest-thing 1.0.0"]!.description).toMatch(/development dependency/i);
+    expect(by["Vulnerable dependency: jest-thing 1.0.0"]!.description).toMatch(/development, tests or examples/i);
   });
 
   it("counts a package as development-only only if every place it appears says so", async () => {
@@ -171,5 +171,15 @@ describe("counting advisories", () => {
     ]]]);
     const out = await dependencyFindings([{ path: "requirements.txt", content: "PyJWT==2.10.1\n" }], { owner: "acme", repo: "app" });
     expect(out.findings[0]!.description).toContain("has 2 known advisories");
+  });
+});
+
+describe("sample dependency files", () => {
+  it("rates a vulnerability in an examples folder one step lower, like a development dependency", async () => {
+    osv.answers = new Map([["PyPI:flask@2.3.2", [advisory("GHSA-flsk")]]]);
+    const out = await dependencyFindings([{ path: "examples/celery/requirements.txt", content: "flask==2.3.2\n" }], { owner: "pallets", repo: "flask" });
+    expect(out.findings[0]!.severity).toBe("medium");
+    const real = await dependencyFindings([{ path: "requirements.txt", content: "flask==2.3.2\n" }], { owner: "pallets", repo: "flask" });
+    expect(real.findings[0]!.severity).toBe("critical");
   });
 });

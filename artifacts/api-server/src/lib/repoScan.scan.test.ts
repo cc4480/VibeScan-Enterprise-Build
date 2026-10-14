@@ -108,9 +108,11 @@ describe("scanRepository", () => {
     expect(shipped).toHaveLength(1);
     expect(shipped[0]!.severity).toBe("critical");
     expect(shipped[0]!.evidence).toContain("app/pay.py");
-    expect(fake).toHaveLength(2);
-    expect(fake.every((v) => v.severity === "info")).toBe(true);
-    expect(fake.map((v) => v.evidence).join(" ")).toContain("server/pay.test.ts");
+    // The two test-file hits are one finding, listing both files.
+    expect(fake).toHaveLength(1);
+    expect(fake[0]!.severity).toBe("info");
+    expect(fake[0]!.evidence).toContain("server/pay.test.ts");
+    expect(fake[0]!.evidence).toContain("docs/guide.md");
   });
 
   it("shows a value its own code calls forged, dummy or a probe as information, and a plain one as before", async () => {

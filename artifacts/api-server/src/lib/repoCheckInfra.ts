@@ -152,19 +152,25 @@ function composeFindings(f: RepoFile, ref: RepoRef): ScanVulnerability[] {
       solution: "Remove privileged and add only the specific capability the service needs (cap_add), or the specific device (devices).",
     }));
   }
-  if (/^\s*-\s*["']?\/var\/run\/docker\.sock\b/im.test(text)) {
+  const socket = /^\s*-\s*["']?\/var\/run\/docker\.sock\S*/im.exec(text);
+  if (socket) {
+    // A reverse proxy such as Traefik mounts it read-only on purpose; read-only still exposes the container list, so
+    // it is rated lower, not dropped.
+    const readOnly = /:ro\b/.test(socket[0]);
     out.push(repoFinding({
       ref, path: f.path, name: "Compose Service Mounts the Docker Socket",
-      severity: "medium", category: "Security Misconfiguration", cweId: "CWE-250", cvssScore: 6.5, confidence: 80,
+      severity: readOnly ? "low" : "medium", category: "Security Misconfiguration", cweId: "CWE-250", cvssScore: readOnly ? 3.7 : 6.5, confidence: readOnly ? 55 : 80,
       description: "A service mounts /var/run/docker.sock. Whoever controls that service controls Docker on the host, which is the same as root on it.",
       solution: "Avoid mounting the socket. If a tool must talk to Docker, mount it read-only through a socket proxy that allows only the calls it needs.",
     }));
   }
   const exposed = [...text.matchAll(/^\s*-\s*["']?(?:0\.0\.0\.0:)?(\d{2,5}):(\d{2,5})(?:\/\w+)?["']?\s*$/gm)].filter((m) => DB_PORTS.has(m[2]!)).map((m) => `${m[1]}:${m[2]}`);
   if (exposed.length > 0) {
+    // An override or dev compose file publishes the database to the developer's own machine on purpose.
+    const devOnly = /(?:override|dev|local|test)/i.test(f.path.slice(f.path.lastIndexOf("/") + 1));
     out.push(repoFinding({
       ref, path: f.path, name: "Compose Publishes a Database Port to Every Network Interface",
-      severity: "medium", category: "Security Misconfiguration", cweId: "CWE-668", cvssScore: 6.5, confidence: 70,
+      severity: devOnly ? "info" : "medium", category: "Security Misconfiguration", cweId: "CWE-668", cvssScore: devOnly ? 0 : 6.5, confidence: devOnly ? 45 : 70,
       description: "A database or cache port is published without a host address, so it listens on every interface of the machine. On a server with a public address, that makes the database reachable from the internet, where it is attacked within hours.",
       detail: `Ports: ${[...new Set(exposed)].slice(0, 4).join(", ")}`,
       solution: "Bind it to the loopback address (\"127.0.0.1:5432:5432\") or drop the ports entry, since services on the same compose network reach each other by name.",

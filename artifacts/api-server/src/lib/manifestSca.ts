@@ -215,7 +215,7 @@ function findingFor(
     category: "Vulnerable Components",
     description: ctx.repository
       ? `${pkg.name} ${pkg.version} has ${issues} known ${plural} against it (${idList}). The version was read from ${source} in the repository ${ctx.repository}, so this is what the project installs, not a guess from a fingerprint. ` +
-        (pkg.dev ? "It is a development dependency only (not installed in production), so it is rated one step lower. " : "") +
+        (pkg.dev ? "It is only used for development, tests or examples (not installed in production), so it is rated one step lower. " : "") +
         (worst.v.summary ? `The most severe: ${worst.v.summary}` : "")
       : `${pkg.name} ${pkg.version} has ${issues} known ${plural} against it (${idList}). ` +
         `This is not inferred from a fingerprint: the version was read from ${source}, ` +
