@@ -89,3 +89,25 @@ describe("processRepoOnlyJob", () => {
     expect(calls.refunds).toBe(1);
   });
 });
+
+describe("the fix prompt of a repository scan", () => {
+  it("is saved with the report, built from the findings, naming the repository and each finding's files", async () => {
+    progressEvents = [];
+    outcome = {
+      status: "scanned", via: "public", filesRead: 3,
+      findings: [{
+        id: "f1", name: "TLS Certificate Verification Disabled", severity: "medium", category: "Transport Security",
+        description: "Certificate verification is switched off for outgoing connections.", solution: "Remove the override.",
+        evidence: "Repository: acme/app\nFile: server/pgSsl.ts\nCode: rejectUnauthorized: false", cweId: "CWE-295", cvssScore: 5.3, confidence: 70,
+      }],
+      coverage: { treeFiles: 3, chosen: 3, read: 3, bytesRead: 900, leftOutByCap: 0, tooLarge: 0, truncatedTree: false, failedReads: 0, byCheck: {}, notRead: { binary: 0, vendored: 0 } },
+      checks: [{ name: "repository secrets", files: 3, findings: 0 }],
+    };
+    await processRepoOnlyJob(base);
+    const ai = calls.persisted[0]!.reportData.aiAnalysis;
+    expect(ai.source).toBe("template");
+    expect(ai.agentFixPrompt).toContain("in my repository (acme/app)");
+    expect(ai.agentFixPrompt).toContain("Where: server/pgSsl.ts");
+    expect(ai.agentFixPrompt).not.toContain("rejectUnauthorized");
+  });
+});

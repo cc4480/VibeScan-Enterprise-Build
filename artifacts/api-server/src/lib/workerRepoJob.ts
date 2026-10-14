@@ -12,6 +12,8 @@ import { parseGithubRepoRef, githubProbeOutcome } from "./githubSourceProbe";
 import { scanRepository } from "./repoScan";
 import { githubInstallationSource, publicGithubSource } from "./repoSource";
 import { buildReport } from "./workerReport";
+import { buildFallbackAnalysis } from "./fixPromptFallback";
+import { detectAgentEnvironment } from "./deepseek";
 import { createLiveProgress } from "./liveProgress";
 import { progressRecord } from "./repoProgress";
 import { persistReport, refundIfPaid } from "./workerPersist";
@@ -85,8 +87,14 @@ export async function processRepoOnlyJob(input: RepoJobInput): Promise<void> {
     tests: ledger.records,
   };
 
+  // The fix prompt is built from the findings themselves, with no AI call: a repository scan spends nothing beyond its scan.
+  const repository = `${ref.owner}/${ref.repo}`;
+  const aiAnalysis = buildFallbackAnalysis({
+    targetUrl, vulnerabilities: findings, agent: detectAgentEnvironment([], targetUrl), tests: ledger.records, repository,
+  });
+
   const { reportData, riskScore, grade, intercepted, severityCounts, executiveSummary } = await buildReport({
-    scanResult, targetUrl, tests: ledger.records, reconRunResult: null, aiAnalysis: null, autoSuppressedCount: 0, repository: `${ref.owner}/${ref.repo}`,
+    scanResult, targetUrl, tests: ledger.records, reconRunResult: null, aiAnalysis, autoSuppressedCount: 0, repository,
   });
 
   await persistReport({

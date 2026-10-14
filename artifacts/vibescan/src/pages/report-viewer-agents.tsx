@@ -12,7 +12,7 @@ import { useState, useCallback } from "react";
  */
 const WORKS_IN = "Claude Code, Cursor, Codex, GitHub Copilot, Windsurf, Grok Build, Gemini, ChatGPT, Lovable, Bolt, Replit, v0 and other AI coding tools";
 
-export function AgentFixPromptCard({ prompt, fromTemplate = false }: { prompt: string; fromTemplate?: boolean }) {
+export function AgentFixPromptCard({ prompt, fromTemplate = false, repoOnly = false }: { prompt: string; fromTemplate?: boolean; repoOnly?: boolean }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(() => {
@@ -47,7 +47,9 @@ export function AgentFixPromptCard({ prompt, fromTemplate = false }: { prompt: s
       </div>
       {fromTemplate && (
         <p className="text-xs text-muted-foreground mb-4">
-          Built from your findings — the AI writer was unavailable for this scan. Every line is taken from the findings above.
+          {repoOnly
+            ? "Built from your findings, with the files each one is in. Every line is taken from the findings above."
+            : "Built from your findings — the AI writer was unavailable for this scan. Every line is taken from the findings above."}
         </p>
       )}
 

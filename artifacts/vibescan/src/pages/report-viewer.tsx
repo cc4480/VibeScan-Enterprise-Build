@@ -246,7 +246,7 @@ export default function ReportViewer() {
           )}
 
           {/* AI Analysis */}
-          {aiAnalysis && <AiAnalysisCard aiAnalysis={aiAnalysis} fixedCount={fixedVulns.length} />}
+          {aiAnalysis && !repoOnly && <AiAnalysisCard aiAnalysis={aiAnalysis} fixedCount={fixedVulns.length} />}
 
           {/* Compliance mapping — which controls these findings are evidence
               for. Same component the shared report uses; renders nothing when
@@ -265,7 +265,7 @@ export default function ReportViewer() {
 
           {/* Fix with your AI agent */}
           {aiAnalysis?.agentFixPrompt && (
-            <AgentFixPromptCard prompt={aiAnalysis.agentFixPrompt} fromTemplate={aiAnalysis.source === "template"} />
+            <AgentFixPromptCard prompt={aiAnalysis.agentFixPrompt} fromTemplate={aiAnalysis.source === "template"} repoOnly={repoOnly} />
           )}
 
           {/* Software Inventory */}

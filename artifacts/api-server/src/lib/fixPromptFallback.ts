@@ -52,6 +52,22 @@ function platformLine(agent: AgentEnvironment): string {
   }
 }
 
+/** The files a repository finding is in, from its evidence ("File: path (line 12)"), without the line numbers. Paths are not secrets. */
+export function filesOf(v: ScanVulnerability, max = 8): { files: string[]; more: number } {
+  const all = [...new Set([...(v.evidence ?? "").matchAll(/^File: (.+?)(?: \(line \d+\))?$/gm)].map((m) => m[1]!.trim()).filter((f) => f && f !== "(repository)"))];
+  return { files: all.slice(0, max), more: Math.max(0, all.length - max) };
+}
+
+/**
+ * A repository scan raises one finding per file, so thirty fixtures would be thirty entries. Same-named findings become
+ * one (the first's wording and severity), carrying every file in its evidence so "Where:" lists them all.
+ */
+function mergeByName(list: ScanVulnerability[]): ScanVulnerability[] {
+  const byName = new Map<string, ScanVulnerability[]>();
+  for (const v of list) byName.set(v.name, [...(byName.get(v.name) ?? []), v]);
+  return [...byName.values()].map((group) => (group.length === 1 ? group[0]! : { ...group[0]!, evidence: group.map((g) => g.evidence ?? "").join("\n") }));
+}
+
 function describeNotRun(tests: TestRecord[]): string {
   const notRun = tests.filter((t) => t.status !== "ran");
   if (notRun.length === 0) return "";
@@ -72,15 +88,24 @@ function summary(vulns: ScanVulnerability[], tests: TestRecord[]): string {
   );
 }
 
-function buildPrompt(targetUrl: string, main: ScanVulnerability[], lower: ScanVulnerability[], hidden: number, agent: AgentEnvironment): string {
-  const parts: string[] = [
-    `Please fix the following security findings in my web app (${targetUrl}).`,
-    "",
-    "They come from an automated black-box scan. Work through them in order, most severe first. For each one make the smallest change that fixes it, search the whole project for the same insecure pattern and fix every place, and leave unrelated code alone. " +
-      "If a finding does not apply to how this app is built, say so instead of guessing. Do not add a package unless a fix needs one. " +
-      "If you cannot read or edit files here, give me the exact change to make for each finding instead.",
-  ];
-  const platform = platformLine(agent);
+function buildPrompt(targetUrl: string, main: ScanVulnerability[], lower: ScanVulnerability[], hidden: number, agent: AgentEnvironment, repository?: string): string {
+  const parts: string[] = repository
+    ? [
+        `Please fix the following security findings in my repository (${repository}).`,
+        "",
+        "They come from an automated read of the repository's source code: secrets, database rules, CI settings, risky code patterns and vulnerable dependencies. Each finding lists the files it is in. Work through them in order, most severe first. For each one make the smallest change that fixes it, search the whole repository for the same insecure pattern and fix every place, and leave unrelated code alone. " +
+          "A value in a test or example file is usually a fake: check whether it is real before changing anything, and if it is real, rotate it first (removing it from the file does not remove it from Git history). " +
+          "If a finding does not apply to how this project is built, say so instead of guessing. Do not add a package unless a fix needs one. " +
+          "If you cannot read or edit files here, give me the exact change to make for each finding instead.",
+      ]
+    : [
+        `Please fix the following security findings in my web app (${targetUrl}).`,
+        "",
+        "They come from an automated black-box scan. Work through them in order, most severe first. For each one make the smallest change that fixes it, search the whole project for the same insecure pattern and fix every place, and leave unrelated code alone. " +
+          "If a finding does not apply to how this app is built, say so instead of guessing. Do not add a package unless a fix needs one. " +
+          "If you cannot read or edit files here, give me the exact change to make for each finding instead.",
+      ];
+  const platform = repository ? "" : platformLine(agent);
   if (platform) parts.push("", platform);
 
   let i = 1;
@@ -91,6 +116,10 @@ function buildPrompt(targetUrl: string, main: ScanVulnerability[], lower: ScanVu
       `What was found: ${firstSentence(v.description, 320)}`,
       `How to fix it: ${redactForLlm(v.solution).replace(/\s+/g, " ").trim()}`,
     );
+    if (repository) {
+      const { files, more } = filesOf(v);
+      if (files.length > 0) parts.push(`Where: ${files.join(", ")}${more > 0 ? ` and ${more} more` : ""}`);
+    }
   };
   for (const v of main) block(v, v.severity);
   if (lower.length > 0) {
@@ -109,9 +138,12 @@ export function buildFallbackAnalysis(input: {
   vulnerabilities: ScanVulnerability[];
   agent: AgentEnvironment;
   tests: TestRecord[];
+  /** owner/repo, for a scan of a repository alone: the prompt then speaks of the repository and names each finding's files. */
+  repository?: string;
 }): FallbackAnalysis {
-  const { targetUrl, vulnerabilities, agent, tests } = input;
-  const fixable = vulnerabilities.filter(isFixable).sort(bySeverity);
+  const { targetUrl, vulnerabilities, agent, tests, repository } = input;
+  const sorted = vulnerabilities.filter(isFixable).sort(bySeverity);
+  const fixable = repository ? mergeByName(sorted) : sorted;
   const actionable = fixable.filter((v) => v.severity !== "info");
   const infoOnly = fixable.filter((v) => v.severity === "info");
 
@@ -130,7 +162,7 @@ export function buildFallbackAnalysis(input: {
     topPriorities,
     quickWins,
     complianceNotes: null,
-    agentFixPrompt: fixable.length === 0 ? "" : buildPrompt(targetUrl, main, lower, hidden, agent),
+    agentFixPrompt: fixable.length === 0 ? "" : buildPrompt(targetUrl, main, lower, hidden, agent, repository),
     detectedAgent: agent,
     source: "template",
   };

@@ -7,6 +7,13 @@ for each change; this collects what shipped and why it mattered.
 
 ### Reports
 
+- **A repository-only scan gives a fix prompt.** It is built from the findings themselves, with no AI call, so it
+  costs nothing beyond the scan. It speaks of the repository (not a web app), lists the files each finding is in, merges
+  the one-per-file findings of a rule into one entry, puts information-only findings under "lower priority", asks the tool
+  to check whether a value in a test file is real before changing it, and never includes a matched value. The report
+  page shows it as the "Fix with your AI coding tool" card (and the MCP report includes it); the "AI Analysis" card is
+  not shown for a repository scan, since nothing there was written by AI.
+
 - **A long list of findings no longer shows blank gaps or flickers.** Each finding card was a blurred "glass" layer that
   also faded in from invisible. On a report with dozens of findings that meant dozens of blurred layers, which can make
   a browser stop painting part of the page or flicker when it is clicked, and cards that start invisible stay blank in a
