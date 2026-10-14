@@ -211,6 +211,9 @@ if (process.env.NODE_ENV !== "production") {
     app.use(
       express.static(staticDir, {
         dotfiles: "allow",
+        // Not index.html for "/": the static middleware would answer the home page with the
+        // bare shell before the handler below, which adds the prerendered page to it.
+        index: false,
         // express.static defaulted to max-age=0, so Cloudflare revalidated
         // every asset with Railway on every request (cf-cache-status:
         // REVALIDATED) — a round trip to origin for files that never change.
