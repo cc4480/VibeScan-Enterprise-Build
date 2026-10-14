@@ -3,7 +3,7 @@
 import type { Vulnerability } from "@workspace/api-client-react";
 import { APP_ORIGIN } from "@/lib/origin";
 import { NO_FINDINGS_WITH_NOTES, SCAN_NOTES_BLURB, SCAN_NOTES_TITLE } from "@/lib/scan-notes";
-import { PrintCoverage, type CoverageTest } from "./shared-report-components";
+import { PrintCoverage, PrintSourceCode, type CoverageTest } from "./shared-report-components";
 import { getCategoryMeta, type ComplianceData } from "./report-viewer-data";
 import { PrintGradeRing, PrintVulnCard } from "./report-viewer-print-parts";
 import { PrintWithheld, type Interception } from "./report-viewer-provenance";
@@ -89,6 +89,7 @@ export function PrintableReport({
       </div>
 
       {/* What was tested, and what was not — a PDF is what gets forwarded, so it carries this. */}
+      <PrintSourceCode tests={tests} vulnerabilities={[...confirmedVulns, ...unverifiedVulns]} />
       <PrintCoverage tests={tests} />
       <PrintWithheld withheld={withheld} interception={interception} />
 

@@ -1,5 +1,5 @@
 import { APP_ORIGIN } from "../lib/appOrigin";
-import { coverageLines } from "../lib/testLedger";
+import { coverageLines, sourceLines } from "../lib/testLedger";
 import { and } from "drizzle-orm";
 import { splitScanNotes } from "../lib/scanNotes";
 
@@ -102,7 +102,7 @@ export function formatReport(
   ];
   // Next to the grade, on the first page: a clean grade must not read as full
   // coverage when active tests or access-control tests were skipped.
-  if (firstPage) lines.push(...coverageLines(d.tests));
+  if (firstPage) lines.push(...sourceLines(d.tests, vulns), ...coverageLines(d.tests));
   // The narrative belongs to the report, not to a page — sent once, on page 1.
   const ai = d.aiAnalysis;
   if (firstPage) {

@@ -11,6 +11,8 @@ export interface CoverageTest {
   reason?: string;
   /** Names of the findings this test raised. */
   found?: string[];
+  /** For the repository scan: what was read and what each check found (see shared-report-source.tsx). */
+  source?: import("./shared-report-source").SourceRecord;
 }
 
 export const isCoverageTest = (t: unknown): t is CoverageTest => {

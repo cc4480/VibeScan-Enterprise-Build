@@ -64,12 +64,8 @@ export interface RepoCoverage {
   byCheck: Record<Why, number>;
 }
 
-export interface RepoScanOutcome extends GithubScanOutcome {
-  coverage?: RepoCoverage;
-  /** What each check looked at and found, for the per-test log. */
-  checks?: Array<{ name: string; files: number; findings: number; note?: string }>;
-  via?: RepoSource["via"];
-}
+/** What a repository scan returns: the outcome the scanner records, with its coverage and per-check results (see GithubScanOutcome). */
+export type RepoScanOutcome = GithubScanOutcome;
 
 export function chooseFiles(tree: TreeFile[]): { chosen: Array<TreeFile & { why: Why }>; leftOutByCap: number; tooLarge: number } {
   const byClass = new Map<Why, Array<TreeFile & { why: Why }>>();

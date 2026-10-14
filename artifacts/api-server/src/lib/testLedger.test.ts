@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TestLedger, formatTestLine, formatTestSummary, NOT_VERIFIED, coverageLines, newlyRunTests, foundNames, MAX_FOUND_NAMES } from "./testLedger";
+import { TestLedger, formatTestLine, formatTestSummary, NOT_VERIFIED, coverageLines, newlyRunTests, foundNames, MAX_FOUND_NAMES, sourceLines } from "./testLedger";
 
 const finding = { id: "1", name: "x", severity: "low", category: "c", description: "d", solution: "s" } as const;
 
@@ -222,5 +222,64 @@ describe("NOT_VERIFIED", () => {
     // for want of a verified domain by this prefix. Rewording it without updating that file would
     // silently remove the banner from every report, so this fails first.
     expect(NOT_VERIFIED.startsWith("domain not verified")).toBe(true);
+  });
+});
+
+describe("sourceLines — the repository section of a report as text", () => {
+  const rec = (status: "ran" | "skipped" | "failed", extra: object = {}) => ({
+    group: "passive", name: "GitHub source code secrets", status, findings: 0, durationMs: 1, ...extra,
+  });
+  const repoVuln = { name: "Hardcoded Stripe key (in source repository)", evidence: "Repository: acme/app\nFile: .env" };
+
+  it("says nothing when the scan was given no repository", () => {
+    expect(sourceLines([rec("skipped", { reason: "no repository was supplied for this scan" })])).toEqual([]);
+    expect(sourceLines([])).toEqual([]);
+    expect(sourceLines(undefined)).toEqual([]);
+  });
+
+  it("says how much was read and what each check found, for a clean repository", () => {
+    const text = sourceLines([
+      rec("ran", { source: { repository: "acme/app", via: "github-app", read: 12, treeFiles: 400, checks: [
+        { name: "repository secrets", files: 4, findings: 0 },
+        { name: "CI and configuration", files: 0, findings: 0, note: "no matching files in the repository" },
+      ] } }),
+    ]).join("\n");
+    expect(text).toContain("Source code (acme/app): read 12 files of 400 in the repository, through the connected GitHub App.");
+    expect(text).toContain("- repository secrets: 4 files read, 0 findings");
+    expect(text).toContain("- CI and configuration: no matching files in the repository");
+    expect(text).toContain("Nothing was found in the files that were read.");
+  });
+
+  it("lists what was found in the repository, and only that", () => {
+    const text = sourceLines(
+      [rec("ran", { findings: 1, source: { repository: "acme/app", read: 3 } })],
+      [repoVuln, { name: "Missing HSTS", evidence: "Header absent" }],
+    ).join("\n");
+    expect(text).toContain("Found in the repository: Hardcoded Stripe key (in source repository).");
+    expect(text).not.toContain("Missing HSTS");
+  });
+
+  it("says a repository that was not read says nothing about its code", () => {
+    const text = sourceLines([rec("skipped", { reason: "the repository is private", source: { repository: "acme/app" } })]).join("\n");
+    expect(text).toContain("Source code (acme/app): the repository was not read — the repository is private.");
+    expect(text).toContain("says nothing about this code");
+  });
+
+  it("warns when part of the repository could not be read", () => {
+    const text = sourceLines([rec("ran", { source: { repository: "acme/app", read: 300, leftOut: 40 } })]).join("\n");
+    expect(text).toContain("covers only the files that were read");
+  });
+});
+
+describe("sourceLines — scans from before the record kept what was read", () => {
+  it("says the check ran but not what it read, and does not say nothing was found", () => {
+    const text = sourceLines([{ group: "passive", name: "GitHub source code secrets", status: "ran", findings: 0, durationMs: 1 }]).join("\n");
+    expect(text).toContain("what it read was not recorded");
+    expect(text).not.toContain("Nothing was found");
+  });
+
+  it("still says a given repository was not read, when its name was not recorded", () => {
+    const text = sourceLines([{ group: "passive", name: "GitHub source code secrets", status: "skipped", findings: 0, durationMs: 0, reason: "the repository is private or does not exist" }]).join("\n");
+    expect(text).toContain("the repository was not read");
   });
 });

@@ -5,6 +5,18 @@ for each change; this collects what shipped and why it mattered.
 
 ## 2026-10-14
 
+### Reports
+
+- **A "Source code" section in the report when a repository was scanned.** The repository scan always ran its
+  five checks, but the saved report kept only "ran, 0 findings", so a clean repository left no trace of what
+  was read. The test record now keeps the repository, how it was read (public, or through the GitHub App),
+  files read of files in the repository, what was left out by the limits, and each check's file and finding
+  counts. The report page, shared report, PDF/print, copied Markdown and the MCP report text all show it,
+  including the findings read from the repository and a plain "not read" message when a private repository
+  could not be opened. Reports from before this say the check ran but what it read was not recorded.
+- The "private or missing repository" message no longer says only public repositories can be read; it says to
+  connect GitHub and choose the repository.
+
 ### SEO
 
 - **Public pages are prerendered for crawlers that run no JavaScript.** Home, `/learn`, `/about`, `/bot`,

@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { Vulnerability } from "@workspace/api-client-react";
 import { APP_ORIGIN } from "@/lib/origin";
 import { scanNotesMarkdown } from "@/lib/scan-notes";
-import { coverageMarkdown, type CoverageTest } from "./shared-report-components";
+import { coverageMarkdown, sourceCodeMarkdown, type CoverageTest } from "./shared-report-components";
 import { withheldMarkdown, type Interception } from "./report-viewer-provenance";
 import { SEVERITY_EMOJI, type ComplianceData } from "./report-viewer-data";
 
@@ -59,6 +59,7 @@ export function formatReportMarkdown(d: ReportCopyData): string {
     ``,
     d.summary.executiveSummary,
     ``,
+    ...sourceCodeMarkdown(d.tests, [...d.confirmedVulns, ...d.unverifiedVulns]),
     ...coverageMarkdown(d.tests),
     ...withheldMarkdown(d.withheld, d.interception),
   ];

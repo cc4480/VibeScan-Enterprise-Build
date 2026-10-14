@@ -1,5 +1,5 @@
 /** What a repository scan achieved, and why when it did not. */
-import type { ProbeOutcome } from "./testLedger";
+import type { ProbeOutcome, SourceScanRecord } from "./testLedger";
 import type { ScanVulnerability } from "./scanner";
 
 /**
@@ -16,6 +16,17 @@ export interface GithubScanOutcome {
   skipped?: number;
   /** GitHub cut the file list short, so files beyond it were never seen. */
   truncated?: boolean;
+  /** How much of the repository was looked at (the repository scanner fills these in). */
+  coverage?: {
+    treeFiles: number; chosen: number; read: number; bytesRead: number; leftOutByCap: number;
+    tooLarge: number; truncatedTree: boolean; failedReads: number;
+    /** Files read, by what they were read for. */
+    byCheck?: Record<string, number>;
+  };
+  /** What each check looked at and found. */
+  checks?: Array<{ name: string; files: number; findings: number; note?: string }>;
+  /** How the repository was read. */
+  via?: "public" | "github-app";
 }
 
 /** Why a repository was not looked at, or null when it was. */
@@ -36,16 +47,36 @@ export function githubNotScannedReason(status: GithubScanOutcome["status"]): str
  * fact that only public repositories can be read, so the report does not count it as a failed test. A
  * GitHub outage, a rate limit, a block or unreadable files are failures (they throw), as before.
  */
-export function githubProbeOutcome(outcome: GithubScanOutcome): ProbeOutcome {
+export function githubProbeOutcome(outcome: GithubScanOutcome, ref?: { owner: string; repo: string }): ProbeOutcome {
   if (outcome.status === "not_public_or_missing") {
     return {
       findings: [],
-      notTested: "the repository is private or does not exist (only public repositories can be read)",
+      notTested: outcome.via === "github-app"
+        ? "the repository could not be read through the connected GitHub account: it may no longer be shared with SecScan, or it does not exist. Connect GitHub again and choose it"
+        : "the repository is private, or does not exist. To scan a private repository, connect GitHub on the scan page and choose it; a public one needs nothing",
+      ...(ref ? { source: { repository: `${ref.owner}/${ref.repo}`, ...(outcome.via ? { via: outcome.via } : {}) } } : {}),
     };
   }
   const why = githubNotScannedReason(outcome.status);
   if (why) throw new Error(why);
-  return { findings: outcome.findings };
+  return { findings: outcome.findings, ...(ref ? { source: sourceRecord(outcome, ref) } : {}) };
+}
+
+/** What the report keeps of a repository scan: how it was read, how much, and what each check found. */
+export function sourceRecord(outcome: GithubScanOutcome, ref: { owner: string; repo: string }): SourceScanRecord {
+  const c = outcome.coverage;
+  return {
+    repository: `${ref.owner}/${ref.repo}`,
+    ...(outcome.via ? { via: outcome.via } : {}),
+    read: c?.read ?? outcome.filesRead,
+    ...(c
+      ? {
+          treeFiles: c.treeFiles, chosen: c.chosen, bytesRead: c.bytesRead, leftOut: c.leftOutByCap,
+          tooLarge: c.tooLarge, failedReads: c.failedReads, truncatedTree: c.truncatedTree,
+        }
+      : {}),
+    ...(outcome.checks ? { checks: outcome.checks } : {}),
+  };
 }
 
 export const NOT_SCANNED = (status: GithubScanOutcome["status"]): GithubScanOutcome => ({ findings: [], status, filesRead: 0 });

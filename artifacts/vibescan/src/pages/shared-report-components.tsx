@@ -3,6 +3,7 @@ import { type CoverageTest } from "./shared-report-coverage";
 export { ComplianceCard, VulnRow } from "./shared-report-cards";
 export { CoverageCard, PrintCoverage, coverageMarkdown } from "./shared-report-coverage";
 export type { CoverageTest } from "./shared-report-coverage";
+export { SourceCodeCard, PrintSourceCode, sourceCodeMarkdown } from "./shared-report-source";
 
 export interface SharedReportData {
   id: string;

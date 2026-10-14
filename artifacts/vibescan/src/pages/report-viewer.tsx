@@ -15,7 +15,7 @@ import { useMemo, useState } from "react";
 import { useVerifications } from "@/lib/use-verifications";
 import { fixedFindingIds, fixedNotice, latestFixDate, subtractFixed } from "@/lib/fixed-findings";
 import { useSeo } from "@/lib/seo";
-import { ComplianceCard, CoverageCard, type CoverageTest } from "./shared-report-components";
+import { ComplianceCard, CoverageCard, SourceCodeCard, type CoverageTest } from "./shared-report-components";
 import { ReportTestsContext, WithheldCard, type Interception } from "./report-viewer-provenance";
 import { type ComplianceData, DismissalsContext } from "./report-viewer-data";
 import { OwaspBreakdown } from "./report-viewer-charts";
@@ -248,6 +248,9 @@ export default function ReportViewer() {
               for. Same component the shared report uses; renders nothing when
               no findings map to a framework. */}
           <ComplianceCard compliance={compliance} />
+
+          {/* The repository, when the scan was given one: what was read and what each check found. */}
+          <SourceCodeCard tests={coverageTests} vulnerabilities={findings} />
 
           {/* What the scan tested, and what it skipped — beside the grade's context so a
               clean result is not read as full coverage. */}

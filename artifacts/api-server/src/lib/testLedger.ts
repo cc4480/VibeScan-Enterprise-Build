@@ -15,9 +15,36 @@ import type { ScanVulnerability } from "./scanner";
 
 export type TestStatus = "ran" | "skipped" | "failed";
 
+/**
+ * What a source-code scan of a repository looked at, kept with its test record so the report can show it.
+ * A clean result is only worth something beside how much was read: "nothing found" in 3 files is not
+ * "nothing found" in a repository.
+ */
+export interface SourceScanRecord {
+  /** owner/repo */
+  repository: string;
+  /** How it was read: GitHub's public API, or through the GitHub App the owner installed. */
+  via?: "public" | "github-app";
+  /** Files in the repository, the ones of a kind the checks read, and the ones actually read. */
+  treeFiles?: number;
+  chosen?: number;
+  read?: number;
+  bytesRead?: number;
+  /** Candidate files left out by the file and size limits, over the per-file limit, or not downloadable. */
+  leftOut?: number;
+  tooLarge?: number;
+  failedReads?: number;
+  /** GitHub cut the repository's file list short. */
+  truncatedTree?: boolean;
+  /** What each check looked at and found. */
+  checks?: Array<{ name: string; files: number; findings: number; note?: string }>;
+}
+
 /** What a probe hands back when it can tell "found nothing" from "had nothing to test". */
 export interface ProbeOutcome {
   findings: ScanVulnerability[];
+  /** What a source-code scan read, kept on the test record. */
+  source?: SourceScanRecord;
   /** Set when nothing was actually tested: why. Ignored when there are findings. */
   notTested?: string;
 }
@@ -33,6 +60,8 @@ export interface TestRecord {
   reason?: string;
   /** The names of the findings it raised, so a check-by-check view can say which check fired. */
   found?: string[];
+  /** For the repository scan: what was read and what each check found. */
+  source?: SourceScanRecord;
 }
 
 /**
@@ -113,14 +142,15 @@ export class TestLedger {
   trackOutcome(group: string, name: string, run: Promise<ProbeOutcome>): Promise<ScanVulnerability[]> {
     const started = Date.now();
     return run.then(
-      ({ findings, notTested }) => {
+      ({ findings, notTested, source }) => {
         if (notTested && findings.length === 0) {
-          this.records.push({ group, name, status: "skipped", findings: 0, durationMs: Date.now() - started, reason: notTested });
+          this.records.push({ group, name, status: "skipped", findings: 0, durationMs: Date.now() - started, reason: notTested, ...(source ? { source } : {}) });
           return findings;
         }
         this.records.push({
           group, name, status: "ran", findings: findings.length, durationMs: Date.now() - started,
           ...(findings.length > 0 ? { found: foundNames(findings) } : {}),
+          ...(source ? { source } : {}),
         });
         return findings;
       },
@@ -212,6 +242,44 @@ export function coverageLines(tests: unknown): string[] {
   if (notRun.length > CAP) lines.push(`- …and ${notRun.length - CAP} more.`);
   lines.push("");
   return lines;
+}
+
+/** The name the repository scan is recorded under (one record covers all five of its checks). */
+export const SOURCE_TEST_NAME = "GitHub source code secrets";
+
+/**
+ * The repository section of a report, as plain text: which repository was read, how much of it, what each
+ * check found. Empty when the scan was not given a repository. `findings` are the scan's findings; the ones
+ * read from the repository say "Repository: owner/repo" in their evidence.
+ */
+export function sourceLines(tests: unknown, findings: ReadonlyArray<{ name?: unknown; evidence?: unknown }> = []): string[] {
+  const list = Array.isArray(tests) ? tests.filter(isTestRecord) : [];
+  const t = list.find((x) => x.name === SOURCE_TEST_NAME);
+  // Not given a repository (or not one GitHub names): nothing to say. A repository that was given and not read, on
+  // a scan from before the record kept its name, is still worth saying so about.
+  if (!t || (t.status === "skipped" && !t.source && /no repository was supplied|recognisable GitHub repository/.test(t.reason ?? ""))) return [];
+  const s = t.source;
+  const head = `Source code${s?.repository ? ` (${s.repository})` : ""}`;
+  if (t.status === "ran" && !s && !findings.some((f) => typeof f.evidence === "string" && f.evidence.startsWith("Repository: "))) {
+    return [`${head}: the repository check ran, but what it read was not recorded for this scan (it ran before reports kept that).`, ""];
+  }
+  if (t.status !== "ran") {
+    return [`${head}: the repository was not read${t.reason ? ` — ${t.reason}` : ""}. A clean result says nothing about this code.`, ""];
+  }
+  const fromRepo = findings.filter(
+    (f) => typeof f.evidence === "string" && f.evidence.startsWith("Repository: ") && f.name !== "GitHub source scan covered only part of the repository",
+  );
+  const out = [
+    `${head}: read ${s?.read ?? 0} file${s?.read === 1 ? "" : "s"}${s?.treeFiles != null ? ` of ${s.treeFiles} in the repository` : ""}${s?.via === "github-app" ? ", through the connected GitHub App" : s?.via ? ", as a public repository" : ""}.`,
+    ...(s?.checks ?? []).map(
+      (c) => `- ${c.name}: ${c.files === 0 ? (c.note ?? "nothing of this kind to read") : `${c.files} file${c.files === 1 ? "" : "s"} read, ${c.findings} finding${c.findings === 1 ? "" : "s"}`}`,
+    ),
+    fromRepo.length > 0 ? `Found in the repository: ${fromRepo.map((f) => String(f.name)).join("; ")}.` : "Nothing was found in the files that were read.",
+  ];
+  const partial = s && ((s.leftOut ?? 0) > 0 || (s.tooLarge ?? 0) > 0 || (s.failedReads ?? 0) > 0 || s.truncatedTree);
+  if (partial) out.push("Not everything could be read, so a clean result covers only the files that were read.");
+  out.push("");
+  return out;
 }
 
 /** A test's identity without its per-scan counts: "site crawl (12 inner pages)" -> "site crawl". */
