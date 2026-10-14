@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { publicGithubSource } from "./repoSource";
+import { publicGithubSource, publicApiHeaders } from "./repoSource";
 
 const ref = { owner: "acme", repo: "big" };
 
@@ -15,7 +15,7 @@ function fakeGithub(routes: Record<string, unknown>) {
   return calls;
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe("opening a repository whose file list GitHub cut off", () => {
   it("walks it folder by folder, so its size does not decide which files are seen", async () => {
@@ -41,5 +41,40 @@ describe("opening a repository whose file list GitHub cut off", () => {
     });
     const opened = await publicGithubSource(ref).open();
     expect(opened.ok && opened.truncated).toBe(true);
+  });
+});
+
+describe("the optional token for reading public repositories", () => {
+  it("is sent to the API and never to the file host", async () => {
+    const seen: Array<{ url: string; auth: string | undefined }> = [];
+    vi.stubEnv("GITHUB_PUBLIC_API_TOKEN", "  github_pat_test_value  ");
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: { headers?: Record<string, string> }) => {
+      seen.push({ url, auth: init?.headers?.["Authorization"] });
+      if (url.endsWith("/repos/acme/big")) return new Response(JSON.stringify({ private: false, default_branch: "main" }), { status: 200 });
+      if (url.includes("/git/trees/")) return new Response(JSON.stringify({ tree: [{ path: "a.txt", type: "blob", size: 1 }] }), { status: 200 });
+      return new Response("hello", { status: 200 });
+    }));
+    const source = publicGithubSource(ref);
+    const opened = await source.open();
+    expect(opened.ok).toBe(true);
+    if (opened.ok) await source.read("a.txt", opened.branch);
+    const api = seen.filter((c) => c.url.startsWith("https://api.github.com/"));
+    const raw = seen.filter((c) => c.url.startsWith("https://raw.githubusercontent.com/"));
+    expect(api.length).toBeGreaterThan(0);
+    expect(api.every((c) => c.auth === "Bearer github_pat_test_value")).toBe(true);
+    expect(raw.length).toBe(1);
+    expect(raw[0]!.auth).toBeUndefined();
+  });
+
+  it("is absent when not configured, so nothing changes for a deployment without one", () => {
+    expect(publicApiHeaders({})).toEqual({});
+    expect(publicApiHeaders({ GITHUB_PUBLIC_API_TOKEN: "   " })).toEqual({});
+  });
+
+  it("still refuses a private repository, whatever the token could see", async () => {
+    vi.stubEnv("GITHUB_PUBLIC_API_TOKEN", "github_pat_test_value");
+    fakeGithub({ "/repos/acme/big": { private: true, default_branch: "main" } });
+    const opened = await publicGithubSource(ref).open();
+    expect(opened).toMatchObject({ ok: false, status: "not_public_or_missing" });
   });
 });

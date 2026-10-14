@@ -84,10 +84,22 @@ async function openRepo(ref: RepoRef, timeoutMs: number, headers: Record<string,
 
 const encodePath = (p: string) => p.split("/").map(encodeURIComponent).join("/");
 
+/**
+ * GITHUB_PUBLIC_API_TOKEN (optional): a read-only token used for api.github.com when reading a PUBLIC repository.
+ * Without one, every user's public-repository scan shares GitHub's unauthenticated limit of 60 API calls an hour for the
+ * server's address, so about thirty scans an hour would start failing. With one the limit is 5,000. Create it as a
+ * fine-grained token with "Public repositories (read-only)" and no other access. It is never sent to the file host,
+ * and a repository that turns out to be private is refused whatever the token could see (openRepo's allowPrivate).
+ */
+export function publicApiHeaders(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const token = env["GITHUB_PUBLIC_API_TOKEN"]?.trim();
+  return token ? { Authorization: `Bearer ${token}`, "X-GitHub-Api-Version": "2022-11-28" } : {};
+}
+
 export function publicGithubSource(ref: RepoRef, timeoutMs = 10_000): RepoSource {
   return {
     via: "public",
-    open: () => openRepo(ref, timeoutMs, {}, false),
+    open: () => openRepo(ref, timeoutMs, publicApiHeaders(), false),
     async read(path, branch) {
       const r = await githubGet(`https://raw.githubusercontent.com/${ref.owner}/${ref.repo}/${encodeURIComponent(branch)}/${encodePath(path)}`, "text", timeoutMs);
       return r && r.ok && typeof r.data === "string" ? r.data : null;

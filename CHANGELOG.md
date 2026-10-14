@@ -7,6 +7,11 @@ for each change; this collects what shipped and why it mattered.
 
 ### Performance
 
+- **Public-repository scans no longer share GitHub's 60-calls-an-hour limit.** Reading a public repository sent no
+  credentials, so every user's scans together were limited to 60 GitHub API calls an hour for the server's address (about
+  thirty scans). An optional `GITHUB_PUBLIC_API_TOKEN` (a read-only token for public repositories) raises that to 5,000. It
+  goes only to api.github.com, never to the file host, and a repository that is private is still refused.
+
 - **A first visit downloads half as much.** Every page used to ship in one 1.38 MB script (399 kB compressed), so the
   landing page paid for the dashboard, report viewer and settings too. The signed-in pages now load when first opened:
   the main file is 636 kB (201 kB compressed) and the landing page loads that one script alone. The public pages stay in
