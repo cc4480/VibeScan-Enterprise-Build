@@ -22,6 +22,7 @@
 
 import { logger } from "./logger";
 import { SCANNER_USER_AGENT } from "./http";
+import { scanDispatcher } from "./pinnedDispatcher";
 import { checkScanTarget } from "./ssrfGuard";
 import { type HeaderSnapshot, snapshotHeaders } from "./monitorPulseHeaders";
 import { PULSE_TIMEOUT_MS, probeCertDates } from "./monitorPulseCert";
@@ -195,7 +196,9 @@ export async function runPulse(targetUrl: string): Promise<PulseResult> {
         redirect: "manual",
         headers: { "User-Agent": SCANNER_USER_AGENT, Accept: "*/*" },
         signal: AbortSignal.timeout(PULSE_TIMEOUT_MS),
-      });
+        // Same connect-time pinning as the scanner, and the same self-host opt-in as the check above.
+        dispatcher: scanDispatcher,
+      } as RequestInit);
 
       const location = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
       if (!location) break;

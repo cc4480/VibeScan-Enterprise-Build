@@ -4,7 +4,7 @@ import dnsPromises from "node:dns/promises";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { Agent, fetch as undiciFetch } from "undici";
-import { vettedLookup, scanDispatcher } from "./pinnedDispatcher";
+import { vettedLookup, scanDispatcher, strictDispatcher } from "./pinnedDispatcher";
 import { scanFetch } from "./http";
 import { _clearResolveCache } from "./ssrfGuard";
 
@@ -83,5 +83,15 @@ describe("a rebinding name at connect time", () => {
     vi.spyOn(dnsPromises, "lookup").mockResolvedValue([{ address: "93.184.216.34", family: 4 }] as never);
     await scanFetch("http://example.com/");
     expect((spy.mock.calls[0]![1] as { dispatcher?: unknown }).dispatcher).toBe(scanDispatcher);
+  });
+});
+
+describe("strictDispatcher", () => {
+  it("refuses a rebinding answer for a non-scan request, even with the private-target opt-in on", async () => {
+    process.env["ALLOW_PRIVATE_SCAN_TARGETS"] = "true";
+    mockConnectLookup([{ address: "93.184.216.34", family: 4 }, { address: "127.0.0.1", family: 4 }]);
+    await expect(
+      undiciFetch("http://rebind.test/", { dispatcher: strictDispatcher }),
+    ).rejects.toThrow();
   });
 });

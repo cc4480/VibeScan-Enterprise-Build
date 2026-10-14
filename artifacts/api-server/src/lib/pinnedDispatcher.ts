@@ -13,18 +13,31 @@ import { isPrivateAddress, privateTargetsAllowed } from "./ssrfGuard";
 type LookupAddress = { address: string; family: number };
 type LookupCallback = (err: NodeJS.ErrnoException | null, address?: string | LookupAddress[], family?: number) => void;
 
-/** A `dns.lookup` stand-in that refuses a name if any answer is private or local. */
-export function vettedLookup(
+/**
+ * A `dns.lookup` stand-in that refuses a name if any answer is private or local.
+ * `honourOptOut` lets ALLOW_PRIVATE_SCAN_TARGETS through: right for scan targets, wrong for
+ * anything else (see strictDispatcher).
+ */
+function lookupWith(honourOptOut: boolean) {
+  return (
+    hostname: string,
+    options: { all?: boolean; family?: number | string } | LookupCallback,
+    callback?: LookupCallback,
+  ): void => vet(hostname, options, callback, honourOptOut);
+}
+
+function vet(
   hostname: string,
   options: { all?: boolean; family?: number | string } | LookupCallback,
-  callback?: LookupCallback,
+  callback: LookupCallback | undefined,
+  honourOptOut: boolean,
 ): void {
   const cb = (typeof options === "function" ? options : callback) as LookupCallback;
   const opts = typeof options === "function" ? {} : options;
 
   dns.lookup(hostname, { all: true, verbatim: true }, (err, addresses) => {
     if (err) return cb(err);
-    if (!privateTargetsAllowed() && (addresses.length === 0 || addresses.some((a) => isPrivateAddress(a.address)))) {
+    if (!(honourOptOut && privateTargetsAllowed()) && (addresses.length === 0 || addresses.some((a) => isPrivateAddress(a.address)))) {
       const blocked: NodeJS.ErrnoException = new Error("blocked target address: resolves to a private or local address");
       blocked.code = "ESSRFBLOCKED";
       return cb(blocked);
@@ -40,6 +53,15 @@ export function vettedLookup(
     cb(null, usable[0]!.address, usable[0]!.family);
   });
 }
+
+export const vettedLookup = lookupWith(true);
+
+/**
+ * For requests to a host a user named that is not a scan target (webhooks, domain verification).
+ * Private addresses are refused whatever ALLOW_PRIVATE_SCAN_TARGETS says: a self-hoster who opts
+ * in to scanning their own network has not opted in to having webhooks post there.
+ */
+export const strictDispatcher = new Agent({ connect: { lookup: lookupWith(false) as never } });
 
 /** Shared by every request the scanner makes at a target. */
 export const scanDispatcher = new Agent({ connect: { lookup: vettedLookup as never } });

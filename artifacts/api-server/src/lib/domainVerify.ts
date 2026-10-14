@@ -26,6 +26,7 @@
 import crypto from "node:crypto";
 import * as dns from "node:dns/promises";
 import { checkHostname, isPrivateAddress } from "./ssrfGuard";
+import { strictDispatcher } from "./pinnedDispatcher";
 import { readBodyMarked } from "./httpBody";
 
 export function extractDomain(rawUrl: string): string {
@@ -179,10 +180,8 @@ export async function checkTxtRecord(domain: string, token: string): Promise<boo
  * a host that was never validated, and a file served from somewhere else
  * proves nothing about this domain.
  *
- * Note the limit honestly — the hostname is resolved for the check and again
- * by fetch, so a DNS record that changes between the two could still move the
- * request. Closing that needs connection-level IP pinning, which nothing in
- * this codebase does yet; this is no weaker than the scanner's own fetches.
+ * The hostname is resolved for the check and again to connect, so the request
+ * goes through strictDispatcher, which vets the address the socket opens to.
  */
 export async function checkWellKnownFile(domain: string, token: string): Promise<boolean> {
   const safe = await checkHostname(domain);
@@ -197,7 +196,8 @@ export async function checkWellKnownFile(domain: string, token: string): Promise
       redirect: "manual",
       signal: ctl.signal,
       headers: { "Cache-Control": "no-cache" },
-    });
+      dispatcher: strictDispatcher,
+    } as RequestInit);
     if (!res.ok) return false;
     // Cap the read: a verification file is 40-odd bytes, and this is an
     // attacker-controlled endpoint that would otherwise happily stream forever.

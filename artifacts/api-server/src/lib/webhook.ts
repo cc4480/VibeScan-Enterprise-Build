@@ -7,6 +7,7 @@
 
 import { logger } from "./logger";
 import { checkHostname } from "./ssrfGuard";
+import { strictDispatcher } from "./pinnedDispatcher";
 import { APP_DOMAIN } from "./appOrigin";
 import { notificationPrefs, shouldNotify, type AlertKind } from "./notificationPrefs";
 
@@ -166,7 +167,10 @@ async function postWebhook(url: string, body: Record<string, unknown>): Promise<
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(10_000),
     redirect: "error",
-  });
+    // The SSRF check and this connection resolve the name separately; this opens the socket only
+    // to an address vetted at connect time, so a rebinding record cannot slip through.
+    dispatcher: strictDispatcher,
+  } as RequestInit);
   return res.ok;
 }
 
