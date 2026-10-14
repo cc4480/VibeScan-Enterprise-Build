@@ -18,6 +18,7 @@
 import { shannonEntropy, looksLikeAName, looksLikeReference, isPlaceholderToken, isTrivialPassword } from "./secretPlaceholders";
 import { redactSecret } from "./jsScanner";
 import { isPublicByDesignValue, isPublicByDesignName } from "./publicKeys";
+import { namesItselfFake } from "./repoFinding";
 
 export interface ConfigSecretHit {
   key: string;
@@ -27,6 +28,8 @@ export interface ConfigSecretHit {
   line: number;
   /** True in an .example/.sample/.template file. */
   inExampleFile: boolean;
+  /** The key or the value itself says it is fake: forged, dummy, a fixture, an example, a probe. */
+  namesItselfFake: boolean;
 }
 
 const MAX_HITS_PER_FILE = 10;
@@ -132,7 +135,7 @@ export function scanConfigSecrets(path: string, content: string): ConfigSecretHi
   const add = (key: string, value: string, line: number) => {
     if (hits.length >= MAX_HITS_PER_FILE || seen.has(key)) return;
     seen.add(key);
-    hits.push({ key, redacted: redactSecret(value), line, inExampleFile: example });
+    hits.push({ key, redacted: redactSecret(value), line, inExampleFile: example, namesItselfFake: namesItselfFake(`${key} ${value}`) });
   };
 
   // JSON that parses is read as a document, so nested keys and quoted commas are not a line-regex's problem.

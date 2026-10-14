@@ -127,7 +127,8 @@ function secretFindings(files: RepoFile[], ref: RepoRef): ScanVulnerability[] {
       const key = `config|${f.path}|${hit.key}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push(isTestOrExamplePath(f.path) ? asTestFileFinding(configFinding(ref, f.path, hit)) : configFinding(ref, f.path, hit));
+      const found = configFinding(ref, f.path, hit);
+      out.push(isTestOrExamplePath(f.path) ? asTestFileFinding(found) : hit.namesItselfFake ? asTestFileFinding(found, "named-fake") : found);
     }
   }
   return out;

@@ -131,6 +131,15 @@ describe("scanRepository", () => {
     expect(out.coverage).toMatchObject({ treeFiles: 6, read: 1, notRead: { binary: 3, vendored: 2 } });
   });
 
+  it("shows a probe's own login, in a config-style pair, as information", async () => {
+    const out = await scanRepository(memorySource({
+      "server/aggressive/nosql.ts": 'const body = { username: "seclayer_probe", password: "seclayer_probe_9x7Kq2Lm" };\n',
+    }), ref);
+    const cfg = out.findings.filter((v) => /Config File/.test(v.name));
+    expect(cfg.every((v) => v.severity === "info")).toBe(true);
+    expect(cfg.some((v) => /deliberately fake/.test(v.name))).toBe(true);
+  });
+
   it("a repository with only binary files says nothing was tested, not that it is clean", async () => {
     const out = await scanRepository(memorySource({ "static/logo.png": "x", "assets/font.woff2": "y" }), ref);
     const note = out.findings.find((v) => v.name === "GitHub source scan covered only part of the repository")!;
