@@ -2,25 +2,20 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSeo } from "@/lib/seo";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Loader2, AlertTriangle, Mail, CreditCard, Bot } from "lucide-react";
+import { Loader2, Mail, CreditCard, Bot } from "lucide-react";
 import { AiEditorsSection } from "@/components/ai-editors";
 import { ConnectedAppsSection } from "@/components/connected-apps";
 import { BillingSummary } from "@/components/billing-options";
 import { PrivacyCard } from "@/components/privacy-card";
 import { cn } from "@/lib/utils";
-import { deleteAccount, requestDeleteCode, getEmailPreferences, setEmailPreferences, type EmailPreferences, type EmailPreferenceUpdate } from "@/lib/account-api";
+import { getEmailPreferences, setEmailPreferences, type EmailPreferences, type EmailPreferenceUpdate } from "@/lib/account-api";
 import { SEVERITY_CHOICES, PreferenceToggle, getFriendlyError } from "./settings-parts";
+import { DeleteAccountSection } from "./settings-delete-account";
 
 export default function SettingsPage() {
   useSeo({ title: "Settings — SecScan.us", noindex: true });
   const { toast } = useToast();
 
-  // Typing the word is the confirmation. A dialog with a red button is too easy
-  // to dismiss by reflex for something with no undo.
-  const [deleteConfirm, setDeleteConfirm] = useState("");
-  const [deleteChallenge, setDeleteChallenge] = useState<{ challenge: string; sentTo: string } | null>(null);
-  const [deleteCode, setDeleteCode] = useState("");
-  const [deleting, setDeleting] = useState(false);
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
 
@@ -55,35 +50,6 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSendDeleteCode = async () => {
-    setDeleting(true);
-    try {
-      setDeleteChallenge(await requestDeleteCode());
-      setDeleteCode("");
-    } catch (err) {
-      toast({ title: "Couldn't send the code", description: getFriendlyError(err), variant: "destructive" });
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const handleDeleteAccount = async () => {
-    if (!deleteChallenge) return;
-    setDeleting(true);
-    try {
-      await deleteAccount(deleteChallenge.challenge, deleteCode.trim());
-      // Full reload rather than a router push: every cached query belongs to an
-      // account that no longer exists.
-      window.location.href = "/";
-    } catch (err) {
-      setDeleting(false);
-      toast({
-        title: "Couldn't delete account",
-        description: getFriendlyError(err),
-        variant: "destructive",
-      });
-    }
-  };
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -243,73 +209,7 @@ export default function SettingsPage() {
         ) : null}
       </div>
 
-      <div className="glass-panel p-6 sm:p-10 rounded-3xl border border-red-500/20">
-        <div className="flex items-start gap-4 mb-6">
-          <div className="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center border border-red-500/20 shrink-0">
-            <AlertTriangle className="w-6 h-6 text-red-400" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold mb-1">Delete account</h2>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Permanently erases your account, every scan and report, your saved credentials,
-              your credits and your verified domains. Share links stop working. This cannot be
-              undone and there is no grace period. Payment records are kept by Stripe where
-              accounting law requires it.
-            </p>
-          </div>
-        </div>
-
-        <label className="block text-sm text-muted-foreground mb-2">
-          Type <span className="font-mono text-foreground">DELETE</span> to confirm
-        </label>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <input
-            type="text"
-            value={deleteConfirm}
-            onChange={(e) => setDeleteConfirm(e.target.value)}
-            aria-label="Type DELETE to confirm"
-            className="flex-1 px-4 py-3 rounded-xl bg-black/30 border border-white/10 text-sm font-mono focus:outline-none focus:border-red-500/50"
-          />
-          {!deleteChallenge && (
-            <button
-              type="button"
-              onClick={handleSendDeleteCode}
-              disabled={deleteConfirm !== "DELETE" || deleting}
-              className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-red-500/90 text-white font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-            >
-              {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-              Email me a code
-            </button>
-          )}
-        </div>
-        {deleteChallenge && (
-          <div className="mt-4">
-            <label className="block text-sm text-muted-foreground mb-2">
-              We sent a 6-digit code to {deleteChallenge.sentTo}. Enter it to erase the account.
-            </label>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <input
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                value={deleteCode}
-                onChange={(e) => setDeleteCode(e.target.value)}
-                aria-label="6-digit code"
-                className="flex-1 px-4 py-3 rounded-xl bg-black/30 border border-white/10 text-sm font-mono focus:outline-none focus:border-red-500/50"
-              />
-              <button
-                type="button"
-                onClick={handleDeleteAccount}
-                disabled={deleteConfirm !== "DELETE" || deleteCode.trim().length < 6 || deleting}
-                className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-red-500/90 text-white font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-              >
-                {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                Delete my account
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      <DeleteAccountSection />
     </div>
   );
 }
