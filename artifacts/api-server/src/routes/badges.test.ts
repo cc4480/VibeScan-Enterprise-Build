@@ -166,7 +166,7 @@ describe("GET /badge/:token.svg", () => {
 });
 
 describe("POST and DELETE /reports/:id/badge", () => {
-  const owner = { isAuthenticated: () => true, user: { id: "u1" }, params: { id: "r1" }, log: { error() {} } };
+  const owner = { isAuthenticated: () => true, user: { id: "u1" }, params: { id: "11111111-1111-4111-8111-111111111111" }, log: { error() {} } };
   const verifiedReport = { id: "r1", userId: "u1", targetUrl: "https://app.example.com/", data: { summary: { grade: "A" }, tests: ranVerified } };
 
   it("refuses an anonymous caller", async () => {
@@ -180,7 +180,7 @@ describe("POST and DELETE /reports/:id/badge", () => {
     queue.push([{ id: "r1", userId: "someone-else" }]);
     const res = fakeRes();
     await (await handler("post", "/reports/:id/badge"))(owner, res);
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(404);
     expect(inserts).toHaveLength(0);
   });
 
@@ -243,7 +243,7 @@ describe("POST and DELETE /reports/:id/badge", () => {
     queue.push([{ id: "r1", userId: "someone-else" }]);
     const res = fakeRes();
     await (await handler("delete", "/reports/:id/badge"))(owner, res);
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(404);
     expect(updates).toHaveLength(0);
   });
 });

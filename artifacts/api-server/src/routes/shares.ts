@@ -20,6 +20,10 @@ router.post("/reports/:id/shares", async (req, res): Promise<void> => {
   }
 
   const reportId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (!reportId || !UUID_ANY.test(reportId)) {
+    res.status(404).json({ error: "Report not found" });
+    return;
+  }
   const parsed = CreateShareBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid request" });
@@ -37,7 +41,7 @@ router.post("/reports/:id/shares", async (req, res): Promise<void> => {
       return;
     }
     if (report.userId !== req.user!.id) {
-      res.status(403).json({ error: "Forbidden" });
+      res.status(404).json({ error: "Report not found" });
       return;
     }
 
@@ -67,6 +71,10 @@ router.get("/reports/:id/shares", async (req, res): Promise<void> => {
   }
 
   const reportId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (!reportId || !UUID_ANY.test(reportId)) {
+    res.status(404).json({ error: "Report not found" });
+    return;
+  }
 
   try {
     const [report] = await db
@@ -79,7 +87,7 @@ router.get("/reports/:id/shares", async (req, res): Promise<void> => {
       return;
     }
     if (report.userId !== req.user!.id) {
-      res.status(403).json({ error: "Forbidden" });
+      res.status(404).json({ error: "Report not found" });
       return;
     }
 
@@ -115,6 +123,10 @@ router.delete("/reports/:id/shares/:shareId", async (req, res): Promise<void> =>
   }
 
   const reportId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (!reportId || !UUID_ANY.test(reportId)) {
+    res.status(404).json({ error: "Report not found" });
+    return;
+  }
   const shareId = Array.isArray(req.params.shareId) ? req.params.shareId[0] : req.params.shareId;
   if (!shareId || !UUID_ANY.test(shareId)) {
     res.status(404).json({ error: "Share link not found" });
@@ -132,7 +144,7 @@ router.delete("/reports/:id/shares/:shareId", async (req, res): Promise<void> =>
       return;
     }
     if (report.userId !== req.user!.id) {
-      res.status(403).json({ error: "Forbidden" });
+      res.status(404).json({ error: "Report not found" });
       return;
     }
 

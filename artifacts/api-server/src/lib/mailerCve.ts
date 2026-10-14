@@ -2,7 +2,7 @@
 import { APP_ORIGIN } from "./appOrigin";
 import { unsubscribeHeaders } from "./emailPrefs";
 import { highestSeverity } from "./notificationPrefs";
-import { bulkMailAllowed, RESEND_API, resendBody } from "./mailerCore";
+import { bulkMailAllowed, escapeHtml, RESEND_API, resendBody } from "./mailerCore";
 
 // ── Monitor emails ─────────────────────────────────────────────────────────────
 
@@ -56,12 +56,12 @@ export async function sendMonitorCveAlertEmail(opts: SendMonitorCveAlertOptions)
       (m) => `
       <tr>
         <td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
-          <span style="font-family:monospace;font-size:13px;color:#a5b4fc;">${m.cveId}</span>
+          <span style="font-family:monospace;font-size:13px;color:#a5b4fc;">${escapeHtml(m.cveId)}</span>
           <span style="margin-left:8px;font-size:11px;background:${SEVERITY_COLOR[m.severity] ?? "#94a3b8"}22;color:${SEVERITY_COLOR[m.severity] ?? "#94a3b8"};padding:2px 8px;border-radius:12px;font-weight:700;">${m.severity}</span>
           <br/>
-          <span style="font-size:12px;color:#64748b;">${m.affectedTech}</span>
+          <span style="font-size:12px;color:#64748b;">${escapeHtml(m.affectedTech)}</span>
           <br/>
-          <span style="font-size:12px;color:#94a3b8;">${m.summary}</span>
+          <span style="font-size:12px;color:#94a3b8;">${escapeHtml(m.summary)}</span>
         </td>
       </tr>
     `,
@@ -86,7 +86,7 @@ export async function sendMonitorCveAlertEmail(opts: SendMonitorCveAlertOptions)
           <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;">New vulnerabilities in software your site runs</h2>
           <p style="margin:0 0 24px;color:#94a3b8;font-size:14px;">
             <strong style="color:#f8fafc;">${cveMatches.length} CVE${cveMatches.length > 1 ? "s" : ""}</strong>, newly published or newly analysed by the NVD, list software detected on
-            <strong style="color:#f8fafc;">${targetUrl}</strong> as vulnerable.
+            <strong style="color:#f8fafc;">${escapeHtml(targetUrl)}</strong> as vulnerable.
             Each one below says whether the version we detected is in the affected range, or whether no version could be detected.
             A rescan has been queued automatically.
           </p>
@@ -101,7 +101,7 @@ export async function sendMonitorCveAlertEmail(opts: SendMonitorCveAlertOptions)
         </td></tr>
 
         <tr><td style="padding-top:24px;text-align:center;font-size:12px;color:#64748b;">
-          <p style="margin:0;">You received this because you have a SecScan continuous monitor active for ${targetUrl}.</p>
+          <p style="margin:0;">You received this because you have a SecScan continuous monitor active for ${escapeHtml(targetUrl)}.</p>
           <p style="margin:4px 0 0;">© 2026 SecScan · <a href="${dashboardUrl}" style="color:#64748b;">Manage subscriptions</a></p>
         </td></tr>
       </table>
@@ -170,7 +170,7 @@ export async function sendRegressionAlertEmail(opts: SendRegressionAlertOptions)
       <tr>
         <td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
           <span style="font-size:11px;background:${color}22;color:${color};padding:2px 8px;border-radius:12px;font-weight:700;margin-right:8px;">${r.severity}</span>
-          <span style="font-size:14px;color:#f8fafc;">${r.checkTitle}</span>
+          <span style="font-size:14px;color:#f8fafc;">${escapeHtml(r.checkTitle)}</span>
         </td>
       </tr>`;
   }).join("");
@@ -192,7 +192,7 @@ export async function sendRegressionAlertEmail(opts: SendRegressionAlertOptions)
           <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;">Security checks are now failing</h2>
           <p style="margin:0 0 24px;color:#94a3b8;font-size:14px;">
             <strong style="color:#f8fafc;">${regressions.length} check${regressions.length > 1 ? "s" : ""}</strong> that previously passed are now failing on
-            <strong style="color:#f8fafc;">${targetUrl}</strong>.
+            <strong style="color:#f8fafc;">${escapeHtml(targetUrl)}</strong>.
           </p>
           <table width="100%" cellpadding="0" cellspacing="0">${rows}</table>
           <div style="margin-top:32px;text-align:center;">

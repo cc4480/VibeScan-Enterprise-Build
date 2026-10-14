@@ -2,7 +2,7 @@
 import { AUTH_FROM_EMAIL, APP_ORIGIN } from "./appOrigin";
 import { htmlToPlainText } from "./htmlToText";
 import { isSuppressed, healBounceSuppression } from "./emailSuppression";
-import { RESEND_API, resendBody } from "./mailerCore";
+import { escapeHtml, RESEND_API, resendBody } from "./mailerCore";
 
 // ── Account emails ────────────────────────────────────────────────────────────
 
@@ -16,7 +16,7 @@ export function buildAccountHtml(heading: string, body: string, ctaLabel: string
 <html><body style="margin:0;padding:24px;background:#f4f7f5;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#121a17;">
   <table role="presentation" width="100%" style="max-width:520px;margin:0 auto;background:#ffffff;border:1px solid #dbe4df;border-radius:8px;">
     <tr><td style="padding:28px;">
-      <h1 style="margin:0 0 12px;font-size:20px;line-height:1.3;">${heading}</h1>
+      <h1 style="margin:0 0 12px;font-size:20px;line-height:1.3;">${escapeHtml(heading)}</h1>
       <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#3c4b45;">${body}</p>
       <a href="${ctaUrl}" style="display:inline-block;padding:11px 20px;background:#0e9463;color:#ffffff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">${ctaLabel}</a>
       <p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#64766e;">${footnote}</p>

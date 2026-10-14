@@ -1,5 +1,5 @@
 import { type IRouter } from "express";
-import { LoginBody, attempts, isRateLimited, maskEmail, publicUser, startSession } from "./accountShared";
+import { LoginBody, attempts, isRateLimited, isLockedOut, recordFailure, maskEmail, publicUser, startSession } from "./accountShared";
 import { db, usersTable, scansTable, creditsTable, monitorSubscriptionsTable, dismissedFindingsTable, reportSharesTable, domainVerificationsTable, githubInstallationsTable, authTokensTable, pendingLoginsTable, billingSubscriptionsTable, purchaseIntentsTable, apiTokensTable, feedbackTable, findingVerificationsTable, oauthCodesTable, oauthRefreshTokensTable } from "@workspace/db";
 import { stripe } from "../lib/stripe";
 import { eq } from "drizzle-orm";
@@ -31,7 +31,17 @@ export function registerAccountSession(router: IRouter): void {
     // One message for every failure below — a distinct "no such account" reply
     // would turn this endpoint into a way to test whether an address is
     // registered.
-    const reject = () => res.status(401).json({ error: "Email or password is incorrect" });
+    const acct = `login-acct:${email}`;
+    const reject = () => {
+      recordFailure(acct);
+      res.status(401).json({ error: "Email or password is incorrect" });
+    };
+
+    // Per account, on top of per address: guesses spread over many addresses still reach one account.
+    if (isLockedOut(acct)) {
+      res.status(429).json({ error: "Too many attempts. Try again in a few minutes." });
+      return;
+    }
 
     try {
       const [row] = await db.select().from(usersTable).where(eq(usersTable.email, email));
@@ -221,32 +231,36 @@ export function registerAccountSession(router: IRouter): void {
     }
 
     try {
-      await db.delete(scansTable).where(eq(scansTable.userId, userId));
-      await db.delete(monitorSubscriptionsTable).where(eq(monitorSubscriptionsTable.userId, userId));
-      await db.delete(reportSharesTable).where(eq(reportSharesTable.userId, userId));
-      await db.delete(dismissedFindingsTable).where(eq(dismissedFindingsTable.userId, userId));
-      await db.delete(domainVerificationsTable).where(eq(domainVerificationsTable.userId, userId));
-      await db.delete(githubInstallationsTable).where(eq(githubInstallationsTable.userId, userId));
-      await db.delete(creditsTable).where(eq(creditsTable.userId, userId));
-      await db.delete(billingSubscriptionsTable).where(eq(billingSubscriptionsTable.userId, userId));
-      // Tokens die with the account: a token outliving it would authenticate as
-      // an id that no longer exists (the join in authenticateApiToken would
-      // refuse it, but a credential should not survive its owner either way).
-      await db.delete(apiTokensTable).where(eq(apiTokensTable.userId, userId));
-      await db.delete(purchaseIntentsTable).where(eq(purchaseIntentsTable.userId, userId));
-      // Feedback is kept — it is about the product, not the person — but no
-      // longer says who sent it.
-      await db
-        .update(feedbackTable)
-        .set({ userId: null, email: null })
-        .where(eq(feedbackTable.userId, userId));
-      await db.delete(authTokensTable).where(eq(authTokensTable.userId, userId));
-      // Tables with no foreign key to users: ids and verdicts only, but still the account's.
-      await db.delete(findingVerificationsTable).where(eq(findingVerificationsTable.userId, userId));
-      await db.delete(oauthCodesTable).where(eq(oauthCodesTable.userId, userId));
-      await db.delete(oauthRefreshTokensTable).where(eq(oauthRefreshTokensTable.userId, userId));
-      await db.delete(pendingLoginsTable).where(eq(pendingLoginsTable.userId, userId));
-      await db.delete(usersTable).where(eq(usersTable.id, userId));
+      // One transaction: a failure part-way must not leave a half-erased account (the subscription is
+      // already cancelled by now, so the retry has to be able to finish the job).
+      await db.transaction(async (tx) => {
+        await tx.delete(scansTable).where(eq(scansTable.userId, userId));
+        await tx.delete(monitorSubscriptionsTable).where(eq(monitorSubscriptionsTable.userId, userId));
+        await tx.delete(reportSharesTable).where(eq(reportSharesTable.userId, userId));
+        await tx.delete(dismissedFindingsTable).where(eq(dismissedFindingsTable.userId, userId));
+        await tx.delete(domainVerificationsTable).where(eq(domainVerificationsTable.userId, userId));
+        await tx.delete(githubInstallationsTable).where(eq(githubInstallationsTable.userId, userId));
+        await tx.delete(creditsTable).where(eq(creditsTable.userId, userId));
+        await tx.delete(billingSubscriptionsTable).where(eq(billingSubscriptionsTable.userId, userId));
+        // Tokens die with the account: a token outliving it would authenticate as
+        // an id that no longer exists (the join in authenticateApiToken would
+        // refuse it, but a credential should not survive its owner either way).
+        await tx.delete(apiTokensTable).where(eq(apiTokensTable.userId, userId));
+        await tx.delete(purchaseIntentsTable).where(eq(purchaseIntentsTable.userId, userId));
+        // Feedback is kept — it is about the product, not the person — but no
+        // longer says who sent it.
+        await tx
+          .update(feedbackTable)
+          .set({ userId: null, email: null })
+          .where(eq(feedbackTable.userId, userId));
+        await tx.delete(authTokensTable).where(eq(authTokensTable.userId, userId));
+        // Tables with no foreign key to users: ids and verdicts only, but still the account's.
+        await tx.delete(findingVerificationsTable).where(eq(findingVerificationsTable.userId, userId));
+        await tx.delete(oauthCodesTable).where(eq(oauthCodesTable.userId, userId));
+        await tx.delete(oauthRefreshTokensTable).where(eq(oauthRefreshTokensTable.userId, userId));
+        await tx.delete(pendingLoginsTable).where(eq(pendingLoginsTable.userId, userId));
+        await tx.delete(usersTable).where(eq(usersTable.id, userId));
+      });
 
       // EVERY session, not just this one. getSession reads the session's own JSON
       // snapshot and never re-checks usersTable, so a session on another device

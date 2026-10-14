@@ -50,6 +50,21 @@ export function isRateLimited(key: string): boolean {
   return recent.length > MAX_ATTEMPTS;
 }
 
+/**
+ * Whether this key has already failed MAX_ATTEMPTS times in the window, without counting this
+ * look. For per-account login throttling: the IP limit alone lets guesses spread across many
+ * addresses all reach one account. Only failures are recorded (recordFailure), so a person who
+ * signs in correctly is not counted against.
+ */
+export function isLockedOut(key: string): boolean {
+  const now = Date.now();
+  return (attempts.get(key) ?? []).filter((t) => now - t < WINDOW_MS).length >= MAX_ATTEMPTS;
+}
+
+export function recordFailure(key: string): void {
+  isRateLimited(key);
+}
+
 // "al***@example.com" — enough for the user to recognise their own mailbox,
 // not enough to hand the address to someone who only guessed the password.
 export function maskEmail(address: string): string {

@@ -1,7 +1,7 @@
 /** Monitor alerts about certificate expiry and availability. */
 import { APP_ORIGIN } from "./appOrigin";
 import { unsubscribeHeaders } from "./emailPrefs";
-import { bulkMailAllowed, RESEND_API, resendBody } from "./mailerCore";
+import { bulkMailAllowed, escapeHtml, RESEND_API, resendBody } from "./mailerCore";
 
 // ── Cert expiry email ──────────────────────────────────────────────────────────
 
@@ -44,7 +44,7 @@ export async function sendCertExpiryEmail(opts: SendCertExpiryOptions): Promise<
         <tr><td style="background:#1a1d27;border-radius:16px;border:1px solid rgba(255,255,255,0.08);padding:40px;text-align:center;">
           <div style="display:inline-block;font-size:48px;margin-bottom:16px;">🔒</div>
           <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;">TLS Certificate Expiring Soon</h2>
-          <p style="margin:0 0 8px;font-size:18px;font-weight:700;color:#f8fafc;">${targetUrl}</p>
+          <p style="margin:0 0 8px;font-size:18px;font-weight:700;color:#f8fafc;">${escapeHtml(targetUrl)}</p>
           <p style="margin:0 0 24px;color:#94a3b8;font-size:14px;">Certificate expires on <strong style="color:#facc15;">${expiryStr}</strong> — <strong style="color:#f8fafc;">${daysRemaining} day${daysRemaining !== 1 ? "s" : ""} remaining</strong>.</p>
           <p style="margin:0 0 32px;color:#94a3b8;font-size:13px;">Renew your TLS certificate immediately to avoid downtime and security warnings in browsers. Let's Encrypt certificates can be renewed with: <code style="background:#0f1117;padding:2px 6px;border-radius:4px;">certbot renew</code></p>
           <a href="${dashboardUrl}" style="display:inline-block;background:#6366f1;color:#fff;font-weight:700;font-size:15px;padding:14px 32px;border-radius:10px;text-decoration:none;">View Monitor Dashboard →</a>
@@ -133,8 +133,8 @@ export async function sendAvailabilityEmail(opts: SendAvailabilityOptions): Prom
         <tr><td style="background:#1a1d27;border-radius:16px;border:1px solid rgba(255,255,255,0.08);padding:40px;text-align:center;">
           <div style="display:inline-block;font-size:48px;margin-bottom:16px;">${icon}</div>
           <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;">${heading}</h2>
-          <p style="margin:0 0 8px;font-size:18px;font-weight:700;color:${accent};">${targetUrl}</p>
-          <p style="margin:0 0 8px;color:#94a3b8;font-size:14px;">${detail}</p>
+          <p style="margin:0 0 8px;font-size:18px;font-weight:700;color:${accent};">${escapeHtml(targetUrl)}</p>
+          <p style="margin:0 0 8px;color:#94a3b8;font-size:14px;">${escapeHtml(detail)}</p>
           ${lastSeen ? `<p style="margin:0 0 24px;color:#64748b;font-size:13px;">${lastSeen}</p>` : ""}
           <p style="margin:0 0 32px;color:#64748b;font-size:12px;">SecScan checks every monitored URL once an hour. This is an availability check, not a security scan — your scan cadence is unchanged.</p>
           <a href="${dashboardUrl}" style="display:inline-block;background:#6366f1;color:#fff;font-weight:700;font-size:15px;padding:14px 32px;border-radius:10px;text-decoration:none;">Open Monitoring →</a>

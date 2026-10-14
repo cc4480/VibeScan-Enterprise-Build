@@ -244,6 +244,13 @@ if (oidcConfigured) {
 
 // Always available: clears the session cookie, which password accounts use too.
 router.get("/logout", async (req: Request, res: Response): Promise<void> => {
+  // A link on another site must not be able to sign someone out. Browsers say where a navigation
+  // came from; cross-site gets the home page and keeps the session. (The app itself signs out
+  // with POST /api/account/logout.)
+  if (req.headers["sec-fetch-site"] === "cross-site") {
+    res.redirect("/");
+    return;
+  }
   const sid = getSessionId(req);
   await clearSession(res, sid);
   res.redirect("/");

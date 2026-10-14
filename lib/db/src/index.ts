@@ -46,6 +46,13 @@ export const pool = new Pool({
   // exhausted — a timeout names the problem, an indefinite wait does not.
   connectionTimeoutMillis: 10_000,
 });
+// An idle client can error (the server restarts, a proxy drops the socket). Without a listener that
+// "error" event is unhandled and takes the whole process down; with one, the pool discards the
+// client and the next query opens a fresh connection.
+pool.on("error", (err) => {
+  console.error("Postgres pool: idle client error (connection discarded)", err.message);
+});
+
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";

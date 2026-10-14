@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, reportsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { GetReportResponse } from "@workspace/api-zod";
+import { UUID_ANY } from "./accountShared";
 import { changesForReport } from "../lib/scanDiffLoader";
 import { withNoteFreeTotals } from "../lib/reportTotals";
 
@@ -14,6 +15,11 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
   }
 
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+  if (!id || !UUID_ANY.test(id)) {
+    res.status(404).json({ error: "Report not found" });
+    return;
+  }
 
   try {
     const [report] = await db

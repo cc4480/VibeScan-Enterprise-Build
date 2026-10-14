@@ -56,7 +56,7 @@ async function get(): Promise<any> {
   let body: any;
   const res: any = { statusCode: 200, status(c: number) { this.statusCode = c; return this; }, json(b: any) { body = b; return this; } };
   await layer.route!.stack[0]!.handle(
-    { isAuthenticated: () => true, user: { id: "u1" }, params: { id: "r1" }, log: { error() {}, warn() {} } },
+    { isAuthenticated: () => true, user: { id: "u1" }, params: { id: "11111111-1111-4111-8111-111111111111" }, log: { error() {}, warn() {} } },
     res,
   );
   return body;

@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, reportsTable, reportBadgesTable } from "@workspace/db";
 import { eq, and, isNull } from "drizzle-orm";
+import { UUID_ANY } from "./accountShared";
 import { APP_ORIGIN } from "../lib/appOrigin";
 import {
   badgeSnippets,
@@ -26,7 +27,7 @@ async function ownedReport(
   }
   const raw = req.params["id"];
   const reportId = Array.isArray(raw) ? raw[0] : raw;
-  if (!reportId) {
+  if (!reportId || !UUID_ANY.test(reportId)) {
     res.status(404).json({ error: "Report not found" });
     return null;
   }
@@ -39,7 +40,7 @@ async function ownedReport(
     return null;
   }
   if (report.userId !== req.user!.id) {
-    res.status(403).json({ error: "Forbidden" });
+    res.status(404).json({ error: "Report not found" });
     return null;
   }
   return { id: report.id, targetUrl: report.targetUrl, data: report.data };
