@@ -6,6 +6,11 @@ for each change; this collects what shipped and why it mattered.
 ## 2026-10-14
 
 ### Accuracy
+- **Two false positives from a repository scan of cc4480/Agent-Mesh.** A compose file whose database password defaults to a
+  development value (`${DB_PASSWORD:-localdev123}`) publishes its port for the developer's own machine, so the port is now
+  information, as it already was for dev-named compose files (`repoCheckInfra.ts`). An example env file whose value names itself
+  local, dev, demo, test, example or sample is a placeholder, not a hardcoded secret (`configSecrets.ts`). Clean twins keep a
+  production-looking password at Medium and a generated-looking example value flagged.
 - **The check catalog now lists the repository scan's checks.** Before, the catalog held only the website checks (156), so the
   repository checks (secrets, Supabase migrations, CI and configuration, code patterns, dependencies: 55) were on the public
   coverage page but not in the catalog the scanner's tests verify. `checkCatalogRepo.ts` lists them, each with a needle the

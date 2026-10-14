@@ -166,8 +166,10 @@ function composeFindings(f: RepoFile, ref: RepoRef): ScanVulnerability[] {
   }
   const exposed = [...text.matchAll(/^\s*-\s*["']?(?:0\.0\.0\.0:)?(\d{2,5}):(\d{2,5})(?:\/\w+)?["']?\s*$/gm)].filter((m) => DB_PORTS.has(m[2]!)).map((m) => `${m[1]}:${m[2]}`);
   if (exposed.length > 0) {
-    // An override or dev compose file publishes the database to the developer's own machine on purpose.
-    const devOnly = /(?:override|dev|local|test)/i.test(f.path.slice(f.path.lastIndexOf("/") + 1));
+    // An override or dev compose file publishes the database to the developer's own machine on purpose. So does one whose
+    // database password defaults to a development value (${DB_PASSWORD:-localdev123}): that is the local stack, not a server.
+    const devDbDefault = /\$\{\w*PASS\w*:-(?:local|dev|test|example|changeme|password|postgres)[^}]*\}/i.test(text);
+    const devOnly = /(?:override|dev|local|test)/i.test(f.path.slice(f.path.lastIndexOf("/") + 1)) || devDbDefault;
     out.push(repoFinding({
       ref, path: f.path, name: "Compose Publishes a Database Port to Every Network Interface",
       severity: devOnly ? "info" : "medium", category: "Security Misconfiguration", cweId: "CWE-668", cvssScore: devOnly ? 0 : 6.5, confidence: devOnly ? 45 : 70,

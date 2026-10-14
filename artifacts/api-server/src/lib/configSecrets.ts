@@ -73,6 +73,8 @@ function isSecretValue(raw: string, example: boolean): boolean {
   if (/(?:process\.env|import\.meta\.env|os\.environ|getenv|System\.getenv)/i.test(value)) return false;
   if (isPublicByDesignValue(value)) return false; // AIza, pk.ey, pk_live_, anon JWT: shipped to browsers on purpose
   if (looksLikeReference(value) || looksLikeAName(value) || isPlaceholderToken(value) || isTrivialPassword(value)) return false;
+  // An example file that names its own value as a local or demo one (local-…, demo-…) is a placeholder, not a key.
+  if (example && /^(?:local|dev|demo|test|example|sample)[-_]/i.test(value)) return false;
   const entropy = shannonEntropy(value);
   return example ? value.length >= 16 && entropy >= 3.5 : entropy >= 2.5;
 }

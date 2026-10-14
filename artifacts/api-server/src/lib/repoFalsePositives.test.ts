@@ -169,3 +169,23 @@ describe("round three: Go, monorepos and repeats", () => {
     expect(mergeSameName([mk("low", "a.ts"), mk("low", "b.ts")])).toHaveLength(1);
   });
 });
+
+describe("the Agent-Mesh report: a local development stack is not a published server", () => {
+  it("a database port whose password defaults to a development value is information (docker-compose.yml with ${DB_PASSWORD:-localdev123})", () => {
+    const compose = `services:\n  postgres:\n    environment:\n      POSTGRES_PASSWORD: \${DB_PASSWORD:-localdev123}\n    ports:\n      - "5432:5432"\n`;
+    expect(infraFindings(f("docker-compose.yml", compose), ref)[0]).toMatchObject({ severity: "info" });
+  });
+
+  it("clean twin: the same port with a password that has no development default stays medium", () => {
+    const compose = `services:\n  postgres:\n    environment:\n      POSTGRES_PASSWORD: \${DB_PASSWORD:?set-it}\n    ports:\n      - "5432:5432"\n`;
+    expect(infraFindings(f("docker-compose.yml", compose), ref)[0]).toMatchObject({ severity: "medium" });
+  });
+
+  it("an example env file whose value names itself local is a placeholder, not a hardcoded secret (.env.example)", () => {
+    expect(keys(".env.example", "RAW_DATA_ACCESS_KEY_ENV=local-7fQ2kXv9Lm4Rt8Wz3Nb6Hy1Pc5Ds0Jq\n")).toEqual([]);
+  });
+
+  it("clean twin: a generated-looking value in the same example file is still reported", () => {
+    expect(keys(".env.example", "RAW_DATA_ACCESS_KEY_ENV=Xk9fQ2mLp8Zr4Tv7Nc1Wb6Hs0Gd3Ey\n")).toEqual(["RAW_DATA_ACCESS_KEY_ENV"]);
+  });
+});
