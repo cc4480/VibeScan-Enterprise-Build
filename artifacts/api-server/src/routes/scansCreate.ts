@@ -10,7 +10,7 @@ import { linkedInstallationIds } from "../lib/githubLinks";
 import { enqueueScan } from "../lib/queue";
 import { validateCredentials, encryptCredentials, sameAccountInput } from "../lib/scanCredentials";
 import { checkScanTarget } from "../lib/ssrfGuard";
-import { TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE } from "../lib/freeTrial";
+import { TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE, TrialExhaustedError, insertScanRow } from "../lib/freeTrial";
 import { refundFailedScan, chargeScan, refundCharge } from "../lib/billing";
 import { zodMessage } from "../lib/zodMessage";
 
@@ -263,9 +263,7 @@ export async function createScanHandler(req: Request, res: Response): Promise<vo
 
   let scan: typeof scansTable.$inferSelect;
   try {
-    [scan] = await db
-    .insert(scansTable)
-    .values({
+    scan = await insertScanRow({
       userId: req.user.id,
       userEmail: req.user.email ?? "",
       targetUrl,
@@ -279,9 +277,13 @@ export async function createScanHandler(req: Request, res: Response): Promise<vo
       autoSecondAccount,
       // Recorded so a scan that fails later is refunded to the same place.
       paidWith,
-    })
-    .returning() as [typeof scansTable.$inferSelect];
+    });
   } catch (err) {
+    // The free scans were used up by requests that arrived together with this one.
+    if (err instanceof TrialExhaustedError) {
+      res.status(403).json({ error: TRIAL_LIMIT_MESSAGE, code: TRIAL_LIMIT_CODE });
+      return;
+    }
     // Paid for, not created: give it back before failing the request.
     req.log.error({ err }, "Could not create the scan row");
     await refundIfCharged();

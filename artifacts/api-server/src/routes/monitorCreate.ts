@@ -6,7 +6,7 @@ import { eq, and, count } from "drizzle-orm";
 import { enqueueScan } from "../lib/queue";
 import { logger } from "../lib/logger";
 import { checkScanTarget } from "../lib/ssrfGuard";
-import { trialScansExhausted, TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE } from "../lib/freeTrial";
+import { trialScansExhausted, TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE, insertScanRow } from "../lib/freeTrial";
 import { monitorEntitlement } from "../lib/entitlements";
 import { hasLivePlan, chargeScan, refundCharge, refundFailedScan, type PaidWith } from "../lib/billing";
 import { creditBalance } from "../lib/credits";
@@ -180,9 +180,7 @@ export function registerMonitorCreate(router: IRouter): void {
     // historical data while the new scan runs.
     let baselineScanId: string | null = null;
     try {
-      const [scan] = await db
-        .insert(scansTable)
-        .values({
+      const scan = await insertScanRow({
           userId: req.user.id,
           userEmail: req.user.email ?? "",
           targetUrl,
@@ -194,8 +192,7 @@ export function registerMonitorCreate(router: IRouter): void {
           // could add monitors one after another and collect a full scan from
           // each.
           paidWith: baselinePaidWith,
-        })
-        .returning();
+        });
       baselineScanId = scan.id;
 
       await enqueueScan({

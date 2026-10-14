@@ -230,6 +230,11 @@ export const mockFactory8 = () => ({ creditBalance: async () => billingState.cre
 /** Factory for vi.mock("../lib/freeTrial"). */
 export const mockFactory9 = () => ({
   trialScansExhausted: async () => billingState.trialExhausted,
+  insertScanRow: async (values: Record<string, unknown>) => {
+    inserted.push(values);
+    return { id: "mock-scan-id", ...values };
+  },
+  TrialExhaustedError: class TrialExhaustedError extends Error {},
   TRIAL_LIMIT_MESSAGE: "out of scans",
   TRIAL_LIMIT_CODE: "trial_exhausted",
 });

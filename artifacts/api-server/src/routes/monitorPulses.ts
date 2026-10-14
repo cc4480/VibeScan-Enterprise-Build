@@ -4,7 +4,7 @@ import { db, monitorSubscriptionsTable, monitorPulseChecksTable, scansTable } fr
 import { eq, and, gte, desc } from "drizzle-orm";
 import { enqueueScan } from "../lib/queue";
 import { logger } from "../lib/logger";
-import { TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE } from "../lib/freeTrial";
+import { TRIAL_LIMIT_MESSAGE, TRIAL_LIMIT_CODE, TrialExhaustedError, insertScanRow } from "../lib/freeTrial";
 import { monitorEntitlement } from "../lib/entitlements";
 import { hasLivePlan, chargeScan, refundCharge, refundFailedScan, type PaidWith } from "../lib/billing";
 import { summariseUptime } from "../lib/monitorPulse";
@@ -131,9 +131,7 @@ export function registerMonitorPulses(router: IRouter): void {
 
     let scanId: string | null = null;
     try {
-      const [scan] = await db
-        .insert(scansTable)
-        .values({
+      const scan = await insertScanRow({
           userId: req.user.id,
           userEmail: req.user.email ?? "",
           targetUrl: sub.targetUrl,
@@ -141,8 +139,7 @@ export function registerMonitorPulses(router: IRouter): void {
           status: "paid",
           origin: "monitor",
           paidWith,
-        })
-        .returning();
+        });
       scanId = scan.id;
 
       await enqueueScan({
@@ -162,6 +159,10 @@ export function registerMonitorPulses(router: IRouter): void {
 
       res.json({ scanId: scan.id });
     } catch (err) {
+      if (err instanceof TrialExhaustedError) {
+        res.status(403).json({ error: TRIAL_LIMIT_MESSAGE, code: TRIAL_LIMIT_CODE });
+        return;
+      }
       logger.error({ err }, "Failed to enqueue manual monitor scan");
       // Paid for, never ran: give it back. Once the row exists the worker's
       // exactly-once refund path applies; before that, the charge is returned

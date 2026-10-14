@@ -1,5 +1,5 @@
 import { db, scansTable } from "@workspace/db";
-import { and, count, eq, gte, or } from "drizzle-orm";
+import { and, count, eq, gte, or, sql } from "drizzle-orm";
 
 /**
  * The free-scan allowance, and the one place that decides whether it is spent.
@@ -70,4 +70,48 @@ export async function trialScansUsedBy(userId: string, now: Date = new Date()): 
 
 export async function trialScansExhausted(userId: string): Promise<boolean> {
   return (await trialScansUsedBy(userId)) >= FREE_TRIAL_SCAN_LIMIT;
+}
+
+/** Thrown by insertScanRow when the free allowance ran out between chargeScan and the insert. */
+export class TrialExhaustedError extends Error {
+  constructor() {
+    super(TRIAL_LIMIT_CODE);
+    this.name = "TrialExhaustedError";
+  }
+}
+
+/**
+ * Create a scan row, holding the free allowance to its limit.
+ *
+ * chargeScan decides "free" by counting scan rows, but the row is written some time later, so
+ * requests arriving together all counted the same rows, all got "free", and all inserted. For a
+ * free scan this takes a per-user advisory lock, counts again, and inserts under that lock; the
+ * next request for the same user waits for the commit and counts this row. The lock is
+ * transaction-scoped, so it cannot outlive the insert, and it is per user, so no one else waits.
+ *
+ * Any other kind of payment already took something (a credit, an included scan) atomically and
+ * is inserted as before. Throws TrialExhaustedError when the free scan is no longer available;
+ * nothing was taken for a free scan, so there is nothing to refund.
+ */
+export async function insertScanRow(values: typeof scansTable.$inferInsert): Promise<typeof scansTable.$inferSelect> {
+  if (values.paidWith !== "free") {
+    const [row] = await db.insert(scansTable).values(values).returning();
+    return row!;
+  }
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`free-scan:${values.userId}`}))`);
+    const [used] = await tx
+      .select({ n: count() })
+      .from(scansTable)
+      .where(
+        and(
+          eq(scansTable.userId, values.userId),
+          or(eq(scansTable.origin, "user"), eq(scansTable.paidWith, "free")),
+          gte(scansTable.createdAt, freeScanPeriodStart()),
+        ),
+      );
+    if ((used?.n ?? 0) >= FREE_TRIAL_SCAN_LIMIT) throw new TrialExhaustedError();
+    const [row] = await tx.insert(scansTable).values(values).returning();
+    return row!;
+  });
 }
