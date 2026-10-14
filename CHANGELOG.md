@@ -7,6 +7,11 @@ for each change; this collects what shipped and why it mattered.
 
 ### Accuracy
 
+- **Two false positives in existing checks, found by reading the RFCs against our code.** HSTS: a quoted `max-age="31536000"`
+  (valid under RFC 6797) was read as zero and reported as "too short"; the header is now parsed the way a browser does (quoted
+  values, case, repeated directives), `max-age=0` is reported as a withdrawn policy, and a header with no usable max-age as
+  one browsers ignore. SPF: the `+all` check missed a bare `all` (which means `+all`, RFC 7208) and fired on text inside
+  another term such as `include:mail+all.example`; it now reads the record as terms.
 - **Build tools in lockfiles are rated as build tools.** Only npm's lockfile says which packages are development-only, so
   a Vite or Python project's advisories in esbuild, postcss, picomatch, pytest or virtualenv were rated like code that ships,
   and a front end with nothing wrong in production still graded badly. bun.lock, pnpm-lock.yaml, yarn.lock (with the

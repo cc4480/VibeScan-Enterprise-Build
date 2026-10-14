@@ -35,7 +35,8 @@ export async function checkSpf(hostname: string): Promise<ScanVulnerability[]> {
   // SPF exists — check for dangerous configurations
   const vulns: ScanVulnerability[] = [];
 
-  if (/\+all/.test(spfRecord)) {
+  const allQualifier = spfAllQualifier(spfRecord);
+  if (allQualifier === "+") {
     vulns.push(vuln({
       name: "SPF Record Uses +all (Allows Any Sender)",
       severity: "critical",
@@ -46,7 +47,7 @@ export async function checkSpf(hostname: string): Promise<ScanVulnerability[]> {
       cweId: "CWE-290",
       cvssScore: 9.1,
     }));
-  } else if (/\?all/.test(spfRecord)) {
+  } else if (allQualifier === "?") {
     vulns.push(vuln({
       name: "SPF Record Uses ?all (Neutral — No Enforcement)",
       severity: "medium",
@@ -201,4 +202,17 @@ export async function checkDkim(hostname: string): Promise<ScanVulnerability[]> 
   }
 
   return [];
+}
+
+/**
+ * The qualifier of an SPF record's "all" mechanism: "+" (written or implied), "-", "~" or "?"; null when there is none.
+ * RFC 7208 section 4.6.2 makes a bare `all` mean `+all`, and the term must stand alone: "include:foo+all.example" is not
+ * one, which a text search for "+all" cannot tell.
+ */
+export function spfAllQualifier(record: string): "+" | "-" | "~" | "?" | null {
+  for (const term of record.trim().split(/\s+/).slice(1)) {
+    const m = /^([+\-~?])?all$/i.exec(term);
+    if (m) return (m[1] as "+" | "-" | "~" | "?" | undefined) ?? "+";
+  }
+  return null;
 }

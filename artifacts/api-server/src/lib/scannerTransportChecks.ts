@@ -1,5 +1,6 @@
 import { headerVal, vuln, type ScanVulnerability, type PageContext } from "./scannerTypes";
 import { isHstsPreloaded } from "./scannerHstsPreload";
+import { parseHsts } from "./hstsParse";
 
 /** The finding for an address served without TLS: a fact about the address, whatever the response was. */
 export const PLAINTEXT_FINDING_NAME = "No HTTPS / Plaintext HTTP";
@@ -52,9 +53,33 @@ export async function transportFindings({ finalUrl, rawHeaders, isHttps }: PageC
     }
   } else if (hsts) {
     // Check for weak HSTS config
-    const maxAgeMatch = /max-age=(\d+)/i.exec(hsts);
-    const maxAge = maxAgeMatch ? parseInt(maxAgeMatch[1], 10) : 0;
-    if (maxAge < 15552000) { // less than 180 days
+    const maxAge = parseHsts(hsts).maxAge;
+    if (maxAge === null) {
+      // RFC 6797 section 6.1: a header with no usable max-age is ignored by browsers, so no HSTS policy is in effect.
+      vulnerabilities.push(vuln({
+        name: "HSTS Header Has No Usable max-age (Ignored by Browsers)",
+        severity: "low",
+        category: "Transport Security",
+        description: "The Strict-Transport-Security header has no valid max-age directive, so browsers ignore it and no HSTS policy is in effect.",
+        evidence: `GET ${finalUrl}\nStrict-Transport-Security: ${hsts}`,
+        solution: "Set a complete header: Strict-Transport-Security: max-age=31536000; includeSubDomains",
+        cweId: "CWE-523",
+        cvssScore: 3.1,
+        wstgId: "WSTG-CONF-07",
+      }));
+    } else if (maxAge === 0) {
+      vulnerabilities.push(vuln({
+        name: "HSTS Policy Is Being Removed (max-age=0)",
+        severity: "low",
+        category: "Transport Security",
+        description: "The header sets max-age=0, which tells browsers to forget this host's HSTS policy. That is how a policy is withdrawn on purpose, so the site is not protected by HSTS. If this is not intended, restore a long max-age.",
+        evidence: `GET ${finalUrl}\nStrict-Transport-Security: ${hsts}`,
+        solution: "Serve a long max-age (Strict-Transport-Security: max-age=31536000; includeSubDomains) once the site works over HTTPS everywhere.",
+        cweId: "CWE-523",
+        cvssScore: 3.1,
+        wstgId: "WSTG-CONF-07",
+      }));
+    } else if (maxAge < 15552000) { // less than 180 days
       vulnerabilities.push(vuln({
         name: "HSTS max-age Too Short",
         severity: "low",
