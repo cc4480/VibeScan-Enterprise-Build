@@ -15,7 +15,7 @@ import { CopyReportButton } from "./report-viewer-copy";
 import { ShareButton } from "./report-viewer-share";
 
 /** The cover: grade ring, target, executive summary and the severity legend. */
-export function ReportCover({ report, summary, pagesScanned, severityCounts, categoryCounts, allUnverifiedVulns, fixedNotice }: {
+export function ReportCover({ report, summary, pagesScanned, severityCounts, categoryCounts, allUnverifiedVulns, fixedNotice, repoOnly = false }: {
   report: ReportResponse;
   summary: NonNullable<ReportPayload["summary"]>;
   pagesScanned: ReportPayload["pagesScanned"];
@@ -24,7 +24,11 @@ export function ReportCover({ report, summary, pagesScanned, severityCounts, cat
   allUnverifiedVulns: Vulnerability[];
   /** Set when findings have been verified fixed since the scan; says what did and did not change. */
   fixedNotice?: string | null;
+  /** A repository scanned alone: the "also detected" labels describe a website's checks, so they are left out. */
+  repoOnly?: boolean;
 }) {
+  // Information findings carry no weight in the grade, so only the others are "in" it.
+  const weighed = allUnverifiedVulns.filter((v) => v.severity !== "info");
   // The same rule the ring uses: a grade outside A to F means no real grade was
   // given, which is what a bot-protection interception produces ("N/A").
   const pagesLabel = scannedPagesLabel(pagesScanned, !(summary.grade in GRADE_HEX));
@@ -61,11 +65,11 @@ export function ReportCover({ report, summary, pagesScanned, severityCounts, cat
             {fixedNotice}
           </div>
         )}
-        <SummaryNewFindings categories={categoryCounts} />
-        {allUnverifiedVulns.length > 0 && (
+        {!repoOnly && <SummaryNewFindings categories={categoryCounts} />}
+        {weighed.length > 0 && (
           <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-xs text-amber-300">
             <HelpCircle className="w-3.5 h-3.5 shrink-0" />
-            Grade includes {allUnverifiedVulns.length} heuristic finding{allUnverifiedVulns.length !== 1 ? "s" : ""} — see "Needs Verification" below before acting
+            Grade includes {weighed.length} heuristic finding{weighed.length !== 1 ? "s" : ""} — see "Needs Verification" below before acting
           </div>
         )}
       </div>

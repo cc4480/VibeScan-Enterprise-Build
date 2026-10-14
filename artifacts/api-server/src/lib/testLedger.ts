@@ -64,6 +64,8 @@ export interface TestRecord {
   found?: string[];
   /** For the repository scan: what was read and what each check found. */
   source?: SourceScanRecord;
+  /** A line of real numbers for the live display ("168 of 544 read", "12 files checked"), when the outcome alone says too little. */
+  detail?: string;
 }
 
 /**
@@ -98,12 +100,22 @@ class ObservedRecords extends Array<TestRecord> {
 
 export class TestLedger {
   readonly records: TestRecord[];
+  private readonly onRecord: ((record: TestRecord) => void) | undefined;
 
   /** `onRecord` hears every test as it is recorded: how a running scan shows real progress. */
   constructor(onRecord?: (record: TestRecord) => void) {
     const records = new ObservedRecords();
     if (onRecord) records.listener = onRecord;
     this.records = records;
+    this.onRecord = onRecord;
+  }
+
+  /**
+   * A step of a test that is still running, for the live display only. It is heard by the same listener as a recorded
+   * test but is not kept in `records`, so it never appears in the saved report's list of tests.
+   */
+  progress(record: TestRecord): void {
+    this.onRecord?.(record);
   }
 
   /**
@@ -152,7 +164,7 @@ export class TestLedger {
         this.records.push({
           group, name, status: "ran", findings: findings.length, durationMs: Date.now() - started,
           ...(findings.length > 0 ? { found: foundNames(findings) } : {}),
-          ...(source ? { source } : {}),
+          ...(source ? { source, detail: sourceDetail(source) } : {}),
         });
         return findings;
       },
@@ -311,4 +323,12 @@ export function newlyRunTests(previous: unknown, current: TestRecord[]): string[
   return current
     .filter((r) => r.status === "ran" && !ranBefore.has(testIdentity(r)))
     .map((r) => r.name);
+}
+
+/** The live line for the repository test: what was read, in the scan's own numbers. */
+export function sourceDetail(s: SourceScanRecord): string {
+  const read = s.read ?? 0;
+  const of = s.treeFiles != null ? ` of ${s.treeFiles} files` : " files";
+  const via = s.via === "github-app" ? " through the connected GitHub App" : s.via ? " as a public repository" : "";
+  return `read ${read}${of} in ${s.repository}${via}`;
 }

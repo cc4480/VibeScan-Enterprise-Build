@@ -8,6 +8,7 @@ import {
   tally,
   progressPercent,
   EXPECTED_TESTS,
+  EXPECTED_REPO_STEPS,
   TEST_MS,
   CHECK_MS,
   type LiveCheck,
@@ -183,5 +184,28 @@ describe("progressPercent follows what is on screen", () => {
 
   it("shows no progress for a failed scan", () => {
     expect(progressPercent("failed", 30)).toBe(0);
+  });
+});
+
+describe("repository steps", () => {
+  const step = { group: "repository", name: "Reading files (100 of 544)", status: "ran" as const, findings: 0, durationMs: 0, detail: "100 of 544 read, 1.2 MB" };
+
+  it("shows the step's real numbers instead of 'no issues found'", () => {
+    expect(toRow(step).result).toBe("100 of 544 read, 1.2 MB");
+    expect(toRow(step).tone).toBe("clean");
+  });
+
+  it("keeps the finding count first when a step has findings", () => {
+    expect(toRow({ ...step, name: "Check: repository secrets", findings: 3, detail: "543 files checked" }).result).toBe("3 findings · 543 files checked");
+  });
+
+  it("still says why a check had nothing to look at", () => {
+    const skipped = { ...step, status: "skipped" as const, reason: "no matching files in the repository" };
+    expect(toRow(skipped).result).toBe("not run: no matching files in the repository");
+  });
+
+  it("fits the progress bar to the number of repository steps", () => {
+    expect(progressPercent("scanning", EXPECTED_REPO_STEPS, EXPECTED_REPO_STEPS)).toBe(88);
+    expect(progressPercent("scanning", 7, EXPECTED_REPO_STEPS)).toBe(49);
   });
 });

@@ -140,6 +140,21 @@ describe("scanRepository", () => {
     expect(cfg.some((v) => /deliberately fake/.test(v.name))).toBe(true);
   });
 
+  it("reports its steps as it goes: the listing, the reading in stages, then each check", async () => {
+    const many: Record<string, string> = { "supabase/migrations/001.sql": "create table t (id int);" };
+    for (let i = 0; i < 250; i++) many[`src/m${i}.ts`] = `export const v${i} = ${i};`;
+    const events: Array<{ kind: string; [k: string]: unknown }> = [];
+    await scanRepository(memorySource(many), ref, { onProgress: (e) => events.push(e) });
+    expect(events[0]).toMatchObject({ kind: "listed", treeFiles: 251, toRead: 251 });
+    const reading = events.filter((e) => e.kind === "reading");
+    expect(reading.map((e) => e.read)).toEqual([100, 200, 251]);
+    expect(events.filter((e) => e.kind === "check").map((e) => e.name)).toEqual([
+      "repository secrets", "Supabase migrations (RLS and policies)", "CI and configuration", "dangerous code patterns", "dependency vulnerabilities (OSV)",
+    ]);
+    // Order: listing, then reading, then checks.
+    expect(events.map((e) => e.kind)).toEqual(["listed", "reading", "reading", "reading", "check", "check", "check", "check", "check"]);
+  });
+
   it("a repository with only binary files says nothing was tested, not that it is clean", async () => {
     const out = await scanRepository(memorySource({ "static/logo.png": "x", "assets/font.woff2": "y" }), ref);
     const note = out.findings.find((v) => v.name === "GitHub source scan covered only part of the repository")!;

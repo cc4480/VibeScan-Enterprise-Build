@@ -197,6 +197,7 @@ export default function ReportViewer() {
         categoryCounts={categoryCounts}
         allUnverifiedVulns={allUnverifiedVulns}
         fixedNotice={fixedCover}
+        repoOnly={repoOnly}
       />
 
       {/* What is waiting on domain verification, directly under the grade: the coverage card

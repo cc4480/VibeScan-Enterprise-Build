@@ -21,6 +21,7 @@ import { ciConfigFindings, isWorkflowPath, isDockerfilePath, isSupabaseConfigPat
 import { codePatternFindings, isCodePath, isEnvFilePath } from "./repoCheckCode";
 import { dependencyFindings, isManifestPath, isLockfilePath } from "./repoCheckDeps";
 import type { RepoSource, TreeFile } from "./repoSource";
+import type { RepoProgress } from "./repoProgress";
 import type { ScanVulnerability } from "./scanner";
 
 export const MAX_FILE_BYTES = 10_000_000;
@@ -138,12 +139,14 @@ function secretFindings(files: RepoFile[], ref: RepoRef): ScanVulnerability[] {
 const keptToTheEnd = (p: string) =>
   isMigrationPath(p) || isWorkflowPath(p) || isDockerfilePath(p) || isSupabaseConfigPath(p) || isFunctionCodePath(p) || isManifestPath(p) || isLockfilePath(p);
 
-export async function scanRepository(source: RepoSource, ref: RepoRef): Promise<RepoScanOutcome> {
+export async function scanRepository(source: RepoSource, ref: RepoRef, opts: { onProgress?: (e: RepoProgress) => void } = {}): Promise<RepoScanOutcome> {
+  const onProgress = opts.onProgress;
   const opened = await source.open();
   if (!opened.ok) return NOT_SCANNED(opened.status);
   if (opened.tree.length === 0) return { findings: [], status: "empty", filesRead: 0, via: source.via };
 
   const { chosen, tooLarge, notRead } = chooseFiles(opened.tree);
+  onProgress?.({ kind: "listed", treeFiles: opened.tree.length, toRead: chosen.length, binary: notRead.binary, vendored: notRead.vendored, tooLarge, truncated: opened.truncated });
   const files: RepoFile[] = []; // only what is kept to the end
   const readPaths: string[] = [];
   const findings: ScanVulnerability[] = [];
@@ -153,6 +156,9 @@ export async function scanRepository(source: RepoSource, ref: RepoRef): Promise<
   const secrets = { files: 0, found: 0 };
   const code = { files: 0, found: 0 };
 
+  // About ten progress lines however big the repository is, and always one for the last batch.
+  const batches = Math.ceil(chosen.length / BATCH);
+  const every = Math.max(1, Math.ceil(batches / 10));
   for (let i = 0; i < chosen.length; i += BATCH) {
     const batch: RepoFile[] = [];
     await mapLimit(chosen.slice(i, i + BATCH), CONCURRENCY, async (f) => {
@@ -171,6 +177,8 @@ export async function scanRepository(source: RepoSource, ref: RepoRef): Promise<
     const forCode = batch.filter((f) => isCodePath(f.path) || isEnvFilePath(f.path));
     if (forCode.length) { const found = codePatternFindings(forCode, ref); findings.push(...found); code.files += forCode.length; code.found += found.length; }
     files.push(...batch.filter((f) => keptToTheEnd(f.path)));
+    const n = i / BATCH + 1;
+    if (n % every === 0 || n === batches) onProgress?.({ kind: "reading", read: readPaths.length, total: chosen.length, bytes: bytesRead });
   }
 
   // Chosen files existed and none could be read: GitHub's raw host failing is not a clean repository.
@@ -197,6 +205,8 @@ export async function scanRepository(source: RepoSource, ref: RepoRef): Promise<
     name: "dependency vulnerabilities (OSV)", files: files.filter((f) => isManifestPath(f.path) || isLockfilePath(f.path)).length, findings: deps.findings.length,
     ...(deps.considered === 0 ? { note: "no package.json or package-lock.json with exact versions" } : deps.looked < deps.considered ? { note: `looked up ${deps.looked} of ${deps.considered} packages` } : {}),
   });
+
+  for (const c of checks) onProgress?.({ kind: "check", name: c.name, files: c.files, findings: c.findings, ...(c.note ? { note: c.note } : {}) });
 
   // No count or byte limit exists any more; the field stays so records and reports made before keep their meaning.
   const cap = 0;

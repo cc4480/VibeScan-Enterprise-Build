@@ -13,3 +13,9 @@ export function isRepoOnlyReport(targetUrl: string | null | undefined, tests: un
     return typeof source?.repository === "string" && source.repository.toLowerCase() === repository;
   });
 }
+
+/** "owner/repo" when a scan's address is a GitHub repository (a scan of a repository alone), otherwise null. */
+export function repoNameFromAddress(address: string | null | undefined): string | null {
+  const m = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)(?:\/|$)/i.exec(address ?? "");
+  return m ? `${m[1]}/${m[2]}` : null;
+}

@@ -5,7 +5,8 @@ import { CheckCircle2, XCircle, Loader2, Clock, AlertTriangle } from "lucide-rea
 import { cn } from "@/lib/utils";
 import { useSeo } from "@/lib/seo";
 import { ScanTerminal } from "@/components/scan-terminal";
-import { flattenItems, orderForDisplay, progressPercent, revealDelayMs } from "@/lib/scan-terminal";
+import { EXPECTED_REPO_STEPS, flattenItems, orderForDisplay, progressPercent, revealDelayMs } from "@/lib/scan-terminal";
+import { repoNameFromAddress } from "@/lib/repo-only-report";
 import { useLiveTests, useRevealed } from "@/lib/use-live-tests";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -95,8 +96,9 @@ export default function ScanProgressPage() {
     );
   }
 
-  const domain = getDomain(data?.targetUrl ?? "");
-  const progress = progressPercent(uiStatus, shown.filter((i) => i.kind === "test").length);
+  const repository = repoNameFromAddress(data?.targetUrl);
+  const domain = repository ?? getDomain(data?.targetUrl ?? "");
+  const progress = progressPercent(uiStatus, shown.filter((i) => i.kind === "test").length, repository ? EXPECTED_REPO_STEPS : undefined);
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
@@ -120,7 +122,9 @@ export default function ScanProgressPage() {
         <h1 className="text-xl font-bold tracking-tight">
           {uiComplete ? "Scan Complete" : isFailed ? "Scan Failed" : domain || "Security Scan"}
         </h1>
-        <p className="text-sm text-muted-foreground">{replaying ? "Showing every check as it was run…" : (STATUS_LABEL[uiStatus] ?? "Processing…")}</p>
+        <p className="text-sm text-muted-foreground">
+          {replaying ? "Showing every check as it was run…" : repository && uiStatus === "scanning" ? "Reading your repository…" : (STATUS_LABEL[uiStatus] ?? "Processing…")}
+        </p>
       </div>
 
       <ScanTerminal
@@ -133,6 +137,7 @@ export default function ScanProgressPage() {
         totalChecks={totalChecks}
         caughtUp={caughtUp}
         progress={progress}
+        repository={repository}
       />
 
       <div className="text-center">

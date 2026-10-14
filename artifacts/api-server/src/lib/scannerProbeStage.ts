@@ -6,6 +6,7 @@ import { checkDnsSecurity } from "./dnsChecks";
 import { scanJavaScriptForSecrets, collectFirstPartyJavaScript } from "./jsScanner";
 import { parseGithubRepoRef, githubProbeOutcome } from "./githubSourceProbe";
 import { scanRepository } from "./repoScan";
+import { progressRecord } from "./repoProgress";
 import { publicGithubSource, githubInstallationSource } from "./repoSource";
 import { crawlAndCheck } from "./crawler";
 import { checkForKnownVulnerabilities } from "./cveCheck";
@@ -225,7 +226,7 @@ export async function runProbeStage({
         // tested" (see githubProbeOutcome) while a GitHub outage or rate limit still throws and is
         // recorded as failed, instead of either reading as a clean "nothing found".
         tracked: true,
-        run: ledger.trackOutcome("passive", "GitHub source code secrets", scanRepository(githubAccessToken ? githubInstallationSource(repoRef, githubAccessToken) : publicGithubSource(repoRef), repoRef).then((o) => githubProbeOutcome(o, repoRef))),
+        run: ledger.trackOutcome("passive", "GitHub source code secrets", scanRepository(githubAccessToken ? githubInstallationSource(repoRef, githubAccessToken) : publicGithubSource(repoRef), repoRef, { onProgress: (e) => ledger.progress(progressRecord(e)) }).then((o) => githubProbeOutcome(o, repoRef))),
       });
     } else {
       ledger.skip("passive", "GitHub source code secrets", "the supplied value was not a recognisable GitHub repository");

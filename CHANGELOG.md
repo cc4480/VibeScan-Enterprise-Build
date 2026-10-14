@@ -7,6 +7,15 @@ for each change; this collects what shipped and why it mattered.
 
 ### Reports
 
+- **The live scan terminal shows what a repository scan is doing, with real numbers.** A repository read (alone, or
+  added to a website scan) now reports its steps as they happen: the file listing ("624 files found, 544 to read, left
+  alone: 4 binary files, 76 in vendored or fixture folders"), the reading in about ten stages ("300 of 544 read, 2.1 MB"),
+  then each of the five checks with its file and finding counts, or "not run: no matching files" when it had nothing to
+  look at. The steps are for the display only and are not added to the report's list of tests. A repository-only scan names
+  the repository, uses repository wording and totals (not the website catalogue of checks), and its closing line counts
+  only its own steps. The report cover no longer shows the website-only "Also detected" box for a repository scan, and its
+  "grade includes N heuristic findings" notice counts only findings that carry weight (information findings do not).
+
 - **Scan a GitHub repository on its own, with no website.** The scan page has a "GitHub repository only" choice
   (a private repository works through the connected GitHub App, as before). A repository address where the website
   goes is read as a repository-only scan: it spends one scan, counts against the same daily limit and queue, and skips

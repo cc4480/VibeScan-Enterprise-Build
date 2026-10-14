@@ -15,9 +15,20 @@ interface ScanTerminalProps {
   totalChecks: number;
   caughtUp: boolean;
   progress: number;
+  /** owner/repo, for a scan of a repository alone: there is no site, so no site totals or wording. */
+  repository?: string | null;
 }
 
 const RULE = "─".repeat(52);
+
+/** The closing line of a repository scan, from its own steps only (the roll-up record repeats the checks' findings). */
+function repoSummary(all: LiveTest[]): string {
+  const steps = all.filter((x) => x.group === "repository");
+  const ran = steps.filter((x) => x.status === "ran").length;
+  const empty = steps.filter((x) => x.status === "skipped").length;
+  const found = steps.reduce((n, x) => n + x.findings, 0);
+  return `✓ ${ran} ${ran === 1 ? "step" : "steps"} run${empty > 0 ? `, ${empty} had nothing to check` : ""}, ${found} ${found === 1 ? "finding" : "findings"}`;
+}
 const clock = () => new Date().toLocaleTimeString("en-US", { hour12: false });
 
 const STATUS_WORD: Record<string, string> = {
@@ -35,7 +46,9 @@ const Cursor = () => (
 );
 
 /** The scan terminal. Every line is real; see lib/scan-terminal.ts. */
-export function ScanTerminal({ domain, sessionId, status, error, shown, all, totalChecks, caughtUp, progress }: ScanTerminalProps) {
+export function ScanTerminal({ domain, sessionId, status, error, shown, all, totalChecks: siteChecks, caughtUp, progress, repository }: ScanTerminalProps) {
+  // A repository alone is not counted against the website catalogue of checks.
+  const totalChecks = repository ? 0 : siteChecks;
   const body = useRef<HTMLDivElement>(null);
   const stamps = useRef<string[]>([]);
   const waiting = ["queued", "paid", "pending"].includes(status);
@@ -64,7 +77,7 @@ export function ScanTerminal({ domain, sessionId, status, error, shown, all, tot
             <span className="w-3 h-3 rounded-full bg-green-500/80" />
           </div>
           <span className="flex-1 text-center text-xs font-mono text-zinc-500 tracking-wide truncate">
-            secscan — security terminal{domain ? ` — ${domain}` : ""}
+            {repository ? `secscan — repository scan — ${repository}` : `secscan — security terminal${domain ? ` — ${domain}` : ""}`}
           </span>
           <div className="flex items-center gap-1.5">
             <span className={cn("w-2 h-2 rounded-full", complete ? "bg-green-500" : failed ? "bg-red-500" : "bg-primary animate-pulse")} />
@@ -79,10 +92,10 @@ export function ScanTerminal({ domain, sessionId, status, error, shown, all, tot
         >
           <div className="text-primary/70">SecScan Security Scanner</div>
           <div className="text-zinc-600">{RULE}</div>
-          <div className="text-zinc-400">Target  : https://{domain || "…"}</div>
+          <div className="text-zinc-400">Target  : {repository ? `https://github.com/${repository}` : `https://${domain || "…"}`}</div>
           <div className="text-zinc-400">Session : {sessionId}</div>
           {totalChecks > 0 && <div className="text-zinc-400">Checks  : {totalChecks}{complete && caughtUp ? ` across ${t.tests} tests` : ""}</div>}
-          <div className="text-zinc-500">A test is one thing the scanner runs; a check is one detection inside it.</div>
+          <div className="text-zinc-500">{repository ? "Reads every text file in the repository, then runs five checks over what it read." : "A test is one thing the scanner runs; a check is one detection inside it."}</div>
           <div className="text-zinc-500">Every line is a real result, in the colour of its kind of check.</div>
           <div className="text-zinc-600 mb-3">{RULE}</div>
 
@@ -127,7 +140,11 @@ export function ScanTerminal({ domain, sessionId, status, error, shown, all, tot
           {complete && caughtUp && (
             <div className="mt-4 flex flex-col gap-0.5 text-green-400">
               <span className="text-zinc-600">{RULE}</span>
-              <span>✓ {t.tests} tests, {totalChecks} checks: {t.clear} clear, {t.finding} with findings, {t.checked} checked, {t.notRun} not run{t.unrecorded > 0 ? `, ${t.unrecorded} not recorded` : ""}</span>
+              {repository ? (
+                <span>{repoSummary(all)}</span>
+              ) : (
+                <span>✓ {t.tests} tests, {totalChecks} checks: {t.clear} clear, {t.finding} with findings, {t.checked} checked, {t.notRun} not run{t.unrecorded > 0 ? `, ${t.unrecorded} not recorded` : ""}</span>
+              )}
               {t.failed > 0 && <span className="text-amber-400">{t.failed} {t.failed === 1 ? "test" : "tests"} did not run to completion: see above.</span>}
               <span className="text-zinc-500 text-xs">Opening your report…</span>
             </div>
@@ -143,7 +160,7 @@ export function ScanTerminal({ domain, sessionId, status, error, shown, all, tot
 
         <div className="bg-[#161b22] border-t border-white/[0.06] px-5 py-3">
           <div className="flex items-center justify-between text-xs font-mono mb-2">
-            <span className="text-zinc-500">{checksShown}{totalChecks ? ` of ${totalChecks}` : ""} checks shown</span>
+            <span className="text-zinc-500">{repository ? `${shown.filter((i) => i.kind === "test").length} steps shown` : `${checksShown}${totalChecks ? ` of ${totalChecks}` : ""} checks shown`}</span>
             <span className={cn("font-semibold", complete ? "text-green-400" : failed ? "text-red-400" : "text-primary")}>{progress}%</span>
           </div>
           <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">

@@ -25,6 +25,8 @@ export interface LiveTest {
   reason?: string;
   /** Finding category, for colour. Null for a step with no findings of its own. */
   category?: string | null;
+  /** Real numbers for the line ("168 of 544 read"), for steps whose outcome alone says too little. */
+  detail?: string;
   checks?: LiveCheck[];
 }
 
@@ -50,9 +52,9 @@ export function toRow(t: LiveTest): TerminalRow {
     return { mark: "✗", tone: "failed", group: t.group, name: t.name, result: `did not run: ${t.reason ?? "unknown error"}` };
   }
   if (t.findings > 0) {
-    return { mark: "!", tone: "finding", group: t.group, name: t.name, result: `${t.findings} ${t.findings === 1 ? "finding" : "findings"}` };
+    return { mark: "!", tone: "finding", group: t.group, name: t.name, result: `${t.findings} ${t.findings === 1 ? "finding" : "findings"}${t.detail ? ` · ${t.detail}` : ""}` };
   }
-  return { mark: "✓", tone: "clean", group: t.group, name: t.name, result: "no issues found" };
+  return { mark: "✓", tone: "clean", group: t.group, name: t.name, result: t.detail ?? "no issues found" };
 }
 
 /** One check inside a test. "checked" means it ran but a finding could not be placed, so it is not called clear. */
@@ -135,15 +137,18 @@ export function tally(tests: LiveTest[], totalChecks: number): Tally {
   };
 }
 
+/** A repository scan shows about this many steps (listing, reading in stages, five checks); only shapes the progress bar. */
+export const EXPECTED_REPO_STEPS = 14;
+
 /** The scanner runs about this many tests; only used to shape the progress bar. */
 export const EXPECTED_TESTS = 40;
 
 /** Bar position from what is actually on screen, so it never runs ahead of the lines. */
-export function progressPercent(status: string, revealedTests: number): number {
+export function progressPercent(status: string, revealedTests: number, expectedTests = EXPECTED_TESTS): number {
   if (status === "complete") return 100;
   if (status === "failed") return 0;
   if (["queued", "paid", "pending"].includes(status)) return Math.min(8, 2 + revealedTests);
-  const scanning = 10 + Math.round((Math.min(revealedTests, EXPECTED_TESTS) / EXPECTED_TESTS) * 78);
+  const scanning = 10 + Math.round((Math.min(revealedTests, expectedTests) / expectedTests) * 78);
   return status === "analyzing" ? Math.max(scanning, 92) : Math.min(scanning, 88);
 }
 

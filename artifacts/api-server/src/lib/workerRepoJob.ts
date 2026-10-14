@@ -12,6 +12,8 @@ import { parseGithubRepoRef, githubProbeOutcome } from "./githubSourceProbe";
 import { scanRepository } from "./repoScan";
 import { githubInstallationSource, publicGithubSource } from "./repoSource";
 import { buildReport } from "./workerReport";
+import { createLiveProgress } from "./liveProgress";
+import { progressRecord } from "./repoProgress";
 import { persistReport, refundIfPaid } from "./workerPersist";
 import type { Log } from "./workerTypes";
 
@@ -43,18 +45,22 @@ export async function processRepoOnlyJob(input: RepoJobInput): Promise<void> {
     return;
   }
 
-  const ledger = new TestLedger();
+  // The steps of the read are shown on the progress page as they happen (and saved with the scan row, not the report).
+  const live = createLiveProgress(scanId);
+  const ledger = new TestLedger(live.add);
   let findings: ScanResult["vulnerabilities"];
   try {
     const source = githubAccessToken ? githubInstallationSource(ref, githubAccessToken) : publicGithubSource(ref);
-    findings = await ledger.trackOutcome("passive", SOURCE_TEST_NAME, scanRepository(source, ref).then((o) => githubProbeOutcome(o, ref)));
+    findings = await ledger.trackOutcome("passive", SOURCE_TEST_NAME, scanRepository(source, ref, { onProgress: (e) => ledger.progress(progressRecord(e)) }).then((o) => githubProbeOutcome(o, ref)));
   } catch (err) {
     log.error({ err }, "Repository scan failed");
+    await live.finish();
     await fail(`GitHub could not be read just now: ${err instanceof Error ? err.message.slice(0, 160) : "unknown error"}. You were not charged; try again in a few minutes.`);
     return;
   }
 
   // Not read at all (private and not shared, or no such repository): nothing to report, so nothing to charge for.
+  await live.finish();
   const record = ledger.records.find((r) => r.name === SOURCE_TEST_NAME);
   if (!record || record.status !== "ran") {
     await fail(
