@@ -9,8 +9,8 @@ import { createProxyMiddleware } from "http-proxy-middleware";
 import router from "./routes";
 import oauthMetadataRouter from "./routes/oauthMetadata";
 import { logger } from "./lib/logger";
-import { isSpaRoute } from "./lib/spaRoutes";
-import { metaForPath, applyPageMeta, withRenderedRoot, PRERENDERED } from "./lib/pageMeta";
+import { isSpaRoute, setLearnCheckIds } from "./lib/spaRoutes";
+import { metaForPath, applyPageMeta, withRenderedRoot, registerChecks, PRERENDERED, type CheckMeta } from "./lib/pageMeta";
 import { staticCacheControl } from "./lib/cachePolicy";
 import { authMiddleware } from "./middlewares/authMiddleware";
 import { configureTrustProxy } from "./lib/clientIp";
@@ -257,6 +257,16 @@ if (process.env.NODE_ENV !== "production") {
     const renderedRoot = new Map(
       Object.entries(PRERENDERED).map(([route, name]) => [route, prerendered(`${name}.root`)] as const),
     );
+    // The documented checks (one page each at /learn/<id>), written by the frontend build.
+    // Without the list those paths are let through and the client decides what to show.
+    try {
+      const checks = JSON.parse(readFileSync(nodePath.join(staticDir, "prerender", "checks.json"), "utf-8")) as CheckMeta[];
+      registerChecks(checks);
+      setLearnCheckIds(checks.map((c) => c.id));
+      for (const c of checks) renderedRoot.set(`/learn/${c.id}`, prerendered(`learn-${c.id}.root`));
+    } catch {
+      logger.warn("prerender/checks.json missing — /learn/<id> pages are not validated or prerendered");
+    }
     const normalise = (p: string): string => p.replace(/\/+$/, "") || "/";
 
     app.get(/.*/, (req, res) => {

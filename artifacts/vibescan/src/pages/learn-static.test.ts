@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { renderLearnStatic } from "./learn-static";
-import { learnStaticHtml } from "./learn-static-entry";
+import { renderLearnStatic, renderLearnMarkdown } from "./learn-static";
+import { learnStaticHtml, learnStaticMarkdown } from "./learn-static-entry";
 import { LEARN_CATEGORIES_A } from "./learn-data-a";
 import { LEARN_CATEGORIES_B } from "./learn-data-b";
 import { LEARN_CATEGORIES_C } from "./learn-data-c";
@@ -29,5 +29,23 @@ describe("renderLearnStatic", () => {
     expect(html).not.toContain("<script>");
     expect(html).not.toContain("<img");
     expect(html).toContain("&lt;script&gt;");
+  });
+});
+
+describe("renderLearnMarkdown", () => {
+  it("has a heading and the fix for every check, with the origin placeholder for the build to rewrite", () => {
+    for (const cat of ALL) {
+      expect(learnStaticMarkdown).toContain(`## ${cat.label}`);
+      for (const c of cat.checks) expect(learnStaticMarkdown, c.id).toContain(`### ${c.title}`);
+    }
+    expect(learnStaticMarkdown.match(/\*\*How to fix it\.\*\*/g)?.length).toBe(ALL.reduce((n, c) => n + c.checks.length, 0));
+    expect(learnStaticMarkdown).toContain("https://seclayer.io/learn");
+  });
+
+  it("fences code with its language", () => {
+    const cat = { id: "x", label: "L", description: "d", icon: () => null, checks: [
+      { id: "a", title: "T", shortTitle: "T", severity: "low", what: "w", why: "y", howTested: "h", fix: "f", fixCode: "x = 1", fixCodeLang: "nginx" },
+    ] } as unknown as Category;
+    expect(renderLearnMarkdown([cat], "https://e.test")).toContain("```nginx\nx = 1\n```");
   });
 });

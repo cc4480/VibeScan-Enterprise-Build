@@ -13,6 +13,14 @@ for each change; this collects what shipped and why it mattered.
   the server places each page's markup in the root container. `/learn` also gets every check written out
   in its `<noscript>` block. The step is best-effort: if the browser cannot be installed or a page fails
   to render, that page is served as before and the build still succeeds.
+- **Every documented check has its own page** at `/learn/<id>` (19 of them, e.g. `/learn/hsts`). Each opens
+  with the plain answer, has its own title, description, canonical, breadcrumb, TechArticle and a two-question
+  FAQ in the structured data, is prerendered like the pages above, and is in the sitemap. The build writes
+  the list of valid ids (`prerender/checks.json`); the server answers 404 for any other `/learn/<id>`.
+- **`/llms-full.txt`**: the full text of every check in one Markdown file for language models, built from the
+  same data as the page and linked from `llms.txt`.
+- `/learn` carries TechArticle markup with the date it was last reviewed (a test keeps it equal to the date
+  the page shows).
 - The homepage meta description is 155 characters (was 204), and `/oauth/` and `/feedback` are in the
   `robots.txt` Disallow list.
 

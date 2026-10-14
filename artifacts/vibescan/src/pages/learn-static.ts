@@ -1,4 +1,5 @@
 import type { Category } from "./learn-types";
+import { checkPath } from "./learn-checks";
 
 function esc(v: string): string {
   return v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -21,7 +22,7 @@ export function renderLearnStatic(categories: Category[]): string {
     for (const c of cat.checks) {
       const refs = [c.owasp && `OWASP ${c.owasp}`, c.cweId, c.wstgId].filter(Boolean).join(" · ");
       out.push(
-        `<article id="${esc(c.id)}"><h3>${esc(c.title)}</h3>` +
+        `<article id="${esc(c.id)}"><h3><a href="${checkPath(c.id)}">${esc(c.title)}</a></h3>` +
           `<p><strong>Severity:</strong> ${esc(c.severity)}${refs ? ` — ${esc(refs)}` : ""}</p>` +
           `<h4>What it is</h4><p>${esc(c.what)}</p>` +
           `<h4>Why it matters</h4><p>${esc(c.why)}</p>` +
@@ -32,6 +33,45 @@ export function renderLearnStatic(categories: Category[]): string {
       );
     }
     out.push("</section>");
+  }
+  return out.join("\n");
+}
+
+/**
+ * The same documentation as Markdown, for /llms-full.txt: one file a language model
+ * can read whole, without following links or running a page. Built from the same
+ * check data as the page and the HTML above.
+ */
+export function renderLearnMarkdown(categories: Category[], origin: string): string {
+  const out: string[] = [
+    "# SecScan security documentation",
+    "",
+    `> The checks SecScan runs, what each one means and how to fix it. Source: ${origin}/learn. ` +
+      `A summary of the product is at ${origin}/llms.txt.`,
+    "",
+  ];
+  for (const cat of categories) {
+    out.push(`## ${cat.label}`, "", cat.description, "");
+    for (const c of cat.checks) {
+      const refs = [c.owasp && `OWASP ${c.owasp}`, c.cweId, c.wstgId].filter(Boolean).join(", ");
+      out.push(
+        `### ${c.title}`,
+        "",
+        `Page: ${origin}${checkPath(c.id)}`,
+        "",
+        `Severity: ${c.severity}${refs ? ` (${refs})` : ""}`,
+        "",
+        `**What it is.** ${c.what}`,
+        "",
+        `**Why it matters.** ${c.why}`,
+        "",
+        `**How SecScan tests it.** ${c.howTested}`,
+        "",
+        `**How to fix it.** ${c.fix}`,
+        "",
+      );
+      if (c.fixCode) out.push("```" + (c.fixCodeLang ?? ""), c.fixCode, "```", "");
+    }
   }
   return out.join("\n");
 }

@@ -1,8 +1,10 @@
 /** Severity badge, code block and the expandable check. */
 import { useState } from "react";
+import { Link } from "wouter";
 import { Shield, ExternalLink, AlertTriangle, Info, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Severity, Check } from "./learn-types";
+import { checkPath } from "./learn-checks";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -134,6 +136,10 @@ export function CheckAccordion({ check }: { check: Check }) {
             <p className="text-sm text-muted-foreground leading-relaxed mb-1">{check.fix}</p>
             {check.fixCode && <CodeBlock code={check.fixCode} lang={check.fixCodeLang} />}
           </div>
+
+          <Link href={checkPath(check.id)} className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline mr-4">
+            Open this check on its own page
+          </Link>
 
           {check.learnMore && (
             <a

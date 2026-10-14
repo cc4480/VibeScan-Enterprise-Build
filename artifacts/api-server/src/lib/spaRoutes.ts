@@ -38,7 +38,25 @@ export const SPA_ROUTES: RegExp[] = [
   /^\/oauth\/authorize\/?$/,
 ];
 
+/** /learn/<id>: one page per documented check. The ids come from the frontend build. */
+const LEARN_CHECK = /^\/learn\/([a-z0-9-]+)\/?$/;
+
+let learnCheckIds: ReadonlySet<string> | null = null;
+
+/**
+ * The ids the frontend build says have a page (prerender/checks.json). A path
+ * naming any other id is a 404 here, not the app shell: otherwise every
+ * /learn/<anything> would be a 200, which is the soft-404 shape the list above
+ * exists to prevent. Null (the build did not write the list) lets any well-formed
+ * id through, so the pages keep working and the client shows its own not-found.
+ */
+export function setLearnCheckIds(ids: Iterable<string> | null): void {
+  learnCheckIds = ids === null ? null : new Set(ids);
+}
+
 /** Whether the SPA shell should be served for this path. */
 export function isSpaRoute(path: string): boolean {
+  const check = LEARN_CHECK.exec(path);
+  if (check) return learnCheckIds === null || learnCheckIds.has(check[1]!);
   return SPA_ROUTES.some((re) => re.test(path));
 }

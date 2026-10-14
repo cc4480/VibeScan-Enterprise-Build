@@ -290,3 +290,32 @@ describe("withRenderedRoot", () => {
     expect(pages).toEqual(PRERENDERED);
   });
 });
+
+describe("TechArticle on the documentation page", () => {
+  it("describes /learn as an article by the founder, linked to its page", () => {
+    const g = graphOf(applyPageMeta(SHELL_WITH_LD, metaForPath("/learn")!));
+    const article = g.find((n) => n["@type"] === "TechArticle")!;
+
+    expect(article["url"]).toBe("https://secscan.us/learn");
+    expect(article["author"]).toEqual({ "@id": "https://secscan.us/#founder" });
+    expect(article["publisher"]).toEqual({ "@id": "https://secscan.us/#organization" });
+    expect(article["isPartOf"]).toEqual({ "@id": "https://secscan.us/learn#webpage" });
+    expect(article["dateModified"]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("is on no other page", () => {
+    for (const path of ["/", "/about", "/bot", "/privacy", "/terms"]) {
+      const meta = metaForPath(path);
+      if (!meta) continue;
+      expect(graphOf(applyPageMeta(SHELL_WITH_LD, meta)).map((n) => n["@type"]), path).not.toContain("TechArticle");
+    }
+  });
+
+  it("carries the date shown on the page as 'last reviewed'", () => {
+    const page = readFileSync(new URL("../../../vibescan/src/pages/learn-checks.ts", import.meta.url), "utf8");
+    const shown = /LEARN_LAST_REVIEWED = "([^"]+)"/.exec(page)?.[1];
+    expect(shown).toBeDefined();
+    const iso = new Date(`${shown} 00:00:00 UTC`).toISOString().slice(0, 10);
+    expect(metaForPath("/learn")!.article?.dateModified).toBe(iso);
+  });
+});

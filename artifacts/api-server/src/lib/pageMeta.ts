@@ -25,7 +25,32 @@ export interface PageMeta {
   breadcrumb?: { name: string; path: string }[];
   /** schema.org type for the page node, when it is more specific than WebPage. */
   pageType?: "AboutPage";
+  /** Adds a TechArticle node: the page is documentation, last reviewed on this ISO date. */
+  article?: { dateModified: string };
+  /** Question and answer pairs, written out as FAQPage markup. */
+  faq?: { q: string; a: string }[];
 }
+
+/** One documented check, as written by the frontend build (see checkManifest in the page data). */
+export interface CheckMeta {
+  id: string;
+  title: string;
+  description: string;
+  name: string;
+  what: string;
+  fix: string;
+}
+
+const CHECKS = new Map<string, CheckMeta>();
+
+/** Load the list of /learn/<id> pages. Called once at startup with the build's checks.json. */
+export function registerChecks(list: CheckMeta[]): void {
+  CHECKS.clear();
+  for (const c of list) CHECKS.set(c.id, c);
+}
+
+/** Date the documentation was last reviewed: LEARN_LAST_REVIEWED in the frontend (a test keeps them equal). */
+const LEARN_REVIEWED = "2026-09-24";
 
 const SITE = (process.env["APP_ORIGIN"] ?? "https://secscan.us").replace(/\/$/, "");
 
@@ -38,7 +63,32 @@ const ROUTES: { match: RegExp; meta: (path: string) => PageMeta }[] = [
       description:
         "Plain-English guides to the key security checks SecScan runs: HTTPS, HSTS, CSP, CORS, cookie flags and Supabase RLS, each with a code fix to paste.",
       breadcrumb: [{ name: "Security documentation", path: "/learn" }],
+      // Same date as LEARN_LAST_REVIEWED in the page (a test keeps them equal).
+      article: { dateModified: LEARN_REVIEWED },
     }),
+  },
+  {
+    match: /^\/learn\/([a-z0-9-]+)\/?$/,
+    meta: (p) => {
+      const c = CHECKS.get(/^\/learn\/([a-z0-9-]+)/.exec(p)?.[1] ?? "");
+      // Not a documented check: say nothing to a search engine about it. The server
+      // answers 404 for these before it gets here; this covers the lenient case.
+      if (!c) return { path: p, title: "Page not found — SecScan.us", noindex: true };
+      return {
+        path: `/learn/${c.id}`,
+        title: c.title,
+        description: c.description,
+        breadcrumb: [
+          { name: "Security documentation", path: "/learn" },
+          { name: c.name, path: `/learn/${c.id}` },
+        ],
+        article: { dateModified: LEARN_REVIEWED },
+        faq: [
+          { q: `What is ${c.name}?`, a: c.what },
+          { q: `How do I fix ${c.name}?`, a: c.fix },
+        ],
+      };
+    },
   },
   {
     match: /^\/privacy\/?$/,
@@ -203,6 +253,36 @@ function applyJsonLd(html: string, meta: PageMeta, url: string): string {
 
     return [node];
   });
+
+  // The documentation is an article by the founder, which is what lets an answer
+  // engine attribute and date what it quotes. Added after the page node it describes.
+  if (meta.article) {
+    next.push({
+      "@type": "TechArticle",
+      "@id": `${url}#article`,
+      headline: meta.title ?? "Security documentation",
+      ...(meta.description ? { description: meta.description } : {}),
+      url,
+      inLanguage: "en-US",
+      dateModified: meta.article.dateModified,
+      author: { "@id": `${SITE}/#founder` },
+      publisher: { "@id": `${SITE}/#organization` },
+      isPartOf: { "@id": `${url}#webpage` },
+      mainEntityOfPage: { "@id": `${url}#webpage` },
+    });
+  }
+
+  if (meta.faq?.length) {
+    next.push({
+      "@type": "FAQPage",
+      "@id": `${url}#faq`,
+      mainEntity: meta.faq.map((f) => ({
+        "@type": "Question",
+        name: f.q,
+        acceptedAnswer: { "@type": "Answer", text: f.a },
+      })),
+    });
+  }
 
   const json = JSON.stringify({ "@context": "https://schema.org", "@graph": next });
   // `</script>` inside a JSON string would close this block early.

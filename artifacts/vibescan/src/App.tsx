@@ -16,6 +16,7 @@ import ReportViewer from "@/pages/report-viewer";
 import MonitorPage from "@/pages/monitor";
 import SharedReport from "@/pages/shared-report";
 import LearnPage from "@/pages/learn";
+import LearnCheckPage from "@/pages/learn-check";
 import SettingsPage from "@/pages/settings";
 import DomainsPage from "@/pages/domains";
 import FeedbackPage from "@/pages/feedback";
@@ -203,6 +204,7 @@ function Router() {
           <Switch>
             <Route path="/" component={LandingPage} />
             <Route path="/learn" component={LearnPage} />
+            <Route path="/learn/:id" component={LearnCheckPage} />
             <Route path="/bot" component={BotPage} />
             <Route path="/about" component={AboutPage} />
             <Route path="/privacy">{() => <LegalPage kind="privacy" />}</Route>

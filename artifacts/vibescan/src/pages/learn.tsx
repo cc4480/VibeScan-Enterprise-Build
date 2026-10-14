@@ -4,18 +4,9 @@ import { Shield, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSeo } from "@/lib/seo";
 import { APP_ORIGIN } from "@/lib/origin";
-import type { Severity, Category } from "./learn-types";
-import { LEARN_CATEGORIES_A } from "./learn-data-a";
-import { LEARN_CATEGORIES_B } from "./learn-data-b";
-import { LEARN_CATEGORIES_C } from "./learn-data-c";
+import type { Severity } from "./learn-types";
+import { LEARN_CATEGORIES as CATEGORIES, LEARN_LAST_REVIEWED } from "./learn-checks";
 import { SEV_CONFIG, CheckAccordion } from "./learn-parts";
-
-/** Update when the checks below are reviewed against the scanner. Shown on the page. */
-const LEARN_LAST_REVIEWED = "September 24, 2026";
-
-// ─── Data ────────────────────────────────────────────────────────────────────
-
-const CATEGORIES: Category[] = [...LEARN_CATEGORIES_A, ...LEARN_CATEGORIES_B, ...LEARN_CATEGORIES_C];
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 

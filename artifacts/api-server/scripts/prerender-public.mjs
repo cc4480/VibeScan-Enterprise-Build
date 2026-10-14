@@ -19,6 +19,16 @@ const dist = path.resolve(
 // route → file name. Keep in step with PRERENDERED in src/app.ts.
 const PAGES = { "/": "home", "/learn": "learn", "/about": "about", "/bot": "bot", "/privacy": "privacy", "/terms": "terms" };
 
+// The check pages (/learn/<id>) come from the list the frontend build wrote.
+async function checkPages() {
+  try {
+    const list = JSON.parse(await readFile(path.join(dist, "prerender", "checks.json"), "utf8"));
+    return Object.fromEntries(list.map((c) => [`/learn/${c.id}`, `learn-${c.id}`]));
+  } catch {
+    return {};
+  }
+}
+
 const TYPES = {
   ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json",
   ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp",
@@ -60,7 +70,7 @@ async function main() {
   try {
     browser = await chromium.launch({ args: ["--no-sandbox"], executablePath: process.env.PRERENDER_CHROME_PATH || undefined });
     await mkdir(path.join(dist, "prerender"), { recursive: true });
-    for (const [route, name] of Object.entries(PAGES)) {
+    for (const [route, name] of Object.entries({ ...PAGES, ...(await checkPages()) })) {
       const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
       try {
         await page.goto(origin + route, { waitUntil: "load", timeout: 30_000 });

@@ -138,6 +138,8 @@ revoked any time.
 
 ## Reference documentation
 
+The full text of every check this scanner runs, in one file: https://secscan.us/llms-full.txt
+
 Full documentation lives on https://secscan.info, which has its own llms.txt at
 https://secscan.info/llms.txt:
 

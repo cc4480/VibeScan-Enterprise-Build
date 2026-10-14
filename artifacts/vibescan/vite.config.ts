@@ -73,7 +73,7 @@ function applyOriginToPublicFiles(): Plugin {
 }
 
 /**
- * Writes the /learn documentation as plain HTML next to the bundle, for the API
+ * Writes the /learn documentation as plain HTML (and as /llms-full.txt) next to the bundle, for the API
  * server to add to that page's <noscript> block (lib/pageMeta.ts). Crawlers that
  * do not run JavaScript otherwise get one line of a page that is mostly content.
  * The text comes from the same check data the page renders (src/pages/learn-static.ts).
@@ -84,7 +84,7 @@ function prerenderStaticContent(): Plugin {
     name: "prerender-static-content",
     apply: "build",
     async closeBundle() {
-      const { mkdir, writeFile } = await import("node:fs/promises");
+      const { mkdir, writeFile, readFile } = await import("node:fs/promises");
       const server = await createServer({
         configFile: false,
         root: import.meta.dirname,
@@ -98,6 +98,20 @@ function prerenderStaticContent(): Plugin {
         const dir = path.resolve(import.meta.dirname, "dist/public/prerender");
         await mkdir(dir, { recursive: true });
         await writeFile(path.join(dir, "learn.html"), applyOrigin(String(mod.learnStaticHtml)));
+        await writeFile(
+          path.resolve(import.meta.dirname, "dist/public/llms-full.txt"),
+          applyOrigin(String(mod.learnStaticMarkdown)),
+        );
+        // The server's list of /learn/<id> pages (it answers 404 for any other id) and their metadata.
+        await writeFile(path.join(dir, "checks.json"), JSON.stringify(mod.learnCheckManifest));
+        // Each check page in the sitemap, with the date the documentation was last reviewed.
+        const sitemapFile = path.resolve(import.meta.dirname, "dist/public/sitemap.xml");
+        const sitemap = await readFile(sitemapFile, "utf8");
+        const lastmod = new Date(`${mod.LEARN_LAST_REVIEWED} 00:00:00 UTC`).toISOString().slice(0, 10);
+        const urls = (mod.learnCheckManifest as { id: string }[])
+          .map((c) => `  <url>\n    <loc>${APP_ORIGIN}/learn/${c.id}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.6</priority>\n  </url>\n`)
+          .join("");
+        if (!sitemap.includes("/learn/")) await writeFile(sitemapFile, sitemap.replace("</urlset>", urls + "</urlset>"));
       } catch (err) {
         console.warn("prerender-static-content: skipped —", err instanceof Error ? err.message : err);
       } finally {
