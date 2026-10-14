@@ -1,6 +1,7 @@
 import { Switch, Route, Router as WouterRouter, useLocation, Link } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useEffect, Component, type ReactNode } from "react";
+import { useEffect, Component, Suspense, type ReactNode } from "react";
+import { lazyPage } from "@/lib/lazy-page";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
@@ -8,26 +9,37 @@ import { useGetCurrentAuthUser } from "@workspace/api-client-react";
 
 import { Layout } from "@/components/layout";
 import LandingPage from "@/pages/landing";
-import DashboardPage from "@/pages/dashboard";
-import ScanFormPage from "@/pages/scan-form";
-import ScanProgressPage from "@/pages/scan-progress";
-import OAuthAuthorizePage from "@/pages/oauth-authorize";
-import ReportViewer from "@/pages/report-viewer";
-import MonitorPage from "@/pages/monitor";
-import SharedReport from "@/pages/shared-report";
 import LearnPage from "@/pages/learn";
 import LearnCheckPage from "@/pages/learn-check";
-import SettingsPage from "@/pages/settings";
-import DomainsPage from "@/pages/domains";
 import FeedbackPage from "@/pages/feedback";
 import LegalPage from "@/pages/legal";
 import BotPage from "@/pages/bot";
 import AboutPage from "@/pages/about";
 import SignInPage from "@/pages/sign-in";
-import RegisterPage from "@/pages/register";
-import ForgotPasswordPage from "@/pages/forgot-password";
-import ResetPasswordPage from "@/pages/reset-password";
-import VerifyEmailPage from "@/pages/verify-email";
+
+// Signed-in pages load when first opened (lib/lazy-page.ts); the public pages above stay in the main file.
+const DashboardPage = lazyPage(() => import("@/pages/dashboard"));
+const ScanFormPage = lazyPage(() => import("@/pages/scan-form"));
+const ScanProgressPage = lazyPage(() => import("@/pages/scan-progress"));
+const OAuthAuthorizePage = lazyPage(() => import("@/pages/oauth-authorize"));
+const ReportViewer = lazyPage(() => import("@/pages/report-viewer"));
+const MonitorPage = lazyPage(() => import("@/pages/monitor"));
+const SharedReport = lazyPage(() => import("@/pages/shared-report"));
+const SettingsPage = lazyPage(() => import("@/pages/settings"));
+const DomainsPage = lazyPage(() => import("@/pages/domains"));
+const RegisterPage = lazyPage(() => import("@/pages/register"));
+const ForgotPasswordPage = lazyPage(() => import("@/pages/forgot-password"));
+const ResetPasswordPage = lazyPage(() => import("@/pages/reset-password"));
+const VerifyEmailPage = lazyPage(() => import("@/pages/verify-email"));
+
+/** Shown for the moment a page's file is on its way. */
+function PageLoading() {
+  return (
+    <div role="status" aria-label="Loading" className="flex items-center justify-center min-h-[40vh]">
+      <div className="w-8 h-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+    </div>
+  );
+}
 
 // ── ErrorBoundary ────────────────────────────────────────────────────────────
 
@@ -169,6 +181,7 @@ function Router() {
   return (
     <>
     <ScrollToTop />
+    <Suspense fallback={<PageLoading />}>
     <Switch>
       {/* Public share page — rendered without the app Layout (no nav/auth required) */}
       <Route path="/share/:token" component={SharedReport} />
@@ -201,6 +214,8 @@ function Router() {
               was written for made the whole site invisible to new visitors. */}
       <Route>
         <Layout>
+          {/* Inside the layout, so the navigation stays put while a page's file loads. */}
+          <Suspense fallback={<PageLoading />}>
           <Switch>
             <Route path="/" component={LandingPage} />
             <Route path="/learn" component={LearnPage} />
@@ -220,9 +235,11 @@ function Router() {
             <Route path="/domains">{() => <ProtectedRoute><DomainsPage /></ProtectedRoute>}</Route>
             <Route component={NotFound} />
           </Switch>
+          </Suspense>
         </Layout>
       </Route>
     </Switch>
+    </Suspense>
     </>
   );
 }

@@ -5,7 +5,7 @@ import { useListScans } from "@workspace/api-client-react";
 import { Shield, RefreshCw, Loader2, ArrowRight, Bell, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { listMonitorSubscriptions } from "@/lib/monitor-api";
-import { PurchaseResultBanner } from "@/components/billing-options";
+import { PurchaseResultBanner } from "@/components/billing-summary";
 import { ScanRow } from "./dashboard-rows";
 
 export default function DashboardPage() {

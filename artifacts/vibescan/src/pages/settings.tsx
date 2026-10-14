@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Mail, CreditCard, Bot } from "lucide-react";
 import { AiEditorsSection } from "@/components/ai-editors";
 import { ConnectedAppsSection } from "@/components/connected-apps";
-import { BillingSummary } from "@/components/billing-options";
+import { BillingSummary } from "@/components/billing-summary";
 import { PrivacyCard } from "@/components/privacy-card";
 import { cn } from "@/lib/utils";
 import { getEmailPreferences, setEmailPreferences, type EmailPreferences, type EmailPreferenceUpdate } from "@/lib/account-api";

@@ -5,6 +5,15 @@ for each change; this collects what shipped and why it mattered.
 
 ## 2026-10-14
 
+### Performance
+
+- **A first visit downloads half as much.** Every page used to ship in one 1.38 MB script (399 kB compressed), so the
+  landing page paid for the dashboard, report viewer and settings too. The signed-in pages now load when first opened:
+  the main file is 636 kB (201 kB compressed) and the landing page loads that one script alone. The public pages stay in
+  the main file, so they are still prerendered and paint at once. A tab left open across a deploy, which would ask for a
+  file that no longer exists, reloads once by itself instead of showing an error. Two billing files that re-exported each
+  other across chunks (a build warning about load order) now import directly.
+
 ### Reports
 
 - **A repository-only scan gives a fix prompt.** It is built from the findings themselves, with no AI call, so it
