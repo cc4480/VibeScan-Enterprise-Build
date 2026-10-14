@@ -7,6 +7,14 @@ for each change; this collects what shipped and why it mattered.
 
 ### Accuracy
 
+- **Twenty-nine more secret formats are recognised.** AI providers (Groq, OpenRouter, xAI, Perplexity, Together AI,
+  Hugging Face, Pinecone), developer infrastructure (npm and PyPI publish tokens, DigitalOcean, PlanetScale, Doppler, Pulumi,
+  Neon, Supabase management tokens, Databricks, Netlify, Atlassian, Linear, Notion, Figma), payments and commerce (Shopify,
+  Square), messaging (Brevo, Telegram, Discord, Mailgun) and cloud files (Azure storage connection strings, Google Cloud
+  service-account key files). Each is a vendor's own token shape; Discord and Mailgun, which have no distinctive prefix, must
+  follow a word naming the vendor or a token. Every format has a positive, a near miss and a full-scanner test, and a set of
+  ordinary-code lines that must stay quiet. They apply to a website's scripts and to repositories alike.
+
 - **The repository scan checks dependencies in seven ecosystems, and flags malicious packages.** It read only
   package.json and package-lock.json (npm). It now also reads yarn.lock, pnpm-lock.yaml and bun.lock; Python (poetry.lock,
   uv.lock, Pipfile.lock, pinned requirements.txt); Go (go.mod); Rust (Cargo.lock); Ruby (Gemfile.lock) and PHP

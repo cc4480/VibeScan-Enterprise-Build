@@ -5,6 +5,7 @@
 
 import { VENDOR_SECRET_PATTERNS } from "./secret-pattern-vendors";
 import { GENERIC_SECRET_PATTERNS } from "./secret-pattern-generic";
+import { MORE_VENDOR_PATTERNS } from "./secret-pattern-more";
 import type { ScanVulnerability } from "./scanner";
 
 export interface SecretPattern {
@@ -34,4 +35,4 @@ export interface SecretPattern {
   skipPlaceholderCheck?: boolean;
 }
 
-export const SECRET_PATTERNS: SecretPattern[] = [...VENDOR_SECRET_PATTERNS, ...GENERIC_SECRET_PATTERNS];
+export const SECRET_PATTERNS: SecretPattern[] = [...VENDOR_SECRET_PATTERNS, ...MORE_VENDOR_PATTERNS, ...GENERIC_SECRET_PATTERNS];
