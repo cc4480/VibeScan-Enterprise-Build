@@ -105,3 +105,21 @@ describe("unsafe-inline in style-src alone", () => {
     expect(found?.severity).toBe("medium");
   });
 });
+
+describe("object-src falls back to default-src (Google CSP Evaluator behaviour)", () => {
+  const found = (csp: string) => cspFindings(page("<html></html>", { "content-security-policy": csp })).some((v) => /object-src/.test(v.name));
+
+  it("does not flag a policy whose default-src already confines plugin content", () => {
+    expect(found("default-src 'self'; script-src 'self'")).toBe(false);
+    expect(found("default-src 'none'; script-src 'self'")).toBe(false);
+    expect(found("script-src 'self'; object-src 'none'")).toBe(false);
+    expect(found("script-src 'self'; object-src 'self'")).toBe(false);
+  });
+
+  it("clean twin: flags a policy with no object-src and no default-src, or one that allows any origin or data:", () => {
+    expect(found("script-src 'self'")).toBe(true);
+    expect(found("default-src *; script-src 'self'")).toBe(true);
+    expect(found("script-src 'self'; object-src data:")).toBe(true);
+    expect(found("default-src https:; script-src 'self'")).toBe(true);
+  });
+});

@@ -6,6 +6,7 @@ for each change; this collects what shipped and why it mattered.
 ## 2026-10-14
 
 ### Accuracy
+- A CSP with `default-src 'self'` (or `'none'`) is no longer reported as missing `object-src`: object-src falls back to default-src. It is flagged only when nothing restricts it or the effective list allows `*`, `data:` or a whole scheme; severity is now low, matching the catalog.
 
 - **Two false positives in existing checks, found by reading the RFCs against our code.** HSTS: a quoted `max-age="31536000"`
   (valid under RFC 6797) was read as zero and reported as "too short"; the header is now parsed the way a browser does (quoted

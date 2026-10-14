@@ -1,4 +1,4 @@
-import { analyzeCsp, extractMetaCsp } from "./headerAnalysis.js";
+import { analyzeCsp, extractMetaCsp, parseCsp } from "./headerAnalysis.js";
 import { headerVal, vuln, type ScanVulnerability, type PageContext } from "./scannerTypes";
 
 /** Content-Security-Policy presence and deep analysis of the policy. */
@@ -92,12 +92,17 @@ Content-Security-Policy-Report-Only: ${cspReportOnly.slice(0, 200)}`,
   // ── CSP deep analysis (when CSP exists) ──────────────────────────────
   if (csp) {
     // object-src 'none' prevents Flash/Java plugins and data: URI XSS escalation
-    if (!/object-src\s+'none'/i.test(csp) && !/object-src\s+['"]\s*['"]/i.test(csp)) {
-      const hasDefaultNone = /default-src\s+'none'/i.test(csp);
-      if (!hasDefaultNone) {
+    // object-src falls back to default-src, so the effective source list is what counts (as Google's CSP Evaluator does):
+    // default-src 'self' already confines plugin content to the site's own origin. Flag it only when nothing restricts it,
+    // or what restricts it allows any origin or a data: or scheme-wide source.
+    {
+      const dirs = parseCsp(csp);
+      const effective = dirs.get("object-src") ?? dirs.get("default-src");
+      const restricted = effective !== undefined && !effective.some((t) => /^(?:\*|data:|https?:|'unsafe-inline')$/i.test(t));
+      if (!restricted) {
         vulnerabilities.push(vuln({
           name: "CSP Missing object-src 'none' Directive",
-          severity: "medium",
+          severity: "low",
           category: "Injection Defense",
           description: "The Content-Security-Policy does not include 'object-src: none'. Without this, browsers may allow Flash, Java, or other plugin content to load, which can bypass script-src restrictions entirely. XSS via plugin content is a known CSP bypass technique.",
           evidence: `GET ${finalUrl}\n${shown}\n(object-src directive absent — plugin content unrestricted)`,
