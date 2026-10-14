@@ -5,8 +5,33 @@ for each change; this collects what shipped and why it mattered.
 
 ## 2026-10-13
 
+### Security
+
+- **Connections are pinned for webhooks, domain verification and monitor pulses.** The SSRF check
+  resolved a hostname and `fetch` then resolved it again, so a DNS-rebinding record could pass the
+  check and be connected to. Webhooks and domain verification now connect through `strictDispatcher`
+  (private addresses refused at connect time, even with `ALLOW_PRIVATE_SCAN_TARGETS`); the pulse uses
+  the scanner's dispatcher.
+- **Free scans and the daily limit hold under concurrent requests.** Both were counted from scan rows
+  written later, so parallel requests all passed. They are now checked under a per-user lock at insert.
+  A deleted account's free scans used that month are remembered (a keyed hash of the email, purged after
+  the month) so signing up again does not reset them. Migration 0030.
+- **Deleting an account needs an emailed code**, not only a session, and runs in one transaction.
+- **Sign-in:** an account is locked for 15 minutes after 10 failed passwords from any addresses.
+- **Emails escape dynamic values** (alert emails and the account heading).
+- **`ENCRYPTION_KEY_PREVIOUS`** lets the encryption key be rotated without losing stored logins.
+- Smaller: report, share and badge routes answer 404 for a malformed or foreign id; `GET /logout` ignores
+  cross-site requests; the Postgres pool handles idle-client errors; public share and badge reads are
+  rate limited; `GET /scans` returns the newest 200 (`?limit=` up to 500); checkout return URLs always
+  use `APP_ORIGIN`.
+
 ### Changed
 
+- **Dependency advisories cleared.** `vite`, `vitest`, `esbuild` (the override pinned 0.27.3) and the
+  transitive `postcss`, `nanoid`, `lodash`, `browserslist`, `@babel/core`, `source-map-js` and
+  `postcss-selector-parser` are on patched versions. `pnpm audit` went from 24 advisories to 1
+  (`braces` under the dev-only proxy, no patched release exists). The duplicate `drizzle-orm` copies are
+  gone, so the type check is clean again.
 - **One universal fix prompt for every AI coding tool.** The report's fix prompt used to be
   written differently for each detected platform (Lovable, Bolt, Next.js for "Cursor or Claude
   Code", WordPress and so on), and the report page wrapped it again per tool, one wrapper telling
