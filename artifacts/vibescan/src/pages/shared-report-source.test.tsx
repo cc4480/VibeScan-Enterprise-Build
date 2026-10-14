@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  SourceCodeCard, PrintSourceCode, sourceCodeMarkdown, sourceTestOf, repoFindingsOf, findingFile, isPartial, readSummary, partialNotes,
+  mostSevere, SourceCodeCard, PrintSourceCode, sourceCodeMarkdown, sourceTestOf, repoFindingsOf, findingFile, isPartial, readSummary, partialNotes,
   SOURCE_TEST_NAME,
 } from "./shared-report-source";
 
@@ -133,5 +133,18 @@ describe("a scan from before the report kept what was read", () => {
   it("still shows that a given repository was not read, even without its name recorded", () => {
     expect(sourceTestOf([OLD_PRIVATE])).toBe(OLD_PRIVATE);
     expect(renderToStaticMarkup(<SourceCodeCard tests={[OLD_PRIVATE]} vulnerabilities={[]} />)).toContain("The repository was not read");
+  });
+});
+
+describe("mostSevere", () => {
+  const f = (name: string, severity: string) => ({ name, severity });
+
+  it("lists the most severe first and keeps the scan's order within a severity", () => {
+    const got = mostSevere([f("a", "info"), f("b", "medium"), f("c", "info"), f("d", "high")], 3).map((x) => x.name);
+    expect(got).toEqual(["d", "b", "a"]);
+  });
+
+  it("returns everything when there are fewer than the limit", () => {
+    expect(mostSevere([f("a", "info")], 12)).toHaveLength(1);
   });
 });

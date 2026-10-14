@@ -39,6 +39,19 @@ export function sourceTestOf(tests: unknown): (CoverageTest & { source?: SourceR
 }
 
 /** Findings that were read from the repository's files: they all say "Repository: owner/repo" first. */
+/** Findings listed in the report's side card; the rest are in the findings list. A card as long as the report is slow to paint. */
+export const SIDEBAR_FINDINGS = 12;
+const SEVERITY_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+
+/** The first `max` findings by severity, keeping the order the scan gave within a severity. */
+export function mostSevere<T extends { severity?: unknown }>(list: readonly T[], max: number): T[] {
+  return list
+    .map((v, i) => ({ v, i }))
+    .sort((a, b) => (SEVERITY_RANK[String(a.v.severity)] ?? 5) - (SEVERITY_RANK[String(b.v.severity)] ?? 5) || a.i - b.i)
+    .slice(0, max)
+    .map((x) => x.v);
+}
+
 export function repoFindingsOf<T extends SourceFinding>(vulns: readonly T[] | null | undefined): T[] {
   return (vulns ?? []).filter((v) => typeof v.evidence === "string" && v.evidence.startsWith("Repository: "));
 }
@@ -157,7 +170,7 @@ export function SourceCodeCard({ tests, vulnerabilities }: { tests?: unknown; vu
                 Found in the repository ({findings.length})
               </p>
               <ul className="space-y-2">
-                {findings.map((v, i) => (
+                {mostSevere(findings, SIDEBAR_FINDINGS).map((v, i) => (
                   <li key={`${v.name}-${i}`} className="text-sm flex items-start gap-2">
                     <SeverityBadge severity={(v.severity as Severity) ?? "info"} />
                     <span className="flex-1 min-w-0 break-words">
@@ -166,6 +179,9 @@ export function SourceCodeCard({ tests, vulnerabilities }: { tests?: unknown; vu
                     </span>
                   </li>
                 ))}
+                {findings.length > SIDEBAR_FINDINGS && (
+                  <li className="text-xs text-muted-foreground">…and {findings.length - SIDEBAR_FINDINGS} more, the least severe, in the findings list.</li>
+                )}
               </ul>
               <p className="text-xs text-muted-foreground mt-2">Each is in the findings list with its evidence and the fix.</p>
             </div>

@@ -7,6 +7,14 @@ for each change; this collects what shipped and why it mattered.
 
 ### Performance
 
+- **No part of the app blurs what is behind it, and long reports paint far less.** A background blur makes the browser
+  re-blur everything under it as you scroll, and a report with many of them can flicker or leave sections blank on some
+  graphics setups (every card and panel blinked on one). Cards, panels, the header, the mobile menu and the feedback
+  button are now solid, a little more opaque to keep the look, and the page background is its own layer. Long lists are
+  drawn a page at a time: a group shows its first 25 findings with "Show 25 more" and "Show all N", the report's
+  side card lists the 12 most severe findings and says how many more there are, and off-screen finding cards are not
+  painted. Measured on a 150-finding report: blurred layers 6 to 0, page height 14,000 px to 3,900 px, cards drawn 151 to 26.
+
 - **Public-repository scans no longer share GitHub's 60-calls-an-hour limit.** Reading a public repository sent no
   credentials, so every user's scans together were limited to 60 GitHub API calls an hour for the server's address (about
   thirty scans). An optional `GITHUB_PUBLIC_API_TOKEN` (a read-only token for public repositories) raises that to 5,000. It

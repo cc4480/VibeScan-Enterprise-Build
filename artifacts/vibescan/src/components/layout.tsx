@@ -23,6 +23,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         className="fixed inset-0 pointer-events-none z-[-1] overflow-hidden"
         aria-hidden="true"
         style={{
+          // Its own compositor layer: painted once, not again as the page scrolls over it.
+          transform: "translateZ(0)",
+          willChange: "transform",
           backgroundImage: [
             "radial-gradient(50% 38% at 50% 24%, hsl(var(--video-teal) / 0.38), transparent 72%)",
             "radial-gradient(70% 55% at 8% 0%, hsl(var(--video-blue) / 0.85), transparent 70%)",
@@ -53,9 +56,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       <header
         className={cn(
-          "fixed top-0 left-0 right-0 z-50 transition-all duration-300 border-b",
+          "fixed top-0 left-0 right-0 z-50 transition-[padding,background-color,box-shadow] duration-300 border-b",
           scrolled
-            ? "bg-background/80 backdrop-blur-lg border-white/5 shadow-lg shadow-black/20 py-3"
+            ? "bg-background/95 border-white/5 shadow-lg shadow-black/20 py-3"
             : "bg-transparent border-transparent py-5",
         )}
       >
@@ -155,7 +158,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Mobile menu */}
         {mobileMenuOpen && (
-          <div className="min-[1180px]:hidden absolute top-full left-0 right-0 bg-background/95 backdrop-blur-xl border-b border-white/5 py-4 px-4 flex flex-col gap-3 shadow-2xl">
+          <div className="min-[1180px]:hidden absolute top-full left-0 right-0 bg-background/95 border-b border-white/5 py-4 px-4 flex flex-col gap-3 shadow-2xl">
             <Link
               href="/"
               onClick={() => setMobileMenuOpen(false)}
@@ -234,7 +237,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Link
           href="/feedback"
           title="Send feedback"
-          className="group fixed bottom-5 right-5 z-40 flex items-center gap-2 h-11 pl-3.5 pr-4 rounded-full bg-card/95 backdrop-blur border border-white/10 text-muted-foreground shadow-lg shadow-black/40 hover:text-foreground hover:border-primary/40 hover:shadow-primary/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary transition-all"
+          className="group fixed bottom-5 right-5 z-40 flex items-center gap-2 h-11 pl-3.5 pr-4 rounded-full bg-card/95 border border-white/10 text-muted-foreground shadow-lg shadow-black/40 hover:text-foreground hover:border-primary/40 hover:shadow-primary/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary transition-all"
         >
           <MessageSquare className="w-[18px] h-[18px] text-primary/80 group-hover:text-primary transition-colors" />
           <span className="text-[13px] font-medium tracking-wide">Feedback</span>

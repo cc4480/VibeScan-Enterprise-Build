@@ -13,6 +13,9 @@ import { NEW_CATEGORY_LABELS } from "@/lib/summary-category-labels";
 export const BULK_INFO_GROUP = 8;
 export const isBulkInformation = (vulns: Vulnerability[]): boolean => vulns.length > BULK_INFO_GROUP && vulns.every((v) => v.severity === "info");
 
+/** Findings drawn at first in an open group; the rest come with "Show more". A long page is slow and fragile to paint. */
+export const GROUP_PAGE = 25;
+
 export function CategorySection({
   category,
   vulns,
@@ -31,6 +34,7 @@ export function CategorySection({
   // A long group of information-only findings (the many fixture values in a repository's tests, say) starts closed: it
   // is context, not something to act on, and dozens of open cards make the page heavy to paint. One click opens it.
   const [open, setOpen] = useState(defaultOpen && !isBulkInformation(vulns));
+  const [shownCount, setShownCount] = useState(GROUP_PAGE);
   const meta = getCategoryMeta(category);
 
   const highestSeverity = vulns.reduce<string | null>((acc, v) => {
@@ -61,7 +65,7 @@ export function CategorySection({
 
       {open && (
         <div className="px-3 pb-3 pt-1 space-y-2 border-t border-white/5">
-          {vulns.map((v, i) => (
+          {vulns.slice(0, shownCount).map((v, i) => (
             <VulnCard
               key={v.id}
               vuln={v}
@@ -70,6 +74,19 @@ export function CategorySection({
               rootUrl={rootUrl}
             />
           ))}
+          {vulns.length > shownCount && (
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+              <button
+                onClick={() => setShownCount((n) => n + GROUP_PAGE)}
+                className="px-4 py-2 rounded-lg text-sm font-semibold bg-secondary hover:bg-secondary/80 border border-white/10 transition-colors"
+              >
+                Show {Math.min(GROUP_PAGE, vulns.length - shownCount)} more
+              </button>
+              <button onClick={() => setShownCount(vulns.length)} className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-2">
+                Show all {vulns.length} ({vulns.length - shownCount} not shown)
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

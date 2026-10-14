@@ -99,17 +99,21 @@
 
 @layer utilities {
   .glass-panel {
-    @apply bg-card/60 backdrop-blur-xl border border-white/5 shadow-2xl shadow-black/50;
+    @apply bg-card/80 border border-white/5 shadow-2xl shadow-black/50;
   }
   
   .glass-card {
-    @apply bg-card/40 backdrop-blur-md border border-white/5 shadow-lg hover:bg-card/60 transition-colors duration-300;
+    @apply bg-card/60 border border-white/5 shadow-lg hover:bg-card/70 transition-colors duration-300;
   }
 
-  /* The same card without the background blur, for long lists: dozens of blurred layers on one page can make a browser
-     stop painting parts of it or flicker when it is clicked. Nothing behind these cards needs to show through blurred. */
+  /* No card or panel blurs what is behind it. A background blur makes the browser re-blur everything under the layer on
+     every scroll, and a page of several of them (a long report) can flicker or stop painting parts of itself on some
+     graphics setups. The page behind is a dark gradient, so a little more opacity gives the same look. glass-flat is the
+     lighter card for long lists, which also lets the browser skip painting cards that are off screen. */
   .glass-flat {
     @apply bg-card/60 border border-white/5 shadow-lg hover:bg-card/70;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 84px;
   }
 
   .text-gradient {
