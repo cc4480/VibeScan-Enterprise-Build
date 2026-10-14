@@ -17,6 +17,18 @@ for each change; this collects what shipped and why it mattered.
 - The "private or missing repository" message no longer says only public repositories can be read; it says to
   connect GitHub and choose the repository.
 
+### GitHub connection
+
+- **Connect GitHub now starts by asking GitHub who you are, then installs only if nothing is found.** Someone who
+  had already installed the App was sent to GitHub's settings page with no way back to SecScan, so nothing was
+  connected. The trip is now authorise, then (only if no installation exists) the install page, then authorise
+  and list again; a second empty answer is "none", not another trip. "Add or change repositories" goes straight
+  to GitHub's repository chooser (`/api/github/connect?manage=1`). Needs `https://secscan.us/api/github/callback`
+  among the App's Callback URLs.
+- Installations and repositories are read across all pages (up to 1,000), not just the first 100.
+- Each connection reports how it stands (`ok`, `gone` when the App was uninstalled, `unavailable` when GitHub
+  could not be asked) and the scan form says which, instead of showing an empty list for all three.
+
 ### SEO
 
 - **Public pages are prerendered for crawlers that run no JavaScript.** Home, `/learn`, `/about`, `/bot`,

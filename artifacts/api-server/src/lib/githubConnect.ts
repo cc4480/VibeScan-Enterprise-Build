@@ -27,15 +27,27 @@ export function connectConfigured(env: NodeJS.ProcessEnv = process.env): boolean
   return Boolean(app?.slug) && githubClientConfig(env) !== null;
 }
 
-/** Where to send someone to authorise the App without installing it again (they already have it installed). */
-export function authorizeUrl(client: GithubClientConfig, state: string): string {
-  return `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(client.clientId)}&state=${encodeURIComponent(state)}`;
+/**
+ * Where to send someone to prove which GitHub account they are, so the installations they can use can be listed. This is
+ * the first step of connecting, before any install page: a person who already installed the App is recognised at once and
+ * comes straight back, instead of being left on GitHub's settings page with no way back to SecScan.
+ * `redirectUri` must be one of the App's Callback URLs; when given, GitHub returns exactly there.
+ */
+export function authorizeUrl(client: GithubClientConfig, state: string, redirectUri?: string): string {
+  return (
+    `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(client.clientId)}&state=${encodeURIComponent(state)}` +
+    (redirectUri ? `&redirect_uri=${encodeURIComponent(redirectUri)}` : "")
+  );
 }
 
 /** Why the GitHub side of connecting failed. The message never contains a credential. */
 export class GithubConnectError extends Error {
   constructor(readonly reason: "code_rejected" | "github_unavailable", message: string) { super(message); }
 }
+
+const PAGE_SIZE = 100;
+/** Pages read from any GitHub list: a ceiling, so an odd answer cannot loop. */
+const MAX_PAGES = 10;
 
 const GITHUB_HEADERS = { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "SecScan" };
 
@@ -67,18 +79,24 @@ export interface UserInstallation { installationId: number; accountLogin: string
  * An installation of any other App is ignored.
  */
 export async function userInstallations(userToken: string, appId: string, fetchFn: typeof fetch = fetch): Promise<UserInstallation[]> {
-  let res: Response;
-  try {
-    res = await fetchFn("https://api.github.com/user/installations?per_page=100", {
-      headers: { ...GITHUB_HEADERS, Authorization: `Bearer ${userToken}` },
-      signal: AbortSignal.timeout(10_000),
-    });
-  } catch {
-    throw new GithubConnectError("github_unavailable", "GitHub could not be reached to list installations");
+  // A person who can reach more than 100 installations (of every App, not just this one) has them on later pages.
+  const list: Array<Record<string, unknown>> = [];
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    let res: Response;
+    try {
+      res = await fetchFn(`https://api.github.com/user/installations?per_page=${PAGE_SIZE}&page=${page}`, {
+        headers: { ...GITHUB_HEADERS, Authorization: `Bearer ${userToken}` },
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch {
+      throw new GithubConnectError("github_unavailable", "GitHub could not be reached to list installations");
+    }
+    if (!res.ok) throw new GithubConnectError("github_unavailable", `GitHub refused to list installations (HTTP ${res.status})`);
+    const body = (await res.json().catch(() => null)) as { installations?: unknown } | null;
+    const got = Array.isArray(body?.installations) ? (body!.installations as Array<Record<string, unknown>>) : [];
+    list.push(...got);
+    if (got.length < PAGE_SIZE) break;
   }
-  if (!res.ok) throw new GithubConnectError("github_unavailable", `GitHub refused to list installations (HTTP ${res.status})`);
-  const body = (await res.json().catch(() => null)) as { installations?: unknown } | null;
-  const list = Array.isArray(body?.installations) ? (body!.installations as Array<Record<string, unknown>>) : [];
   return list
     .filter((i) => String(i["app_id"]) === String(appId) && typeof i["id"] === "number")
     .map((i) => {
@@ -90,16 +108,23 @@ export async function userInstallations(userToken: string, appId: string, fetchF
 export interface ConnectedRepository { fullName: string; private: boolean; url: string; installationId: number }
 
 /**
- * The repositories one installation lets SecScan read. A token is minted for the whole installation, metadata only,
- * used for this one listing and dropped. Missing or failing installations yield an empty list, not an error: the
- * person may have uninstalled the App on GitHub since connecting.
+ * How one connection stands: "ok" (listed, possibly with no repositories shared), "gone" (GitHub says the installation no
+ * longer exists, so the App was uninstalled), or "unavailable" (GitHub could not be asked, or refused: say nothing is wrong
+ * with the connection, only that it could not be read now).
  */
-export async function installationRepositories(
+export type ConnectionStatus = "ok" | "gone" | "unavailable";
+
+/**
+ * The repositories one installation lets SecScan read. A token is minted for the whole installation, metadata only,
+ * used for this listing and dropped. All pages are read (up to a ceiling), so an owner with more than 100 repositories
+ * sees them all. The status says why the list is empty when it is.
+ */
+export async function installationRepositoryList(
   installationId: number,
   cfg: GithubAppConfig | null = githubAppConfig(),
   fetchFn: typeof fetch = fetch,
-): Promise<ConnectedRepository[]> {
-  if (!cfg) return [];
+): Promise<{ status: ConnectionStatus; repositories: ConnectedRepository[] }> {
+  if (!cfg) return { status: "unavailable", repositories: [] };
   try {
     const tokenRes = await fetchFn(`https://api.github.com/app/installations/${installationId}/access_tokens`, {
       method: "POST",
@@ -107,20 +132,38 @@ export async function installationRepositories(
       body: JSON.stringify({ permissions: { metadata: "read" } }),
       signal: AbortSignal.timeout(10_000),
     });
-    if (!tokenRes.ok) return [];
+    if (tokenRes.status === 404) return { status: "gone", repositories: [] };
+    if (!tokenRes.ok) return { status: "unavailable", repositories: [] };
     const token = ((await tokenRes.json().catch(() => null)) as { token?: unknown } | null)?.token;
-    if (typeof token !== "string" || !token) return [];
-    const res = await fetchFn("https://api.github.com/installation/repositories?per_page=100", {
-      headers: { ...GITHUB_HEADERS, Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) return [];
-    const body = (await res.json().catch(() => null)) as { repositories?: unknown } | null;
-    const repos = Array.isArray(body?.repositories) ? (body!.repositories as Array<Record<string, unknown>>) : [];
-    return repos
-      .filter((r) => typeof r["full_name"] === "string" && typeof r["html_url"] === "string")
-      .map((r) => ({ fullName: r["full_name"] as string, private: r["private"] === true, url: r["html_url"] as string, installationId }));
+    if (typeof token !== "string" || !token) return { status: "unavailable", repositories: [] };
+
+    const repositories: ConnectedRepository[] = [];
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const res = await fetchFn(`https://api.github.com/installation/repositories?per_page=${PAGE_SIZE}&page=${page}`, {
+        headers: { ...GITHUB_HEADERS, Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) return { status: repositories.length > 0 ? "ok" : "unavailable", repositories };
+      const body = (await res.json().catch(() => null)) as { repositories?: unknown } | null;
+      const repos = Array.isArray(body?.repositories) ? (body!.repositories as Array<Record<string, unknown>>) : [];
+      for (const r of repos) {
+        if (typeof r["full_name"] === "string" && typeof r["html_url"] === "string") {
+          repositories.push({ fullName: r["full_name"], private: r["private"] === true, url: r["html_url"], installationId });
+        }
+      }
+      if (repos.length < PAGE_SIZE) break;
+    }
+    return { status: "ok", repositories };
   } catch {
-    return [];
+    return { status: "unavailable", repositories: [] };
   }
+}
+
+/** Just the repositories; empty (not an error) when the installation is gone or cannot be read. */
+export async function installationRepositories(
+  installationId: number,
+  cfg: GithubAppConfig | null = githubAppConfig(),
+  fetchFn: typeof fetch = fetch,
+): Promise<ConnectedRepository[]> {
+  return (await installationRepositoryList(installationId, cfg, fetchFn)).repositories;
 }

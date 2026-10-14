@@ -6,10 +6,11 @@ import { generateKeyPairSync } from "node:crypto";
 
 const saveLinks = vi.fn(async () => {});
 const removeLink = vi.fn(async () => true);
+const linkedInstallations = vi.fn(async (): Promise<Array<{ installationId: number; accountLogin: string | null }>> => []);
 vi.mock("../lib/githubLinks", () => ({
   saveLinks: (...a: unknown[]) => saveLinks(...(a as [])),
   removeLink: (...a: unknown[]) => removeLink(...(a as [])),
-  linkedInstallations: async () => [],
+  linkedInstallations: (...a: unknown[]) => linkedInstallations(...(a as [])),
 }));
 
 import githubConnectRouter from "./githubConnect";
@@ -30,7 +31,10 @@ function makeApp(userId: string | null = "user-a") {
   return app;
 }
 
-const cookieFor = (state: string, userId: string) => `gh_connect=${Buffer.from(JSON.stringify({ state, userId })).toString("base64url")}`;
+const cookieFor = (state: string, userId: string, stage?: "start" | "installing") =>
+  `gh_connect=${Buffer.from(JSON.stringify({ state, userId, ...(stage ? { stage } : {}) })).toString("base64url")}`;
+
+const REDIRECT = encodeURIComponent("https://secscan.us/api/github/callback");
 
 const OLD = { ...process.env };
 const realFetch = globalThis.fetch;
@@ -38,6 +42,8 @@ const realFetch = globalThis.fetch;
 beforeEach(() => {
   saveLinks.mockClear();
   removeLink.mockClear();
+  linkedInstallations.mockReset();
+  linkedInstallations.mockResolvedValue([]);
   process.env["GITHUB_APP_ID"] = "4242";
   process.env["GITHUB_APP_PRIVATE_KEY"] = privateKey;
   process.env["GITHUB_APP_SLUG"] = "test-app";
@@ -63,18 +69,32 @@ describe("GET /api/github/connect", () => {
     expect(res.headers["location"]).toBe("/scan?github=unavailable");
   });
 
-  it("sends the person to the App's install page with a state it also keeps in a short-lived cookie", async () => {
+  it("starts by asking GitHub who the person is, with a state it also keeps in a short-lived cookie", async () => {
     const res = await request(makeApp()).get("/api/github/connect");
     expect(res.status).toBe(302);
     const location = new URL(res.headers["location"] as string);
-    expect(location.origin + location.pathname).toBe("https://github.com/apps/test-app/installations/new");
+    // Authorise first, not the install page: an existing installation is found and the person returns at once.
+    expect(location.origin + location.pathname).toBe("https://github.com/login/oauth/authorize");
+    expect(location.searchParams.get("client_id")).toBe("Iv1.testclient");
+    expect(location.searchParams.get("redirect_uri")).toBe("https://secscan.us/api/github/callback");
     const state = location.searchParams.get("state")!;
     expect(state.length).toBeGreaterThan(20);
     const cookie = (res.headers["set-cookie"] as unknown as string[]).find((c) => c.startsWith("gh_connect="))!;
     expect(cookie).toMatch(/HttpOnly/);
     expect(cookie).toMatch(/Path=\/api\/github/);
     const stored = JSON.parse(Buffer.from(cookie.split(";")[0]!.split("=")[1]!, "base64url").toString());
-    expect(stored).toEqual({ state, userId: "user-a" });
+    expect(stored).toEqual({ state, userId: "user-a", stage: "start" });
+  });
+});
+
+describe("GET /api/github/connect?manage=1", () => {
+  it("goes straight to GitHub's page for choosing repositories, and remembers it did", async () => {
+    const res = await request(makeApp()).get("/api/github/connect?manage=1");
+    const location = new URL(res.headers["location"] as string);
+    expect(location.origin + location.pathname).toBe("https://github.com/apps/test-app/installations/new");
+    const state = location.searchParams.get("state")!;
+    const cookie = (res.headers["set-cookie"] as unknown as string[]).find((c) => c.startsWith("gh_connect="))!;
+    expect(JSON.parse(Buffer.from(cookie.split(";")[0]!.split("=")[1]!, "base64url").toString())).toEqual({ state, userId: "user-a", stage: "installing" });
   });
 });
 
@@ -99,7 +119,7 @@ describe("GET /api/github/callback: only the trip this browser started, for this
 
   it("asks GitHub to authorise when it came back without a code, keeping the same state", async () => {
     const res = await request(makeApp()).get("/api/github/callback?state=s1&installation_id=5&setup_action=update").set("Cookie", cookieFor("s1", "user-a"));
-    expect(res.headers["location"]).toBe("https://github.com/login/oauth/authorize?client_id=Iv1.testclient&state=s1");
+    expect(res.headers["location"]).toBe(`https://github.com/login/oauth/authorize?client_id=Iv1.testclient&state=s1&redirect_uri=${REDIRECT}`);
     expect(saveLinks).not.toHaveBeenCalled();
   });
 
@@ -124,14 +144,43 @@ describe("GET /api/github/callback: only the trip this browser started, for this
     expect(calls.some((c) => c.includes("/user/installations"))).toBe(true);
   });
 
-  it("says so when the person has no installation of this App", async () => {
+  const noInstallations = () =>
+    (globalThis.fetch = vi.fn(async (url: string | URL | Request) =>
+      String(url).includes("access_token")
+        ? new Response(JSON.stringify({ access_token: "t" }), { status: 200 })
+        : new Response(JSON.stringify({ installations: [] }), { status: 200 })) as unknown as typeof fetch);
+
+  it("sends a person with nothing installed on to the install page, once, keeping the same state", async () => {
+    noInstallations();
+    const res = await request(makeApp()).get("/api/github/callback?state=s1&code=c1").set("Cookie", cookieFor("s1", "user-a", "start"));
+    expect(res.headers["location"]).toBe("https://github.com/apps/test-app/installations/new?state=s1");
+    expect(saveLinks).not.toHaveBeenCalled();
+    const cookie = (res.headers["set-cookie"] as unknown as string[]).find((c) => c.startsWith("gh_connect="))!;
+    const stored = JSON.parse(Buffer.from(cookie.split(";")[0]!.split("=")[1]!, "base64url").toString());
+    expect(stored).toEqual({ state: "s1", userId: "user-a", stage: "installing" });
+  });
+
+  it("says so, instead of looping, when they come back from the install page still with nothing", async () => {
+    noInstallations();
+    const res = await request(makeApp()).get("/api/github/callback?state=s1&code=c1").set("Cookie", cookieFor("s1", "user-a", "installing"));
+    expect(res.headers["location"]).toBe("/scan?github=none");
+    expect(saveLinks).not.toHaveBeenCalled();
+  });
+
+  it("connects an installation that already exists without ever visiting the install page", async () => {
     globalThis.fetch = vi.fn(async (url: string | URL | Request) =>
       String(url).includes("access_token")
         ? new Response(JSON.stringify({ access_token: "t" }), { status: 200 })
-        : new Response(JSON.stringify({ installations: [] }), { status: 200 })) as unknown as typeof fetch;
+        : new Response(JSON.stringify({ installations: [{ id: 111, app_id: 4242, account: { login: "alice" } }] }), { status: 200 })) as unknown as typeof fetch;
+    const res = await request(makeApp()).get("/api/github/callback?state=s1&code=c1").set("Cookie", cookieFor("s1", "user-a", "start"));
+    expect(res.headers["location"]).toBe("/scan?github=connected");
+    expect(saveLinks).toHaveBeenCalledWith("user-a", [{ installationId: 111, accountLogin: "alice" }]);
+  });
+
+  it("treats a cookie from before stages existed as the start of the trip", async () => {
+    noInstallations();
     const res = await request(makeApp()).get("/api/github/callback?state=s1&code=c1").set("Cookie", cookieFor("s1", "user-a"));
-    expect(res.headers["location"]).toBe("/scan?github=none");
-    expect(saveLinks).not.toHaveBeenCalled();
+    expect(res.headers["location"]).toBe("https://github.com/apps/test-app/installations/new?state=s1");
   });
 
   it("reports an error, and records nothing, when GitHub rejects the code", async () => {
@@ -139,6 +188,34 @@ describe("GET /api/github/callback: only the trip this browser started, for this
     const res = await request(makeApp()).get("/api/github/callback?state=s1&code=used").set("Cookie", cookieFor("s1", "user-a"));
     expect(res.headers["location"]).toBe("/scan?github=error");
     expect(saveLinks).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/github/repos", () => {
+  it("needs a signed-in account", async () => {
+    expect((await request(makeApp(null)).get("/api/github/repos")).status).toBe(401);
+  });
+
+  it("says how each connection stands, so an uninstalled App is not shown as 'nothing shared'", async () => {
+    linkedInstallations.mockResolvedValue([
+      { installationId: 1, accountLogin: "alice" },
+      { installationId: 2, accountLogin: "old-org" },
+      { installationId: 3, accountLogin: "empty" },
+    ]);
+    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+      const u = String(url);
+      const id = /installations\/(\d+)\/access_tokens/.exec(u)?.[1];
+      if (id === "2") return new Response("{}", { status: 404 });
+      if (id) return new Response(JSON.stringify({ token: `tok${id}` }), { status: 201 });
+      return new Response(JSON.stringify({ repositories: (u.includes("Authorization") ? [] : []) }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const res = await request(makeApp()).get("/api/github/repos");
+    expect(res.status).toBe(200);
+    const by = Object.fromEntries((res.body.connections as Array<{ installationId: number; status: string }>).map((c) => [c.installationId, c.status]));
+    expect(by).toEqual({ 1: "ok", 2: "gone", 3: "ok" });
+    expect(res.body.available).toBe(true);
+    expect(res.body.repositories).toEqual([]);
   });
 });
 

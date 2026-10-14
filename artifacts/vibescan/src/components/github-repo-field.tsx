@@ -4,6 +4,8 @@ import { Github, Lock, CheckCircle2, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   CONNECT_HREF,
+  MANAGE_HREF,
+  connectionNote,
   connectOutcomeMessage,
   disconnectGithub,
   getGithubRepos,
@@ -137,9 +139,18 @@ export function GithubRepoField({ value, onChange }: { value: string; onChange: 
               </span>
             ))}
           </span>
-          <a href={CONNECT_HREF} className="text-primary underline underline-offset-2">Add or change repositories</a>
+          <a href={MANAGE_HREF} className="text-primary underline underline-offset-2">Add or change repositories</a>
         </div>
       )}
+
+      {available && connections.map((c) => {
+        const note = connectionNote(c);
+        return note ? (
+          <p key={`note-${c.installationId}`} role="status" className="flex items-start gap-2 text-xs text-amber-200 ml-1">
+            <AlertTriangle className="w-4 h-4 shrink-0" /> <span>{note}</span>
+          </p>
+        ) : null;
+      })}
     </div>
   );
 }

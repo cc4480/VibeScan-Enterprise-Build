@@ -7,6 +7,7 @@ import {
   exchangeCode,
   githubClientConfig,
   installationRepositories,
+  installationRepositoryList,
   userInstallations,
 } from "./githubConnect";
 import { installationForRepo } from "./githubInstallationAccess";
@@ -81,6 +82,70 @@ describe("installationRepositories", () => {
   it("is empty, not an error, when the installation is gone", async () => {
     expect(await installationRepositories(5, cfg, vi.fn(async () => json(404, {})) as unknown as typeof fetch)).toEqual([]);
     expect(await installationRepositories(5, null)).toEqual([]);
+  });
+});
+
+describe("authorizeUrl", () => {
+  it("names the address GitHub must return to, when given one", () => {
+    const url = new URL(authorizeUrl({ clientId: "Iv1.x", clientSecret: "s" }, "st", "https://secscan.us/api/github/callback"));
+    expect(url.searchParams.get("redirect_uri")).toBe("https://secscan.us/api/github/callback");
+    expect(new URL(authorizeUrl({ clientId: "Iv1.x", clientSecret: "s" }, "st")).searchParams.has("redirect_uri")).toBe(false);
+  });
+});
+
+describe("reading every page of what GitHub lists", () => {
+  const page = (n: number, start: number) => ({ installations: Array.from({ length: n }, (_, i) => ({ id: start + i, app_id: 4242, account: { login: `a${start + i}` } })) });
+
+  it("follows installations onto a second page", async () => {
+    const urls: string[] = [];
+    const fetchFn = vi.fn(async (url: string | URL | Request) => {
+      urls.push(String(url));
+      return json(200, String(url).includes("&page=1") ? page(100, 1) : page(3, 101));
+    });
+    const got = await userInstallations("t", "4242", fetchFn as unknown as typeof fetch);
+    expect(got).toHaveLength(103);
+    expect(urls).toHaveLength(2);
+  });
+
+  it("stops after one page when it was not full", async () => {
+    const fetchFn = vi.fn(async () => json(200, page(2, 1)));
+    await userInstallations("t", "4242", fetchFn as unknown as typeof fetch);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not loop forever on a list that never ends", async () => {
+    const fetchFn = vi.fn(async () => json(200, page(100, 1)));
+    await userInstallations("t", "4242", fetchFn as unknown as typeof fetch);
+    expect(fetchFn.mock.calls.length).toBeLessThanOrEqual(10);
+  });
+
+  it("lists more than 100 repositories", async () => {
+    const repos = (n: number, start: number) => ({ repositories: Array.from({ length: n }, (_, i) => ({ full_name: `me/r${start + i}`, html_url: `https://github.com/me/r${start + i}`, private: true })) });
+    const fetchFn = vi.fn(async (url: string | URL | Request) => {
+      const u = String(url);
+      if (u.includes("access_tokens")) return json(201, { token: "tok" });
+      return json(200, u.includes("&page=1") ? repos(100, 0) : repos(40, 100));
+    });
+    const r = await installationRepositoryList(5, cfg, fetchFn as unknown as typeof fetch);
+    expect(r.status).toBe("ok");
+    expect(r.repositories).toHaveLength(140);
+  });
+});
+
+describe("how a connection stands", () => {
+  it("is gone when GitHub says the installation no longer exists (the App was uninstalled)", async () => {
+    expect((await installationRepositoryList(5, cfg, vi.fn(async () => json(404, {})) as unknown as typeof fetch)).status).toBe("gone");
+  });
+
+  it("is unavailable, not gone, when GitHub cannot be asked", async () => {
+    expect((await installationRepositoryList(5, cfg, vi.fn(async () => json(502, {})) as unknown as typeof fetch)).status).toBe("unavailable");
+    expect((await installationRepositoryList(5, cfg, vi.fn(async () => { throw new Error("down"); }) as unknown as typeof fetch)).status).toBe("unavailable");
+    expect((await installationRepositoryList(5, null)).status).toBe("unavailable");
+  });
+
+  it("is ok with an empty list when the installation exists but nothing is shared", async () => {
+    const fetchFn = vi.fn(async (url: string | URL | Request) => (String(url).includes("access_tokens") ? json(201, { token: "tok" }) : json(200, { repositories: [] })));
+    expect(await installationRepositoryList(5, cfg, fetchFn as unknown as typeof fetch)).toEqual({ status: "ok", repositories: [] });
   });
 });
 
