@@ -7,6 +7,15 @@ for each change; this collects what shipped and why it mattered.
 
 ### Accuracy
 
+- **The repository scan checks dependencies in seven ecosystems, and flags malicious packages.** It read only
+  package.json and package-lock.json (npm). It now also reads yarn.lock, pnpm-lock.yaml and bun.lock; Python (poetry.lock,
+  uv.lock, Pipfile.lock, pinned requirements.txt); Go (go.mod); Rust (Cargo.lock); Ruby (Gemfile.lock) and PHP
+  (composer.lock), each looked up in OSV under its own ecosystem. A package that OSV lists as malicious (an OpenSSF "MAL-"
+  record) is reported as critical, with the advice to rotate every secret the installing machine could read. A
+  vulnerability in a development-only dependency is rated one step lower, never above medium, and says so. Also fixed:
+  a repository dependency finding used the website wording ("this site publishes this file", "stop serving it publicly");
+  it now names the repository and file and says to upgrade and regenerate the lockfile.
+
 - **"CSP allows inline styles" is information that needs verification, not a low finding.** When a site's script rules
   are strict and only `style-src` allows `unsafe-inline`, it cannot run JavaScript, and a front end that injects its own
   styles at runtime often cannot drop it. It is still shown (under "Needs verification"), but no longer weighs on the grade.

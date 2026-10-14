@@ -199,11 +199,11 @@ export async function scanRepository(source: RepoSource, ref: RepoRef, opts: { o
   run("CI and configuration", (f) => isWorkflowPath(f.path) || isDockerfilePath(f.path) || isSupabaseConfigPath(f.path) || isFunctionCodePath(f.path), (fs) => ciConfigFindings(fs, ref));
   record("dangerous code patterns", code.files, code.found);
 
-  const deps = await dependencyFindings(files).catch(() => ({ findings: [] as ScanVulnerability[], considered: 0, looked: 0, source: null as string | null }));
+  const deps = await dependencyFindings(files, ref).catch(() => ({ findings: [] as ScanVulnerability[], considered: 0, looked: 0, source: null as string | null }));
   findings.push(...deps.findings);
   checks.push({
     name: "dependency vulnerabilities (OSV)", files: files.filter((f) => isManifestPath(f.path) || isLockfilePath(f.path)).length, findings: deps.findings.length,
-    ...(deps.considered === 0 ? { note: "no package.json or package-lock.json with exact versions" } : deps.looked < deps.considered ? { note: `looked up ${deps.looked} of ${deps.considered} packages` } : {}),
+    ...(deps.considered === 0 ? { note: "no dependency file with exact versions (a lockfile, or a pinned package.json, requirements.txt or go.mod)" } : deps.looked < deps.considered ? { note: `looked up ${deps.looked} of ${deps.considered} packages` } : {}),
   });
 
   for (const c of checks) onProgress?.({ kind: "check", name: c.name, files: c.files, findings: c.findings, ...(c.note ? { note: c.note } : {}) });

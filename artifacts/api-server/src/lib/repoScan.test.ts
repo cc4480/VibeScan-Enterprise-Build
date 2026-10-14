@@ -204,8 +204,8 @@ describe("dependencies", () => {
   const lock = JSON.stringify({ lockfileVersion: 3, packages: { "": { name: "app" }, "node_modules/lodash": { version: "4.17.20" }, "node_modules/react": { version: "19.0.0" }, "node_modules/a/node_modules/lodash": { version: "4.17.15" }, "node_modules/linked": { link: true } } });
 
   it("reads exact versions from a lockfile and a manifest, never a range", () => {
-    expect(lockedPackages(lock)).toEqual([{ name: "lodash", version: "4.17.20" }, { name: "react", version: "19.0.0" }, { name: "lodash", version: "4.17.15" }]);
-    expect(directDependencies(JSON.stringify({ dependencies: { a: "1.2.3", b: "^2.0.0" }, devDependencies: { c: "3.0.0" } }))).toEqual([{ name: "a", version: "1.2.3" }, { name: "c", version: "3.0.0" }]);
+    expect(lockedPackages(lock)).toEqual([{ name: "lodash", version: "4.17.20", ecosystem: "npm" }, { name: "react", version: "19.0.0", ecosystem: "npm" }, { name: "lodash", version: "4.17.15", ecosystem: "npm" }]);
+    expect(directDependencies(JSON.stringify({ dependencies: { a: "1.2.3", b: "^2.0.0" }, devDependencies: { c: "3.0.0" } }))).toEqual([{ name: "a", version: "1.2.3", ecosystem: "npm" }, { name: "c", version: "3.0.0", ecosystem: "npm", dev: true }]);
     expect(lockedPackages("not json")).toEqual([]);
   });
 

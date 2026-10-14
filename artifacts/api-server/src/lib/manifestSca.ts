@@ -42,7 +42,20 @@ import { scanFetch } from "./http";
 export interface ManifestPackage {
   name: string;
   version: string;
+  /** OSV ecosystem: "npm" (the default), "PyPI", "Go", "crates.io", "RubyGems" or "Packagist". */
+  ecosystem?: string;
+  /** Only a development dependency (not installed in production): a vulnerability there weighs less. */
+  dev?: boolean;
+  /** The file this package was read from, when a scan reads several. */
+  source?: string;
 }
+
+/** Where the dependency list was read: a file a website serves, or a file in a repository the owner chose to scan. */
+export interface ScaContext {
+  repository?: string;
+}
+
+const SEVERITY_ORDER = ["info", "low", "medium", "high", "critical"] as const;
 
 /** Cap on packages from one manifest, so a huge tree cannot stall a scan. */
 const MAX_PACKAGES = 60;
@@ -141,16 +154,46 @@ async function mapLimit<T, R>(
 function findingFor(
   pkg: ManifestPackage,
   vulns: OsvVuln[],
-  source: string,
+  declaredSource: string,
+  ctx: ScaContext = {},
 ): ScanVulnerability | null {
   if (vulns.length === 0) return null;
+  const source = pkg.source ?? declaredSource;
+  const ecosystem = pkg.ecosystem ?? "npm";
+
+  // OpenSSF malicious-package records (OSV ids "MAL-...") are not a bug to patch: the package itself is hostile code.
+  const malicious = vulns.filter((v) => v.id.startsWith("MAL-"));
+  if (malicious.length > 0) {
+    const ids = malicious.map((v) => v.id).slice(0, 4).join(", ");
+    return {
+      id: randomUUID(),
+      name: `Malicious package: ${pkg.name} ${pkg.version}`,
+      severity: "critical",
+      category: "Supply Chain Security",
+      description:
+        `${pkg.name} ${pkg.version} (${ecosystem}) is listed in the OpenSSF malicious-packages database (${ids}). A package on that list contained code written to steal data or run commands when it was installed or imported. ` +
+        (ctx.repository ? `The version was read from ${source} in the repository ${ctx.repository}.` : `The version was read from ${source}, which this site publishes.`),
+      evidence: ctx.repository
+        ? `Repository: ${ctx.repository}\nFile: ${source}\n${pkg.name} ${pkg.version} (${ecosystem})\nOSV records: ${ids}`
+        : `${source} declares ${pkg.name} ${pkg.version} (${ecosystem})\nOSV records: ${ids}`,
+      solution:
+        `Remove ${pkg.name} from the project and its lockfile now, reinstall from a clean cache, and treat every secret that the machine which installed it could read (environment variables, tokens, SSH and cloud credentials) as exposed: rotate them.`,
+      cweId: "CWE-506",
+      cvssScore: 9.8,
+      confidence: 95,
+    };
+  }
 
   const scored = vulns
     .map((v) => ({ v, cvss: extractCvss(v) }))
     .sort((a, b) => (b.cvss ?? 0) - (a.cvss ?? 0));
   const worst = scored[0];
   if (!worst) return null;
-  const severity = cvssToSeverity(worst.cvss);
+  const baseSeverity = cvssToSeverity(worst.cvss);
+  // A package that is only a development dependency is not in what runs in production: one step down, and never above medium.
+  const severity = pkg.dev
+    ? SEVERITY_ORDER[Math.max(0, Math.min(SEVERITY_ORDER.indexOf(baseSeverity) - 1, SEVERITY_ORDER.indexOf("medium")))]!
+    : baseSeverity;
 
   // The highest fixed version across all the advisories: upgrading to the fix
   // for the worst one can still leave another unpatched.
@@ -168,18 +211,24 @@ function findingFor(
     name: `Vulnerable dependency: ${pkg.name} ${pkg.version}`,
     severity,
     category: "Vulnerable Components",
-    description:
-      `${pkg.name} ${pkg.version} has ${vulns.length} known ${plural} against it (${idList}). ` +
-      `This is not inferred from a fingerprint: the version was read from ${source}, ` +
-      `which this site publishes, so the same list is available to anyone who looks. ` +
-      (worst.v.summary ? `The most severe: ${worst.v.summary}` : ""),
-    evidence:
-      `${source} declares "${pkg.name}": "${pkg.version}"\n` +
-      `OSV advisories: ${idList}` +
-      (worst.cvss ? `\nHighest CVSS: ${worst.cvss}` : ""),
-    solution: fixed
-      ? `Upgrade ${pkg.name} to ${fixed} or later. Also stop serving ${source} publicly — it is what makes this list trivial to compile.`
-      : `Update ${pkg.name} to a patched release. Also stop serving ${source} publicly — it is what makes this list trivial to compile.`,
+    description: ctx.repository
+      ? `${pkg.name} ${pkg.version} has ${vulns.length} known ${plural} against it (${idList}). The version was read from ${source} in the repository ${ctx.repository}, so this is what the project installs, not a guess from a fingerprint. ` +
+        (pkg.dev ? "It is a development dependency only (not installed in production), so it is rated one step lower. " : "") +
+        (worst.v.summary ? `The most severe: ${worst.v.summary}` : "")
+      : `${pkg.name} ${pkg.version} has ${vulns.length} known ${plural} against it (${idList}). ` +
+        `This is not inferred from a fingerprint: the version was read from ${source}, ` +
+        `which this site publishes, so the same list is available to anyone who looks. ` +
+        (worst.v.summary ? `The most severe: ${worst.v.summary}` : ""),
+    evidence: ctx.repository
+      ? `Repository: ${ctx.repository}\nFile: ${source}\n${pkg.name} ${pkg.version} (${ecosystem})\nOSV advisories: ${idList}` + (worst.cvss ? `\nHighest CVSS: ${worst.cvss}` : "")
+      : `${source} declares "${pkg.name}": "${pkg.version}"\n` +
+        `OSV advisories: ${idList}` +
+        (worst.cvss ? `\nHighest CVSS: ${worst.cvss}` : ""),
+    solution: ctx.repository
+      ? (fixed ? `Upgrade ${pkg.name} to ${fixed} or later and regenerate the lockfile.` : `Update ${pkg.name} to a patched release and regenerate the lockfile.`)
+      : fixed
+        ? `Upgrade ${pkg.name} to ${fixed} or later. Also stop serving ${source} publicly — it is what makes this list trivial to compile.`
+        : `Update ${pkg.name} to a patched release. Also stop serving ${source} publicly — it is what makes this list trivial to compile.`,
     cweId: "CWE-1395",
     cvssScore: worst.cvss,
     wstgId: "WSTG-CONF-01",
@@ -199,11 +248,12 @@ function findingFor(
 export async function scaFromManifest(
   packages: ManifestPackage[],
   source: string,
+  ctx: ScaContext = {},
 ): Promise<ScanVulnerability[]> {
   if (packages.length === 0) return [];
   const results = await mapLimit(packages, OSV_CONCURRENCY, async (pkg) => {
     try {
-      return findingFor(pkg, await queryOsv(pkg.name, pkg.version, "npm"), source);
+      return findingFor(pkg, await queryOsv(pkg.name, pkg.version, pkg.ecosystem ?? "npm"), source, ctx);
     } catch {
       return null;
     }
