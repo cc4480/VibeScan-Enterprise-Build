@@ -58,14 +58,14 @@ export const namesItselfFake = (context: string): boolean => /(?:forged|fake|dum
  * The same finding, shown as information under its own name. Its own name, so that it is never merged into (and never
  * hides, or is hidden by) a finding of the same kind in a file that ships.
  */
-export function asTestFileFinding(v: ScanVulnerability, why: "test-file" | "named-fake" = "test-file"): ScanVulnerability {
+export function asTestFileFinding(v: ScanVulnerability, why: "test-file" | "named-fake" | "dev-default" = "test-file"): ScanVulnerability {
   return {
     ...v,
-    name: v.name.replace(" (in source repository)", why === "test-file" ? " (in a test or example file)" : " (a value that looks deliberately fake)"),
+    name: v.name.replace(" (in source repository)", why === "test-file" ? " (in a test or example file)" : why === "dev-default" ? " (looks like a development default)" : " (a value that looks deliberately fake)"),
     severity: "info",
     cvssScore: 0,
     confidence: 40,
-    description: `${v.description} ${why === "test-file" ? "It is in a test, mock, example or documentation file" : "The code around it names it as fake (forged, dummy, fixture, example, probe)"}, where a fake value is the usual reason, so it is shown as information. If the value is a real credential, treat it as exposed.`,
+    description: `${v.description} ${why === "test-file" ? "It is in a test, mock, example or documentation file, where a fake value is the usual reason" : why === "dev-default" ? "It is a plain lowercase word in a compose, CI or development file: the throwaway password of a local or test database" : "The code around it names it as fake (forged, dummy, fixture, example, probe), where a fake value is the usual reason"}, so it is shown as information. If it protects a real database or service, change it and treat it as exposed.`,
   } as ScanVulnerability;
 }
 

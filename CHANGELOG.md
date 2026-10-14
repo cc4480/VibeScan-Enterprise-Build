@@ -7,6 +7,16 @@ for each change; this collects what shipped and why it mattered.
 
 ### Accuracy
 
+- **False positives found by reviewing real repositories.** A throwaway database password that is a plain lowercase word
+  (`POSTGRES_PASSWORD: complyscan` in a docker-compose or CI file) was reported as a high "hardcoded secret"; in a compose,
+  CI or development file it is now information ("looks like a development default"), while a generated-looking password in the
+  same file is still high and a `.env` is not treated as a development file. fetch's `credentials: "same-origin"` (and the
+  other mode words) was reported as a credential; it no longer is.
+- **A scan interrupted by a deploy is retried within about two minutes.** A deploy restarts the server and kills the scans
+  running on it; they used to sit "scanning" until a two-hour expiry let them retry (one repository scan that had already read
+  all its files showed as running for 17 minutes and counting). Every scan job now carries a heartbeat, so a dead worker is
+  noticed and the scan re-runs from the start.
+
 - **Five more Supabase checks.** A policy or function that decides access from `user_metadata` (every user can edit their
   own, so anyone can grant themselves the role), a SECURITY DEFINER function that anyone with the public key can call through
   `/rest/v1/rpc` (no caller check, no REVOKE; low confidence, so "needs verification"), a table with a password or card-number

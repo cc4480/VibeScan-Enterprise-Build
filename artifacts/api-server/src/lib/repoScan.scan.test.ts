@@ -314,3 +314,25 @@ describe("what the first Lovable-shaped repository showed was missing", () => {
     expect(ciConfigFindings([inv, f("supabase/functions/get-invoice/index.ts", `const { data: u } = await supabase.auth.getUser();`)], ref)).toEqual([]);
   });
 });
+
+describe("found in real repositories: the report", () => {
+  it("shows a development database password as information, and a generated one as the high finding it is", async () => {
+    const out = await scanRepository(memorySource({
+      "docker-compose.yml": "services:\n  db:\n    environment:\n      POSTGRES_PASSWORD: complyscan\n",
+      "deploy/docker-compose.prod.yml": "services:\n  db:\n    environment:\n      POSTGRES_PASSWORD: Xk9fQ2mLp8Zr4Tv7Nc1Wb6Hs\n",
+    }), ref);
+    const dev = out.findings.filter((v) => /looks like a development default/.test(v.name));
+    const real = out.findings.filter((v) => /Hardcoded Secret in Config File \(in source repository\)/.test(v.name));
+    expect(dev).toHaveLength(1);
+    expect(dev[0]!.severity).toBe("info");
+    expect(dev[0]!.evidence).toContain("docker-compose.yml");
+    expect(real).toHaveLength(1);
+    expect(real[0]!.severity).toBe("high");
+    expect(real[0]!.evidence).toContain("deploy/docker-compose.prod.yml");
+  });
+
+  it("does not report fetch credentials modes in a front-end script", async () => {
+    const out = await scanRepository(memorySource({ "runner/ui/app.js": 'const r = await fetch("/api", { credentials: "same-origin", headers: { a: "b" } });\n' }), ref);
+    expect(out.findings.filter((v) => /Secret|Password|Credential/i.test(v.name))).toEqual([]);
+  });
+});

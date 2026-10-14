@@ -169,3 +169,24 @@ describe("code and shell commands are not committed secrets", () => {
     expect(keys("deploy/app.env", `API_SECRET=${REAL}\n`)).toEqual(["API_SECRET"]);
   });
 });
+
+describe("found in real repositories: not secrets", () => {
+  it("fetch's credentials option is a mode, not a credential", () => {
+    expect(keys("src/ui/app.js", `fetch(url, { credentials: "same-origin" }); fetch(u, { credentials: 'include' });`)).toEqual([]);
+  });
+
+  it("a plain lowercase word as a database password in a compose, CI or dev file is a development default", () => {
+    const compose = `services:\n  db:\n    image: postgres:16\n    environment:\n      POSTGRES_PASSWORD: complyscan\n`;
+    const hit = scanConfigSecrets("docker-compose.yml", compose);
+    expect(hit.map((h) => h.key)).toEqual(["POSTGRES_PASSWORD"]);
+    expect(hit[0]!.devDefault).toBe(true);
+    const ci = `jobs:\n  test:\n    services:\n      postgres:\n        env:\n          POSTGRES_PASSWORD: complyscan\n`;
+    expect(scanConfigSecrets(".github/workflows/ci.yml", ci)[0]!.devDefault).toBe(true);
+  });
+
+  it("is not a development default when the file is not a dev file, or the password looks generated", () => {
+    expect(scanConfigSecrets(".env", `POSTGRES_PASSWORD=complyscan\n`)[0]!.devDefault).toBe(false);
+    expect(scanConfigSecrets("docker-compose.yml", `    environment:\n      POSTGRES_PASSWORD: Xk9fQ2mLp8Zr4Tv7Nc1Wb6Hs\n`)[0]!.devDefault).toBe(false);
+    expect(scanConfigSecrets("docker-compose.yml", `    environment:\n      POSTGRES_PASSWORD: complyscan2026x\n`)[0]!.devDefault).toBe(false);
+  });
+});

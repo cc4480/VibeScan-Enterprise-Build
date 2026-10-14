@@ -30,7 +30,14 @@ export interface ConfigSecretHit {
   inExampleFile: boolean;
   /** The key or the value itself says it is fake: forged, dummy, a fixture, an example, a probe. */
   namesItselfFake: boolean;
+  /** A password that is a plain lowercase word, in a compose, CI or dev file: the throwaway password of a local or test database. */
+  devDefault: boolean;
 }
+
+/** Files where a database or service is started for development or tests, not production. */
+const DEV_CONTEXT = /(?:^|\/)(?:docker-)?compose[^/]*\.ya?ml$|(?:^|\/)\.github\/workflows\/|(?:^|\/)\.devcontainer\/|(?:^|\/)\.gitlab-ci\.ya?ml$|(?:^|\/)\.circleci\/|\.env\.(?:dev|development|test|local|ci)\b|(?:^|\/)Makefile$|(?:^|\/)(?:dev|local|test)[\w.-]*\.(?:ya?ml|env)$/i;
+/** A human word (or two joined by - or _), all lowercase and no digits: nobody generated that. */
+const PLAIN_WORD = /^[a-z]{3,}(?:[-_.][a-z]{2,})?$/;
 
 const MAX_HITS_PER_FILE = 10;
 
@@ -48,7 +55,7 @@ const holdsSecret = (key: string): boolean => {
 };
 
 /** Words, digits and punctuation that mean "no value" or a setting rather than a secret. */
-const NOT_A_SECRET_VALUE = /^(?:true|false|null|none|nil|undefined|yes|no|on|off|localhost|\d+|[\w.-]*\.(?:json|pem|txt|key|crt))$/i;
+const NOT_A_SECRET_VALUE = /^(?:true|false|null|none|nil|undefined|yes|no|on|off|localhost|\d+|[\w.-]*\.(?:json|pem|txt|key|crt)|same-origin|same-site|include|omit|no-cors|cors|navigate|strict|lax|bearer|basic|digest|default|manual|auto)$/i;
 
 const isExampleFile = (path: string): boolean => /\.(?:example|sample|template|tmpl|dist)$|(?:^|\/)(?:example|sample)[^/]*$/i.test(path);
 
@@ -135,7 +142,10 @@ export function scanConfigSecrets(path: string, content: string): ConfigSecretHi
   const add = (key: string, value: string, line: number) => {
     if (hits.length >= MAX_HITS_PER_FILE || seen.has(key)) return;
     seen.add(key);
-    hits.push({ key, redacted: redactSecret(value), line, inExampleFile: example, namesItselfFake: namesItselfFake(`${key} ${value}`) });
+    hits.push({
+      key, redacted: redactSecret(value), line, inExampleFile: example, namesItselfFake: namesItselfFake(`${key} ${value}`),
+      devDefault: DEV_CONTEXT.test(path) && /pass(?:word|wd)?|pwd/.test(normaliseKey(key)) && PLAIN_WORD.test(value),
+    });
   };
 
   // JSON that parses is read as a document, so nested keys and quoted commas are not a line-regex's problem.
