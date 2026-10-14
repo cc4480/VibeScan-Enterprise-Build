@@ -28,14 +28,13 @@ import * as net from "node:net";
 import * as tls from "node:tls";
 import { vettedLookup } from "./pinnedDispatcher";
 import { isHostnameSafeSync, privateTargetsAllowed } from "./ssrfGuard";
-import { describeCertificate } from "./tlsCertificate";
+import { describeCertificate } from "./tlsCheckCertificate";
 
-export { describeCertificate, signatureAlgorithmOf } from "./tlsCertificate";
+export { describeCertificate, signatureAlgorithmOf } from "./tlsCheckCertificate";
 import {
   TLS_LABEL,
   TLS_VERSIONS,
   type ProtocolProbe,
-  type TlsCertificate,
   type TlsHandshakeResult,
   type TlsInspection,
   type TlsVersion,

@@ -12,11 +12,11 @@
  */
 import { vuln, type ScanVulnerability } from "./scannerTypes";
 import { TLS_LABEL, TLS_VERSIONS, type TlsHandshakeResult } from "./tlsCheckTypes";
-import { LEGACY, WEAK_CIPHER, hostPort, ago, certificateState, isForwardSecret } from "./tlsFindingsShared";
-import { certificateFindings } from "./tlsFindingsCertificate";
+import { LEGACY, WEAK_CIPHER, hostPort, ago, certificateState, isForwardSecret } from "./tlsCheckShared";
+import { certificateFindings } from "./tlsCheckCertFindings";
 
-// The shared pieces live in tlsFindingsShared.ts; re-exported so every import path is unchanged.
-export { EXPIRY_WARNING_DAYS, expiryWarningMs, certificateState, type CertificateState } from "./tlsFindingsShared";
+// The shared pieces live in tlsCheckShared.ts; re-exported so every import path is unchanged.
+export { EXPIRY_WARNING_DAYS, expiryWarningMs, certificateState, type CertificateState } from "./tlsCheckShared";
 
 /** What the handshake showed that is worth reporting. Order is stable: protocols, certificate, trust, cipher. */
 export function tlsFindings(r: TlsHandshakeResult, now: Date = new Date()): ScanVulnerability[] {
@@ -46,7 +46,7 @@ export function tlsFindings(r: TlsHandshakeResult, now: Date = new Date()): Scan
     }));
   }
 
-  // Certificate validity, host match, chain trust, key size and signature (tlsFindingsCertificate.ts).
+  // Certificate validity, host match, chain trust, key size and signature (tlsCheckCertFindings.ts).
   certificateFindings(findings, r, now);
 
   // ── The cipher suite a current client gets ───────────────────────────────

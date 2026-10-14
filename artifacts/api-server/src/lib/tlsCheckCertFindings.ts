@@ -5,7 +5,7 @@
  */
 import { vuln, type ScanVulnerability } from "./scannerTypes";
 import { type TlsHandshakeResult } from "./tlsCheckTypes";
-import { DAY_MS, EXPIRY_WARNING_DAYS, REPORTED_SEPARATELY, LEAF_ONLY, WEAK_HASH, hostPort, days, ago, certLines, certificateState, expiryWarningMs } from "./tlsFindingsShared";
+import { DAY_MS, EXPIRY_WARNING_DAYS, REPORTED_SEPARATELY, LEAF_ONLY, WEAK_HASH, hostPort, days, ago, certLines, certificateState, expiryWarningMs } from "./tlsCheckShared";
 
 export function certificateFindings(findings: ScanVulnerability[], r: TlsHandshakeResult, now: Date): void {
   const target = hostPort(r);
