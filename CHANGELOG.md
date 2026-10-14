@@ -7,6 +7,11 @@ for each change; this collects what shipped and why it mattered.
 
 ### Accuracy
 
+- **`.secscanignore`: an owner can mark a finding as accepted.** A file in the repository root with one rule per line: a
+  path or glob (gitignore-style; every file of a finding must match), `rule: some name`, or `rule: some name @ glob`. The report
+  carries a note naming each rule and the findings it removed, so a suppression is always visible and reviewable; coverage notes
+  are never suppressed, and only a root file counts. Documented in GITHUB_REPO_SCAN.md.
+
 - **The repository scan was run over fifteen well-known public projects, and every false positive it showed was fixed.**
   Express, Flask, FastAPI's full-stack template, Vercel's subscription, chatbot and commerce templates, create-t3-app, shadcn
   taxonomy, Gin, Laravel, Sinatra, PocketBase and supabase-js. Fixed: a template's own placeholder (`changethis`) and a

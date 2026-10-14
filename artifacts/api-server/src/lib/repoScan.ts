@@ -19,6 +19,7 @@ import { repoFinding, NOT_THE_PROJECTS_OWN, isTestOrExamplePath, asTestFileFindi
 import { supabaseMigrationFindings, isMigrationPath } from "./repoCheckSupabase";
 import { supabaseExtraFindings } from "./repoCheckSupabaseExtra";
 import { softenSamplePaths, mergeSameName } from "./repoPostProcess";
+import { IGNORE_FILE, applyIgnore, parseIgnore, suppressedNotice } from "./repoIgnore";
 import { ciConfigFindings, isWorkflowPath, isDockerfilePath, isSupabaseConfigPath, isFunctionCodePath } from "./repoCheckCi";
 import { isInfraPath } from "./repoCheckInfra";
 import { codePatternFindings, isCodePath, isEnvFilePath } from "./repoCheckCode";
@@ -140,7 +141,7 @@ function secretFindings(files: RepoFile[], ref: RepoRef): ScanVulnerability[] {
 
 /** Files a check needs alongside others (a table in one migration, its policy in the next), so they are kept to the end. */
 const keptToTheEnd = (p: string) =>
-  isMigrationPath(p) || isWorkflowPath(p) || isDockerfilePath(p) || isSupabaseConfigPath(p) || isFunctionCodePath(p) || isInfraPath(p) || isManifestPath(p) || isLockfilePath(p);
+  isMigrationPath(p) || isWorkflowPath(p) || isDockerfilePath(p) || isSupabaseConfigPath(p) || isFunctionCodePath(p) || isInfraPath(p) || isManifestPath(p) || isLockfilePath(p) || p === IGNORE_FILE;
 
 /**
  * Migrations grouped by the Supabase project they belong to (the folder that holds supabase/). A monorepo can carry
@@ -224,9 +225,13 @@ export async function scanRepository(source: RepoSource, ref: RepoRef, opts: { o
   });
 
   // Report what matters, once: samples softened, repeats of a low-level finding merged.
-  const shaped = mergeSameName(softenSamplePaths(findings));
+  // What the owner has marked as accepted in .secscanignore comes out first, and is counted in the report.
+  const ignoreFile = files.find((f) => f.path === IGNORE_FILE);
+  const { kept, suppressed } = applyIgnore(findings, ignoreFile ? parseIgnore(ignoreFile.content) : []);
+  const ignoredNote = suppressedNotice(suppressed, ref);
+  const shaped = mergeSameName(softenSamplePaths(kept));
   findings.length = 0;
-  findings.push(...shaped);
+  findings.push(...shaped, ...(ignoredNote ? [ignoredNote] : []));
 
   for (const c of checks) onProgress?.({ kind: "check", name: c.name, files: c.files, findings: c.findings, ...(c.note ? { note: c.note } : {}) });
 

@@ -20,3 +20,22 @@ At most 300 files, 1 MB each (5 MB for a lockfile), 25 MB in total, prioritised 
 
 ## Not built yet
 The installation flow in the product: a table mapping an account to its installation ids, the install-callback route and the repository picker in the UI, and passing the installation id through the scan job so the worker mints the token. `RunScanExtras.githubAccessToken` and `scanRepository(githubInstallationSource(...))` are the seam it plugs into. Also not covered: Supabase RLS review of dashboard-only changes (no migration records them), other lockfile formats (pnpm, yarn), and languages other than JavaScript/TypeScript for the code patterns.
+
+## Telling the scanner a finding is accepted: `.secscanignore`
+
+Put a `.secscanignore` file in the **root** of the repository. One rule per line; `#` starts a comment.
+
+```
+# a path or glob, gitignore-style: every finding whose files all match is left out
+legacy/
+scripts/seed.*
+/docker-compose.dev.yml
+
+# a rule name (a case-insensitive part of the finding's title), anywhere
+rule: Container Runs as Root
+
+# a rule name, only in matching files
+rule: Hardcoded Password @ scripts/seed.*
+```
+
+The report always says what was suppressed: a "N findings suppressed by .secscanignore" note lists each rule and the findings it removed, so a suppression can be seen and reviewed. A note about the scan itself (such as "covered only part of the repository") is never suppressed. The file is read from the repository root only, and a finding that touches any file the rules do not cover stays.
