@@ -154,10 +154,21 @@ export async function requestEmailVerification(): Promise<{ ok: boolean; already
  * Permanently erase the account and everything belonging to it.
  *
  * There is no undo and no grace period, so the caller is responsible for
- * making the user confirm before this is reached.
+ * making the user confirm before this is reached. The code is the one emailed by
+ * requestDeleteCode, so a session alone cannot erase an account.
  */
-export async function deleteAccount(): Promise<void> {
-  await customFetch("/api/account", { method: "DELETE", responseType: "json" });
+export async function deleteAccount(challenge: string, code: string): Promise<void> {
+  await customFetch("/api/account", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ challenge, code }),
+    responseType: "json",
+  });
+}
+
+/** Step one of deleting: email a 6-digit code to the address on the account. */
+export async function requestDeleteCode(): Promise<{ challenge: string; sentTo: string }> {
+  return customFetch("/api/account/delete/code", { method: "POST", responseType: "json" });
 }
 
 export interface EmailPreferences {

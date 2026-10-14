@@ -116,6 +116,12 @@ export function Privacy() {
           own schedule, so a deleted record can persist in a backup for a short period
           before it is gone.
         </p>
+        <p>
+          To stop the monthly free scans being reset by deleting an account and signing up
+          again, we keep, until the end of that month, a one-way keyed hash of the email address
+          together with the number of free scans used. The address itself is not kept, and the
+          hash is deleted after the month ends.
+        </p>
       </Section>
 
       <Section title="Your rights">

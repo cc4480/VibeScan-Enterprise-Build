@@ -80,6 +80,11 @@ export function trialEmailKey(email: string): string {
   return createHmac("sha256", process.env["ENCRYPTION_KEY"] ?? "secscan-trial").update(email.trim().toLowerCase()).digest("hex");
 }
 
+/** Drop remembered usage from months that are over. Run daily, so nothing outlives the month it applies to. */
+export async function purgeStaleTrialUsage(): Promise<void> {
+  await db.delete(deletedAccountTrialsTable).where(lt(deletedAccountTrialsTable.periodStart, freeScanPeriodStart()));
+}
+
 /** Free scans an earlier, since-deleted account at this address already used this month. */
 async function carriedUsage(userId: string, now: Date, exec: Executor): Promise<number> {
   const [user] = await exec.select({ email: usersTable.email }).from(usersTable).where(eq(usersTable.id, userId));

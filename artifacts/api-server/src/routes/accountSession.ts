@@ -182,6 +182,36 @@ export function registerAccountSession(router: IRouter): void {
    * What survives is named in the privacy policy: Stripe keeps its own payment
    * records for accounting, and database backups age out on their own schedule.
    */
+  /**
+   * Step one of deleting an account: mail a code to the address on file. A session alone is not
+   * enough to erase everything (a borrowed laptop, a stolen cookie), so the delete below also
+   * needs the code. Works for password and Google accounts alike, since both have an inbox.
+   */
+  router.post("/account/delete/code", async (req, res): Promise<void> => {
+    if (!req.isAuthenticated()) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    if (!req.user.email) {
+      res.status(400).json({ error: "This account has no email address to send a code to." });
+      return;
+    }
+    if (isRateLimited(`delcode:${req.user.id}`)) {
+      res.status(429).json({ error: "Too many attempts. Try again in a few minutes." });
+      return;
+    }
+    const { challenge, code } = await issueLoginChallenge(req.user.id);
+    try {
+      await sendLoginCode(req.user.email, code, Math.round(LOGIN_CODE_TTL_MS / 60000));
+    } catch (err) {
+      await abandonLoginChallenges(req.user.id);
+      req.log.error({ err }, "Could not send account deletion code");
+      res.status(502).json({ error: "Could not send your code. Please try again shortly." });
+      return;
+    }
+    res.json({ challenge, sentTo: maskEmail(req.user.email) });
+  });
+
   router.delete("/account", async (req, res): Promise<void> => {
     if (!req.isAuthenticated()) {
       res.status(401).json({ error: "Unauthorized" });
@@ -189,6 +219,22 @@ export function registerAccountSession(router: IRouter): void {
     }
 
     const userId = req.user.id;
+
+    // The emailed code proves whoever holds this session can also read the account's mail. An
+    // account with no address (a legacy anonymous one) has nothing to send to and is let through.
+    if (req.user.email) {
+      if (isRateLimited(`delete:${clientIp(req)}`)) {
+        res.status(429).json({ error: "Too many attempts. Try again in a few minutes." });
+        return;
+      }
+      const challenge = typeof req.body?.challenge === "string" ? req.body.challenge : "";
+      const code = normalizeLoginCode(req.body?.code);
+      const redeemed = challenge && code ? await redeemLoginChallenge(challenge, code) : null;
+      if (!redeemed?.ok || redeemed.userId !== userId) {
+        res.status(403).json({ error: "Enter the 6-digit code we emailed you to delete your account.", code: "delete_code_required" });
+        return;
+      }
+    }
 
     // Stop the money BEFORE erasing anything. Deleting the rows but leaving a
     // live Stripe subscription would keep charging every month to an account

@@ -8,7 +8,7 @@ import { ConnectedAppsSection } from "@/components/connected-apps";
 import { BillingSummary } from "@/components/billing-options";
 import { PrivacyCard } from "@/components/privacy-card";
 import { cn } from "@/lib/utils";
-import { deleteAccount, getEmailPreferences, setEmailPreferences, type EmailPreferences, type EmailPreferenceUpdate } from "@/lib/account-api";
+import { deleteAccount, requestDeleteCode, getEmailPreferences, setEmailPreferences, type EmailPreferences, type EmailPreferenceUpdate } from "@/lib/account-api";
 import { SEVERITY_CHOICES, PreferenceToggle, getFriendlyError } from "./settings-parts";
 
 export default function SettingsPage() {
@@ -18,6 +18,8 @@ export default function SettingsPage() {
   // Typing the word is the confirmation. A dialog with a red button is too easy
   // to dismiss by reflex for something with no undo.
   const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleteChallenge, setDeleteChallenge] = useState<{ challenge: string; sentTo: string } | null>(null);
+  const [deleteCode, setDeleteCode] = useState("");
   const [deleting, setDeleting] = useState(false);
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
@@ -53,10 +55,23 @@ export default function SettingsPage() {
     }
   };
 
-  const handleDeleteAccount = async () => {
+  const handleSendDeleteCode = async () => {
     setDeleting(true);
     try {
-      await deleteAccount();
+      setDeleteChallenge(await requestDeleteCode());
+      setDeleteCode("");
+    } catch (err) {
+      toast({ title: "Couldn't send the code", description: getFriendlyError(err), variant: "destructive" });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deleteChallenge) return;
+    setDeleting(true);
+    try {
+      await deleteAccount(deleteChallenge.challenge, deleteCode.trim());
       // Full reload rather than a router push: every cached query belongs to an
       // account that no longer exists.
       window.location.href = "/";
@@ -255,16 +270,45 @@ export default function SettingsPage() {
             aria-label="Type DELETE to confirm"
             className="flex-1 px-4 py-3 rounded-xl bg-black/30 border border-white/10 text-sm font-mono focus:outline-none focus:border-red-500/50"
           />
-          <button
-            type="button"
-            onClick={handleDeleteAccount}
-            disabled={deleteConfirm !== "DELETE" || deleting}
-            className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-red-500/90 text-white font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-          >
-            {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-            Delete my account
-          </button>
+          {!deleteChallenge && (
+            <button
+              type="button"
+              onClick={handleSendDeleteCode}
+              disabled={deleteConfirm !== "DELETE" || deleting}
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-red-500/90 text-white font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              Email me a code
+            </button>
+          )}
         </div>
+        {deleteChallenge && (
+          <div className="mt-4">
+            <label className="block text-sm text-muted-foreground mb-2">
+              We sent a 6-digit code to {deleteChallenge.sentTo}. Enter it to erase the account.
+            </label>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={deleteCode}
+                onChange={(e) => setDeleteCode(e.target.value)}
+                aria-label="6-digit code"
+                className="flex-1 px-4 py-3 rounded-xl bg-black/30 border border-white/10 text-sm font-mono focus:outline-none focus:border-red-500/50"
+              />
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={deleteConfirm !== "DELETE" || deleteCode.trim().length < 6 || deleting}
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-red-500/90 text-white font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Delete my account
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

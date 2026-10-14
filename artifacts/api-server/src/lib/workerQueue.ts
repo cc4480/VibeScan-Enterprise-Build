@@ -3,6 +3,7 @@ import { and } from "drizzle-orm";
 import { getBoss, SCAN_QUEUE, type ScanJobData } from "./queue";
 import { purgeExpiredOobTokens } from "./oobServer";
 import { purgeExpiredSessions } from "./auth";
+import { purgeStaleTrialUsage } from "./freeTrial";
 import { purgeStaleTokens } from "./authTokens";
 import { warnIfLocalDataStale, OSV_CACHE_MAX_SIZE } from "./cveCheck";
 import { refreshEolData, loadEolCacheFromDb, EOL_REFRESH_QUEUE } from "./eolFetcher";
@@ -117,6 +118,7 @@ export async function startWorker(): Promise<void> {
     // Same daily pass: expired sessions and spent or long-expired sign-in tokens.
     await purgeExpiredSessions();
     await purgeStaleTokens();
+    await purgeStaleTrialUsage();
   });
 
   // ── Domain re-verification ────────────────────────────────────────────────
