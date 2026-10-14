@@ -7,6 +7,14 @@ for each change; this collects what shipped and why it mattered.
 
 ### Accuracy
 
+- **Build tools in lockfiles are rated as build tools.** Only npm's lockfile says which packages are development-only, so
+  a Vite or Python project's advisories in esbuild, postcss, picomatch, pytest or virtualenv were rated like code that ships,
+  and a front end with nothing wrong in production still graded badly. bun.lock, pnpm-lock.yaml, yarn.lock (with the
+  package.json beside it), uv.lock and poetry.lock are now read as a graph from the project's own roots: a package reachable only
+  from development dependencies is rated one step lower, never above medium, and says so. It errs toward production: a package
+  the graph cannot account for, or reachable from any production root at any version, is left as it was. Checked on real
+  lockfiles (Flask, FastAPI's template, Taxonomy, create-t3-app): the runtime libraries stayed production in every case.
+
 - **`.secscanignore`: an owner can mark a finding as accepted.** A file in the repository root with one rule per line: a
   path or glob (gitignore-style; every file of a finding must match), `rule: some name`, or `rule: some name @ glob`. The report
   carries a note naming each rule and the findings it removed, so a suppression is always visible and reviewable; coverage notes

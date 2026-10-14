@@ -14,6 +14,7 @@ import { scaFromManifest, exactVersion, type ManifestPackage } from "./manifestS
 import { isTestOrExamplePath, type RepoFile, type RepoRef } from "./repoFinding";
 import type { ScanVulnerability } from "./scanner";
 import { isLockfile, isManifest, parseLockfile, parsePackageLock, parseRequirements, parseGoMod } from "./repoDepParsers";
+import { markDevOnly } from "./repoDepGraph";
 
 /** A safety ceiling on lookups per repository, far above any real project (a large monorepo has a few thousand packages). */
 export const MAX_PACKAGES = 5000;
@@ -53,7 +54,9 @@ export async function dependencyFindings(files: RepoFile[], ref?: Pick<RepoRef, 
   const manifests = files.filter((f) => isManifest(f.path));
   // A dependency file in an examples, tests or docs folder describes a sample, not what the project installs in production.
   const sampleOnly = (p: ManifestPackage): ManifestPackage => (p.source && isTestOrExamplePath(p.source) ? { ...p, dev: true } : p);
-  const locked = locks.flatMap((f) => parseLockfile(f.path, f.content).map((p) => sampleOnly({ ...p, source: f.path })));
+  // The lockfile's own dev flags where it has them (npm), the dependency graph where it does not (bun, pnpm, yarn, uv, poetry).
+  const manifestBeside = (f: RepoFile) => files.find((m) => m.path === f.path.slice(0, f.path.lastIndexOf("/") + 1) + "package.json")?.content;
+  const locked = locks.flatMap((f) => markDevOnly(f.path, f.content, parseLockfile(f.path, f.content), manifestBeside(f)).map((p) => sampleOnly({ ...p, source: f.path })));
   const direct = manifests.flatMap(manifestPackages).map(sampleOnly);
 
   // A direct dependency is looked up at the version a lockfile resolved, when there is one (it is the installed one).

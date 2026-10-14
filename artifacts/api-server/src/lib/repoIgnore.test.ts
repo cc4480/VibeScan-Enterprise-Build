@@ -45,7 +45,7 @@ describe("parsing and applying rules", () => {
   });
 
   it("never suppresses a coverage note", () => {
-    const note = { ...finding("x", []), category: "Scan Coverage" } as never;
+    const note = { ...(finding("x", []) as object), category: "Scan Coverage" } as never;
     expect(applyIgnore([note], parseIgnore("rule: x")).suppressed).toEqual([]);
   });
 });
