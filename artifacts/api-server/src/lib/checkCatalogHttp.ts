@@ -45,6 +45,7 @@ export const CATALOG_HTTP: CatalogTest[] = [
   ]),
   test("subresource integrity", "Supply Chain Security", PROBES, [
     ["medium", "External Resources Missing Subresource Integrity (SRI)", "External Resources Missing Subresource Integrity (SRI)"],
+    ["high", "Page Loads a Script From a Host Tied to a Known Supply-Chain Attack", "Page Loads a Script From a Host Tied to a Known Supply-Chain Attack", "compromisedScriptHosts.ts"],
   ]),
   test("verbose error pages", "Information Disclosure", PROBES, [
     ["medium", "Verbose Error Pages Expose Internal Application Details", "Verbose Error Pages Expose Internal Application Details"],

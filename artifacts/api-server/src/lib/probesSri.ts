@@ -2,6 +2,7 @@
 import { expectsIntegrity, isVendorUpdated } from "./sriPolicy";
 import type { ScanVulnerability } from "./scanner";
 import { vuln } from "./probesCore";
+import { compromisedScriptFindings } from "./compromisedScriptHosts";
 
 const PIN_ADVICE =
   'Add integrity and crossorigin to all external resources: `<script src="https://cdn.example.com/lib.js" integrity="sha384-..." crossorigin="anonymous">`. Generate hashes at https://www.srihash.org/ or using `openssl dgst -sha384 -binary FILE | openssl base64 -A`.';
@@ -11,7 +12,12 @@ const PIN_ADVICE =
 const VENDOR_ADVICE =
   "These tags are edited by their vendor under a fixed URL, so an integrity hash would break them at the next update. Either self-host a pinned copy and update it on your own schedule, or accept that the vendor can run code on the page and limit the damage: restrict script-src in your Content-Security-Policy to the hosts you use, load the tag only on the pages that need it, and keep it off login, payment and account pages.";
 
+/** The subresource-integrity probe, plus the script hosts tied to a known supply-chain attack (compromisedScriptHosts.ts). */
 export async function checkSRI(html: string, baseUrl: string, requestedUrl?: string): Promise<ScanVulnerability[]> {
+  return [...compromisedScriptFindings(html, baseUrl, requestedUrl ?? baseUrl), ...(await sriFindings(html, baseUrl, requestedUrl))];
+}
+
+async function sriFindings(html: string, baseUrl: string, requestedUrl?: string): Promise<ScanVulnerability[]> {
   let baseHost: string;
   try {
     baseHost = new URL(baseUrl).hostname;

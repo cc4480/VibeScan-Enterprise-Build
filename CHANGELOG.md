@@ -6,6 +6,9 @@ for each change; this collects what shipped and why it mattered.
 ## 2026-10-14
 
 ### Accuracy
+- **A page that loads a script from a host tied to the 2024 Polyfill.io attack is High.** polyfill.io, BootCDN, bootcss,
+  Staticfile and the other domains the reports tied to that operation are matched on the script's host, and subdomains of them
+  (`compromisedScriptHosts.ts`, inside the subresource-integrity probe). No request is made; the HTML is read.
 - **An Algolia DocSearch key in client code is no longer reported.** Its `apiKey` sits beside `indexName`, a search-only key
   public by design, as the config-file check already treated it. The client-code pattern now skips it too (`jsScannerSecrets.ts`).
 - **Backup archives are confirmed by their signature, not their content type.** `/backup.zip` needs a `PK` header and
