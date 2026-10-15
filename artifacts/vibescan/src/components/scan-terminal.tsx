@@ -17,6 +17,8 @@ interface ScanTerminalProps {
   progress: number;
   /** owner/repo, for a scan of a repository alone: there is no site, so no site totals or wording. */
   repository?: string | null;
+  /** owner/repo a website scan also reads (a repository connected to the scan): its steps are shown as the repository scan shows them. */
+  sourceRepository?: string | null;
 }
 
 const RULE = "─".repeat(52);
@@ -46,7 +48,7 @@ const Cursor = () => (
 );
 
 /** The scan terminal. Every line is real; see lib/scan-terminal.ts. */
-export function ScanTerminal({ domain, sessionId, status, error, shown, all, totalChecks: siteChecks, caughtUp, progress, repository }: ScanTerminalProps) {
+export function ScanTerminal({ domain, sessionId, status, error, shown, all, totalChecks: siteChecks, caughtUp, progress, repository, sourceRepository }: ScanTerminalProps) {
   // A repository alone is not counted against the website catalogue of checks.
   const totalChecks = repository ? 0 : siteChecks;
   const body = useRef<HTMLDivElement>(null);
@@ -93,6 +95,7 @@ export function ScanTerminal({ domain, sessionId, status, error, shown, all, tot
           <div className="text-primary/70">SecScan Security Scanner</div>
           <div className="text-zinc-600">{RULE}</div>
           <div className="text-zinc-400">Target  : {repository ? `https://github.com/${repository}` : `https://${domain || "…"}`}</div>
+          {sourceRepository && <div className="text-zinc-400">Repository: https://github.com/{sourceRepository}</div>}
           <div className="text-zinc-400">Session : {sessionId}</div>
           {totalChecks > 0 && <div className="text-zinc-400">Checks  : {totalChecks}{complete && caughtUp ? ` across ${t.tests} tests` : ""}</div>}
           <div className="text-zinc-500">{repository ? "Reads every text file in the repository, then runs five checks over what it read." : "A test is one thing the scanner runs; a check is one detection inside it."}</div>
@@ -145,6 +148,7 @@ export function ScanTerminal({ domain, sessionId, status, error, shown, all, tot
               ) : (
                 <span>✓ {t.tests} tests, {totalChecks} checks: {t.clear} clear, {t.finding} with findings, {t.checked} checked, {t.notRun} not run{t.unrecorded > 0 ? `, ${t.unrecorded} not recorded` : ""}</span>
               )}
+              {sourceRepository && !repository && <span>{repoSummary(all)}</span>}
               {t.failed > 0 && <span className="text-amber-400">{t.failed} {t.failed === 1 ? "test" : "tests"} did not run to completion: see above.</span>}
               <span className="text-zinc-500 text-xs">Opening your report…</span>
             </div>

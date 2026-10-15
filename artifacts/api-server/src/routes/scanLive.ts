@@ -14,6 +14,7 @@ import { isTestRecord } from "../lib/testLedger";
 import { resolveTest } from "../lib/checkOutcomes";
 import { REPO_TOTAL_CHECKS, WEBSITE_TOTAL_CHECKS } from "../lib/checkCatalog";
 import { repoOnlyAddress } from "../lib/repoOnlyScan";
+import { normaliseGithubRepoInput } from "../lib/githubRepoInput";
 
 const router: IRouter = Router();
 
@@ -29,7 +30,7 @@ router.get("/scans/:id/live", async (req, res): Promise<void> => {
     return;
   }
   const [scan] = await db
-    .select({ status: scansTable.status, liveTests: scansTable.liveTests, targetUrl: scansTable.targetUrl })
+    .select({ status: scansTable.status, liveTests: scansTable.liveTests, targetUrl: scansTable.targetUrl, githubRepoUrl: scansTable.githubRepoUrl })
     .from(scansTable)
     .where(and(eq(scansTable.id, rawId), eq(scansTable.userId, req.user.id)));
 
@@ -43,9 +44,15 @@ router.get("/scans/:id/live", async (req, res): Promise<void> => {
   // Each test comes with the checks inside it and what became of each (checkOutcomes.ts),
   // and the total a full scan carries, so the page can show that the two add up.
   const records = Array.isArray(scan.liveTests) ? scan.liveTests.filter(isTestRecord) : [];
-  // A repository-only scan runs the repository checks and nothing else, so its total is that list alone.
-  const totalChecks = repoOnlyAddress(scan.targetUrl) ? REPO_TOTAL_CHECKS : WEBSITE_TOTAL_CHECKS;
-  res.json({ status: scan.status, totalChecks, tests: records.map(resolveTest) });
+  // A repository-only scan runs the repository checks and nothing else, so its total is that list alone. A website scan
+  // with a repository connected runs both lists, so its total is the sum: the ticker shows the repository steps too.
+  const repoOnly = repoOnlyAddress(scan.targetUrl) !== null;
+  const connected = normaliseGithubRepoInput(scan.githubRepoUrl);
+  const repoUrl = repoOnly ? scan.targetUrl : connected.ok ? connected.url : null;
+  const totalChecks = repoOnly ? REPO_TOTAL_CHECKS : WEBSITE_TOTAL_CHECKS + (repoUrl ? REPO_TOTAL_CHECKS : 0);
+  // owner/repo of the repository the scan reads, for the ticker's repository lines (null when the scan reads none).
+  const repository = repoUrl ? repoUrl.replace(/^https:\/\/github\.com\//i, "").replace(/\/$/, "") : null;
+  res.json({ status: scan.status, totalChecks, repository, tests: records.map(resolveTest) });
 });
 
 export default router;

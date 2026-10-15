@@ -12,14 +12,16 @@ import type { LiveTest } from "./scan-terminal";
 interface LiveResponse {
   status: string;
   totalChecks: number;
+  /** owner/repo the scan reads, when a repository is connected to it. */
+  repository?: string | null;
   tests: LiveTest[];
 }
 
 const POLL_MS = 1000;
 
 /** Polls until the scan is over, then once more so the last tests are not missed. */
-export function useLiveTests(scanId: string | undefined, status: string | undefined): { tests: LiveTest[]; totalChecks: number } {
-  const [state, setState] = useState<{ tests: LiveTest[]; totalChecks: number }>({ tests: [], totalChecks: 0 });
+export function useLiveTests(scanId: string | undefined, status: string | undefined): { tests: LiveTest[]; totalChecks: number; repository: string | null } {
+  const [state, setState] = useState<{ tests: LiveTest[]; totalChecks: number; repository: string | null }>({ tests: [], totalChecks: 0, repository: null });
   const over = status === "complete" || status === "failed";
   const finalFetched = useRef(false);
 
@@ -31,7 +33,7 @@ export function useLiveTests(scanId: string | undefined, status: string | undefi
       try {
         const res = await customFetch<LiveResponse>(`/api/scans/${scanId}/live`);
         // Never shrink: a stale response must not un-show a test.
-        if (!stopped) setState((prev) => (res.tests.length >= prev.tests.length ? { tests: res.tests, totalChecks: res.totalChecks } : prev));
+        if (!stopped) setState((prev) => (res.tests.length >= prev.tests.length ? { tests: res.tests, totalChecks: res.totalChecks, repository: res.repository ?? null } : prev));
       } catch {
         /* progress is a display; the status poll reports real failures */
       }

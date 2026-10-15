@@ -44,7 +44,7 @@ export default function ScanProgressPage() {
   });
 
   const status = data?.status ?? "queued";
-  const { tests: liveTests, totalChecks } = useLiveTests(scanId, data?.status);
+  const { tests: liveTests, totalChecks, repository: liveRepository } = useLiveTests(scanId, data?.status);
   const scanOver = status === "analyzing" || status === "complete" || status === "failed";
   const tests = useMemo(() => orderForDisplay(liveTests, scanOver), [liveTests, scanOver]);
   // Each test, then the checks inside it: the terminal steps through these one line at a time.
@@ -138,6 +138,7 @@ export default function ScanProgressPage() {
         caughtUp={caughtUp}
         progress={progress}
         repository={repository}
+        sourceRepository={repository ? null : liveRepository}
       />
 
       <div className="text-center">

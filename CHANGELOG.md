@@ -150,6 +150,10 @@ for each change; this collects what shipped and why it mattered.
   other across chunks (a build warning about load order) now import directly.
 
 ### Reports
+- **A website scan with a connected repository shows its repository steps in the ticker the way a repository-only scan does.**
+  The live endpoint returns the repository and counts the repository checks in the total (website + repository). The terminal
+  shows a `Repository:` line and the repository summary at the close (`scanLive.ts`, `scan-terminal.tsx`, `use-live-tests.ts`).
+  The report still does not carry a Source code section for such a scan; that is a separate change.
 
 - **A repository-only scan gives a fix prompt.** It is built from the findings themselves, with no AI call, so it
   costs nothing beyond the scan. It speaks of the repository (not a web app), lists the files each finding is in, merges
