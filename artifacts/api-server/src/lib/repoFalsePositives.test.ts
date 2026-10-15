@@ -3,6 +3,7 @@ import { scanContent } from "./jsScanner";
 import { scanConfigSecrets } from "./configSecrets";
 import { codePatternFindings } from "./repoCheckCode";
 import { supabaseExtraFindings } from "./repoCheckSupabaseExtra";
+import { supabaseMigrationFindings } from "./repoCheckSupabase";
 import { infraFindings } from "./repoCheckInfra";
 import { isTestOrExamplePath } from "./repoFinding";
 import type { RepoFile, RepoRef } from "./repoFinding";
@@ -201,5 +202,21 @@ describe("the create-t3-app report: a DocSearch search key is public by design",
   it("clean twin: an apiKey with no search index beside it is still reported", () => {
     const client = `export const service = {\n  endpoint: "https://api.example.com",\n  apiKey: "a1b2c3d4e5f6g7h8i9j0k1l2",\n};\n`;
     expect(apiKeyFindings(client)).toHaveLength(1);
+  });
+});
+
+describe("the supabase-js report: a demo table's open policy is information, not a live hole", () => {
+  const mig = (sql: string) => supabaseMigrationFindings([{ path: "supabase/migrations/20250422000000_create_todos_table.sql", content: sql }], ref);
+  const table = `CREATE TABLE IF NOT EXISTS public.todos (id int primary key, task text);\nALTER TABLE public.todos ENABLE ROW LEVEL SECURITY;\n`;
+
+  it("an open delete policy commented 'for backward compatibility with old tests' is one info finding", () => {
+    const out = mig(`${table}-- Allow anonymous users to delete todos (for backward compatibility with old tests)\nCREATE POLICY "Allow anonymous delete access" ON public.todos FOR DELETE TO anon USING (true);\n`);
+    expect(out.map((v) => v.severity)).toEqual(["info"]);
+    expect(out[0]!.name).toContain("for a test or demo");
+  });
+
+  it("clean twin: the same open policy with no test or demo wording stays high", () => {
+    const out = mig(`${table}-- Let anyone remove any todo\nCREATE POLICY "Allow anonymous delete access" ON public.todos FOR DELETE TO anon USING (true);\n`);
+    expect(out.map((v) => v.severity)).toEqual(["high"]);
   });
 });

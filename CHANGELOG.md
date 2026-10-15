@@ -6,6 +6,9 @@ for each change; this collects what shipped and why it mattered.
 ## 2026-10-14
 
 ### Accuracy
+- **An open Supabase policy that its own comment says is for tests or a demo is information.** supabase-js's demo todos
+  table has an anonymous delete policy commented "for backward compatibility with old tests". It was rated High. Now it is one
+  info finding (`repoCheckSupabase.ts`). Policies with no such wording are rated as before.
 - **A Spring heap dump is confirmed by its HPROF header.** Before, any octet-stream answer to `/actuator/heapdump` was reported as
   a full memory dump (`probes-data-server.ts`).
 - **Three exposed-file checks added:** `/.npmrc` (High, when it holds a registry token or password line), `/.mcp.json` and

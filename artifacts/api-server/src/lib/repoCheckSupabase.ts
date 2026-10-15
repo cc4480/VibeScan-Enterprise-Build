@@ -62,7 +62,13 @@ export function tableStates(files: RepoFile[]): Map<string, TableState> {
   return tables;
 }
 
-interface Policy { table: string; command: string; roles: string[]; open: boolean; file: string; name: string }
+interface Policy { table: string; command: string; roles: string[]; open: boolean; intended: boolean; file: string; name: string }
+
+/** A policy whose comment says it exists for tests or a demo ("for backward compatibility with old tests"). Read from the raw text, since comments are stripped before parsing. */
+const intendedForTests = (raw: string, name: string): boolean => {
+  const at = name ? raw.search(new RegExp(String.raw`create\s+policy\s+"?${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"?`, "i")) : -1;
+  return at >= 0 && /\b(?:tests?|testing|examples?|demos?|fixtures?|playground)\b/i.test(raw.slice(Math.max(0, at - 300), at));
+};
 
 /** `create policy "n" on t for select to anon using (true)` and the like. */
 export function policies(files: RepoFile[]): Policy[] {
@@ -80,7 +86,8 @@ export function policies(files: RepoFile[]): Policy[] {
       // No TO clause means every role, anon included.
       const roles = to ? to.split(",").map((r) => r.replace(/"/g, "").trim().toLowerCase()).filter(Boolean) : ["public"];
       const open = /\busing\s*\(\s*true\s*\)/i.test(rest) || /\bwith\s+check\s*\(\s*true\s*\)/i.test(rest);
-      out.push({ table, command, roles, open, file: f.path, name: m[1] ?? m[2] ?? "" });
+      const name = m[1] ?? m[2] ?? "";
+      out.push({ table, command, roles, open, intended: intendedForTests(f.content, name), file: f.path, name });
     }
   }
   return out;
@@ -214,6 +221,18 @@ export function supabaseMigrationFindings(files: RepoFile[], ref: RepoRef): Scan
   const states = tableStates(files);
   for (const p of policies(files)) {
     if (!p.open || !states.has(p.table)) continue;
+    // A policy its own comment says is for tests (the demo app's todos table) is shown as information, once, not as a live hole.
+    if (p.intended) {
+      findings.push(repoFinding({
+        ref, path: p.file,
+        name: `Supabase Policy Opens "${p.table}" (for a test or demo)`,
+        severity: "info", category: "Broken Access Control", cweId: "CWE-862", cvssScore: 0, confidence: 40, wstgId: "WSTG-ATHZ-01",
+        description: `The policy "${p.name}" on public.${p.table} is open (its condition is simply true), and its comment says it exists for tests or a demo. It is shown as information so that it is not mistaken for a production table.`,
+        detail: `Policy: ${p.name}\nTable: public.${p.table}\nFor: ${p.command}  To: ${p.roles.join(", ")}  Condition: true`,
+        solution: "If this migration ever reaches a production database, remove the policy. Otherwise no action is needed.",
+      }));
+      continue;
+    }
     const toAnon = p.roles.some((r) => r === "anon" || r === "public");
     const toSignedIn = p.roles.includes("authenticated");
     const writes = p.command !== "select";

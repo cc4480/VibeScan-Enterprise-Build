@@ -21,8 +21,8 @@ describe("the catalog matches the scanner's source", () => {
     // 156 → 211: the repository scan's own checks (secrets, Supabase migrations, CI and configuration,
     // code patterns, dependencies), which the catalog did not list before. Counted from checkCatalogRepo.ts.
     expect(WEBSITE_TOTAL_CHECKS).toBe(157);
-    expect(REPO_TOTAL_CHECKS).toBe(55);
-    expect(TOTAL_CHECKS).toBe(212);
+    expect(REPO_TOTAL_CHECKS).toBe(56);
+    expect(TOTAL_CHECKS).toBe(213);
     expect(CATALOG.flatMap((t) => t.checks)).toHaveLength(TOTAL_CHECKS);
   });
 

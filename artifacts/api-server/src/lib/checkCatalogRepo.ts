@@ -20,6 +20,7 @@ export const CATALOG_REPO: CatalogTest[] = [
     ["medium", "Supabase Storage Policy Lets Anyone List and Read", "Supabase Storage Policy Lets Anyone List and Read"],
     ["high", "Supabase Tables Created Without Row Level Security"],
     ["low", "Supabase Policy Lets Anyone Insert", 'Supabase Policy Lets Anyone Insert "'],
+    ["info", "Supabase Policy Opens", "(for a test or demo)"],
     ["high", "Supabase Policy Lets Anyone Update, Delete or Read and Write", "p.command[0]!.toUpperCase()"],
     ["varies", "Supabase Policy Lets Anyone Read", 'Supabase Policy Lets Anyone Read "'],
     ["medium", "Supabase Policy Lets Every Signed-In User Reach All Rows", "Supabase Policy Lets Every Signed-In User Reach All Rows of"],
