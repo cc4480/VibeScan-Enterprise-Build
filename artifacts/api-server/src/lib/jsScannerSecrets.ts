@@ -51,6 +51,8 @@ export function scanContent(content: string): Array<{ pattern: SecretPattern; ma
     while ((m = globalPattern.exec(content)) !== null) {
       const match = m[0];
       if (p.validate && !p.validate(match, content.slice(Math.max(0, m.index - 60), m.index))) continue;
+      // Algolia DocSearch's apiKey is a search-only key beside its indexName: public by design, as configSecrets.ts already says.
+      if (p.name === "API Key in Client Code (verify restrictions)" && /\bindexName\b|\bdocsearch\b/i.test(content.slice(Math.max(0, m.index - 400), m.index + 400))) continue;
       // Filler in a vendor token's shape (sk_live_xxxxxxxx, ghp_0000..., Slack's documented webhook)
       // is a template, not a credential: see secretPlaceholders.ts.
       if (!p.skipPlaceholderCheck && isPlaceholderToken(match)) continue;

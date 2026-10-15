@@ -6,6 +6,8 @@ for each change; this collects what shipped and why it mattered.
 ## 2026-10-14
 
 ### Accuracy
+- **An Algolia DocSearch key in client code is no longer reported.** Its `apiKey` sits beside `indexName`, a search-only key
+  public by design, as the config-file check already treated it. The client-code pattern now skips it too (`jsScannerSecrets.ts`).
 - **Backup archives are confirmed by their signature, not their content type.** `/backup.zip` needs a `PK` header and
   `/backup.tar.gz` a gzip header (`1f 8b`). Before, a server that answered any path with `application/octet-stream` was reported
   as an exposed archive (`probes-data-vcs.ts`).

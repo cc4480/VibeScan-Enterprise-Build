@@ -189,3 +189,17 @@ describe("the Agent-Mesh report: a local development stack is not a published se
     expect(keys(".env.example", "RAW_DATA_ACCESS_KEY_ENV=Xk9fQ2mLp8Zr4Tv7Nc1Wb6Hs0Gd3Ey\n")).toEqual(["RAW_DATA_ACCESS_KEY_ENV"]);
   });
 });
+
+describe("the create-t3-app report: a DocSearch search key is public by design", () => {
+  const apiKeyFindings = (content: string) => scanContent(content).filter((h) => h.pattern.name === "API Key in Client Code (verify restrictions)");
+
+  it("an apiKey beside indexName (Algolia DocSearch, www/src/config.ts) is not reported", () => {
+    const config = `export const ALGOLIA = {\n  indexName: "t3-docs",\n  appId: "ABC123DEF4",\n  apiKey: "a1b2c3d4e5f6g7h8i9j0k1l2",\n};\n`;
+    expect(apiKeyFindings(config)).toEqual([]);
+  });
+
+  it("clean twin: an apiKey with no search index beside it is still reported", () => {
+    const client = `export const service = {\n  endpoint: "https://api.example.com",\n  apiKey: "a1b2c3d4e5f6g7h8i9j0k1l2",\n};\n`;
+    expect(apiKeyFindings(client)).toHaveLength(1);
+  });
+});
