@@ -243,4 +243,33 @@ export const SENSITIVE_PATHS_VCS_ENV_CMS: SensitivePath[] = [
     validate: (body) => /"beans"|"applicationContextId"/.test(body.slice(0, 500)),
   },
 
+  // ── Tool and package-manager config that often holds a token ─────────────
+  {
+    path: "/.npmrc",
+    name: ".npmrc Exposed (may hold a registry token)",
+    severity: "high", cweId: "CWE-522", cvssScore: 7.5,
+    category: "Credential Exposure",
+    description: "The npm configuration file is publicly readable. It often holds a registry auth token or a password for a private package registry, which lets anyone publish or download under that account.",
+    solution: "Delete the file from the web root and block dotfiles at the web server. Rotate any token it contains, and keep auth tokens in environment variables, not in .npmrc.",
+    validate: (body) => /^\s*(?:registry\s*=|\/\/[^\s]+:_(?:auth|authToken|password)\s*=|_authToken\s*=|_auth\s*=)/m.test(body),
+  },
+  {
+    path: "/.mcp.json",
+    name: "MCP Server Configuration Exposed",
+    severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
+    category: "Information Disclosure",
+    description: "An MCP server configuration is publicly readable. These files list the tools a project connects to and often carry the credentials they use in their environment blocks.",
+    solution: "Remove the file from the web root. Keep MCP credentials in the environment of the process that starts the server, not in a committed or deployed JSON file.",
+    validate: (body) => /"mcpServers"\s*:\s*\{/.test(body),
+  },
+  {
+    path: "/.claude/settings.json",
+    name: "Claude Code Settings Exposed",
+    severity: "medium", cweId: "CWE-200", cvssScore: 5.3,
+    category: "Information Disclosure",
+    description: "A Claude Code settings file is publicly readable. These files can list the project's permissions, hooks and environment variables, and environment entries sometimes hold tokens.",
+    solution: "Remove the .claude directory from the web root. Keep local settings out of the deployed build, and move any token in them into the environment.",
+    validate: (body) => /"(?:permissions|hooks|env|mcpServers)"\s*:/.test(body),
+  },
+
 ];

@@ -38,7 +38,7 @@ export const CATALOG_HTTP: CatalogTest[] = [
 
   // The HTTP probes: each is its own ledger test, so each carries its own checks.
   test("sensitive file exposure", "Information Disclosure", PROBES, [
-    ["varies", "Sensitive file or path publicly readable (78 paths)", "name: p.name"],
+    ["varies", "Sensitive file or path publicly readable (81 paths)", "name: p.name"],
   ]),
   test("robots.txt disclosure", "Information Disclosure", PROBES, [
     ["low", "robots.txt Discloses Sensitive Application Paths", "robots.txt Discloses Sensitive Application Paths"],

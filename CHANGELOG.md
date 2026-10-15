@@ -6,6 +6,10 @@ for each change; this collects what shipped and why it mattered.
 ## 2026-10-14
 
 ### Accuracy
+- **A Spring heap dump is confirmed by its HPROF header.** Before, any octet-stream answer to `/actuator/heapdump` was reported as
+  a full memory dump (`probes-data-server.ts`).
+- **Three exposed-file checks added:** `/.npmrc` (High, when it holds a registry token or password line), `/.mcp.json` and
+  `/.claude/settings.json` (Medium, when the JSON has their keys). The sensitive-path count is now 81 (`probes-data-vcs.ts`).
 - **A page that loads a script from a host tied to the 2024 Polyfill.io attack is High.** polyfill.io, BootCDN, bootcss,
   Staticfile and the other domains the reports tied to that operation are matched on the script's host, and subdomains of them
   (`compromisedScriptHosts.ts`, inside the subresource-integrity probe). No request is made; the HTML is read.

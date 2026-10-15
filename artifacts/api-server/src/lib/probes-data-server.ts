@@ -22,7 +22,8 @@ export const SENSITIVE_PATHS_SERVER: SensitivePath[] = [
     category: "Credential Exposure",
     description: "The Spring Boot Actuator /heapdump endpoint is publicly accessible. This endpoint downloads a complete snapshot of the JVM heap memory, which contains ALL in-memory application data: database passwords, API keys, session tokens, decrypted secrets, user PII, and any other data the application has processed. An attacker can extract secrets directly from the heap dump using tools like Eclipse Memory Analyzer.",
     solution: "Restrict all Actuator endpoints immediately: `management.endpoints.web.exposure.include=health`. If heapdump is needed for debugging, restrict it to localhost or require authentication.",
-    validate: (_, ct) => ct.includes("octet-stream") || ct.includes("x-java") || ct.includes("application/zip"),
+    // A heap dump starts with its HPROF header, "JAVA PROFILE 1.0.x". A content type of octet-stream proves nothing: servers send it for any path.
+    validate: (body) => /^JAVA PROFILE 1\.0/.test(body),
   },
   {
     path: "/actuator/loggers",

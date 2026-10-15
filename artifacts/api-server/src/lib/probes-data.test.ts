@@ -174,3 +174,41 @@ describe("SENSITIVE_PATHS: /backup.zip and /backup.tar.gz", () => {
     expect(tgz("tar listing text", "application/x-tar")).toBe(false);
   });
 });
+
+// ─── Heap dump and tool configuration files ───────────────────────────────
+
+describe("SENSITIVE_PATHS: /actuator/heapdump", () => {
+  it("is confirmed by the HPROF header, not by the content type", () => {
+    const heap = probeByPath("/actuator/heapdump");
+    expect(heap("JAVA PROFILE 1.0.2\x00\x00\x00\x04", "application/octet-stream")).toBe(true);
+  });
+
+  it("clean twin: an octet-stream answer without the HPROF header is rejected", () => {
+    const heap = probeByPath("/actuator/heapdump");
+    expect(heap("<html>Not found</html>", "application/octet-stream")).toBe(false);
+    expect(heap("\x7fELF binary", "application/octet-stream")).toBe(false);
+  });
+});
+
+describe("SENSITIVE_PATHS: .npmrc, .mcp.json and .claude/settings.json", () => {
+  it("/.npmrc is confirmed by a registry or auth line", () => {
+    const npmrc = probeByPath("/.npmrc");
+    expect(npmrc("registry=https://npm.example.com/\n//npm.example.com/:_authToken=abc123\n", "text/plain")).toBe(true);
+    expect(npmrc("_authToken=abc123\n", "text/plain")).toBe(true);
+  });
+
+  it("clean twin: an .npmrc-named page with prose is rejected", () => {
+    const npmrc = probeByPath("/.npmrc");
+    expect(npmrc("Welcome to our site. Read the registry docs.", "text/html")).toBe(false);
+  });
+
+  it("/.mcp.json and /.claude/settings.json are confirmed by their JSON keys", () => {
+    expect(probeByPath("/.mcp.json")(`{"mcpServers": {"db": {"env": {}}}}`, "application/json")).toBe(true);
+    expect(probeByPath("/.claude/settings.json")(`{"permissions": {"allow": []}}`, "application/json")).toBe(true);
+  });
+
+  it("clean twin: a JSON file without those keys is rejected for both", () => {
+    expect(probeByPath("/.mcp.json")(`{"name": "app", "version": "1.0.0"}`, "application/json")).toBe(false);
+    expect(probeByPath("/.claude/settings.json")(`{"name": "app"}`, "application/json")).toBe(false);
+  });
+});
