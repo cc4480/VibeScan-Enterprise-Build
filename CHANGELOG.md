@@ -6,6 +6,11 @@ for each change; this collects what shipped and why it mattered.
 ## 2026-10-14
 
 ### Accuracy
+- **Backup archives are confirmed by their signature, not their content type.** `/backup.zip` needs a `PK` header and
+  `/backup.tar.gz` a gzip header (`1f 8b`). Before, a server that answered any path with `application/octet-stream` was reported
+  as an exposed archive (`probes-data-vcs.ts`).
+- **Missing Referrer-Policy and Permissions-Policy are Info.** They are hardening defaults, not exposures
+  (`scannerHeaderChecks.ts`, catalog and coverage page updated to match).
 - **Two false positives from a repository scan of cc4480/Agent-Mesh.** A compose file whose database password defaults to a
   development value (`${DB_PASSWORD:-localdev123}`) publishes its port for the developer's own machine, so the port is now
   information, as it already was for dev-named compose files (`repoCheckInfra.ts`). An example env file whose value names itself

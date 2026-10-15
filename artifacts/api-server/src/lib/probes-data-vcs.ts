@@ -192,7 +192,9 @@ export const SENSITIVE_PATHS_VCS_ENV_CMS: SensitivePath[] = [
     category: "Source Code Exposure",
     description: "A backup archive is publicly downloadable. This likely contains source code, configuration files with credentials, and database exports.",
     solution: "Remove all backup files from the web root. Store backups in a private, access-controlled location.",
-    validate: (body, ct) => ct.includes("zip") || ct.includes("octet-stream") || body.slice(0, 2) === "PK",
+    // The file's own signature, not its content type: a server answers any path with octet-stream or a text page. A zip begins
+    // "PK" (local header 0x03 0x04, or an empty archive's end record 0x05 0x06).
+    validate: (body) => /^PK(?:\x03\x04|\x05\x06)/.test(body),
   },
   {
     path: "/backup.tar.gz",
@@ -201,7 +203,8 @@ export const SENSITIVE_PATHS_VCS_ENV_CMS: SensitivePath[] = [
     category: "Source Code Exposure",
     description: "A tar.gz backup archive is publicly downloadable.",
     solution: "Remove backup archives from the web root.",
-    validate: (_, ct) => ct.includes("gzip") || ct.includes("octet-stream") || ct.includes("tar"),
+    // A gzip stream begins 0x1f 0x8b. Bodies are decoded as UTF-8, where the 0x8b byte (not valid on its own) arrives as U+FFFD.
+    validate: (body) => /^\x1f(?:\x8b|�)/.test(body),
   },
 
   // ── API documentation ─────────────────────────────────────────────────────

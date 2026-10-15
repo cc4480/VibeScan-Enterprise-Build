@@ -150,3 +150,27 @@ describe("SENSITIVE_PATHS: /crossdomain.xml", () => {
   it("rejects a non-wildcard allow-access-from", () =>
     expect(validate('<cross-domain-policy><allow-access-from domain="trusted.example.com"/></cross-domain-policy>', "text/xml")).toBe(false));
 });
+
+// ─── Archives: the file's own signature decides, not the content type ─────
+
+describe("SENSITIVE_PATHS: /backup.zip and /backup.tar.gz", () => {
+  it("accepts a real zip (PK\x03\x04) and an empty zip (PK\x05\x06), whatever the content type says", () => {
+    const zip = probeByPath("/backup.zip");
+    expect(zip("PK\x03\x04\x14\x00 source", "application/octet-stream")).toBe(true);
+    expect(zip("PK\x05\x06\x00\x00", "text/plain")).toBe(true);
+  });
+
+  it("clean twin: a zip-named path answered with octet-stream but no zip signature is rejected", () => {
+    const zip = probeByPath("/backup.zip");
+    expect(zip("<html>Not found</html>", "application/octet-stream")).toBe(false);
+    expect(zip("Access denied", "application/zip")).toBe(false);
+  });
+
+  it("accepts a real gzip stream (1f 8b, as the UTF-8 decoder delivers it) and rejects octet-stream alone", () => {
+    const tgz = probeByPath("/backup.tar.gz");
+    expect(tgz("\x1f�\b\x00", "application/octet-stream")).toBe(true);
+    expect(tgz("\x1f\x8b\b\x00", "application/gzip")).toBe(true);
+    expect(tgz("<html>Not found</html>", "application/octet-stream")).toBe(false);
+    expect(tgz("tar listing text", "application/x-tar")).toBe(false);
+  });
+});

@@ -26,3 +26,20 @@ describe("Server Version Disclosure finding", async () => {
     expect(names("BunnyCDN-HOU1-893")).not.toContain("Server Version Disclosure");
   });
 });
+
+describe("Referrer-Policy and Permissions-Policy are hardening notes, not exposures", async () => {
+  const { headerFindings } = await import("./scannerHeaderChecks");
+  const page = (rawHeaders: Record<string, string>) => headerFindings({ finalUrl: "https://example.com/", rawHeaders, html: "", isHttps: true });
+
+  it("a missing Referrer-Policy or Permissions-Policy is Info", () => {
+    const found = page({});
+    expect(found.find((v) => v.name === "Missing Referrer-Policy Header")?.severity).toBe("info");
+    expect(found.find((v) => v.name === "Missing Permissions-Policy Header")?.severity).toBe("info");
+  });
+
+  it("clean twin: when both headers are sent, neither is raised", () => {
+    const names = page({ "referrer-policy": "strict-origin-when-cross-origin", "permissions-policy": "camera=()" }).map((v) => v.name);
+    expect(names).not.toContain("Missing Referrer-Policy Header");
+    expect(names).not.toContain("Missing Permissions-Policy Header");
+  });
+});

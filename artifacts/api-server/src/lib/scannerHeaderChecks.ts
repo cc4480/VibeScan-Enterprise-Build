@@ -57,7 +57,8 @@ export function headerFindings({ finalUrl, rawHeaders }: PageContext): ScanVulne
   if (!rp) {
     vulnerabilities.push(vuln({
       name: "Missing Referrer-Policy Header",
-      severity: "low",
+      // Info: a hardening default, not an exposure. Browsers already send only the origin for most cross-site requests.
+      severity: "info",
       category: "Information Disclosure",
       description: "No Referrer-Policy header is set. By default, browsers may include the full URL of the previous page in the Referer header, potentially leaking sensitive URL parameters (session tokens, search queries) to third-party sites.",
       evidence: `GET ${finalUrl}\nReferrer-Policy: (header absent from response)`,
@@ -73,7 +74,8 @@ export function headerFindings({ finalUrl, rawHeaders }: PageContext): ScanVulne
   if (!pp) {
     vulnerabilities.push(vuln({
       name: "Missing Permissions-Policy Header",
-      severity: "low",
+      // Info: it only limits browser features the page would have to ask the visitor for anyway.
+      severity: "info",
       category: "Browser Feature Control",
       description: "No Permissions-Policy (formerly Feature-Policy) header is present. This header restricts which browser APIs (camera, microphone, geolocation, etc.) can be accessed from your pages and embedded iframes.",
       evidence: `GET ${finalUrl}\nPermissions-Policy: (header absent from response)`,
