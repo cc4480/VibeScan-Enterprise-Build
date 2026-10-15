@@ -144,4 +144,7 @@ export const CATALOG_SURFACE: CatalogTest[] = [
   test("race condition", "Business Logic", "raceConditionProbe.ts", [
     ["high", "Race Condition Allows a One-Time Action to Succeed Multiple Times", "Race Condition Allows a One-Time Action to Succeed Multiple Times"],
   ]),
+  test("business logic: checkout price", "Business Logic", "priceTamperingProbe.ts", [
+    ["high", "Checkout Trusts the Client's Price", "Checkout Trusts the Client's Price"],
+  ]),
 ];

@@ -20,9 +20,9 @@ describe("the catalog matches the scanner's source", () => {
     // grade as the default (the two SSL Labs checks stay listed; they run only with SSLLABS_ENABLED).
     // 156 → 211: the repository scan's own checks (secrets, Supabase migrations, CI and configuration,
     // code patterns, dependencies), which the catalog did not list before. Counted from checkCatalogRepo.ts.
-    expect(WEBSITE_TOTAL_CHECKS).toBe(157);
+    expect(WEBSITE_TOTAL_CHECKS).toBe(158);
     expect(REPO_TOTAL_CHECKS).toBe(56);
-    expect(TOTAL_CHECKS).toBe(213);
+    expect(TOTAL_CHECKS).toBe(214);
     expect(CATALOG.flatMap((t) => t.checks)).toHaveLength(TOTAL_CHECKS);
   });
 
@@ -68,6 +68,7 @@ describe("every test the scanner records is accounted for", () => {
     "port scan",
     "LLM prompt injection (system prompt extraction)",
     "race condition (one-time action)",
+    "business logic: checkout price",
   ];
 
   it("finds the ledger names it is checking against", () => {

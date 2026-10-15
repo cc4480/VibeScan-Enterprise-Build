@@ -172,6 +172,7 @@ async function runScanInner(
 
   const probes = await runProbeStage({
     finalUrl, html, rawHeaders, tier, allowActiveProbes, ledger,
+    signedIn: Boolean(auth?.credentials),
     setCookies: initial.setCookies ?? [],
     status: initial.status,
     requestedUrl: targetUrl,

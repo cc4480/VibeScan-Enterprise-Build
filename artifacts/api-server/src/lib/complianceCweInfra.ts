@@ -80,6 +80,11 @@ export const CWE_CONTROLS_INFRASTRUCTURE: Record<string, ControlRef[]> = {
     { framework: "iso27001", control: "A.5.15", title: "Access control" },
     { framework: "soc2", control: "CC6.1", title: "Logical access restricted to authorised users" },
   ],
+  "CWE-472": [
+    { framework: "asvs", control: "V11.1.4", title: "Business logic values are enforced on the server" },
+    { framework: "iso27001", control: "A.8.28", title: "Secure coding" },
+    { framework: "soc2", control: "CC7.1", title: "Changes and processing integrity" },
+  ],
   "CWE-362": [
     { framework: "asvs", control: "V11.1.6", title: "No TOCTOU or other race conditions in sensitive operations" },
     { framework: "iso27001", control: "A.8.28", title: "Secure coding" },

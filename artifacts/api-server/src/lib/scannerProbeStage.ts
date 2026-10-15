@@ -14,6 +14,7 @@ import { analyzeJwts } from "./jwtAnalysis";
 import { checkSubdomainTakeover } from "./subdomainTakeover";
 import { checkPathTraversal } from "./pathTraversal";
 import { runInjectionProbes } from "./injectionProbe";
+import { priceTamperingFindings } from "./priceTamperingProbe";
 import { checkSourceMaps } from "./sourceMaps";
 import { checkVibeStackSecurity } from "./vibeStackProbes";
 import { runBaasProbes } from "./baasProbes";
@@ -32,6 +33,8 @@ export interface ProbeStageInput {
   status: number;
   tier: string;
   allowActiveProbes: boolean;
+  /** The scan has a signed-in test account. Checkout and order flows are normally behind sign-in, so business-logic probes need it. */
+  signedIn?: boolean;
   githubRepoUrl?: string;
   /**
    * A GitHub App installation token for the repository, when the owner connected it (githubApp.ts). Held in memory for
@@ -56,7 +59,7 @@ export interface ProbeStageInput {
  * which of them could not complete (see the notes on unrunFamilies below).
  */
 export async function runProbeStage({
-  finalUrl, html, rawHeaders, setCookies, status, tier, allowActiveProbes, githubRepoUrl, githubAccessToken, ledger, crawlPageBudget, requestedUrl,
+  finalUrl, html, rawHeaders, setCookies, status, tier, allowActiveProbes, signedIn, githubRepoUrl, githubAccessToken, ledger, crawlPageBudget, requestedUrl,
   authoredHtml,
 }: ProbeStageInput) {
   const vulnerabilities: ScanVulnerability[] = [];
@@ -182,6 +185,7 @@ export async function runProbeStage({
     "dependency CVEs from an exposed manifest",
     "path traversal",
     "injection (XSS, SQLi)",
+    "business logic: checkout price",
   ];
   if (!allowActiveProbes) {
     for (const family of activeFamilies) ledger.skip("active", family, NOT_VERIFIED);
@@ -242,6 +246,12 @@ export async function runProbeStage({
       // A03 Injection — reflected XSS + error-based SQLi active probing
       { family: "injection (XSS, SQLi)", run: runInjectionProbes(finalUrl, html) },
     );
+    // Business logic: a checkout that bills the client's price. The checkout sits behind sign-in, so it needs the test account.
+    if (signedIn) {
+      namedProbes.push({ family: "business logic: checkout price", run: priceTamperingFindings(new URL(finalUrl).origin) });
+    } else {
+      ledger.skip("active", "business logic: checkout price", "no signed-in test account was supplied for this scan");
+    }
   }
 
   const [crawlResult, ...probeResults] = await Promise.all([

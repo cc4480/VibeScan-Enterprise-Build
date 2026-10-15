@@ -149,6 +149,13 @@ for each change; this collects what shipped and why it mattered.
   file that no longer exists, reloads once by itself instead of showing an error. Two billing files that re-exported each
   other across chunks (a build warning about load order) now import directly.
 
+### Business logic
+- **A checkout that bills the client's price is reported (High).** Two requests to each checkout or order endpoint differ only in
+  the unit price (7 and 953, quantity 3). The finding needs the computed product in both responses, at the same field, so an echo
+  of the price is not a finding. Runs only on a verified domain with a signed-in test account, and sends line items only: no
+  payment, no confirm step (`priceTamperingProbe.ts`, ported from Seclayer's price probe). The catalog, coverage page and CWE-472
+  mapping are updated. Coupon reuse, workflow-step skipping and role escalation are not built yet.
+
 ### Reports
 - **The AI fix prompt lists every finding in the report.** The written prompt named only a few findings on a real scan, so every finding (info included) is now listed under it, most severe first, with its files. This is added on both the AI path and the fallback (`fixPromptCoverage.ts`, `aiAnalysis.ts`).
 - **A website scan with a connected repository shows its repository steps in the ticker the way a repository-only scan does.**
