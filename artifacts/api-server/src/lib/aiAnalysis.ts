@@ -4,6 +4,7 @@
  */
 import type { ScanVulnerability } from "./scanner";
 import type { TestRecord } from "./testLedger";
+import { withEveryFinding } from "./fixPromptCoverage";
 import {
   callDeepSeekDetailed,
   detectAgentEnvironment,
@@ -28,14 +29,19 @@ export async function analyseFindings(
   opts: AiCallOptions = {},
 ): Promise<AnalysisOutcome> {
   const outcome = await callDeepSeekDetailed(targetUrl, vulnerabilities, technologies, tier, tests, opts);
-  if (outcome.ok) return { analysis: { ...outcome.result, source: "ai" }, failure: null };
+  if (outcome.ok) {
+    // The written prompt names only some findings, so every finding in the report is listed under it.
+    const agentFixPrompt = withEveryFinding(outcome.result.agentFixPrompt, vulnerabilities);
+    return { analysis: { ...outcome.result, agentFixPrompt, source: "ai" }, failure: null };
+  }
+  const fallback = buildFallbackAnalysis({
+    targetUrl,
+    vulnerabilities,
+    agent: detectAgentEnvironment(technologies, targetUrl),
+    tests,
+  });
   return {
-    analysis: buildFallbackAnalysis({
-      targetUrl,
-      vulnerabilities,
-      agent: detectAgentEnvironment(technologies, targetUrl),
-      tests,
-    }),
+    analysis: { ...fallback, agentFixPrompt: withEveryFinding(fallback.agentFixPrompt, vulnerabilities) },
     failure: outcome.failure,
   };
 }

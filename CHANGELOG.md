@@ -150,6 +150,7 @@ for each change; this collects what shipped and why it mattered.
   other across chunks (a build warning about load order) now import directly.
 
 ### Reports
+- **The AI fix prompt lists every finding in the report.** The written prompt named only a few findings on a real scan, so every finding (info included) is now listed under it, most severe first, with its files. This is added on both the AI path and the fallback (`fixPromptCoverage.ts`, `aiAnalysis.ts`).
 - **A website scan with a connected repository shows its repository steps in the ticker the way a repository-only scan does.**
   The live endpoint returns the repository and counts the repository checks in the total (website + repository). The terminal
   shows a `Repository:` line and the repository summary at the close (`scanLive.ts`, `scan-terminal.tsx`, `use-live-tests.ts`).
