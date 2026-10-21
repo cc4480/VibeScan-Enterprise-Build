@@ -59,38 +59,54 @@ export async function startVerification(input: { userId: string; userEmail: stri
     }
   }
 
-  const [pending] = await db
-    .select({ id: findingVerificationsTable.id, scanId: findingVerificationsTable.scanId })
-    .from(findingVerificationsTable)
-    .where(and(eq(findingVerificationsTable.reportId, input.reportId), eq(findingVerificationsTable.findingId, input.findingId), eq(findingVerificationsTable.verdict, "pending")))
-    .limit(1);
-  if (pending) return { ok: true, verificationId: pending.id, scanId: pending.scanId };
+  // The pending check, the daily count and the two inserts run as one transaction under a per-user
+  // advisory lock, the same pattern as insertScanRow in lib/freeTrial.ts. Without it, parallel
+  // requests all count the same rows and all insert, going past the daily cap.
+  type Claim =
+    | { kind: "existing"; verificationId: string; scanId: string }
+    | { kind: "limit" }
+    | { kind: "created"; verificationId: string; scanId: string };
+  const claim: Claim = await db.transaction(async (tx): Promise<Claim> => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`verify-fix:${input.userId}`}))`);
 
-  const [{ n } = { n: 0 }] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(findingVerificationsTable)
-    .where(and(eq(findingVerificationsTable.userId, input.userId), gte(findingVerificationsTable.createdAt, new Date(Date.now() - DAY_MS))));
-  if (n >= DAILY_VERIFICATIONS) {
+    const [pending] = await tx
+      .select({ id: findingVerificationsTable.id, scanId: findingVerificationsTable.scanId })
+      .from(findingVerificationsTable)
+      .where(and(eq(findingVerificationsTable.reportId, input.reportId), eq(findingVerificationsTable.findingId, input.findingId), eq(findingVerificationsTable.verdict, "pending")))
+      .limit(1);
+    if (pending) return { kind: "existing", verificationId: pending.id, scanId: pending.scanId };
+
+    const [{ n } = { n: 0 }] = await tx
+      .select({ n: sql<number>`count(*)::int` })
+      .from(findingVerificationsTable)
+      .where(and(eq(findingVerificationsTable.userId, input.userId), gte(findingVerificationsTable.createdAt, new Date(Date.now() - DAY_MS))));
+    if (n >= DAILY_VERIFICATIONS) return { kind: "limit" };
+
+    const [scan] = await tx
+      .insert(scansTable)
+      .values({ userId: input.userId, userEmail: input.userEmail, targetUrl: report.targetUrl, tier: "deep", status: "queued", origin: "verify" })
+      .returning({ id: scansTable.id });
+    const [row] = await tx
+      .insert(findingVerificationsTable)
+      .values({ userId: input.userId, reportId: input.reportId, findingId: input.findingId, scanId: scan!.id })
+      .returning({ id: findingVerificationsTable.id });
+    return { kind: "created", verificationId: row!.id, scanId: scan!.id };
+  });
+
+  if (claim.kind === "existing") return { ok: true, verificationId: claim.verificationId, scanId: claim.scanId };
+  if (claim.kind === "limit") {
     return { ok: false, status: 429, code: "rate_limited", message: `You can check ${DAILY_VERIFICATIONS} fixes a day. Try again tomorrow, or run a full scan.` };
   }
 
-  const [scan] = await db
-    .insert(scansTable)
-    .values({ userId: input.userId, userEmail: input.userEmail, targetUrl: report.targetUrl, tier: "deep", status: "queued", origin: "verify" })
-    .returning({ id: scansTable.id });
-  const [row] = await db
-    .insert(findingVerificationsTable)
-    .values({ userId: input.userId, reportId: input.reportId, findingId: input.findingId, scanId: scan!.id })
-    .returning({ id: findingVerificationsTable.id });
-
+  const { scanId, verificationId } = claim;
   try {
-    await enqueueScan({ scanId: scan!.id, userId: input.userId, targetUrl: report.targetUrl, tier: "deep", verificationId: row!.id });
+    await enqueueScan({ scanId, userId: input.userId, targetUrl: report.targetUrl, tier: "deep", verificationId });
   } catch {
-    await db.update(scansTable).set({ status: "failed", error: "Could not be queued" }).where(eq(scansTable.id, scan!.id));
-    await db.update(findingVerificationsTable).set({ verdict: "failed", completedAt: new Date() }).where(eq(findingVerificationsTable.id, row!.id));
+    await db.update(scansTable).set({ status: "failed", error: "Could not be queued" }).where(eq(scansTable.id, scanId));
+    await db.update(findingVerificationsTable).set({ verdict: "failed", completedAt: new Date() }).where(eq(findingVerificationsTable.id, verificationId));
     return { ok: false, status: 503, code: "unavailable", message: "Could not start the check. Please try again." };
   }
-  return { ok: true, verificationId: row!.id, scanId: scan!.id };
+  return { ok: true, verificationId, scanId };
 }
 
 /** Called by the worker once the verification scan's report is saved. */

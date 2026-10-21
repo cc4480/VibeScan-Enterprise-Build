@@ -8,7 +8,7 @@
  */
 
 import { db, pendingLoginsTable } from "@workspace/db";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import {
   LOGIN_CODE_MAX_ATTEMPTS,
   LOGIN_CODE_TTL_MS,
@@ -76,11 +76,23 @@ export async function redeemLoginChallenge(challenge: string, code: string): Pro
   if (row.expiresAt.getTime() < Date.now()) return { ok: false, reason: "expired" };
   if (row.attempts >= LOGIN_CODE_MAX_ATTEMPTS) return { ok: false, reason: "too_many_attempts" };
 
+  // Charge the attempt first, in one statement that also checks the cap. Reading
+  // the count and writing count+1 separately let parallel guesses all read the same
+  // value and all be compared. Only an attempt that wins a slot is compared.
+  const [charged] = await db
+    .update(pendingLoginsTable)
+    .set({ attempts: sql`${pendingLoginsTable.attempts} + 1` })
+    .where(
+      and(
+        eq(pendingLoginsTable.id, row.id),
+        isNull(pendingLoginsTable.usedAt),
+        lt(pendingLoginsTable.attempts, LOGIN_CODE_MAX_ATTEMPTS),
+      ),
+    )
+    .returning({ attempts: pendingLoginsTable.attempts });
+  if (!charged) return { ok: false, reason: "too_many_attempts" };
+
   if (!hashesEqual(hashValue(code), row.codeHash)) {
-    await db
-      .update(pendingLoginsTable)
-      .set({ attempts: row.attempts + 1 })
-      .where(eq(pendingLoginsTable.id, row.id));
     return { ok: false, reason: "invalid" };
   }
 

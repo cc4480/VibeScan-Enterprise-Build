@@ -100,6 +100,13 @@ export function registerAccountRecovery(router: IRouter): void {
       res.status(429).json({ error: "Too many attempts. Try again in a few minutes." });
       return;
     }
+    // Per ADDRESS as well as per IP: every request here that finds an account mails
+    // it a reset link, so rotating addresses must not be able to mail one person
+    // without limit. Applied before the lookup, so it says nothing about the address.
+    if (isRateLimited(`forgot-email:${parsed.data.email}`)) {
+      res.status(429).json({ error: "Too many attempts. Try again in a few minutes." });
+      return;
+    }
 
     try {
       const [row] = await db.select().from(usersTable).where(eq(usersTable.email, parsed.data.email));
@@ -210,6 +217,10 @@ export function registerAccountRecovery(router: IRouter): void {
 
       const passwordHash = await hashPassword(parsed.data.newPassword);
       await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, row.id));
+
+      // As on reset: someone holding the old password may have minted an API token
+      // or connected an app, and changing the password must cut those off too.
+      await revokeAllAccess(row.id);
 
       // Sign other devices out, then re-establish the session for this one so the
       // user is not logged out of the page they are standing on.

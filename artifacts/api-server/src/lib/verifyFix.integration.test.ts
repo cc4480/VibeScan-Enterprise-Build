@@ -103,6 +103,16 @@ suite("verify a fix (real Postgres)", () => {
       expect(await start("u1", rid, "f10")).toMatchObject({ ok: false, status: 429, code: "rate_limited" });
     });
 
+    it("holds the ten-a-day line when checks for one account arrive together", async () => {
+      const ids = Array.from({ length: 15 }, (_, i) => finding(`p${i}`, CSP + "p" + i));
+      const rid = await reportWith("u-par", ids, [t(HEADERS)]);
+      const outcomes = await Promise.all(ids.map((f) => start("u-par", rid, f.id)));
+
+      expect(outcomes.filter((o) => o.ok)).toHaveLength(10);
+      expect(outcomes.filter((o) => !o.ok && o.status === 429)).toHaveLength(5);
+      expect(await rowsOf()).toHaveLength(10);
+    });
+
     it("fails cleanly, leaving nothing pending, when the queue is down", async () => {
       queue.fail = true;
       const rid = await reportWith("u1", [finding("f1", CSP)], [t(HEADERS)]);

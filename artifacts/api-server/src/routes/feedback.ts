@@ -8,10 +8,19 @@
  */
 import { Router, type IRouter } from "express";
 import { db, feedbackTable } from "@workspace/db";
+import { rateLimitMiddleware } from "../lib/rateLimit";
 
 const router: IRouter = Router();
 
-router.post("/feedback", async (req, res): Promise<void> => {
+// Anonymous by design, so there is no account to limit: keyed on the client
+// address like the other unauthenticated write routes. Without it, one script
+// could fill the feedback table at will.
+export const feedbackRateLimit = rateLimitMiddleware({
+  rules: [{ windowMs: 60 * 60 * 1000, max: 10, label: "hour" }],
+  name: "feedback",
+});
+
+router.post("/feedback", feedbackRateLimit, async (req, res): Promise<void> => {
   const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
   if (!message) {
     res.status(400).json({ error: "Feedback message is required" });

@@ -164,8 +164,12 @@ export const mockFactory1 = () => {
   });
   const table = (name: string) =>
     new Proxy({}, { get: (_t, prop) => `${name}.${String(prop)}` });
+  // A transaction runs its callback against the same fake: these tests check what is
+  // written, not isolation, which the real-Postgres integration tests cover.
+  // execute() is the advisory lock: it answers without touching the queued results.
+  const tx = { select: self, insert: self, update: self, delete: self, execute: () => Promise.resolve([]) };
   return {
-    db: { select: self, insert: self, update: self, delete: self },
+    db: { ...tx, transaction: async (cb: (t: unknown) => unknown) => cb(tx) },
     monitorSubscriptionsTable: table("monitor_subscriptions"),
     cveAlertsTable: table("cve_alerts"),
     reportsTable: table("reports"),

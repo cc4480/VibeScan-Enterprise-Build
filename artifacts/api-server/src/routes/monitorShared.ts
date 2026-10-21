@@ -10,8 +10,12 @@ export const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 export const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
 /** Fetch the most recent completed report for a user+URL pair. */
-export async function fetchLatestReport(userId: string, targetUrl: string) {
-  const [report] = await db
+export async function fetchLatestReport(
+  userId: string,
+  targetUrl: string,
+  executor: Pick<typeof db, "select"> = db,
+) {
+  const [report] = await executor
     .select({
       id: reportsTable.id,
       scannedAt: reportsTable.scannedAt,
@@ -24,9 +28,13 @@ export async function fetchLatestReport(userId: string, targetUrl: string) {
   return report ?? null;
 }
 
+// Capped because target_url is btree-indexed (idx_monitor_target), and a value past the
+// index's entry limit made the insert fail with a 500 instead of a 400.
+export const MONITOR_URL_MAX_LENGTH = 2048;
+
 export const CreateMonitorBody = z.object({
-  targetUrl: z.string().url("Must be a valid URL"),
-  webhookUrl: z.string().url().optional(),
+  targetUrl: z.string().max(MONITOR_URL_MAX_LENGTH, "That URL is too long").url("Must be a valid URL"),
+  webhookUrl: z.string().max(MONITOR_URL_MAX_LENGTH, "That webhook URL is too long").url().optional(),
 });
 
 // A subscription schedules recurring scans, so it draws on the same budget.

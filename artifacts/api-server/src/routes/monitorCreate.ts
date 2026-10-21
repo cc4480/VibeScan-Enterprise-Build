@@ -2,7 +2,7 @@ import { type IRouter } from "express";
 import { fetchLatestReport, CreateMonitorBody, monitorRateLimit, requireMonitorAuth } from "./monitorShared";
 import { db, monitorSubscriptionsTable, scansTable } from "@workspace/db";
 import { sameSite } from "../lib/urlKey";
-import { eq, and, count } from "drizzle-orm";
+import { eq, and, count, sql } from "drizzle-orm";
 import { enqueueScan } from "../lib/queue";
 import { logger } from "../lib/logger";
 import { checkScanTarget } from "../lib/ssrfGuard";
@@ -63,34 +63,6 @@ export function registerMonitorCreate(router: IRouter): void {
       return;
     }
 
-    // Counted rather than trusted from the plan: a limit lowered on a downgrade,
-    // or a row added by an admin, must both be reflected without a backfill.
-    const [{ value: activeCount }] = await db
-      .select({ value: count() })
-      .from(monitorSubscriptionsTable)
-      .where(
-        and(
-          eq(monitorSubscriptionsTable.userId, req.user.id),
-          eq(monitorSubscriptionsTable.status, "active"),
-        ),
-      );
-
-    if (Number(activeCount) >= entitlement.urlLimit) {
-      const sites = `${entitlement.urlLimit} monitored site${entitlement.urlLimit === 1 ? "" : "s"}`;
-      res.status(403).json({
-        // A free account is pointed at the paid plans; a paid one at its own limit.
-        error:
-          entitlement.reason === "free"
-            ? `A free account watches ${sites}. Subscribe to watch more, or stop monitoring one to add another.`
-            : `Your plan covers ${sites}. Upgrade or stop monitoring one to add another.`,
-        code: "monitor_url_limit",
-        reason: entitlement.reason,
-        urlLimit: entitlement.urlLimit,
-        monitoring: Number(activeCount),
-      });
-      return;
-    }
-
     // Same guard as POST /scans — a subscription schedules recurring scans, so
     // an internal target here is the SSRF hole on a 3-to-14-day timer.
     const targetCheck = await checkScanTarget(targetUrl);
@@ -99,44 +71,15 @@ export function registerMonitorCreate(router: IRouter): void {
       return;
     }
 
-    // Check for an existing active subscription for this user+URL
-    const [existing] = await db
-      .select()
-      .from(monitorSubscriptionsTable)
-      .where(
-        and(
-          eq(monitorSubscriptionsTable.userId, req.user.id),
-          sameSite(monitorSubscriptionsTable.targetUrl, targetUrl),
-          eq(monitorSubscriptionsTable.status, "active"),
-        ),
-      );
-
-    if (existing) {
-      res.status(409).json({ error: "You already have an active monitor subscription for this URL." });
-      return;
-    }
-
     const now = new Date();
     const expiresAt = new Date(now);
     expiresAt.setFullYear(expiresAt.getFullYear() + 1);
 
-    // Seed from the most recent existing report for this URL so the card
-    // immediately shows the last grade/scan date instead of "Never".
-    const existingReport = await fetchLatestReport(req.user.id, targetUrl);
-    const seedReportId = existingReport?.id ?? null;
-    // Said back to the caller, so the page can tell the owner that an earlier scan of this site was found and is being shown.
-    const seededFrom = existingReport
-      ? {
-          reportId: existingReport.id,
-          scannedAt: existingReport.scannedAt,
-          grade: (existingReport.data as { summary?: { grade?: unknown } } | null)?.summary?.grade ?? null,
-        }
-      : null;
-    const seedScanAt = existingReport?.scannedAt ?? null;
-
-    // Charged last, after every check that could still refuse, so a refusal
-    // never costs a scan. Charged before the insert, so two concurrent requests
-    // cannot both ride on the last scan left.
+    // Charged before the transaction below, because chargeScan draws on the pool and
+    // holding the per-user lock while it waits for a second connection could starve
+    // the pool. Every refusal after this point gives the charge back, so a refused
+    // request still costs nothing. The charge itself is atomic, so two concurrent
+    // requests cannot both ride on the last scan left.
     let baselinePaidWith: PaidWith | null = null;
     if (!planHolder) {
       baselinePaidWith = await chargeScan(req.user.id);
@@ -146,34 +89,117 @@ export function registerMonitorCreate(router: IRouter): void {
       }
     }
 
-    let sub: typeof monitorSubscriptionsTable.$inferSelect;
+    // The plan count, the duplicate check and the insert run as one transaction under a
+    // per-user advisory lock. Without it, two parallel creates both count one site fewer
+    // than the limit, both see no duplicate, and both insert.
+    type Seeded = { reportId: string; scannedAt: Date; grade: unknown } | null;
+    type Outcome =
+      | { kind: "created"; sub: typeof monitorSubscriptionsTable.$inferSelect; seededFrom: Seeded }
+      | { kind: "limit"; activeCount: number }
+      | { kind: "duplicate" };
+
+    let outcome: Outcome;
     try {
-      [sub] = await db
-      .insert(monitorSubscriptionsTable)
-      .values({
-        userId: req.user.id,
-        userEmail: req.user.email ?? "",
-        targetUrl,
-        status: "active",
-        expiresAt,
-        lastReportId: seedReportId,
-        lastScanAt: seedScanAt,
-        // Same sentinel the sweep itself writes before enqueueing (see
-        // monitorScheduler.ts) — the worker overwrites it with the real
-        // grade-based value once the baseline scan below completes. Leaving
-        // this null, as before, meant a subscription with no lastScanAt read
-        // as "due" to the sweep's own eyes: if the 6-hourly sweep ticked
-        // before this baseline scan finished, it enqueued a second one for
-        // the same subscription. Setting it here closes that race the same
-        // way the sweep already closes it against itself.
-        nextScanAt: new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000),
-        webhookUrl: webhookUrl ?? null,
-      })
-      .returning();
+      outcome = await db.transaction(async (tx): Promise<Outcome> => {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`monitor-create:${req.user.id}`}))`);
+
+        // Counted rather than trusted from the plan: a limit lowered on a downgrade,
+        // or a row added by an admin, must both be reflected without a backfill.
+        const [{ value: activeCount }] = await tx
+          .select({ value: count() })
+          .from(monitorSubscriptionsTable)
+          .where(
+            and(
+              eq(monitorSubscriptionsTable.userId, req.user.id),
+              eq(monitorSubscriptionsTable.status, "active"),
+            ),
+          );
+        if (Number(activeCount) >= entitlement.urlLimit) {
+          return { kind: "limit", activeCount: Number(activeCount) };
+        }
+
+        // An existing active subscription for this user+URL.
+        const [existing] = await tx
+          .select()
+          .from(monitorSubscriptionsTable)
+          .where(
+            and(
+              eq(monitorSubscriptionsTable.userId, req.user.id),
+              sameSite(monitorSubscriptionsTable.targetUrl, targetUrl),
+              eq(monitorSubscriptionsTable.status, "active"),
+            ),
+          );
+        if (existing) return { kind: "duplicate" };
+
+        // Seed from the most recent existing report for this URL so the card
+        // immediately shows the last grade/scan date instead of "Never".
+        const existingReport = await fetchLatestReport(req.user.id, targetUrl, tx);
+        const seedReportId = existingReport?.id ?? null;
+        const seedScanAt = existingReport?.scannedAt ?? null;
+        // Said back to the caller, so the page can tell the owner that an earlier scan of this site was found and is being shown.
+        const seededFrom: Seeded = existingReport
+          ? {
+              reportId: existingReport.id,
+              scannedAt: existingReport.scannedAt,
+              grade: (existingReport.data as { summary?: { grade?: unknown } } | null)?.summary?.grade ?? null,
+            }
+          : null;
+
+        const [created] = await tx
+          .insert(monitorSubscriptionsTable)
+          .values({
+            userId: req.user.id,
+            userEmail: req.user.email ?? "",
+            targetUrl,
+            status: "active",
+            expiresAt,
+            lastReportId: seedReportId,
+            lastScanAt: seedScanAt,
+            // Same sentinel the sweep itself writes before enqueueing (see
+            // monitorScheduler.ts) — the worker overwrites it with the real
+            // grade-based value once the baseline scan below completes. Leaving
+            // this null, as before, meant a subscription with no lastScanAt read
+            // as "due" to the sweep's own eyes: if the 6-hourly sweep ticked
+            // before this baseline scan finished, it enqueued a second one for
+            // the same subscription. Setting it here closes that race the same
+            // way the sweep already closes it against itself.
+            nextScanAt: new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000),
+            webhookUrl: webhookUrl ?? null,
+          })
+          .returning();
+        return { kind: "created", sub: created!, seededFrom };
+      });
     } catch (err) {
       await refundCharge(req.user.id, baselinePaidWith);
       throw err;
     }
+
+    if (outcome.kind === "limit") {
+      await refundCharge(req.user.id, baselinePaidWith);
+      const { urlLimit } = entitlement;
+      const sites = `${urlLimit} monitored site${urlLimit === 1 ? "" : "s"}`;
+      res.status(403).json({
+        // A free account is pointed at the paid plans; a paid one at its own limit.
+        error:
+          entitlement.reason === "free"
+            ? `A free account watches ${sites}. Subscribe to watch more, or stop monitoring one to add another.`
+            : `Your plan covers ${sites}. Upgrade or stop monitoring one to add another.`,
+        code: "monitor_url_limit",
+        reason: entitlement.reason,
+        urlLimit,
+        monitoring: outcome.activeCount,
+      });
+      return;
+    }
+
+    if (outcome.kind === "duplicate") {
+      await refundCharge(req.user.id, baselinePaidWith);
+      res.status(409).json({ error: "You already have an active monitor subscription for this URL." });
+      return;
+    }
+
+    const sub = outcome.sub;
+    const seededFrom = outcome.seededFrom;
 
     // Always trigger a baseline deep scan immediately on subscription activation.
     // The card is already seeded with the most recent report above so it shows

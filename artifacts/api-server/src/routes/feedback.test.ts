@@ -42,6 +42,7 @@ function makeRes() {
       res.body = payload;
       return res;
     },
+    setHeader: vi.fn(),
   };
   return res;
 }
@@ -60,20 +61,66 @@ const signedIn = {
   user: { id: "user-1", email: "someone@example.com" },
 };
 
-async function handler() {
+type Layer = { handle: (req: unknown, res: unknown, next: () => void) => unknown };
+
+async function routeStack(): Promise<Layer[]> {
   const mod = await import("./feedback.js");
   const router = mod.default as unknown as {
-    stack: { route?: { path: string; methods: Record<string, boolean>; stack: { handle: unknown }[] } }[];
+    stack: { route?: { path: string; methods: Record<string, boolean>; stack: Layer[] } }[];
   };
   const layer = router.stack.find((l) => l.route?.path === "/feedback" && l.route.methods["post"]);
   if (!layer?.route) throw new Error("no post /feedback route");
-  return layer.route.stack[0]!.handle as (req: unknown, res: unknown) => Promise<void>;
+  return layer.route.stack;
+}
+
+/** The handler itself, i.e. the last layer on the route (after any middleware). */
+async function handler() {
+  const stack = await routeStack();
+  return stack[stack.length - 1]!.handle as (req: unknown, res: unknown) => Promise<void>;
+}
+
+/** Runs the route's layers in order, stopping where a layer does not call next(). */
+async function runRoute(req: unknown, res: unknown): Promise<void> {
+  for (const layer of await routeStack()) {
+    let proceed = false;
+    await layer.handle(req, res, () => {
+      proceed = true;
+    });
+    if (!proceed) return;
+  }
 }
 
 beforeEach(() => {
   state.inserted = [];
   state.insertThrows = null;
   vi.resetModules();
+});
+
+describe("POST /feedback — how often one address may send", () => {
+  it("answers 429 to the submission after the hourly allowance from one address", async () => {
+    const ip = "203.0.113.9";
+    for (let i = 0; i < 10; i++) {
+      const res = makeRes();
+      await runRoute(makeReq({ message: `feedback ${i}` }, { ip }), res);
+      expect(res.statusCode, `submission ${i + 1}`).toBe(201);
+    }
+
+    const refused = makeRes();
+    await runRoute(makeReq({ message: "one too many" }, { ip }), refused);
+
+    expect(refused.statusCode).toBe(429);
+    expect(state.inserted).toHaveLength(10);
+  });
+
+  it("keeps a different address's allowance separate", async () => {
+    for (let i = 0; i < 10; i++) {
+      await runRoute(makeReq({ message: "x" }, { ip: "203.0.113.20" }), makeRes());
+    }
+    const other = makeRes();
+    await runRoute(makeReq({ message: "from elsewhere" }, { ip: "203.0.113.21" }), other);
+
+    expect(other.statusCode).toBe(201);
+  });
 });
 
 describe("POST /feedback — who may submit", () => {

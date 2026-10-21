@@ -34,18 +34,27 @@ let nextId = 1;
 type Pred =
   | { op: "eq"; col: string; val: unknown }
   | { op: "isNull"; col: string }
+  | { op: "lt"; col: string; val: number }
   | { op: "and"; parts: Pred[] };
 
 function matches(row: Row, p: Pred): boolean {
   if (p.op === "eq") return (row as unknown as Record<string, unknown>)[p.col] === p.val;
   if (p.op === "isNull") return (row as unknown as Record<string, unknown>)[p.col] == null;
+  if (p.op === "lt") return (row as unknown as Record<string, number>)[p.col]! < p.val;
   return p.parts.every((part) => matches(row, part));
 }
+
+/** sql`${column} + 1`, as the code writes the atomic attempt increment. */
+type Increment = { op: "increment"; col: string };
+const isIncrement = (v: unknown): v is Increment => typeof v === "object" && v !== null && (v as Increment).op === "increment";
 
 vi.mock("drizzle-orm", () => ({
   eq: (col: string, val: unknown) => ({ op: "eq", col, val }),
   isNull: (col: string) => ({ op: "isNull", col }),
+  lt: (col: string, val: number) => ({ op: "lt", col, val }),
   and: (...parts: Pred[]) => ({ op: "and", parts }),
+  // The only raw SQL the module writes is `${column} + 1`; the fake table understands exactly that.
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ op: "increment", col: values[0] }),
 }));
 
 vi.mock("@workspace/db", () => ({
@@ -80,7 +89,12 @@ vi.mock("@workspace/db", () => ({
       set: (changes: Partial<Row>) => ({
         where: (p: Pred) => {
           const hit = rows.filter((r) => matches(r, p));
-          for (const r of hit) Object.assign(r, changes);
+          for (const r of hit) {
+            for (const [key, value] of Object.entries(changes)) {
+              const record = r as unknown as Record<string, unknown>;
+              record[key] = isIncrement(value) ? (record[value.col] as number) + 1 : value;
+            }
+          }
           const result = Promise.resolve(hit) as Promise<Row[]> & { returning: () => Promise<Row[]> };
           result.returning = () => Promise.resolve(hit);
           return result;

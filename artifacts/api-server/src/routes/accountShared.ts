@@ -20,7 +20,7 @@ export const RegisterBody = z.object({
 
 export const LoginBody = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email address"),
-  password: z.string().min(1, "Enter your password"),
+  password: z.string().min(1, "Enter your password").max(MAX_PASSWORD_LENGTH, "That password is too long"),
 });
 
 /** Any well-formed UUID: for rejecting a malformed id before it reaches a uuid column. */
