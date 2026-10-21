@@ -59,13 +59,26 @@ once known:
 
 Railway → New Project → **Deploy PostgreSQL**. Rename it `postgres`.
 
+Or let the script create the project and the services in one go, after
+`railway login` in your own terminal:
+
+```
+./deploy/railway/setup.sh                    # BRANCH defaults to master
+BRANCH=some-branch ./deploy/railway/setup.sh # deploy another branch
+```
+
+On the first run it generates the secrets into `~/.secscan-railway-secrets`. To
+supply your own instead, `export ENCRYPTION_KEY=...` and `CLOUDFLARE_ORIGIN_SECRET=...`
+in the shell first (not inline on the command line, where they land in shell history).
+The Railway CLI still receives them as arguments while it runs; see the note in
+`setup.sh`.
+
 Railway exposes `DATABASE_URL` on that service. You will reference it from the
 other two rather than copying the value.
 
 ## 2. Create the `web` service
 
-New service → **GitHub Repo** → this repository, branch `fix/dashboard-scan-flicker`
-(or `master` once merged).
+New service → **GitHub Repo** → this repository, branch `master`.
 
 **Settings → Deploy → Custom Start Command:**
 

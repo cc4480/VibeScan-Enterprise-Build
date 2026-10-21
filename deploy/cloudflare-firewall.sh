@@ -11,8 +11,17 @@
 # Re-runnable: Cloudflare's ranges change occasionally, so run it again after
 # they do. It removes the rules it previously added before adding current ones.
 #
-#   sudo ./cloudflare-firewall.sh          # apply
+#   sudo ./cloudflare-firewall.sh            # apply
 #   sudo ./cloudflare-firewall.sh --dry-run  # print what it would do
+#   sudo ./cloudflare-firewall.sh --force    # apply even if unrestricted 80/443 rules exist
+#
+# ufw applies rules in order. If a rule that admits 80 or 443 from anywhere is already
+# present (for example from an earlier `ufw allow http`), it matches before the deny
+# added here, and the restriction does nothing. The script therefore refuses to run in
+# that case and lists the rules. --force overrides this; use it only if you understand
+# why the rule is there. The check matches rules by port number; ufw rules created from
+# an application profile name (such as "Nginx Full") are not detected, so look at
+# `ufw status numbered` yourself before relying on this.
 #
 # SSH is never touched. Read the dry run before applying: locking yourself out
 # of a remote server is tedious to undo and usually needs console access.
@@ -20,7 +29,14 @@
 set -euo pipefail
 
 DRY_RUN=0
-[[ "${1:-}" == "--dry-run" ]] && DRY_RUN=1
+FORCE=0
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY_RUN=1 ;;
+    --force) FORCE=1 ;;
+    *) echo "usage: $0 [--dry-run] [--force]" >&2; exit 2 ;;
+  esac
+done
 
 if [[ $DRY_RUN -eq 0 && $EUID -ne 0 ]]; then
   echo "Run as root (sudo), or pass --dry-run." >&2
@@ -51,6 +67,27 @@ if [[ "$count" -lt 20 ]]; then
   exit 1
 fi
 echo "  $count ranges."
+
+# Refuse while an unrestricted rule already admits 80 or 443 (see the header). Our own rules
+# carry a source address, so they never match this; only rules a person added do.
+echo "Checking for existing unrestricted rules on 80 and 443…"
+if ! status="$(ufw status 2>/dev/null)"; then
+  echo "Could not read ufw status. Run as root (sudo) so the check can run." >&2
+  if [[ $FORCE -eq 0 ]]; then exit 1; fi
+  status=""
+fi
+unscoped="$(printf '%s\n' "$status" | awk '$1 ~ /^(80|443)(\/tcp)?$/ && $0 ~ /ALLOW|LIMIT/ && $0 ~ /Anywhere/' || true)"
+if [[ -n "$unscoped" ]]; then
+  echo "Existing rules already admit 80 or 443 from anywhere. They match before the" >&2
+  echo "Cloudflare-only rules below, so the restriction would not hold:" >&2
+  printf '  %s\n' "$unscoped" >&2
+  if [[ $FORCE -eq 0 ]]; then
+    echo "Refusing to continue. Delete those rules (ufw status numbered, then ufw delete N)," >&2
+    echo "or rerun with --force if they are intended." >&2
+    exit 1
+  fi
+  echo "--force given: continuing with those rules still in place." >&2
+fi
 
 # Drop previously added rules so repeated runs converge rather than accumulate.
 echo "Removing previous $COMMENT rules…"

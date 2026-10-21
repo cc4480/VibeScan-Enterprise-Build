@@ -52,6 +52,12 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+# Every other env file is secret by default: production values, hand-made copies. The
+# committed templates are un-ignored below.
+.env.production
+.env.*
+!.env.*.example
+!.env.example
 # Filled-in config for the Docker stack; .env.docker.example is the template.
 .env.docker
 

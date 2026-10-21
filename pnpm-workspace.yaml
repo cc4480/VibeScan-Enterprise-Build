@@ -4,9 +4,14 @@ packages:
   - lib/integrations/*
   - scripts
 
+# pnpm 10.33 reads both allowBuilds and onlyBuiltDependencies and merges them, so they cannot
+# disagree; allowBuilds is the key pnpm writes and documents, so the list lives here only.
 allowBuilds:
+  '@swc/core': true
   core-js: true
   esbuild: true
+  msw: true
+  unrs-resolver: true
 
 autoInstallPeers: false
 
@@ -35,12 +40,6 @@ fetchRetries: 8
 fetchTimeout: 900000
 
 minimumReleaseAge: 1440
-
-onlyBuiltDependencies:
-  - '@swc/core'
-  - esbuild
-  - msw
-  - unrs-resolver
 
 overrides:
   # Security advisories in transitive dependencies (pnpm audit --prod, 2026-09-30). Each is pinned to the

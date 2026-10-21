@@ -14,13 +14,14 @@
 #
 # What is not scanned:
 #   - node_modules, .git, lockfiles
-#   - __fixtures__ directories and artifacts/vuln-fixture: this repo is a
-#     vulnerability scanner, and these hold deliberately planted fake credentials
+#   - artifacts/vuln-fixture: this repo is a vulnerability scanner, and this fixture
+#     holds deliberately planted fake credentials by design
 #   - this script and its allowlist
-# Everything else that legitimately contains a fake credential (the scanner's own
-# detection tests, for example) is listed one file at a time, with a reason, in
-# scripts/scan-secrets.allowlist. A new file that trips the scan is therefore a
-# conscious decision: remove the secret, or add the file there with a comment.
+# __fixtures__ directories ARE scanned. Everything that legitimately contains a fake
+# credential (the scanner's own detection tests, and any fixture that trips a pattern) is
+# listed one file at a time, with a reason, in scripts/scan-secrets.allowlist. A new file
+# that trips the scan is therefore a conscious decision: remove the secret, or add the
+# file there with a comment.
 
 set -euo pipefail
 export LC_ALL=C
@@ -37,10 +38,30 @@ PATTERNS=(
   'github-token|gh[pousr]_[0-9A-Za-z]{36,}'
   'github-fine-grained-token|github_pat_[0-9A-Za-z_]{22,}'
   'slack-token|xox[baprs]-[0-9A-Za-z-]{10,}'
+  # A connection string with a password inline. The password class excludes $ { } < > * so the
+  # placeholder forms (${POSTGRES_PASSWORD}, <password>, ***) do not match; the password must be
+  # 6+ characters and cannot be empty.
+  'database-url-password|postgres(ql)?://[^:/[:space:]@]+:[^[:space:]@$<>{}*/]{6,}@'
+  # DeepSeek and OpenAI keys are sk- followed by a long alphanumeric run. The leading boundary
+  # stops a match inside a longer identifier such as task-... or my-sk-....
+  'sk-api-key|(^|[^A-Za-z0-9_-])sk-[A-Za-z0-9]{32,}'
+  # Resend keys: re_ followed by 24+ alphanumerics. Same boundary reasoning as sk-.
+  'resend-key|(^|[^A-Za-z0-9_])re_[A-Za-z0-9]{24,}'
+  # ENCRYPTION_KEY or any *_SECRET assigned a 32+ character value. Allows an optional quote
+  # before and after the value, but not a $ or < (shell and template placeholders).
+  'secret-assignment|(ENCRYPTION_KEY|[A-Z0-9_]*_SECRET)[^[:alnum:]$<{[:space:]]{0,3}[[:space:]]*[:=][[:space:]]*[^[:alnum:]$<{[:space:]]{0,2}[A-Za-z0-9+/=_-]{32,}'
+)
+
+# Lines a pattern must NOT report even though its regex matched (grep -viE, case-insensitive),
+# keyed by pattern name. Used for placeholder forms that are shaped like a real value, such as
+# postgres://user:password@host in an .env template. Keep these narrow: a real secret must not
+# be able to hide behind a word here.
+declare -A PLACEHOLDER_FILTER=(
+  ['database-url-password']='://[^:/[:space:]]+:(password|pass|placeholder|changeme|example|secret|redacted|your[-_a-z]*|x{4,})@'
 )
 
 # Repo-relative paths that are never scanned (extended regex, matched with grep -E).
-EXCLUDE_RE='(^|/)(node_modules|\.git)/|(^|/)(pnpm-lock\.yaml|package-lock\.json|yarn\.lock)$|(^|/)__fixtures__/|^artifacts/vuln-fixture/|^scripts/scan-secrets\.(sh|allowlist)$'
+EXCLUDE_RE='(^|/)(node_modules|\.git)/|(^|/)(pnpm-lock\.yaml|package-lock\.json|yarn\.lock)$|^artifacts/vuln-fixture/|^scripts/scan-secrets\.(sh|allowlist)$'
 
 # NUL-separated, repo-relative file list on stdout. Tracked files when this is a
 # git checkout (CI), otherwise a plain walk.
@@ -57,14 +78,16 @@ list_files() {
 # Reads a NUL-separated file list on stdin (paths relative to $1) and prints one
 # "path:line: pattern-name" per hit. Never prints the matching line itself.
 scan_files() {
-  local base="$1" list entry name regex
+  local base="$1" list entry name regex filter
   list="$(mktemp)"
   cat >"$list"
   for entry in "${PATTERNS[@]}"; do
     name="${entry%%|*}"
     regex="${entry#*|}"
+    filter="${PLACEHOLDER_FILTER[$name]:-}"
     # -I skips binary files; -H keeps the filename even for a single file.
     (cd "$base" && xargs -0 -r grep -IHnE -e "$regex" <"$list" 2>/dev/null || true) |
+      { if [[ -n "$filter" ]]; then grep -viE -e "$filter" || true; else cat; fi; } |
       cut -d: -f1,2 | sed "s|\$|: $name|"
   done
   rm -f "$list"
@@ -96,12 +119,30 @@ self_test() {
   printf '%s\nMIIB\n' "$fake_pem" >"$dir/leak-pem.txt"
   printf 'nothing to see here\nAKIA is a prefix, not a key\n' >"$dir/clean.txt"
 
-  out="$(cd "$dir" && printf '%s\0' leak-aws.txt leak-pem.txt clean.txt | scan_files "$dir")"
+  # Newer patterns, same construction: each fake is assembled from pieces so this file does not
+  # itself match. The placeholder file must stay clean: it is the form the templates use.
+  fake_db="postgres://app:""Zq8vLm2nRt@db.internal/app"
+  fake_sk="sk-""AbCdEfGhIjKlMnOpQrStUvWxYz0123456789"
+  fake_enc="ENCRYPTION_KEY=""abcdefghijklmnopqrstuvwxyz012345"
+  printf 'DATABASE_URL=%s\n' "$fake_db" >"$dir/leak-db.txt"
+  printf 'deepseek = %s\n' "$fake_sk" >"$dir/leak-sk.txt"
+  printf '%s\n' "$fake_enc" >"$dir/leak-secret.txt"
+  printf '%s\n%s\n%s\n' \
+    'DATABASE_URL=postgresql://user:password@localhost:5432/vibescan' \
+    'DATABASE_URL=postgresql://app:${POSTGRES_PASSWORD}@db:5432/app' \
+    'ENCRYPTION_KEY=${ENCRYPTION_KEY:?must be set}' >"$dir/placeholder.txt"
+
+  out="$(cd "$dir" && printf '%s\0' leak-aws.txt leak-pem.txt clean.txt leak-db.txt leak-sk.txt leak-secret.txt placeholder.txt | scan_files "$dir")"
 
   grep -q '^leak-aws.txt:1: aws-access-key-id$' <<<"$out" || { echo "self-test FAILED: AWS key not detected" >&2; rc=1; }
   grep -q '^leak-pem.txt:1: private-key$' <<<"$out" || { echo "self-test FAILED: private key header not detected" >&2; rc=1; }
+  grep -q '^leak-db.txt:1: database-url-password$' <<<"$out" || { echo "self-test FAILED: database URL password not detected" >&2; rc=1; }
+  grep -q '^leak-sk.txt:1: sk-api-key$' <<<"$out" || { echo "self-test FAILED: sk- key not detected" >&2; rc=1; }
+  grep -q '^leak-secret.txt:1: secret-assignment$' <<<"$out" || { echo "self-test FAILED: ENCRYPTION_KEY assignment not detected" >&2; rc=1; }
   if grep -q '^clean.txt:' <<<"$out"; then echo "self-test FAILED: clean file was flagged" >&2; rc=1; fi
+  if grep -q '^placeholder.txt:' <<<"$out"; then echo "self-test FAILED: placeholder forms were flagged" >&2; rc=1; fi
   if grep -qF "$fake_aws" <<<"$out"; then echo "self-test FAILED: report leaked the matched text" >&2; rc=1; fi
+  if grep -qE 'Zq8vLm2nRt|AbCdEfGhIj|abcdefghijklmnop' <<<"$out"; then echo "self-test FAILED: report leaked a new fake's text" >&2; rc=1; fi
 
   # The allowlist must suppress exactly the file it names and nothing else.
   local saved="$ALLOWLIST"

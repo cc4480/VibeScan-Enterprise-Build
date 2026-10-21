@@ -20,7 +20,7 @@ x-database-url: &database-url
 
 services:
   db:
-    image: postgres:16
+    image: postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-vibescan}
@@ -48,6 +48,8 @@ services:
     build:
       context: .
       target: web
+      args:
+        APP_ORIGIN: ${APP_ORIGIN:-https://secscan.us}
     restart: unless-stopped
     depends_on:
       db:
@@ -105,6 +107,8 @@ services:
     build:
       context: .
       target: secscan
+      args:
+        APP_ORIGIN: ${APP_ORIGIN:-https://secscan.us}
     restart: unless-stopped
     depends_on:
       db:
@@ -145,6 +149,8 @@ services:
     build:
       context: .
       target: builder
+      args:
+        APP_ORIGIN: ${APP_ORIGIN:-https://secscan.us}
     depends_on:
       db:
         condition: service_healthy
@@ -161,6 +167,8 @@ services:
     build:
       context: .
       target: builder
+      args:
+        APP_ORIGIN: ${APP_ORIGIN:-https://secscan.us}
     depends_on:
       db:
         condition: service_healthy
@@ -174,7 +182,7 @@ services:
   # a bad migration, a mistaken delete, a corrupted table. Copy the backups
   # volume somewhere else on a schedule you control.
   backup:
-    image: postgres:16
+    image: postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
     restart: unless-stopped
     depends_on:
       db:

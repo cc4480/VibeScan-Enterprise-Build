@@ -36,7 +36,7 @@ x-app: &app
 services:
   # ── One Postgres for every app, one database and one user per app ──────────
   db:
-    image: postgres:17
+    image: postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -79,6 +79,8 @@ services:
     build:
       context: ${APPS_DIR:-../../..}/VibeScan-Enterprise-Build
       target: web
+      args:
+        APP_ORIGIN: ${APP_ORIGIN:-https://secscan.us}
     env_file: env/secscan.env
     environment:
       DATABASE_URL: postgresql://secscan:${SECSCAN_DB_PASSWORD}@db:5432/secscan
@@ -99,6 +101,8 @@ services:
     build:
       context: ${APPS_DIR:-../../..}/VibeScan-Enterprise-Build
       target: secscan
+      args:
+        APP_ORIGIN: ${APP_ORIGIN:-https://secscan.us}
     env_file: env/secscan.env
     environment:
       DATABASE_URL: postgresql://secscan:${SECSCAN_DB_PASSWORD}@db:5432/secscan
@@ -238,7 +242,7 @@ services:
   # on your Windows disk. Copy that folder somewhere else (a USB drive, cloud
   # storage): a backup on the same disk does not survive the disk.
   backup:
-    image: postgres:17
+    image: postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
     restart: unless-stopped
     depends_on:
       db:

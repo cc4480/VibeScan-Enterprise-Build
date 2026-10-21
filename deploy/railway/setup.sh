@@ -17,7 +17,7 @@
 set -euo pipefail
 
 REPO="cc4480/VibeScan-Enterprise-Build"
-BRANCH="${BRANCH:-fix/dashboard-scan-flicker}"
+BRANCH="${BRANCH:-master}"
 PROJECT="${PROJECT:-secscan}"
 APP_ORIGIN="${APP_ORIGIN:-https://secscan.us}"
 SECRETS_FILE="${SECRETS_FILE:-$HOME/.secscan-railway-secrets}"
@@ -33,14 +33,22 @@ echo "Authenticated as: $(railway whoami 2>&1)"
 # ── Secrets ─────────────────────────────────────────────────────────────────
 # Reuse them if this has been run before, so a re-run does not orphan the
 # credentials already encrypted with the previous key.
+#
+# On the first run, ENCRYPTION_KEY and CLOUDFLARE_ORIGIN_SECRET may be supplied in the
+# environment (for example exported from a password manager). Otherwise they are generated.
+# Either way they are never printed by this script.
 if [[ -f "$SECRETS_FILE" ]]; then
   echo "Reusing secrets from $SECRETS_FILE"
   # shellcheck disable=SC1090
   source "$SECRETS_FILE"
 else
-  echo "Generating secrets → $SECRETS_FILE"
-  ENCRYPTION_KEY="$(openssl rand -base64 32)"
-  CLOUDFLARE_ORIGIN_SECRET="$(openssl rand -hex 32)"
+  if [[ -n "${ENCRYPTION_KEY:-}" && -n "${CLOUDFLARE_ORIGIN_SECRET:-}" ]]; then
+    echo "Using ENCRYPTION_KEY and CLOUDFLARE_ORIGIN_SECRET from the environment → $SECRETS_FILE"
+  else
+    echo "Generating secrets → $SECRETS_FILE"
+    ENCRYPTION_KEY="${ENCRYPTION_KEY:-$(openssl rand -base64 32)}"
+    CLOUDFLARE_ORIGIN_SECRET="${CLOUDFLARE_ORIGIN_SECRET:-$(openssl rand -hex 32)}"
+  fi
   umask 077
   cat > "$SECRETS_FILE" <<EOF
 # secscan.us — Railway. Generated $(date -Is).
@@ -80,6 +88,13 @@ fi
 
 echo "Adding Postgres…"
 railway add --database postgres
+
+# ── Secret values and the Railway CLI ───────────────────────────────────────
+# The CLI only accepts variables as KEY=VALUE arguments (railway add --variables),
+# and it echoes each pair to stderr as it goes. So while the two calls below run,
+# the secret values are visible to other users in the process list and appear in
+# terminal scrollback or CI logs. Set them in the Railway dashboard instead if that
+# matters on this machine; this script cannot avoid it with this CLI.
 
 # ── web: the web tier ───────────────────────────────────────────────────────
 # DATABASE_URL uses Railway's reference syntax so it keeps working when the

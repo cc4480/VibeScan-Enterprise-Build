@@ -8,7 +8,7 @@
 # rollup-linux-x64-musl, …), so on a musl base the frontend build cannot
 # resolve its platform binaries and fails.
 # ─────────────────────────────────────────────────────────────────────────────
-FROM node:24-bookworm AS builder
+FROM node:24-bookworm@sha256:14078204b6bb268c107ceff6d3c43f45a888105e5c2b18b14c32b3409d93a1b0 AS builder
 
 WORKDIR /app
 ENV CI=true
@@ -26,6 +26,11 @@ RUN pnpm install --frozen-lockfile
 #
 # The root `build` script also runs a typecheck first; it is deliberately not
 # used here so that a pre-existing type error cannot block producing an image.
+#
+# APP_ORIGIN is baked into the frontend at build time (vite.config.ts writes it into index.html,
+# sitemap.xml and robots.txt), so it must be an ARG, not only a runtime env var. It is a public
+# URL, not a secret. Being declared in this stage only, it does not reach the runtime images.
+ARG APP_ORIGIN=https://secscan.us
 RUN pnpm -r --if-present --filter '!@workspace/mockup-sandbox' run build
 
 # Prerender the public pages (home, learn, about, bot, privacy, terms) in headless
@@ -50,7 +55,7 @@ RUN ( for attempt in 1 2 3; do \
 # separate images. They share this base so a change to the Node version or the
 # bundle layout cannot drift between them.
 # ─────────────────────────────────────────────────────────────────────────────
-FROM node:24-bookworm-slim AS runtime-base
+FROM node:24-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5 AS runtime-base
 
 ENV NODE_ENV=production
 
