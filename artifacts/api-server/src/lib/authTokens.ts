@@ -12,7 +12,14 @@
  */
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { db, authTokensTable } from "@workspace/db";
+import {
+  db,
+  authTokensTable,
+  pendingLoginsTable,
+  pendingRegistrationsTable,
+  oauthCodesTable,
+  oauthRefreshTokensTable,
+} from "@workspace/db";
 import { and, eq, isNull, lt, or } from "drizzle-orm";
 
 export type TokenPurpose = "email_verify" | "password_reset";
@@ -98,12 +105,46 @@ export async function redeemToken(raw: string, purpose: TokenPurpose): Promise<R
   return { ok: true, userId: row.userId };
 }
 
-/** Housekeeping: drop tokens that are spent or long past their expiry. */
+/**
+ * Housekeeping (daily, from workerQueue.ts): drop the one-time rows that are no
+ * longer doing anything. Each table is judged by its own expiry column.
+ *
+ * Most tables keep a row for seven days past expiry or use. That grace is what
+ * lets a replayed link or code be told apart from one that never existed, and
+ * it is the window in which an oauth reuse still revokes the token family.
+ *
+ * pending_registrations is the exception: it holds a scrypt hash of a password
+ * the person has not finished setting, so it is dropped as soon as it expires.
+ */
 export async function purgeStaleTokens(): Promise<void> {
-  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
   await db
     .delete(authTokensTable)
     .where(or(lt(authTokensTable.expiresAt, cutoff), lt(authTokensTable.usedAt, cutoff)));
+
+  await db
+    .delete(pendingLoginsTable)
+    .where(or(lt(pendingLoginsTable.expiresAt, cutoff), lt(pendingLoginsTable.usedAt, cutoff)));
+
+  await db
+    .delete(pendingRegistrationsTable)
+    .where(or(lt(pendingRegistrationsTable.expiresAt, now), lt(pendingRegistrationsTable.usedAt, cutoff)));
+
+  await db
+    .delete(oauthCodesTable)
+    .where(or(lt(oauthCodesTable.expiresAt, cutoff), lt(oauthCodesTable.usedAt, cutoff)));
+
+  await db
+    .delete(oauthRefreshTokensTable)
+    .where(
+      or(
+        lt(oauthRefreshTokensTable.expiresAt, cutoff),
+        lt(oauthRefreshTokensTable.usedAt, cutoff),
+        lt(oauthRefreshTokensTable.revokedAt, cutoff),
+      ),
+    );
 }
 
 /**

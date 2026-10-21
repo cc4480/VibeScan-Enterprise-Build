@@ -133,7 +133,10 @@ app.use(
   express.raw({ type: "application/json" }),
 );
 
-app.use(express.json());
+// JSON bodies are capped explicitly at 100kb. This is the same value as express's
+// own default, written down so a future Express upgrade cannot widen it silently.
+// Bodies over the cap are refused with 413 before any route runs.
+app.use(express.json({ limit: "100kb" }));
 app.use(express.urlencoded({ extended: true }));
 // OAuth discovery documents live at the site root, as the standards require. Public, and
 // before authMiddleware: they need no identity and must not create one.

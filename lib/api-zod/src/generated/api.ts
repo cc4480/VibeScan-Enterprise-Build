@@ -163,18 +163,20 @@ export const CreateScanBody = zod.object({
         ),
       cookie: zod
         .string()
+        .max(8192)
         .nullish()
         .describe("Cookie header value, for mode `session`."),
       bearerToken: zod
         .string()
+        .max(4096)
         .nullish()
         .describe("Bearer token, for mode `session`."),
       loginUrl: zod
         .string()
         .nullish()
         .describe("URL of the sign-in page, for mode `form`."),
-      username: zod.string().nullish(),
-      password: zod.string().nullish(),
+      username: zod.string().max(500).nullish(),
+      password: zod.string().max(500).nullish(),
     })
     .optional()
     .describe(
@@ -194,18 +196,20 @@ export const CreateScanBody = zod.object({
         ),
       cookie: zod
         .string()
+        .max(8192)
         .nullish()
         .describe("Cookie header value, for mode `session`."),
       bearerToken: zod
         .string()
+        .max(4096)
         .nullish()
         .describe("Bearer token, for mode `session`."),
       loginUrl: zod
         .string()
         .nullish()
         .describe("URL of the sign-in page, for mode `form`."),
-      username: zod.string().nullish(),
-      password: zod.string().nullish(),
+      username: zod.string().max(500).nullish(),
+      password: zod.string().max(500).nullish(),
     })
     .describe(
       "Optional credentials so the scan can test the authenticated surface. Encrypted at rest and discarded when the scan finishes. Requires `authorized` to be true, since logging into a system automatically is a different legal posture from an unauthenticated header check. Use a dedicated low-privilege test account, never an administrator login.",

@@ -218,6 +218,27 @@
       "when": 1791941165569,
       "tag": "0030_deleted_account_trials",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1792555707490,
+      "tag": "0031_hash_session_ids",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792555714917,
+      "tag": "0032_strip_upstream_tokens_from_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792555735473,
+      "tag": "0033_scans_user_created_index",
+      "breakpoints": true
     }
   ]
 }

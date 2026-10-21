@@ -70,6 +70,9 @@ export const scansTable = pgTable("scans", {
   autoSecondAccount: boolean("auto_second_account").notNull().default(false),
 }, (table) => [
   index("idx_scans_user_id").on(table.userId),
+  // The daily quota count (routes/scansCreate.ts) filters on user and a
+  // created_at range; this serves it without reading every scan the user has.
+  index("idx_scans_user_created").on(table.userId, table.createdAt),
   index("idx_scans_status").on(table.status),
 ]);
 

@@ -1,7 +1,6 @@
 import { safeReturnTo as toSafeReturnTo } from "../lib/safeRedirect";
 import { Router, type IRouter, type Request, type Response } from "express";
 import * as client from "openid-client";
-import crypto from "crypto";
 import { GetCurrentAuthUserResponse } from "@workspace/api-zod";
 import { clientIp } from "../lib/clientIp";
 import {
@@ -206,6 +205,9 @@ if (oidcConfigured) {
           return;
         }
 
+        // Only the user is kept in the session. The upstream access and refresh
+        // tokens are not stored: nothing reads them, and a database dump must
+        // not contain live credentials for the identity provider.
         const sid = await createSession({
           user: {
             id: dbUser.id,
@@ -214,15 +216,6 @@ if (oidcConfigured) {
             lastName: dbUser.lastName,
             profileImageUrl: dbUser.profileImageUrl,
           },
-          access_token:
-            tokens.access_token ?? crypto.randomBytes(16).toString("hex"),
-          refresh_token:
-            typeof tokens.refresh_token === "string"
-              ? tokens.refresh_token
-              : undefined,
-          expires_at: tokens.expires_in
-            ? Date.now() + tokens.expires_in * 1000
-            : undefined,
         });
 
         res.cookie(SESSION_COOKIE, sid, {

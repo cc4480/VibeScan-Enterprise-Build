@@ -1009,17 +1009,21 @@ components:
           description: Attestation that the requester may test this target with these credentials.
         cookie:
           type: [string, 'null']
+          maxLength: 8192
           description: Cookie header value, for mode `session`.
         bearerToken:
           type: [string, 'null']
+          maxLength: 4096
           description: Bearer token, for mode `session`.
         loginUrl:
           type: [string, 'null']
           description: URL of the sign-in page, for mode `form`.
         username:
           type: [string, 'null']
+          maxLength: 500
         password:
           type: [string, 'null']
+          maxLength: 500
 
     CreateScanResponse:
       type: object

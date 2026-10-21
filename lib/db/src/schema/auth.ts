@@ -5,7 +5,11 @@ import { index, integer, jsonb, pgTable, text, timestamp, varchar, boolean} from
 export const sessionsTable = pgTable(
   "sessions",
   {
+    // SHA-256 (hex) of the session id. The raw id is only in the browser's
+    // cookie; lookups hash it first (hashSessionId in lib/auth.ts). Migration
+    // 0031 hashed the rows that existed before this.
     sid: varchar("sid").primaryKey(),
+    // Holds only { user }. Upstream OIDC tokens are never stored here (see 0032).
     sess: jsonb("sess").notNull(),
     expire: timestamp("expire").notNull(),
   },

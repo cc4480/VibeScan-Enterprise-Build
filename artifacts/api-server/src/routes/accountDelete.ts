@@ -1,6 +1,6 @@
 import { type IRouter } from "express";
 import { isRateLimited, maskEmail } from "./accountShared";
-import { db, scansTable, creditsTable, monitorSubscriptionsTable, dismissedFindingsTable, reportSharesTable, domainVerificationsTable, githubInstallationsTable, authTokensTable, pendingLoginsTable, billingSubscriptionsTable, purchaseIntentsTable, apiTokensTable, feedbackTable, findingVerificationsTable, oauthCodesTable, oauthRefreshTokensTable, usersTable } from "@workspace/db";
+import { db, scansTable, creditsTable, monitorSubscriptionsTable, dismissedFindingsTable, reportsTable, reportSharesTable, reportBadgesTable, domainVerificationsTable, githubInstallationsTable, authTokensTable, pendingLoginsTable, pendingRegistrationsTable, billingSubscriptionsTable, purchaseIntentsTable, apiTokensTable, feedbackTable, findingVerificationsTable, oauthCodesTable, oauthRefreshTokensTable, usersTable } from "@workspace/db";
 import { stripe } from "../lib/stripe";
 import { eq } from "drizzle-orm";
 import { clearSession, deleteSessionsForUser, getSessionId } from "../lib/auth";
@@ -127,13 +127,24 @@ export function registerAccountDelete(router: IRouter): void {
     try {
       // One transaction: a failure part-way must not leave a half-erased account (the subscription is
       // already cancelled by now, so the retry has to be able to finish the job).
+      // DELETE LIST RULE: every table with a column holding the account's user id
+      // must be named here, because there are no foreign keys to users and so no
+      // cascade will reach it. Adding a table with a user-id column means adding a
+      // delete here. The integration test (accountDelete.integration.test.ts)
+      // derives the table list from the schema and fails if one is missing, so
+      // the list cannot silently fall behind. The exception is feedback, which is
+      // anonymised rather than deleted.
       await db.transaction(async (tx) => {
         // Before the scans go: remembers this month's free scans already used, so registering again
         // at the same address does not reset the allowance (lib/freeTrial.ts).
         await carryTrialUsage(tx, userId, req.user.email);
         await tx.delete(scansTable).where(eq(scansTable.userId, userId));
         await tx.delete(monitorSubscriptionsTable).where(eq(monitorSubscriptionsTable.userId, userId));
+        // Reports and their badges and shares carry their own user id, and a report whose scan was
+        // never recorded (scan_id null) is not reached by the cascade from scans, so each is named.
+        await tx.delete(reportBadgesTable).where(eq(reportBadgesTable.userId, userId));
         await tx.delete(reportSharesTable).where(eq(reportSharesTable.userId, userId));
+        await tx.delete(reportsTable).where(eq(reportsTable.userId, userId));
         await tx.delete(dismissedFindingsTable).where(eq(dismissedFindingsTable.userId, userId));
         await tx.delete(domainVerificationsTable).where(eq(domainVerificationsTable.userId, userId));
         await tx.delete(githubInstallationsTable).where(eq(githubInstallationsTable.userId, userId));
@@ -156,6 +167,8 @@ export function registerAccountDelete(router: IRouter): void {
         await tx.delete(oauthCodesTable).where(eq(oauthCodesTable.userId, userId));
         await tx.delete(oauthRefreshTokensTable).where(eq(oauthRefreshTokensTable.userId, userId));
         await tx.delete(pendingLoginsTable).where(eq(pendingLoginsTable.userId, userId));
+        // A sign-up started from this anonymous identity; its promotion target is gone with the account.
+        await tx.delete(pendingRegistrationsTable).where(eq(pendingRegistrationsTable.anonUserId, userId));
         await tx.delete(usersTable).where(eq(usersTable.id, userId));
       });
 

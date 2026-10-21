@@ -39,7 +39,6 @@ suite("Session revocation (real Postgres)", () => {
   function session(userId: string | null) {
     return {
       user: userId === null ? undefined : { id: userId, email: `${userId}@example.com` },
-      access_token: "t",
     };
   }
 
