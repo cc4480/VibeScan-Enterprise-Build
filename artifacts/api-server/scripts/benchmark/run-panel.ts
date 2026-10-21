@@ -119,6 +119,10 @@ function openRouter(apiKey: string): Complete {
           model,
           messages,
           temperature: 0,
+          // Credit is reserved for the output ceiling up front, so an unbounded ceiling
+          // makes the provider refuse the call (HTTP 402) even when the balance is ample.
+          // 74 faults x 3 tools of compact JSON fits well inside this.
+          max_tokens: 12000,
           response_format: { type: "json_object" },
           usage: { include: true },
         }),
