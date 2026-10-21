@@ -24,6 +24,7 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { devNull } from "node:os";
 import { join } from "node:path";
 import { GROUND_TRUTH, CATEGORIES, type GroundTruthItem } from "./ground-truth";
 import { OUT_DIR, TOOLS, ZAP_MODE, SCORE_ONLY, HOST_TARGET, DOCKER_TARGET, REPO_ROOT } from "./run-benchmark-config";
@@ -134,7 +135,9 @@ function score(findings: Normalised[], tool: ToolName): { hits: Hit[]; usedIndex
 
 function reachable(url: string): boolean {
   try {
-    sh("curl", ["-s", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "8", url], 15_000);
+    // os.devNull, not "/dev/null": on Windows curl cannot write to the latter, exits 23,
+    // and a running fixture was reported as not answering.
+    sh("curl", ["-s", "-o", devNull, "-w", "%{http_code}", "--max-time", "8", url], 15_000);
     return true;
   } catch { return false; }
 }

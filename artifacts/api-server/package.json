@@ -14,6 +14,8 @@
     "benchmark": "npx tsx ./scripts/benchmark/run-benchmark.ts",
     "benchmark:packet": "npx tsx ./scripts/benchmark/build-judge-packet.ts",
     "benchmark:score": "npx tsx ./scripts/benchmark/score-consensus.ts",
+    "benchmark:panel": "npx tsx ./scripts/benchmark/run-panel.ts",
+    "benchmark:panel-score": "npx tsx ./scripts/benchmark/score-panel.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

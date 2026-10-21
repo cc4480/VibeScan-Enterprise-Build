@@ -55,6 +55,53 @@ process at all. See the top-level project plan.
 
 ---
 
+## The multi-model panel
+
+Three adjudicators from one model share its blind spots. `run-panel.ts` puts the same
+packet in front of ten models from ten vendors (`panel-models.json`) through OpenRouter,
+in two phases:
+
+1. **Round 0, blind.** Each judge decides every fault alone, with the standing prompt
+   from `ADJUDICATOR-PROMPT.md`, exactly as a human adjudicator would. This is the
+   measurement.
+2. **Discussion.** On the decisions the panel split on, every judge sees the others'
+   votes and reasoning under anonymous labels (Judge-1 ... Judge-10, seated in a seeded
+   random order, never the model's name) and argues its position. It may hold its vote
+   or change it, and names the judge whose argument changed its mind. Up to `--rounds`
+   rounds, each on whatever is still split.
+
+```bash
+# Check the model ids against OpenRouter and estimate the cost. No key needed, nothing spent.
+pnpm --filter @workspace/api-server run benchmark:panel -- --dry-run
+
+OPENROUTER_API_KEY=... pnpm --filter @workspace/api-server run benchmark:panel
+pnpm --filter @workspace/api-server run benchmark:panel-score
+```
+
+`score-panel.ts` reports round-0 agreement (unanimity and Fleiss' kappa) first, then the
+detection rate from the round-0 majority and from the majority after discussion. Then it
+reads the discussion like a panel's minutes: each judge's first vote against its last,
+who moved toward the majority, who held out, whose argument others named, the decisions
+where the panel as a whole changed its answer, and what is still split, closest first.
+
+Agreement after discussion is high by construction, because the judges saw each other.
+Quote round 0.
+
+**What a panel still does not give you.** Every judge is a model, and the fixture is
+still our own checklist (below). The first time `score-panel.ts` runs it writes
+`panel/human-check.json`, a blind sample of 40 decisions, half of them disputed. When a
+person grades it, the next run scores every judge and both majorities against that
+person. Until then, the panel shows the judges agree, not that they are right. It is a
+stronger internal check than three copies of one model. It is not independent
+verification, and must not be described as one.
+
+Everything is kept: `panel/raw/` has every reply as received, `panel/key.json` says which
+judge is which model, and a rerun reuses saved verdicts instead of paying for them again.
+Claude is on the panel, and Claude also helped build the fixture and the ground truth, so
+the report lists every judge separately and its verdicts can be read against the rest.
+
+---
+
 ## A discoverability bug this benchmark itself found (fixed 2026-09-22)
 
 The first run of this benchmark scored ZAP at 18/74 blind-adjudicated (24.3%) and
