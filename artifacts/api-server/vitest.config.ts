@@ -14,8 +14,9 @@ export default defineConfig({
     // The scan HTTP layer refuses private addresses, and almost every probe
     // test drives it against a loopback server. This is the same switch a
     // self-hosted operator sets to scan their own network — the guard itself is
-    // tested with the switch off, in ssrfGuard.test.ts and in the redirect case
-    // in http.test.ts.
+    // tested with the switch off, in ssrfGuard.test.ts, and the redirect case
+    // (a hop that points at an internal address is refused) is in
+    // http.blocked.test.ts, which turns the switch off itself.
     env: {
       ALLOW_PRIVATE_SCAN_TARGETS: "true",
       // @workspace/db throws at import time without this, so any test that

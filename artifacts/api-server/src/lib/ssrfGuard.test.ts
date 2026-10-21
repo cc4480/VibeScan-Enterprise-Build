@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from "vitest";
 import {
   isPrivateAddress,
   isHostnameSafeSync,
@@ -18,11 +18,26 @@ vi.mock("node:dns/promises", () => ({
 import * as dns from "node:dns/promises";
 const lookup = dns.lookup as unknown as ReturnType<typeof vi.fn>;
 
+// vitest.config.ts sets ALLOW_PRIVATE_SCAN_TARGETS=true for every test file, which turns the
+// guard's opt-out on. This file tests the guard itself, so it starts with the variable unset
+// (for every test, including the first) and puts the suite-wide value back when it finishes.
+const SAVED_OPT_OUT = process.env["ALLOW_PRIVATE_SCAN_TARGETS"];
+
+beforeAll(() => {
+  delete process.env["ALLOW_PRIVATE_SCAN_TARGETS"];
+});
+
+afterAll(() => {
+  if (SAVED_OPT_OUT === undefined) delete process.env["ALLOW_PRIVATE_SCAN_TARGETS"];
+  else process.env["ALLOW_PRIVATE_SCAN_TARGETS"] = SAVED_OPT_OUT;
+});
+
 beforeEach(() => {
   _clearResolveCache();
   lookup.mockReset();
 });
 
+// Tests that set the variable themselves clear it again, so each starts from unset.
 afterEach(() => {
   delete process.env["ALLOW_PRIVATE_SCAN_TARGETS"];
 });

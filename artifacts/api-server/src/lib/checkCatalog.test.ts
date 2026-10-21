@@ -11,6 +11,40 @@ import { CATALOG, REPO_TOTAL_CHECKS, TOTAL_CHECKS, WEBSITE_TOTAL_CHECKS, catalog
 const LIB = __dirname;
 const src = (file: string) => moduleSource(LIB, file);
 
+/**
+ * The source with its comments removed and its string literals kept. A check that is named
+ * only in a comment is not emitted, so it must not satisfy the catalog. This is a small
+ * scanner, not a parser: it does not understand regex literals, so a line with a quote inside
+ * a regex can throw it off. That fails safe, since the needle then goes missing and the test fails.
+ */
+function liveCode(text: string): string {
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    const c = text[i]!;
+    const d = text[i + 1];
+    if (c === '"' || c === "'" || c === "`") {
+      let j = i + 1;
+      while (j < text.length && text[j] !== c) j += text[j] === "\\" ? 2 : 1;
+      out += text.slice(i, j + 1);
+      i = j + 1;
+    } else if (c === "/" && d === "/") {
+      const end = text.indexOf("\n", i);
+      i = end < 0 ? text.length : end;
+    } else if (c === "/" && d === "*") {
+      const end = text.indexOf("*/", i + 2);
+      i = end < 0 ? text.length : end + 2;
+      out += " ";
+    } else {
+      out += c;
+      i++;
+    }
+  }
+  return out;
+}
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 describe("the catalog matches the scanner's source", () => {
   it("carries the number of checks the site claims, itemised", () => {
     // Deliberate: changing the count is a public-claim change, so it must be edited here too.
@@ -18,21 +52,34 @@ describe("the catalog matches the scanner's source", () => {
     // and the active race-condition probe. 143 → 144: the TLS grade note that says why a grade
     // is below A. 144 → 156: the scanner's own TLS configuration check, which replaces the SSL Labs
     // grade as the default (the two SSL Labs checks stay listed; they run only with SSLLABS_ENABLED).
-    // 156 → 211: the repository scan's own checks (secrets, Supabase migrations, CI and configuration,
-    // code patterns, dependencies), which the catalog did not list before. Counted from checkCatalogRepo.ts.
+    // The website scan's catalog stands at 158 (WEBSITE_TOTAL_CHECKS). The repository scan's own checks
+    // (secrets, Supabase migrations, CI and configuration, code patterns, dependencies) add 56
+    // (REPO_TOTAL_CHECKS), counted from checkCatalogRepo.ts, which the catalog did not list before.
+    // So TOTAL_CHECKS = 158 + 56 = 214.
     expect(WEBSITE_TOTAL_CHECKS).toBe(158);
     expect(REPO_TOTAL_CHECKS).toBe(56);
     expect(TOTAL_CHECKS).toBe(214);
     expect(CATALOG.flatMap((t) => t.checks)).toHaveLength(TOTAL_CHECKS);
   });
 
-  it("finds every check's name in the file that raises it", () => {
+  it("finds every check's name as a string literal in live code, in the file that raises it", () => {
+    // Comments are stripped first, so a check that survives only in a comment (or in a
+    // removed-check note) fails here. What this still cannot prove is that the code holding the
+    // literal is ever called: that is dead-code detection, which needs the scanner's runtime
+    // ledger, not a text search. The finding-level tests in the scanner's own suites cover that.
     const missing: string[] = [];
+    const code = new Map<string, string>();
+    const liveFor = (file: string) => {
+      if (!code.has(file)) code.set(file, liveCode(src(file)));
+      return code.get(file)!;
+    };
     for (const t of CATALOG) {
       for (const c of t.checks) {
         const file = c.file ?? t.file;
         const needle = c.needle ?? c.name;
-        if (!src(file).includes(needle)) missing.push(`${t.test} → ${c.name} (needle "${needle}" not in ${file})`);
+        // Live code includes the text of string and template literals, so this matches a name
+        // the scanner builds (`${what} Rules Let Anyone Write`) as well as a fixed one.
+        if (!liveFor(file).includes(needle)) missing.push(`${t.test} → ${c.name} (needle "${needle}" not in live code of ${file})`);
       }
     }
     expect(missing).toEqual([]);

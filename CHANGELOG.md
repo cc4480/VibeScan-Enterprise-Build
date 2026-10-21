@@ -3,6 +3,48 @@
 Notable changes to the SecScan engine. Commit messages carry the full reasoning
 for each change; this collects what shipped and why it mattered.
 
+## Unreleased
+
+### Security
+- **The certificate check on monitored sites and the mail-server TLS check now connect only to the address they vetted.**
+  A name that answers with a public address for the check and a private one for the connection (DNS rebinding) is refused.
+  The scanner's own requests, the uptime checks and the webhooks already worked this way.
+- **Chromium's sandbox is on by default.** The scanner renders pages the scanned site controls, so the renderer is sandboxed
+  unless `CHROMIUM_SANDBOX=false` is set. Set it only on a platform that cannot create the namespaces the sandbox needs.
+- **Session ids are stored as SHA-256 hashes, not in the clear.** A copy of the sessions table can no longer be pasted into a
+  cookie. Existing sessions keep working; the cookie still carries the raw id (migration 0031).
+- **Upstream OIDC access and refresh tokens are no longer kept in sessions.** Nothing read them back. Migration 0032 removes
+  them from existing rows.
+- **A name that does not resolve within 5 seconds is refused by the SSRF check** rather than waiting on the resolver.
+- **The Supabase, Firebase, BaaS and takeover probes cap the size of the responses they read**, as the other probes already did.
+- **The OPTIONS reprobe sends its crafted Origin only on a verified scan**, the same condition as the active probes.
+- **Accounts:** two-factor codes can no longer be guessed in parallel past the five-attempt cap. Changing a password now revokes
+  API tokens and OAuth grants, as a reset already did. Password-reset emails are limited per address as well as per IP. Login
+  passwords are capped at 200 characters.
+- **Monitors and verification:** creating a monitor checks the plan limit and the duplicate check inside one transaction, so
+  parallel requests cannot exceed the limit. The daily verification cap is enforced the same way.
+- **Dismissals:** text fields are length-limited, each account can hold 2,000 dismissals, and the route is rate-limited. A
+  dismissal with evidence longer than 2,000 characters is refused.
+- **Feedback** is rate-limited to 10 messages an hour per client address. Request bodies are capped at 100 KB explicitly, and
+  generated scan-credential fields have length limits.
+- **Account deletion** also removes reports, report badges and pending registrations. A test fails if any table with a user
+  column is missed.
+- **Stale rows are purged daily:** pending sign-ups and sign-in challenges, and OAuth codes and refresh tokens, after a grace
+  period.
+- **Fix prompts treat scanned text as data:** finding names and evidence sit in a labelled block, are stripped of line breaks
+  and markdown, and are length-capped. The report page asks you to review a prompt before pasting it into an AI tool.
+- **Links and tokens in the web app:** only http and https links are rendered from scanned or entered URLs. The OAuth return
+  must match the registered redirect host. Reset and verification tokens are removed from the address bar, and pages send
+  a strict referrer policy. An unused chart component with raw HTML was deleted. A crash on one page no longer blanks the app.
+- **Build and CI:** Docker base images and GitHub Actions are pinned to digests and commit SHAs. The image build waits for the
+  secret scan. `APP_ORIGIN` is passed as a build argument. The secret scanner checks database URLs with passwords and more key
+  shapes. `.env.production` is ignored by git, and database dumps stay out of the image build. The Playwright version in the
+  Dockerfile must match the lockfile.
+- **Operators:** existing sessions keep working after the session-id migration, but during a rolling deploy some users may
+  have to sign in again. Migration 0033 builds an index on `scans` with a plain `CREATE INDEX`, which blocks writes to `scans`
+  while it runs. Run it in a quiet window. `setup.sh` for Railway now defaults to `master`. The firewall script refuses to run
+  while unrestricted ports 80 or 443 are open, unless `--force` is given.
+
 ## 2026-10-14
 
 ### Accuracy

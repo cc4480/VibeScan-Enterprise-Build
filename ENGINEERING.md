@@ -70,6 +70,7 @@ lib/
 
 - **Dev routing**: the Vite dev server (port 18425) proxies `/api` to Express (port 8080). In production Express serves the built frontend itself.
 - **Accounts**: sign-up needs an emailed code (`routes/accountSignup.ts`); sessions are cookies. The old anonymous `Authorization: Bearer <user id>` path only honours rows that already exist and can be closed (`LEGACY_BEARER_SUNSET`, `ALLOW_LEGACY_ANONYMOUS_BEARER`; see `deploy/railway/README.md`).
+- **Sign-in lockout (accepted trade-off)**: ten wrong passwords for an email address lock that address out of sign-in for 15 minutes, from any IP (`routes/accountSession.ts`; `MAX_ATTEMPTS` and `WINDOW_MS` in `accountShared.ts`). The lock is keyed on the submitted email, not the client, because a per-IP limit alone lets guesses spread across addresses and still reach one account. The cost: an attacker can keep a victim out of their own account for 15 minutes by guessing wrong. We accept that. The lock is short, the reply is the same whether or not the account exists, and the per-IP limit still applies on top. Do not change this without a replacement for the per-account guard.
 - **Graceful degradation**: All three external services (DeepSeek, Resend, Stripe) check for their env var and skip with a warning if not set — the app remains fully functional.
 - **Payments**: on exactly when `STRIPE_SECRET_KEY` (and `STRIPE_WEBHOOK_SECRET`) are set. Checkout sells one plan, SecScan Unlimited ($19/month, unlimited scans, 5 sites); credit packs are withdrawn from sale (still credited if an old checkout is paid); the webhook applies each Stripe event exactly once (see `lib/billing.ts`). Setup: `deploy/PAYMENTS-GO-LIVE.md`.
 - **Two processes, one image**: `src/index.ts` (the `web` tier) serves the API and frontend and only enqueues; `src/secscan.ts` runs the pg-boss worker, the monitor scheduler, the EOL/CVE refresh, and owns Chromium. The only channel between them is the `scan-job` queue in Postgres. Do not add Playwright imports to anything reachable from `index.ts`.
@@ -120,7 +121,7 @@ probe or pattern added to the scanner:
   open Supabase table) is a finding. `sk_live_`, `sb_secret_*`, Mapbox
   `sk.ey…`, and Sentry auth tokens are flagged Critical/High immediately.
 - **Entropy validation**: generic password/secret-key patterns require
-  Shannon entropy ≥2.5–3.0 bits/char (`shannonEntropy()` in `jsScanner.ts`)
+  Shannon entropy ≥2.5–3.0 bits/char (`shannonEntropy()` in `secretPlaceholders.ts`)
   before matching — placeholders and repeating strings score below that.
 - **Confidence is numeric (0–100)**: ≥85 means directly observed/confirmed
   (a real HTTP response returned the data); never emit ≥85 for a pattern-only
@@ -156,13 +157,38 @@ second copy:
 - Redirects are re-checked per hop in `lib/http.ts`: `redirect: "follow"` means
   a public host can bounce the scanner to an internal one, and every probe
   downstream runs against `finalUrl`.
-- Not covered: DNS rebinding between check and connect. Closing that needs
-  connection-level pinning of the resolved IP.
+- **DNS rebinding** (a name that answers a public address to the check and a
+  private one to the connection). The check resolves a name and judges the answer,
+  so each connection that carries traffic also has to vet the address it opens to.
+  `pinnedDispatcher.ts` does that: its `dns.lookup` refuses any name with a private
+  answer and hands the socket the address it judged. Pinned:
+  - every request the scanner makes through `lib/http.ts` (`scanFetch`, which the
+    probes use), including each redirect hop;
+  - the uptime checks (`monitorPulse.ts`) and the certificate check
+    (`monitorPulseCert.ts`);
+  - the TLS configuration check (`tlsCheck.ts`), the mail-server TLS probe
+    (`mailTlsProbe.ts`, which takes no opt-out) and the vetted HTTP proxy
+    (`vettedProxy.ts`);
+  - webhooks and domain-verification fetches, through `strictDispatcher`, which
+    refuses private addresses even when `ALLOW_PRIVATE_SCAN_TARGETS` is set.
+
+  Not pinned:
+  - Browser requests (`browserGuard.ts`): each request and redirect is checked by
+    name, but Chromium resolves the name again. WebSocket connections from the
+    page are checked the same way. `browserGuard.ts` records this as a known limit.
+  - Direct `fetch` calls in the Supabase, Firebase and BaaS probes
+    (`supabase-probes-core.ts`, `firebase-probes.ts`, `baasDepth.ts`). Their hosts
+    are fixed vendor names (`<project>.supabase.co`, Google's Firestore API), so no
+    attacker-chosen address is reached, but the connection is not pinned.
 
 ## Rate limiting and client identity
 
-Client tokens are self-minted UUIDs (`authMiddleware` auto-creates a user from
-any valid v4), so per-user limits are unenforceable — anything that needs to
+Client tokens are self-minted UUIDs. `authMiddleware` does not create a user
+from an unknown UUID: a bearer token that matches no existing row is treated as
+unauthenticated. Existing anonymous rows are still honoured, and the legacy bearer
+path stays open by default unless `ALLOW_LEGACY_ANONYMOUS_BEARER=false` or
+`LEGACY_BEARER_SUNSET=<ISO date>` closes it (`lib/legacyBearer.ts`). A user id is
+not a secret, so per-user limits are still unenforceable — anything that needs to
 resist abuse counts against the client address instead.
 
 - `clientIp.ts` owns address resolution. Never read `x-forwarded-for` directly:
@@ -177,6 +203,28 @@ resist abuse counts against the client address instead.
   `deploy/Caddyfile` overwrites `X-Forwarded-For` rather than appending.
 - Adding a middleware to a route widens `req.params` to `string | string[]` in
   Express's types — hence the `String(req.params.id)` in the monitor rescan route.
+
+## Migrations
+
+Migrations live in `lib/db/migrations/` (Drizzle).
+
+- A migration that changes a column or table a deployed version still reads must
+  be expand/contract: add the new column or table first, have the code write both
+  and read the new one, backfill, and drop the old one only in a later release,
+  once no running code reads it.
+- A migration that drops a column or a table breaks rollback to any earlier code
+  that still reads it. Rolling back the code does not roll back the schema.
+- Past migrations are not edited. One that has run anywhere is history; a
+  correction is a new migration.
+- Rollback implies a forward fix. The answer to a bad migration is a new migration
+  or a code fix, not reverting the file.
+
+The trade-off is visible in `0026_share_token_hash.sql`. It hashes report share
+tokens and drops the plaintext `token` column in the same migration. Existing
+links keep working, because each hash is computed from the current token before the
+column goes, but code from before that release, which reads `report_shares.token`,
+cannot run against this schema. Splitting it into expand (add `token_hash`, backfill)
+and contract (drop `token`) releases would have kept rollback open.
 
 ## Gotchas
 

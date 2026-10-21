@@ -39,14 +39,14 @@ side projects that quietly went to production.
 
 ## What it checks
 
-**144 distinct checks, on every scan** (itemised in `lib/checkCatalog.ts`; `checkCatalog.test.ts` pins the count). There are no tiers — `routes/scans.ts`
+**158 distinct checks on every website scan**, and a repository scan runs its own 56 (214 in the catalogue in total). The two sets differ because they are different scans: `lib/checkCatalog.ts` itemises both, and `checkCatalog.test.ts` pins the counts. There are no tiers — `routes/scans.ts`
 pins every run to the full suite (`const tier = "deep" as const`) and the
 OpenAPI `ScanRequestTier` enum has a single member. `basic` survives only so
 scans recorded before the tier was retired stay readable.
 
-A check is one piece of detection logic; the 140 entries in the lookup tables
-(78 sensitive paths, 35 secret patterns, 19 takeover fingerprints, 8 crawled
-paths) are signatures, not separate checks. The counting method is written up
+A check is one piece of detection logic. The lookup tables (the sensitive-path
+list, the secret patterns, the takeover fingerprints, the crawled paths) hold
+signatures, not separate checks: one path probe applied to 81 paths is one check. The counting method is written up
 in `src/data/coverage.ts` in the secscan.info repo, which renders this list
 publicly.
 
@@ -54,7 +54,7 @@ What varies between two scans is **access, not tier**:
 
 | Gate | Unlocks |
 |---|---|
-| Domain verification (DNS TXT or well-known file) | All active probing — without it, passive checks only |
+| Domain verification (DNS TXT or well-known file) | The offensive active probes (listed under "Scan only what you are allowed to scan" below) — without it, the passive checks only |
 | Credentials | The surface behind the login |
 | A second account | Broken access control (A01) |
 | An OOB collector (`OOB_BASE_URL`) | SSRF detection (A10) |
@@ -72,8 +72,14 @@ cookie checks on each page.
 **[`SCAN_COVERAGE.md`](SCAN_COVERAGE.md) enumerates them** — each check, its
 severity, and which tier runs it. (It documents the probe modules; the TLS
 checks, which live in the scan worker, aren't listed there yet.)
-[`SCAN_TESTS.md`](SCAN_TESTS.md) records how they were validated against real
-targets.
+[`SCAN_TESTS.md`](SCAN_TESTS.md) describes the method behind each check, not how
+it was validated. The validation evidence is in `artifacts/api-server/scripts/`:
+[`SCAN-RESULTS.md`](artifacts/api-server/scripts/SCAN-RESULTS.md) (what the
+scanner returned for each measured run),
+[`FALSE-POSITIVE-AUDIT.md`](artifacts/api-server/scripts/FALSE-POSITIVE-AUDIT.md)
+(the false positives found and fixed), and
+[`RETEST.md`](artifacts/api-server/scripts/RETEST.md) (the procedure, run by hand
+with `scripts/live-scan.ts`). None of it runs in CI.
 
 Findings are scored `Critical +30 / High +15 / Medium +5 / Low +1` into a risk
 score, which maps to a letter grade (A: 0–10, B: 11–25, C: 26–45, D: 46–65,
@@ -108,14 +114,32 @@ by personal API tokens that users create in Settings → AI editors. Tools:
 
 ## ⚠️ Scan only what you are allowed to scan
 
-Scans send active probes — path enumeration, traversal attempts, injection
-canaries, a crawler. Running them against infrastructure you neither own nor
-have written permission to test is likely illegal in your jurisdiction and
-violates most providers' terms of service. You are responsible for your targets.
+Scans send active probes — traversal attempts, injection canaries, forged-origin
+and unusual-method requests, out-of-band SSRF callbacks, a TCP port scan. Running
+them against infrastructure you neither own nor have written permission to test
+is likely illegal in your jurisdiction and violates most providers' terms of
+service. You are responsible for your targets.
 
-This is enforced, not just requested: `lib/activeProbeGate.ts` withholds every
-active probe until the user has proven control of the target domain, and fails
-closed on any lookup error.
+This is enforced, not just requested: `lib/activeProbeGate.ts` decides for each
+scan whether the active probes may run, and it allows them only once the user has
+proven control of the target domain (or the operator has unlocked the instance).
+It fails closed on any lookup error.
+
+Which probes are gated, and why:
+
+- **Gated** (only when the gate allows): the probes that send a crafted request
+  to the target — HTTP method and CORS checks with a forged `Origin`, open
+  redirects, path traversal, reflected-XSS and error-based SQLi probes, API
+  endpoint testing, the out-of-band SSRF test, the Supabase and Firebase row
+  probes, the prompt-injection and race-condition tests, the cross-account
+  checks, the checkout price test, and the TCP port scan.
+- **Ungated, by design**: requests any crawler or search engine would make. These
+  are the sensitive-file path list, `robots.txt`, `security.txt`, directory
+  listings, the API-documentation and health-endpoint paths, the site crawler,
+  the subresource-integrity, header, cookie and TLS checks, the subdomain-takeover
+  lookups, and DNS and subdomain enumeration (public records only). Fetching a path,
+  even one nothing links to, is what every crawler does, and a passive check reads
+  the answer without sending anything unusual. Each of these runs for any target.
 
 ## Architecture
 

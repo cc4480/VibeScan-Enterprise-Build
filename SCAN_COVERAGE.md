@@ -120,13 +120,13 @@ keyword presence.
 
 | # | Check | Severity |
 |---|---|---|
-| 36 | Active CORS — arbitrary origin reflection | High |
-| 37 | Active CORS — null origin accepted | Medium |
+| 36 | Active CORS — arbitrary origin reflection | Critical when `Access-Control-Allow-Credentials: true` is also sent (`probesHttp.ts`); Low when it is not |
+| 37 | Active CORS — null origin reflected | Critical with credentials; Low without. The same check as #36, run with `Origin: null` |
 | 38 | Open redirect via common parameters | Medium |
 | 39 | robots.txt exposes sensitive paths | Low |
 | 40 | Subresource Integrity (SRI) missing on CDN scripts | Medium |
 | 41 | Error/debug information disclosure | Medium |
-| 42 | HTTPS redirect not enforced (HTTP stays HTTP) | High |
+| 42 | HTTPS redirect not enforced (HTTP stays HTTP) | Medium (`probesPage.ts`; HSTS-preloaded domains are not reported) |
 | 43 | Rate limiting absent on root endpoint | Low |
 | 44 | X-Frame-Options misconfigured (non-DENY/SAMEORIGIN value) | Medium |
 | 45–59 | Directory listing on 15 common dirs (`/uploads/`, `/logs/`, `/backup/`, etc.) | Medium |
@@ -166,7 +166,9 @@ keyword presence.
 
 | # | Services Checked | Severity |
 |---|---|---|
-| 72 | AWS S3, Heroku, GitHub Pages, Netlify, Vercel, Azure, Fastly, Shopify, Ghost Pro, Surge.sh, Cargo, Readme.io, Pantheon, Squarespace, Tumblr, WP Engine, Fly.io, Render, Railway | Critical |
+| 72 | AWS S3, Heroku, GitHub Pages, Vercel, Azure App Service: Critical. Shopify, Ghost Pro, Surge.sh, Cargo, Readme.io, Pantheon, Render, Railway: High. Tumblr: Medium. Netlify, Fastly, Squarespace, WP Engine, Fly.io: Medium while unverified (see the note below) | Critical, High or Medium, per service |
+
+The five services marked *ambiguous* in `subdomain-service-data.ts` (Netlify, Fastly, Squarespace, WP Engine, Fly.io) are reported at Medium, with "— Unverified" in the finding name. Their unclaimed-resource page is the same as a claimed site's default 404, so the scanner cannot tell a takeover from a normal site (`subdomainTakeover.ts`).
 
 ---
 
