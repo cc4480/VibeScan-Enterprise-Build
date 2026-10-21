@@ -22,6 +22,7 @@
 
 import { logger } from "./logger";
 import { SCANNER_USER_AGENT } from "./http";
+import { readBodyBounded } from "./httpBody";
 import { scanDispatcher } from "./pinnedDispatcher";
 import { checkScanTarget } from "./ssrfGuard";
 import { type HeaderSnapshot, snapshotHeaders } from "./monitorPulseHeaders";
@@ -203,7 +204,8 @@ export async function runPulse(targetUrl: string): Promise<PulseResult> {
       const location = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
       if (!location) break;
 
-      void res.arrayBuffer().catch(() => undefined);
+      // Capped like every other scanner body read: a redirect body is discarded, but not without a bound.
+      void readBodyBounded(res).catch(() => undefined);
       // Resolved against the current URL, so a relative Location works.
       currentUrl = new URL(location, currentUrl).toString();
       res = null;
@@ -222,8 +224,8 @@ export async function runPulse(targetUrl: string): Promise<PulseResult> {
     }
 
     const responseTimeMs = Date.now() - startedAt;
-    // Drain rather than leave the socket half-read.
-    void res.arrayBuffer().catch(() => undefined);
+    // Drain rather than leave the socket half-read, bounded like every other body read.
+    void readBodyBounded(res).catch(() => undefined);
 
     const cert = await probeCertDates(currentUrl);
 

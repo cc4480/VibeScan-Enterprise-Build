@@ -153,6 +153,8 @@ export function isHostnameSafeSync(hostname: string): boolean {
 // budget. This cache only spares the lookup in the pre-check; it is not what stops rebinding.
 // scanFetch connects through pinnedDispatcher, which vets the address the socket opens to.
 const RESOLVE_TTL_MS = 30_000;
+/** Longest a name may take to resolve before it is refused (fails closed). */
+export const DNS_LOOKUP_TIMEOUT_MS = 5_000;
 const RESOLVE_CACHE_MAX = 512;
 const resolveCache = new Map<string, { safe: boolean; at: number }>();
 
@@ -175,11 +177,18 @@ export async function resolvesPublicly(hostname: string): Promise<boolean> {
   if (hit && Date.now() - hit.at < RESOLVE_TTL_MS) return hit.safe;
 
   let safe: boolean;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const results = await dns.lookup(host, { all: true, verbatim: true });
+    // A resolver that never answers must not stall the scan: past the deadline the name is treated as unsafe.
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("dns lookup timed out")), DNS_LOOKUP_TIMEOUT_MS);
+    });
+    const results = await Promise.race([dns.lookup(host, { all: true, verbatim: true }), timeout]);
     safe = results.length > 0 && !results.some((r) => isPrivateAddress(r.address));
   } catch {
     safe = false;
+  } finally {
+    clearTimeout(timer);
   }
 
   if (resolveCache.size >= RESOLVE_CACHE_MAX) {

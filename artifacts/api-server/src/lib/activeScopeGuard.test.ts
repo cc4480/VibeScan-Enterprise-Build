@@ -2,10 +2,21 @@ import { describe, it, expect, vi } from "vitest";
 import { activeProbesStillAllowed } from "./activeScopeGuard";
 
 describe("activeProbesStillAllowed", () => {
-  it("allows the submitted host itself, and its own subdomains", async () => {
+  it("allows the submitted host itself without a further check", async () => {
     expect(await activeProbesStillAllowed("https://example.com/", "https://example.com/app")).toEqual({ allowed: true });
     expect(await activeProbesStillAllowed("https://example.com/", "http://EXAMPLE.com/")).toEqual({ allowed: true });
-    expect(await activeProbesStillAllowed("https://example.com/", "https://www.example.com/")).toEqual({ allowed: true });
+  });
+
+  it("does not allow a subdomain of the submitted host unless that subdomain is verified", async () => {
+    // A subdomain is not covered by verifying the parent: it must pass the same ownership check.
+    const unverified = await activeProbesStillAllowed("https://example.com/", "https://www.example.com/");
+    expect(unverified).toEqual({ allowed: false, redirectedTo: "www.example.com" });
+    expect(await activeProbesStillAllowed("https://example.com/", "https://www.example.com/", async () => false))
+      .toEqual({ allowed: false, redirectedTo: "www.example.com" });
+
+    const verify = vi.fn(async () => true);
+    expect(await activeProbesStillAllowed("https://example.com/", "https://www.example.com/", verify)).toEqual({ allowed: true });
+    expect(verify).toHaveBeenCalledWith("https://www.example.com/");
   });
 
   it("withdraws active probing when the site redirects to somebody else's host", async () => {

@@ -5,6 +5,7 @@ import { isCloudflareIp } from "./cloudflareIps";
 import type { ScanVulnerability } from "./scanner";
 import { TOP_PORTS } from "./recon-data";
 import { type PortEntry } from "./reconTypes";
+import { isPrivateAddress } from "./ssrfGuard";
 
 export const PORT_CONNECT_TIMEOUT_MS = 2_500;
 
@@ -14,18 +15,13 @@ export const PORT_CONCURRENCY = 20;
 
 // ─── SSRF guard ───────────────────────────────────────────────────────────────
 
+/**
+ * The same private/reserved list the rest of the scanner uses (CGNAT, benchmarking, multicast, reserved and
+ * IPv6 forms included), plus the unspecified address. "0.0.0.0" reaches localhost on Linux, so it is named
+ * explicitly and never left to the range rules.
+ */
 export function isPrivateIp(ip: string): boolean {
-  return (
-    /^10\./.test(ip) ||
-    /^172\.(1[6-9]|2[0-9]|3[01])\./.test(ip) ||
-    /^192\.168\./.test(ip) ||
-    /^127\./.test(ip) ||
-    /^169\.254\./.test(ip) ||
-    ip === "::1" ||
-    /^fc00:/i.test(ip) ||
-    /^fd[0-9a-f]{2}:/i.test(ip) ||
-    ip === "0.0.0.0"
-  );
+  return ip === "0.0.0.0" || isPrivateAddress(ip);
 }
 
 // ─── Port scanner ─────────────────────────────────────────────────────────────

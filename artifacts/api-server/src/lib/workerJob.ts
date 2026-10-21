@@ -213,7 +213,7 @@ export async function processScanJob(job: ScanJob): Promise<void> {
   const tests = await recordSideTests({ scanResult, sslLabsEnabled: useSslLabs, sslLabsResult, tlsCheck, reconRunResult, allowActiveProbes, parallelStartedAt, live, log });
 
   // ── 2c–2e. Merge duplicates, re-verify borderline findings, drop dismissed ones ──
-  const autoSuppressedCount = await refineFindings({ scanResult, targetUrl, userId, httpCredentials: auth.httpCredentials, log });
+  const autoSuppressedCount = await refineFindings({ scanResult, targetUrl, userId, httpCredentials: auth.httpCredentials, allowActiveProbes, log });
 
   // ── 3. Mark as analyzing (AI phase) ──────────────────────────────────
   //

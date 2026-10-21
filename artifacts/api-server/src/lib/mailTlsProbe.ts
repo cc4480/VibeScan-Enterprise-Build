@@ -1,6 +1,14 @@
 /** The STARTTLS handshake against each MX host. */
 import net from "node:net";
 import tls from "node:tls";
+import { checkHostname } from "./ssrfGuard";
+import { strictLookup } from "./pinnedDispatcher";
+
+/**
+ * Most bytes of server reply the probe will buffer while looking for a line break. A real greeting or
+ * EHLO reply is a few hundred bytes; a server that never sends a newline must not grow the buffer forever.
+ */
+export const MAX_REPLY_BYTES = 8 * 1024;
 
 /** Hard ceiling per socket. A slow MX must never stall the whole scan. */
 export const CONNECT_TIMEOUT_MS = 6_000;
@@ -55,6 +63,11 @@ export interface MailPortResult {
   daysToExpiry: number | null;
   banner: string | null;
   error: string | null;
+  /**
+   * Set when the probe was deliberately not run (the MX names a private, loopback or otherwise local
+   * address). Not an error and not evidence: the host was never connected to.
+   */
+  skipped?: string;
 }
 
 export interface MailHostResult {
@@ -108,7 +121,25 @@ export function readCert(socket: tls.TLSSocket, out: MailPortResult): void {
  * advertises STARTTLS accepts mail in cleartext, which is the thing worth
  * reporting whether or not the upgrade itself succeeds.
  */
-export function probeStartTls(host: string, port: number): Promise<MailPortResult> {
+export async function probeStartTls(host: string, port: number): Promise<MailPortResult> {
+  // The MX name comes from DNS, and a domain owner controls DNS. Refuse anything that is not a public address,
+  // and connect through the vetted lookup so the address checked is the address dialled (no rebinding window).
+  const verdict = await checkHostname(host);
+  if (!verdict.ok) {
+    return { ...emptyPort(port), skipped: `not probed: ${verdict.reason ?? "private address"}` };
+  }
+  return negotiate(host, port, strictLookup);
+}
+
+/**
+ * Test seam: the same negotiation with no address check, so the tests can drive it against a loopback stub.
+ * Production code calls probeStartTls, which is the only path that reaches a mail exchanger.
+ */
+export function probeStartTlsForTest(host: string, port: number): Promise<MailPortResult> {
+  return negotiate(host, port, undefined);
+}
+
+function negotiate(host: string, port: number, lookup: unknown): Promise<MailPortResult> {
   return new Promise((resolve) => {
     const out = emptyPort(port);
     let settled = false;
@@ -161,6 +192,11 @@ export function probeStartTls(host: string, port: number): Promise<MailPortResul
 
     socket.on("data", (chunk) => {
       buf += chunk.toString("utf8");
+      if (buf.length > MAX_REPLY_BYTES) {
+        out.error = "server reply exceeds 8 KB without a line break";
+        finish();
+        return;
+      }
       if (stage === "greeting") {
         if (!/\r?\n/.test(buf)) return;
         out.banner = buf.split(/\r?\n/)[0]?.slice(0, 200) ?? null;
@@ -191,7 +227,7 @@ export function probeStartTls(host: string, port: number): Promise<MailPortResul
     });
     socket.on("error", (err: Error) => { out.error = err.message.slice(0, 120); finish(); });
 
-    socket.connect(port, host);
+    socket.connect(lookup ? { port, host, lookup: lookup as never } : { port, host });
   });
 }
 

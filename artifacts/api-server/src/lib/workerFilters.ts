@@ -19,8 +19,10 @@ export async function refineFindings(input: {
   userId: string;
   httpCredentials: Awaited<ReturnType<typeof toScanHttpCredentials>>;
   log: Log;
+  /** The scan's allowActiveProbes. The re-probe sends an active OPTIONS request only when this is true. */
+  allowActiveProbes?: boolean;
 }): Promise<number> {
-  const { scanResult, targetUrl, userId, httpCredentials, log } = input;
+  const { scanResult, targetUrl, userId, httpCredentials, log, allowActiveProbes = false } = input;
   const preCorrobCount = scanResult.vulnerabilities.length;
   scanResult.vulnerabilities = corroborateMerge(scanResult.vulnerabilities);
   log.info(
@@ -35,7 +37,7 @@ export async function refineFindings(input: {
   // discarding real findings from the authenticated surface.
   scanResult.vulnerabilities = await runWithScanHttp(
     { targetUrl, ...(httpCredentials ? { credentials: httpCredentials } : {}) },
-    () => reprobe(targetUrl, scanResult.vulnerabilities, log),
+    () => reprobe(targetUrl, scanResult.vulnerabilities, log, { allowActiveProbes }),
   );
 
   // ── 2e. Filter previously dismissed false positives ───────────────────

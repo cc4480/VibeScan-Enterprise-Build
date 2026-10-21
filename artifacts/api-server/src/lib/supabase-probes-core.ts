@@ -1,6 +1,7 @@
 /** Shared finding constructor and bounded fetch for the Supabase probes. */
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
+import { readBodyBounded } from "./httpBody";
 
 export const TIMEOUT_MS = 10_000;
 
@@ -25,7 +26,7 @@ export async function safeFetch(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, { ...options, signal: controller.signal });
-    const body = await res.text().catch(() => "");
+    const body = await readBodyBounded(res);
     const headers: Record<string, string> = {};
     res.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });
     return { status: res.status, body, headers };

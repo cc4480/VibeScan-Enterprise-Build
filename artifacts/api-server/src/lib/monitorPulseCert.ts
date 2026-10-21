@@ -1,5 +1,7 @@
 /** Certificate expiry probing. */
 import * as tls from "node:tls";
+import { vettedLookup } from "./pinnedDispatcher";
+import { checkScanTarget } from "./ssrfGuard";
 
 // ── Certificate expiry ────────────────────────────────────────────────────────
 
@@ -47,12 +49,16 @@ export async function probeCertDates(rawUrl: string): Promise<{ expiresAt: Date;
   try {
     const url = new URL(rawUrl);
     if (url.protocol !== "https:") return null;
+    // The lookup below vets names, but tls.connect never consults it for an IP literal, so the literal is judged here.
+    if (!(await checkScanTarget(rawUrl)).ok) return null;
     const host = url.hostname;
     const port = parseInt(url.port || "443", 10);
 
     return await new Promise<{ expiresAt: Date; issuedAt: Date | null } | null>((resolve) => {
+      // The vetted lookup judges the address the socket then opens to, so a name that re-resolves to a
+      // private address between the URL check and this connection is refused rather than dialled.
       const socket = tls.connect(
-        { host, port, servername: host, rejectUnauthorized: false },
+        { host, port, servername: host, rejectUnauthorized: false, lookup: vettedLookup as never },
         () => {
           const cert = socket.getPeerCertificate();
           socket.destroy();

@@ -46,7 +46,8 @@ async function dohQuery(name: string, type: string): Promise<DnsAnswer[]> {
       signal: controller.signal,
     });
     if (!res.ok) return [];
-    const json = (await res.json()) as DohResponse;
+    // Bounded like every other body read; a body that is cut short fails to parse and yields no answers.
+    const json = JSON.parse(await readBodyBounded(res)) as DohResponse;
     return json.Answer ?? [];
   } catch {
     return [];
@@ -71,6 +72,7 @@ async function resolveCnameChain(hostname: string): Promise<string | null> {
 
 import { type ServiceFingerprint, SERVICES } from "./subdomain-service-data";
 import { scanFetch } from "./http";
+import { readBodyBounded } from "./httpBody";
 
 
 // ─── HTTP helper ──────────────────────────────────────────────────────────────

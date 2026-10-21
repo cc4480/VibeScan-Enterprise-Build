@@ -20,7 +20,7 @@
 import { randomUUID } from "node:crypto";
 import { promises as dns, MxRecord } from "node:dns";
 import type { ScanVulnerability } from "./scanner.js";
-import { type MailHostResult, probeStartTls, probeHost } from "./mailTlsProbe";
+import { type MailHostResult, probeHost, probeStartTlsForTest } from "./mailTlsProbe";
 export type { MailPortResult, MailHostResult } from "./mailTlsProbe";
 
 function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
@@ -32,7 +32,7 @@ const MAX_MX_HOSTS = 3;
 // Exported for tests. The SMTP negotiation — greeting, multi-line EHLO,
 // capability detection — is where the bugs hide, and it is only reachable
 // through a live socket, so the tests drive it against a local stub server.
-export { probeStartTls as probeStartTlsForTest };
+export { probeStartTlsForTest };
 
 /**
  * Resolve MX and probe the highest-priority hosts.

@@ -25,11 +25,21 @@ interface ReprobeLog {
   warn: (obj: unknown, msg: string) => void;
 }
 
+export interface ReprobeOptions {
+  /**
+   * Whether the requester proved ownership of the target (the scan's allowActiveProbes). The OPTIONS probe
+   * sends a crafted Origin to the target, so it runs only when this is true. Defaults to false.
+   */
+  allowActiveProbes?: boolean;
+}
+
 export async function reprobe(
   targetUrl: string,
   vulns: ScanVulnerability[],
   log: ReprobeLog,
+  opts: ReprobeOptions = {},
 ): Promise<ScanVulnerability[]> {
+  const allowActiveProbes = opts.allowActiveProbes === true;
   const borderline = vulns.filter((v) => {
     const c = v.confidence ?? 100;
     return c >= REPROBE_MIN && c < REPROBE_MAX;
@@ -62,8 +72,9 @@ export async function reprobe(
     signal: globalCtrl.signal,
   }).then((res) => res?.headers ?? null);
 
-  // Probe 2: Active OPTIONS — corroborates CORS wildcard findings
-  const corsProbe = hasBorderlineCors
+  // Probe 2: Active OPTIONS — corroborates CORS wildcard findings. Skipped unless the scan may probe actively;
+  // CORS findings then fall back to the passive GET headers below.
+  const corsProbe = hasBorderlineCors && allowActiveProbes
     ? scanFetch(targetUrl, {
         method: "OPTIONS",
         headers: {

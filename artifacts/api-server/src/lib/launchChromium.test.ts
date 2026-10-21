@@ -13,23 +13,39 @@ const fake = (failWhen?: (o: Opts) => boolean) => {
 };
 
 describe("launchChromium", () => {
-  it("keeps --no-sandbox by default", async () => {
-    const c = fake();
-    await launchChromium(c);
-    expect(c.launch.mock.calls[0]![0].args).toContain("--no-sandbox");
-    expect(c.launch).toHaveBeenCalledTimes(1);
-  });
-
-  it("starts with the sandbox, and without --no-zygote, when asked and available", async () => {
-    process.env["CHROMIUM_SANDBOX"] = "true";
+  it("starts with the sandbox by default", async () => {
     const c = fake();
     await launchChromium(c);
     const args = c.launch.mock.calls[0]![0].args;
     expect(args).not.toContain("--no-sandbox");
     expect(args).not.toContain("--disable-setuid-sandbox");
     expect(args).not.toContain("--no-zygote");
+    expect(c.launch).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts with the sandbox when CHROMIUM_SANDBOX=true", async () => {
+    process.env["CHROMIUM_SANDBOX"] = "true";
+    const c = fake();
+    await launchChromium(c);
+    const args = c.launch.mock.calls[0]![0].args;
+    expect(args).not.toContain("--no-sandbox");
     expect(args).toContain("--disable-dev-shm-usage");
     expect(c.launch).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables the sandbox only on an explicit CHROMIUM_SANDBOX=false", async () => {
+    process.env["CHROMIUM_SANDBOX"] = "false";
+    const c = fake();
+    await launchChromium(c);
+    expect(c.launch).toHaveBeenCalledTimes(1);
+    expect(c.launch.mock.calls[0]![0].args).toContain("--no-sandbox");
+  });
+
+  it("treats any other value as sandbox on", async () => {
+    process.env["CHROMIUM_SANDBOX"] = "0";
+    const c = fake();
+    await launchChromium(c);
+    expect(c.launch.mock.calls[0]![0].args).not.toContain("--no-sandbox");
   });
 
   it("falls back to --no-sandbox when the sandbox will not start", async () => {

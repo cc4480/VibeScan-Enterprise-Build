@@ -14,6 +14,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
+import { readBodyBounded } from "./httpBody";
 
 const TIMEOUT_MS = 8_000;
 const MAX_BUCKETS = 5;
@@ -27,7 +28,7 @@ async function getJson(url: string, init: RequestInit = {}): Promise<{ status: n
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const res = await fetch(url, { ...init, signal: controller.signal });
-    const text = await res.text().catch(() => "");
+    const text = await readBodyBounded(res);
     let json: unknown = null;
     try { json = JSON.parse(text); } catch { /* not JSON: treated as nothing */ }
     return { status: res.status, json };

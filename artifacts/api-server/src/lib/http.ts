@@ -88,8 +88,15 @@ async function perform(url: string, options: ScanFetchOptions): Promise<Outcome>
     // or re-answer DNS with one between the two checks — so the last word has
     // to belong to the code that is about to open the socket.
     if (ctx?.signal?.aborted) return { ok: false, error: "scan abandoned" };
+
+    // The request timer starts before the DNS check, not after it: the lookup inside checkUrlSafe can
+    // itself stall, and the per-request budget has to cover it.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
     const safety = await checkUrlSafe(current, { allowOptOut: true });
     if (!safety.ok) {
+      clearTimeout(timer);
       return { ok: false, error: `blocked target address: ${safety.reason}` };
     }
 
@@ -99,9 +106,6 @@ async function perform(url: string, options: ScanFetchOptions): Promise<Outcome>
     // context, so by the time a reply says "signed out" another probe may
     // already have signed back in — see the session-expiry block below.
     const credentialsSent = ctx?.credentials;
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     // A caller may supply its own signal — reprobe.ts shares a single budget
     // across several parallel probes. Honour both: whichever fires first wins,

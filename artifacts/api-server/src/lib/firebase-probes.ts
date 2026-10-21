@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { probeFirebaseStorage } from "./baasDepth";
 import type { ScanVulnerability } from "./scanner";
 import { classifyExposure } from "./baasExposure";
+import { readBodyBounded } from "./httpBody";
 
 const TIMEOUT_MS = 10_000;
 const MAX_TABLES_TO_TEST = 12;
@@ -31,7 +32,7 @@ async function safeFetch(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, { ...options, signal: controller.signal });
-    const body = await res.text().catch(() => "");
+    const body = await readBodyBounded(res);
     const headers: Record<string, string> = {};
     res.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });
     return { status: res.status, body, headers };

@@ -57,6 +57,12 @@ function vet(
 export const vettedLookup = lookupWith(true);
 
 /**
+ * The same vetted lookup for raw sockets (net.connect), with no opt-out. Used for mail exchangers, which are named by
+ * DNS rather than by the user, so ALLOW_PRIVATE_SCAN_TARGETS does not reach them.
+ */
+export const strictLookup = lookupWith(false) as never;
+
+/**
  * For requests to a host a user named that is not a scan target (webhooks, domain verification).
  * Private addresses are refused whatever ALLOW_PRIVATE_SCAN_TARGETS says: a self-hoster who opts
  * in to scanning their own network has not opted in to having webhooks post there.
