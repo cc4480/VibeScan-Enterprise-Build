@@ -45,8 +45,12 @@ function PageLoading() {
 
 interface ErrorBoundaryState { hasError: boolean; message: string }
 
-class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
-  constructor(props: { children: ReactNode }) {
+/**
+ * `page` is the per-route boundary: it sits inside the layout, so one crashed page shows a retry and a way home
+ * while the navigation stays. Without it, this is the app-wide last resort.
+ */
+class ErrorBoundary extends Component<{ children: ReactNode; page?: boolean }, ErrorBoundaryState> {
+  constructor(props: { children: ReactNode; page?: boolean }) {
     super(props);
     this.state = { hasError: false, message: "" };
   }
@@ -59,6 +63,25 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
   }
 
   render() {
+    if (this.state.hasError && this.props.page) {
+      return (
+        <div role="alert" className="flex flex-col items-center justify-center text-center min-h-[40vh] px-4 py-10">
+          <h1 className="text-xl font-bold mb-2">This page could not be shown</h1>
+          <p className="text-muted-foreground text-sm mb-6">{this.state.message}</p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => this.setState({ hasError: false, message: "" })}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium"
+            >
+              Try again
+            </button>
+            <Link href="/" className="px-4 py-2 border border-white/10 rounded-lg text-sm font-medium hover:bg-white/5">
+              Go to home
+            </Link>
+          </div>
+        </div>
+      );
+    }
     if (this.state.hasError) {
       return (
         <div className="min-h-screen flex items-center justify-center px-4">
@@ -178,6 +201,7 @@ function ScrollToTop() {
 }
 
 function Router() {
+  const [location] = useLocation();
   return (
     <>
     <ScrollToTop />
@@ -214,7 +238,9 @@ function Router() {
               was written for made the whole site invisible to new visitors. */}
       <Route>
         <Layout>
-          {/* Inside the layout, so the navigation stays put while a page's file loads. */}
+          {/* Inside the layout, so the navigation stays put while a page's file loads. The boundary is keyed by
+              the location, so moving to another page clears a crash. */}
+          <ErrorBoundary page key={location}>
           <Suspense fallback={<PageLoading />}>
           <Switch>
             <Route path="/" component={LandingPage} />
@@ -236,6 +262,7 @@ function Router() {
             <Route component={NotFound} />
           </Switch>
           </Suspense>
+          </ErrorBoundary>
         </Layout>
       </Route>
     </Switch>

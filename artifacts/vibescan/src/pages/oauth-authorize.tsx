@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
 import { Loader2, ShieldCheck, TriangleAlert } from "lucide-react";
 import { useSeo } from "@/lib/seo";
-import { isSafeReturn, outcomeOf, whereTo, type ConsentPreview } from "@/lib/oauth-consent";
+import { isReturnFor, isSafeReturn, outcomeOf, whereTo, type ConsentPreview } from "@/lib/oauth-consent";
 
 /**
  * "Allow this app to use your SecScan account?" — the page an AI editor sends the
@@ -59,8 +59,10 @@ export default function OAuthAuthorizePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function leave(url: string) {
-    if (!isSafeReturn(url)) {
+  /** `expected` is the redirect the consent preview showed; when given, the address must match it. */
+  function leave(url: string, expected?: ConsentPreview["redirect"]) {
+    const allowed = expected ? isReturnFor(url, expected) : isSafeReturn(url);
+    if (!allowed) {
       setPhase({ kind: "invalid", message: "This link is not valid." });
       return;
     }
@@ -69,16 +71,17 @@ export default function OAuthAuthorizePage() {
 
   async function decide(approve: boolean) {
     if (phase.kind !== "consent") return;
+    const { preview } = phase;
     setPhase({ kind: "sending", approved: approve });
     try {
       const out = await customFetch<{ redirectUrl?: string }>("/api/oauth/authorize/decision", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ consent: phase.preview.consent, approve }),
+        body: JSON.stringify({ consent: preview.consent, approve }),
       });
       if (!out.redirectUrl) throw new Error("no redirect");
       setPhase({ kind: "sent", approved: approve });
-      leave(out.redirectUrl);
+      leave(out.redirectUrl, preview.redirect);
     } catch (e) {
       const data = (e as { data?: { error_description?: string } }).data;
       setPhase({ kind: "invalid", message: data?.error_description ?? "That did not go through. Start again from your app." });

@@ -55,3 +55,21 @@ export function isSafeReturn(url: string): boolean {
     return false;
   }
 }
+
+/**
+ * The return address must be the one the consent preview described: the same scheme and host as the
+ * registered redirect (the preview carries the host, not the whole URL). A scheme check alone would let
+ * any https address through.
+ */
+export function isReturnFor(url: string, redirect: ConsentPreview["redirect"]): boolean {
+  if (!isSafeReturn(url)) return false;
+  try {
+    const u = new URL(url);
+    if (redirect.kind === "web") return u.protocol === "https:" && u.host === redirect.host;
+    if (redirect.kind === "local") return u.protocol === "http:" && u.host === redirect.host;
+    // App addresses are shown as "scheme://host" (see describeRedirect on the server).
+    return `${u.protocol.slice(0, -1)}://${u.host}`.replace(/\/$/, "") === redirect.host;
+  } catch {
+    return false;
+  }
+}

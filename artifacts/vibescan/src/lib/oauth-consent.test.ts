@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { outcomeOf, signInUrl, whereTo, isSafeReturn } from "./oauth-consent";
+import { outcomeOf, signInUrl, whereTo, isSafeReturn, isReturnFor } from "./oauth-consent";
 
 const preview = { client: { name: "Cursor" }, redirect: { host: "127.0.0.1:5000", kind: "local" }, account: "a@b.c", access: ["x"], consent: "tok" };
 
@@ -55,5 +55,35 @@ describe("isSafeReturn", () => {
 
   it("never navigates to a script, data or file address", () => {
     for (const u of ["javascript:alert(1)", "data:text/html,x", "file:///etc/passwd", "vbscript:x", "not a url", ""]) expect(isSafeReturn(u), u).toBe(false);
+  });
+});
+
+describe("isReturnFor: the return address must be the one the preview showed", () => {
+  const web = { host: "claude.ai", kind: "web" } as const;
+  const local = { host: "127.0.0.1:5000", kind: "local" } as const;
+  const app = { host: "cursor://anysphere.cursor-retrieval", kind: "app" } as const;
+
+  it("accepts the registered address for its kind", () => {
+    expect(isReturnFor("https://claude.ai/cb?code=1", web)).toBe(true);
+    expect(isReturnFor("http://127.0.0.1:5000/cb?code=1", local)).toBe(true);
+    expect(isReturnFor("cursor://anysphere.cursor-retrieval/cb?code=1", app)).toBe(true);
+  });
+
+  it("refuses another site over https, even though the scheme is fine", () => {
+    expect(isReturnFor("https://evil.example/cb?code=1", web)).toBe(false);
+    expect(isReturnFor("https://claude.ai.evil.example/cb", web)).toBe(false);
+  });
+
+  it("refuses a different port, a downgraded scheme, or another app", () => {
+    expect(isReturnFor("http://127.0.0.1:6000/cb", local)).toBe(false);
+    expect(isReturnFor("https://127.0.0.1:5000/cb", local)).toBe(false);
+    expect(isReturnFor("https://claude.ai/cb", local)).toBe(false);
+    expect(isReturnFor("vscode://other.app/cb", app)).toBe(false);
+  });
+
+  it("refuses script, data and unknown addresses whatever the preview says", () => {
+    expect(isReturnFor("javascript:alert(1)", web)).toBe(false);
+    expect(isReturnFor("data:text/html,x", { host: "unknown", kind: "app" })).toBe(false);
+    expect(isReturnFor("not a url", web)).toBe(false);
   });
 });

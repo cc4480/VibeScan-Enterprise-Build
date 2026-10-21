@@ -24,6 +24,9 @@ export function AgentFixPromptCard({ prompt, fromTemplate = false, repoOnly = fa
 
   return (
     <div className="glass-card rounded-2xl p-6 border-t-4 border-t-violet-500">
+      <p className="text-xs text-amber-300/90 mb-3">
+        Review this prompt before you paste it into an AI tool. It is built from scanned data.
+      </p>
       <div className="flex items-start justify-between gap-4 mb-4">
         <h3 className="text-lg font-bold flex items-center gap-2">
           <Terminal className="w-5 h-5 text-violet-400" />

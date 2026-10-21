@@ -4,6 +4,7 @@ import { useSeo } from "@/lib/seo";
 import { AuthShell } from "@/components/auth-shell";
 import { verifyEmail, accountErrorMessage } from "@/lib/account-api";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { tokenInUrl, clearTokenFromUrl } from "@/lib/url-token";
 
 export default function VerifyEmailPage() {
   useSeo({ title: "Confirming your email — SecScan.us", noindex: true });
@@ -18,7 +19,8 @@ export default function VerifyEmailPage() {
     if (started.current) return;
     started.current = true;
 
-    const token = new URLSearchParams(window.location.search).get("token") ?? "";
+    const token = tokenInUrl(window);
+    clearTokenFromUrl(window);
     if (!token) {
       setError("That link is missing its token. Open the link from your email directly.");
       setState("failed");

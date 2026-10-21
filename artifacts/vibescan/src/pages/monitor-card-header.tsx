@@ -5,6 +5,7 @@ import { MonitorPauseButton } from "@/components/monitor-pause-button";
 import { type MonitorSubscription } from "@/lib/monitor-api";
 import { relativeTime, formatMs } from "./monitor-format";
 import { siteStatus, STATUS_TONE } from "./monitor-card-sections";
+import { safeHref } from "@/lib/safe-href";
 
 /** The card's top row: site, status, badges and the scan / pause / cancel actions. */
 export function SubscriptionHeader({ sub, card }: { sub: MonitorSubscription; card: SubscriptionCardState }) {
@@ -18,15 +19,21 @@ export function SubscriptionHeader({ sub, card }: { sub: MonitorSubscription; ca
         )} />
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <a
-              href={sub.targetUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-semibold text-foreground hover:text-primary transition-colors flex items-center gap-1 truncate max-w-[16rem] sm:max-w-xs"
-            >
-              {sub.targetUrl}
-              <ExternalLink className="w-3 h-3 shrink-0" />
-            </a>
+            {safeHref(sub.targetUrl) ? (
+              <a
+                href={safeHref(sub.targetUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-foreground hover:text-primary transition-colors flex items-center gap-1 truncate max-w-[16rem] sm:max-w-xs"
+              >
+                {sub.targetUrl}
+                <ExternalLink className="w-3 h-3 shrink-0" />
+              </a>
+            ) : (
+              <span className="font-semibold text-foreground flex items-center gap-1 truncate max-w-[16rem] sm:max-w-xs">
+                {sub.targetUrl}
+              </span>
+            )}
             {/* One pill for the site's state: Healthy, Needs attention, Down, Scanning, Paused, Getting started. */}
             <span className={cn("px-2 py-0.5 rounded-full text-xs font-semibold border", STATUS_TONE[siteStatus(sub).tone])}>
               {siteStatus(sub).label}

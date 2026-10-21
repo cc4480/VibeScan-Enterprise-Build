@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState, useMemo, useCallback } from "react";
 import type { Vulnerability } from "@workspace/api-client-react";
 import { parseTechVersion } from "./report-viewer-data";
+import { safeHref } from "@/lib/safe-href";
 
 // ─── Pages Scanned card ───────────────────────────────────────────────────────
 
@@ -73,15 +74,21 @@ export function PagesScannedCard({
               {allPages.map((page, i) => (
                 <div key={i} className="flex items-center gap-2 py-1">
                   <Globe className={cn("w-3 h-3 shrink-0", page.isRoot ? "text-sky-400" : "text-muted-foreground/50")} />
-                  <a
-                    href={page.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors truncate"
-                    title={page.url}
-                  >
-                    {page.label}
-                  </a>
+                  {safeHref(page.url) ? (
+                    <a
+                      href={safeHref(page.url)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors truncate"
+                      title={page.url}
+                    >
+                      {page.label}
+                    </a>
+                  ) : (
+                    <span className="text-xs font-mono text-muted-foreground truncate" title={page.url}>
+                      {page.label}
+                    </span>
+                  )}
                   {page.isRoot && (
                     <span className="shrink-0 text-[9px] px-1 py-0.5 bg-sky-500/10 text-sky-400/70 border border-sky-500/20 rounded font-medium leading-none">
                       root
