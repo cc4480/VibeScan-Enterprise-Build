@@ -23,7 +23,9 @@ dbSuiteOf(describe)("GitHub issues for findings (real Postgres, local GitHub)", 
   let alice: { id: string; email: string };
   let bob: { id: string; email: string };
 
-  const api = (path: string, init: { method?: string; body?: unknown } = {}) =>
+  // The body is read as loosely typed JSON, which is what a test of a JSON API wants to poke at.
+  type Answer = { status: number; json(): Promise<any>; text(): Promise<string> }; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const api = (path: string, init: { method?: string; body?: unknown } = {}): Promise<Answer> =>
     fetch(`${app.base}${path}`, {
       method: init.method ?? "GET",
       headers: { "content-type": "application/json" },
