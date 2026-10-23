@@ -288,8 +288,9 @@ suite("sign-up (real Postgres)", () => {
       expect(fresh.status).toBe(429);
       expect(existing.body).toEqual(fresh.body);
       // A capped network cannot use sign-up to mail anyone, existing account or not.
+      // (A welcome email for the earlier sign-ups may still be in flight; what must not exist is a code or a notice.)
       expect(notices()).toEqual([]);
-      expect(sink.mail).toHaveLength(0);
+      expect(codesSent()).toBe(0);
     });
 
     it("fails the same way as a new address when the email cannot be sent", async () => {
