@@ -246,6 +246,13 @@
       "when": 1792763963668,
       "tag": "0034_github_issues",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792764687029,
+      "tag": "0035_trust_pages",
+      "breakpoints": true
     }
   ]
 }

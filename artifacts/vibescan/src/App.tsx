@@ -25,6 +25,7 @@ const OAuthAuthorizePage = lazyPage(() => import("@/pages/oauth-authorize"));
 const ReportViewer = lazyPage(() => import("@/pages/report-viewer"));
 const MonitorPage = lazyPage(() => import("@/pages/monitor"));
 const SharedReport = lazyPage(() => import("@/pages/shared-report"));
+const TrustPage = lazyPage(() => import("@/pages/trust-page"));
 const SettingsPage = lazyPage(() => import("@/pages/settings"));
 const DomainsPage = lazyPage(() => import("@/pages/domains"));
 const RegisterPage = lazyPage(() => import("@/pages/register"));
@@ -209,6 +210,8 @@ function Router() {
     <Switch>
       {/* Public share page — rendered without the app Layout (no nav/auth required) */}
       <Route path="/share/:token" component={SharedReport} />
+      {/* Public trust page for a verified domain — also without the app Layout */}
+      <Route path="/trust/:domain" component={TrustPage} />
 
       {/* Account screens sit outside ProtectedRoute deliberately: a reset or
           confirmation link arrives by email and has to work whatever the

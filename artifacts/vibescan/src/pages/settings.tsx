@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSeo } from "@/lib/seo";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Mail, CreditCard, Bot, Github } from "lucide-react";
+import { Loader2, Mail, CreditCard, Bot, Github, ShieldCheck } from "lucide-react";
 import { AiEditorsSection } from "@/components/ai-editors";
 import { GithubIssuesSection } from "@/components/github-issues-section";
+import { TrustPagesSection } from "@/components/trust-pages-section";
 import { ConnectedAppsSection } from "@/components/connected-apps";
 import { BillingSummary } from "@/components/billing-summary";
 import { PrivacyCard } from "@/components/privacy-card";
@@ -108,6 +109,21 @@ export default function SettingsPage() {
           </div>
         </div>
         <GithubIssuesSection />
+      </div>
+
+      <div className="glass-panel p-6 sm:p-10 rounded-3xl mb-8">
+        <div className="flex items-start gap-4 mb-6">
+          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20 shrink-0">
+            <ShieldCheck className="w-6 h-6 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold mb-1">Trust pages</h2>
+            <p className="text-sm text-muted-foreground">
+              Show customers the grade and date of your latest scan on a public page under your name and colour. Only for domains you have verified; it never lists the findings.
+            </p>
+          </div>
+        </div>
+        <TrustPagesSection />
       </div>
 
       <div className="glass-panel p-6 sm:p-10 rounded-3xl mb-8">
