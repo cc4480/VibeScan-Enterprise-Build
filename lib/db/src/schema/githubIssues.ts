@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, integer, timestamp, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, integer, boolean, timestamp, index, uniqueIndex } from "drizzle-orm/pg-core";
 
 /**
  * Where an account files GitHub issues for findings: one repository, and a fine-grained personal access token that can
@@ -10,6 +10,10 @@ export const githubIssueDestinationsTable = pgTable("github_issue_destinations",
   /** "owner/name". */
   repoFullName: text("repo_full_name").notNull(),
   tokenEncrypted: text("token_encrypted").notNull(),
+  /** File issues by itself when monitoring finds a new problem. Off until the account turns it on. */
+  autoFile: boolean("auto_file").notNull().default(false),
+  /** The lowest severity filed by itself. */
+  autoMinSeverity: text("auto_min_severity", { enum: ["critical", "high", "medium"] }).notNull().default("high"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -9,6 +9,24 @@ export interface GithubIssueDestination {
   repo: string | null;
   /** False when the server cannot store a token (no encryption key), so there is nothing to offer. */
   available: boolean;
+  /** File issues by itself when monitoring finds a new problem. */
+  autoFile: boolean;
+  /** The lowest severity it files. */
+  autoMinSeverity: AutoSeverity;
+}
+
+export type AutoSeverity = "critical" | "high" | "medium";
+
+export const AUTO_SEVERITY_CHOICES: ReadonlyArray<{ value: AutoSeverity; label: string }> = [
+  { value: "critical", label: "Critical only" },
+  { value: "high", label: "High and critical" },
+  { value: "medium", label: "Medium and above" },
+];
+
+/** What the switch promises, in the words of what the server does (api-server lib/githubIssuesAuto.ts). */
+export function autoFileNote(repo: string, minSeverity: AutoSeverity): string {
+  const level = AUTO_SEVERITY_CHOICES.find((c) => c.value === minSeverity)?.label.toLowerCase() ?? minSeverity;
+  return `When a scheduled scan finds a new problem (${level}) that the last scan did not have, an issue is filed in ${repo}. One per problem, at most 10 a scan; secrets in the evidence are removed first.`;
 }
 
 export interface FiledIssue { issueNumber: number; issueUrl: string }

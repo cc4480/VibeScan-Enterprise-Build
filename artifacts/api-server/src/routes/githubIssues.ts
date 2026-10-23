@@ -5,13 +5,14 @@
  */
 import { Router, type IRouter } from "express";
 import { z } from "zod";
-import { fileIssue, getDestination, issuesForReport, removeDestination, saveDestination } from "../lib/githubIssues";
+import { AUTO_SEVERITIES, fileIssue, getDestination, issuesForReport, removeDestination, saveDestination, setAutoFile } from "../lib/githubIssues";
 import { isEncryptionConfigured } from "../lib/crypto";
 import { UUID } from "./appRouteRunner";
 
 const router: IRouter = Router();
 
 const DestinationBody = z.object({ repo: z.string().min(3).max(200), token: z.string().min(10).max(300) });
+const AutoBody = z.object({ enabled: z.boolean(), minSeverity: z.enum(["critical", "high", "medium"]).optional() });
 const FileBody = z.object({ findingId: z.string().min(1).max(100) });
 
 router.get("/integrations/github-issues", async (req, res): Promise<void> => {
@@ -19,7 +20,10 @@ router.get("/integrations/github-issues", async (req, res): Promise<void> => {
   res.setHeader("Cache-Control", "no-store");
   const dest = await getDestination(req.user.id);
   // The token is never returned: only whether one is saved, and for which repository.
-  res.json({ configured: dest !== null, repo: dest?.repoFullName ?? null, available: isEncryptionConfigured() });
+  res.json({
+    configured: dest !== null, repo: dest?.repoFullName ?? null, available: isEncryptionConfigured(),
+    autoFile: dest?.autoFile ?? false, autoMinSeverity: dest?.autoMinSeverity ?? "high",
+  });
 });
 
 router.put("/integrations/github-issues", async (req, res): Promise<void> => {
@@ -30,6 +34,17 @@ router.put("/integrations/github-issues", async (req, res): Promise<void> => {
   if (!saved.ok) { res.status(saved.status).json({ error: saved.message, code: saved.code }); return; }
   req.log.info({ repo: saved.repoFullName }, "GitHub issue destination saved");
   res.json({ configured: true, repo: saved.repoFullName });
+});
+
+router.patch("/integrations/github-issues/auto", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const parsed = AutoBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: `Send { "enabled": true or false, "minSeverity": ${AUTO_SEVERITIES.map((s) => `"${s}"`).join(", ")} }.`, code: "bad_request" }); return; }
+  const current = await getDestination(req.user.id);
+  if (!current) { res.status(409).json({ error: "Connect a GitHub repository first.", code: "no_destination" }); return; }
+  const minSeverity = parsed.data.minSeverity ?? current.autoMinSeverity;
+  await setAutoFile(req.user.id, parsed.data.enabled, minSeverity);
+  res.json({ autoFile: parsed.data.enabled, autoMinSeverity: minSeverity });
 });
 
 router.delete("/integrations/github-issues", async (req, res): Promise<void> => {

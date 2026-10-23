@@ -48,9 +48,25 @@ const rec = (v: unknown): Record<string, unknown> => (typeof v === "object" && v
 
 // ── The destination ───────────────────────────────────────────────────────────
 
-export async function getDestination(userId: string): Promise<{ repoFullName: string } | null> {
-  const [row] = await db.select({ repoFullName: githubIssueDestinationsTable.repoFullName }).from(githubIssueDestinationsTable).where(eq(githubIssueDestinationsTable.userId, userId));
+export type AutoSeverity = "critical" | "high" | "medium";
+export const AUTO_SEVERITIES: readonly AutoSeverity[] = ["critical", "high", "medium"];
+
+export async function getDestination(userId: string): Promise<{ repoFullName: string; autoFile: boolean; autoMinSeverity: AutoSeverity } | null> {
+  const [row] = await db.select({
+    repoFullName: githubIssueDestinationsTable.repoFullName,
+    autoFile: githubIssueDestinationsTable.autoFile,
+    autoMinSeverity: githubIssueDestinationsTable.autoMinSeverity,
+  }).from(githubIssueDestinationsTable).where(eq(githubIssueDestinationsTable.userId, userId));
   return row ?? null;
+}
+
+/** Turn filing-by-itself on or off, and choose the lowest severity it files. False when no repository is connected. */
+export async function setAutoFile(userId: string, enabled: boolean, minSeverity: AutoSeverity): Promise<boolean> {
+  const rows = await db.update(githubIssueDestinationsTable)
+    .set({ autoFile: enabled, autoMinSeverity: minSeverity })
+    .where(eq(githubIssueDestinationsTable.userId, userId))
+    .returning({ userId: githubIssueDestinationsTable.userId });
+  return rows.length > 0;
 }
 
 export async function saveDestination(userId: string, repoInput: string, token: string): Promise<{ ok: true; repoFullName: string } | Failure> {
@@ -71,9 +87,11 @@ export async function saveDestination(userId: string, repoInput: string, token: 
   if (rec(res.json)["archived"] === true) return fail(409, "archived", `${repo.fullName} is archived, so issues cannot be created in it.`);
 
   const tokenEncrypted = encryptSecret(clean);
+  // Pointing the account at a different repository switches filing-by-itself off: it was agreed for the old one.
+  const sameRepo = (await getDestination(userId))?.repoFullName === repo.fullName;
   await db.insert(githubIssueDestinationsTable)
     .values({ userId, repoFullName: repo.fullName, tokenEncrypted })
-    .onConflictDoUpdate({ target: githubIssueDestinationsTable.userId, set: { repoFullName: repo.fullName, tokenEncrypted, createdAt: new Date() } });
+    .onConflictDoUpdate({ target: githubIssueDestinationsTable.userId, set: { repoFullName: repo.fullName, tokenEncrypted, createdAt: new Date(), ...(sameRepo ? {} : { autoFile: false }) } });
   return { ok: true, repoFullName: repo.fullName };
 }
 

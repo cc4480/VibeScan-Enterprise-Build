@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Github, Loader2, Unplug } from "lucide-react";
-import { destinationFormError, issueRefusal, type GithubIssueDestination } from "@/lib/github-issues";
+import { AUTO_SEVERITY_CHOICES, autoFileNote, destinationFormError, issueRefusal, type AutoSeverity, type GithubIssueDestination } from "@/lib/github-issues";
 
 /**
  * Settings → GitHub issues: the repository findings are filed in, and the fine-grained token that lets SecScan create issues
@@ -35,6 +35,23 @@ export function GithubIssuesSection() {
       });
       setToken("");
       setRepo("");
+      await refresh();
+    } catch (err) {
+      setError(issueRefusal(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setAuto(enabled: boolean, minSeverity: AutoSeverity) {
+    setBusy(true);
+    setError(null);
+    try {
+      await customFetch("/api/integrations/github-issues/auto", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled, minSeverity }),
+      });
       await refresh();
     } catch (err) {
       setError(issueRefusal(err));
@@ -76,6 +93,37 @@ export function GithubIssuesSection() {
           File a finding as an issue with one click. Create a <strong>fine-grained personal access token</strong> on GitHub, limited to the one repository, with{" "}
           <strong>Issues: Read and write</strong> and nothing else.
         </p>
+      )}
+
+      {connected && destination.data && (
+        <div className="rounded-xl border border-white/10 px-4 py-3 space-y-2">
+          <div className="flex items-center justify-between gap-4">
+            <span className="font-medium text-sm">File new problems automatically</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={destination.data.autoFile}
+              aria-label="File new problems automatically"
+              disabled={busy}
+              onClick={() => setAuto(!destination.data!.autoFile, destination.data!.autoMinSeverity)}
+              className={`w-11 h-6 rounded-full border transition-colors disabled:opacity-50 shrink-0 ${destination.data.autoFile ? "bg-primary border-primary" : "bg-secondary border-white/10"}`}
+            >
+              <span className={`block w-4 h-4 rounded-full bg-white transition-transform mx-1 ${destination.data.autoFile ? "translate-x-5" : ""}`} />
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">{autoFileNote(connected, destination.data.autoMinSeverity)}</p>
+          {destination.data.autoFile && (
+            <select
+              aria-label="Lowest severity to file automatically"
+              value={destination.data.autoMinSeverity}
+              disabled={busy}
+              onChange={(e) => setAuto(true, e.target.value as AutoSeverity)}
+              className="px-2 py-1.5 rounded-lg bg-secondary border border-white/10 text-sm"
+            >
+              {AUTO_SEVERITY_CHOICES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+          )}
+        </div>
       )}
 
       <form onSubmit={save} className="space-y-3">

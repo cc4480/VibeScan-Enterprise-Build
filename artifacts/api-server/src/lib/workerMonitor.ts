@@ -13,6 +13,7 @@ import { type ScanVulnerability } from "./scanner";
 import { findingFingerprint } from "./fingerprint";
 import { newlyRunTests, type TestRecord } from "./testLedger";
 import { APP_ORIGIN } from "./appOrigin";
+import { autoFileRegressions } from "./githubIssuesAuto";
 
 /** What the monitor bookkeeping needs to know about the scan that just completed. */
 export interface MonitorScanInput {
@@ -232,6 +233,9 @@ export async function recordMonitorScan(input: MonitorScanInput): Promise<void> 
                 log.warn({ err }, "Failed to fire regression webhook (non-fatal)"),
               );
             }
+
+            // Only when the account has switched it on (Settings, GitHub issues). Never throws.
+            await autoFileRegressions({ userId, reportId: report.id, regressions: newRegressions, log });
           }
         }
       }

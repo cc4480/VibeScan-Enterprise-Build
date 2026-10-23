@@ -1,0 +1,2 @@
+ALTER TABLE "github_issue_destinations" ADD COLUMN "auto_file" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "github_issue_destinations" ADD COLUMN "auto_min_severity" text DEFAULT 'high' NOT NULL;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { issueView, safeIssueHref, issueRefusal, destinationFormError, type GithubIssueDestination } from "./github-issues";
+import { issueView, safeIssueHref, issueRefusal, destinationFormError, autoFileNote, type GithubIssueDestination } from "./github-issues";
 
 const connected: GithubIssueDestination = { configured: true, repo: "acme/website", available: true };
 const unconfigured: GithubIssueDestination = { configured: false, repo: null, available: true };
@@ -78,5 +78,20 @@ describe("destinationFormError", () => {
     for (const t of ["", "short", "has spaces in the token it is long enough", "github_pat_ä" + "x".repeat(30)]) {
       expect(destinationFormError("acme/website", t), t).toMatch(/whole token/);
     }
+  });
+});
+
+describe("autoFileNote", () => {
+  it("names the repository, the level, and the limits the server enforces", () => {
+    const note = autoFileNote("acme/website", "high");
+    expect(note).toContain("acme/website");
+    expect(note).toContain("high and critical");
+    expect(note).toMatch(/at most 10 a scan/);
+    expect(note).toMatch(/secrets/);
+  });
+
+  it("words each level it offers", () => {
+    expect(autoFileNote("a/b", "critical")).toContain("critical only");
+    expect(autoFileNote("a/b", "medium")).toContain("medium and above");
   });
 });
