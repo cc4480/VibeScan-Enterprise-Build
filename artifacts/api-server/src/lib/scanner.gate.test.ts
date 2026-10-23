@@ -1,27 +1,30 @@
 /**
  * runScan end to end against local servers, for the cases where what the scan analyses is not the
- * app: a platform sign-in wall, a headless-only challenge, an error at the start page. The browser
- * is mocked so the render can be made to disagree with the plain request.
+ * app: a platform sign-in wall, a headless-only challenge, an error at the start page. The headless browser is the real
+ * one: a server tells it from the plain request by the Accept header only a browser navigation sends, so the
+ * render can be made to disagree with the plain request.
  */
-import { describe, it, expect, vi, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import http from "node:http";
+import { existsSync } from "node:fs";
 import type { AddressInfo } from "node:net";
-
-const render = vi.hoisted(() => ({ next: null as null | { html: string; status: number; headers?: Record<string, string> } }));
-vi.mock("./browser", () => ({
-  isSpa: (html: string) => /<div id="root"><\/div>/.test(html),
-  renderPage: async (url: string) =>
-    render.next
-      ? { html: render.next.html, status: render.next.status, headers: render.next.headers ?? {}, setCookies: [], finalUrl: url, observed: [] }
-      : null,
-  initBrowser: async () => {},
-  closeBrowser: async () => {},
-}));
-
+import { useHstsPreloadStub } from "./hstsPreloadStub.testkit";
+import { initBrowser, closeBrowser } from "./browser";
 import { runScan } from "./scanner";
 
+await useHstsPreloadStub();
+
+let HAVE_CHROMIUM = false;
+try {
+  const { chromium } = await import("playwright");
+  HAVE_CHROMIUM = existsSync(chromium.executablePath());
+} catch { /* playwright or its browser is not installed */ }
+
+beforeAll(async () => { if (HAVE_CHROMIUM) await initBrowser(); }, 60_000);
+afterAll(async () => { await closeBrowser(); });
+
 const servers: http.Server[] = [];
-afterAll(() => servers.forEach((s) => s.close()));
+afterAll(() => { servers.forEach((s) => { s.closeAllConnections(); s.close(); }); });
 
 async function serve(handler: http.RequestListener): Promise<string> {
   const s = http.createServer(handler);
@@ -31,8 +34,18 @@ async function serve(handler: http.RequestListener): Promise<string> {
 }
 
 const SPA = `<!doctype html><html><head><title>App</title><script type="module" src="/assets/i.js"></script></head><body><div id="root"></div></body></html>`;
+const APP_JS = `document.getElementById("root").innerHTML = "<h1>Hello</h1><p>The application has started and is ready for use.</p>";`;
 
-beforeEach(() => { render.next = null; });
+/** A site that serves its single-page app to the plain request and `forBrowser` (when given) to a browser's navigation. */
+function spaSite(forBrowser?: { status: number; html: string }) {
+  return serve((req, res) => {
+    if (req.url === "/assets/i.js") { res.writeHead(200, { "content-type": "text/javascript" }); res.end(APP_JS); return; }
+    const browser = /signed-exchange/.test(String(req.headers["accept"]));
+    if (browser && forBrowser) { res.writeHead(forBrowser.status, { "content-type": "text/html" }); res.end(forBrowser.html); return; }
+    res.writeHead(200, { "content-type": "text/html" });
+    res.end(SPA);
+  });
+}
 
 describe("runScan when something other than the app answers", () => {
   it("withholds findings read from a Vercel Deployment Protection page, lists them, and does not grade", async () => {
@@ -56,9 +69,8 @@ describe("runScan when something other than the app answers", () => {
     expect(r.tests?.find((t) => t.name === "security.txt")).toMatchObject({ status: "skipped", reason: expect.stringMatching(/not tested on the app: a sign-in page answered/) });
   }, 60_000);
 
-  it("sets aside a render that met a challenge served with HTTP 200 only to the browser", async () => {
-    const url = await serve((_req, res) => { res.writeHead(200, { "content-type": "text/html" }); res.end(SPA); });
-    render.next = { status: 200, html: `<html><head><title>Just a moment...</title></head><body><script>window._cf_chl_opt={}</script></body></html>` };
+  it.skipIf(!HAVE_CHROMIUM)("sets aside a render that met a challenge served with HTTP 200 only to the browser", async () => {
+    const url = await spaSite({ status: 200, html: `<html><head><title>Just a moment...</title></head><body><script>window._cf_chl_opt={}</script></body></html>` });
     const r = await runScan(url, "deep", false);
     expect(r.renderedWithBrowser).toBe(false);
     expect(r.intercepted).toBe(false);
@@ -66,17 +78,15 @@ describe("runScan when something other than the app answers", () => {
     expect(note?.evidence).toMatch(/bot-protection challenge/);
   }, 60_000);
 
-  it("sets aside a render answered with an error the plain request did not get", async () => {
-    const url = await serve((_req, res) => { res.writeHead(200, { "content-type": "text/html" }); res.end(SPA); });
-    render.next = { status: 403, html: "<html><body>Forbidden</body></html>" };
+  it.skipIf(!HAVE_CHROMIUM)("sets aside a render answered with an error the plain request did not get", async () => {
+    const url = await spaSite({ status: 403, html: "<html><body>Forbidden</body></html>" });
     const r = await runScan(url, "deep", false);
     expect(r.renderedWithBrowser).toBe(false);
     expect(r.vulnerabilities.find((v) => v.name === "Browser Rendering Was Not Used")?.evidence).toMatch(/HTTP 403 where the plain request got HTTP 200/);
   }, 60_000);
 
-  it("uses a render that agrees with the plain request", async () => {
-    const url = await serve((_req, res) => { res.writeHead(200, { "content-type": "text/html" }); res.end(SPA); });
-    render.next = { status: 200, html: `<html><head><title>App</title></head><body><div id="root"><h1>Hello</h1></div></body></html>` };
+  it.skipIf(!HAVE_CHROMIUM)("uses a render that agrees with the plain request", async () => {
+    const url = await spaSite();
     const r = await runScan(url, "deep", false);
     expect(r.renderedWithBrowser).toBe(true);
     expect(r.vulnerabilities.some((v) => v.name === "Browser Rendering Was Not Used")).toBe(false);
