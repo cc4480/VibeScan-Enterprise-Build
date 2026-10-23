@@ -34,24 +34,24 @@ module does. `none` — neither, so no test exercises it at all.
 | `scannerHeaderChecks.ts` | 7 | 144 | 5 | direct |
 | `jwtAnalysis.ts` | 6 | 274 | 9 | direct |
 | `repoCheckSupabaseExtra.ts` | 6 | 166 | 9 | direct |
-| `storageProbe.ts` | 5 | 254 | 11 | direct |
-| `firebase-probes.ts` | 4 | 302 | 8 | direct |
-| `probesSupabase.ts` | 4 | 176 | 1 | direct |
-| `baasDepth.ts` | 3 | 161 | 11 | direct |
+| `storageProbe.ts` | 5 | 263 | 11 | direct |
+| `firebase-probes.ts` | 4 | 303 | 8 | direct |
+| `probesSupabase.ts` | 4 | 177 | 1 | direct |
+| `baasDepth.ts` | 3 | 162 | 11 | direct |
 | `isolationHeaders.ts` | 3 | 77 | 4 | direct |
 | `mailTls.ts` | 3 | 139 | 13 | direct |
 | `tlsCheckFindings.ts` | 3 | 155 | 36 | direct |
 | `aiFeatureProbe.ts` | 2 | 152 | 21 | direct |
 | `baasProbes.ts` | 2 | 166 | 11 | direct |
-| `graphqlExtra.ts` | 2 | 105 | 8 | direct |
-| `graphqlProbe.ts` | 2 | 256 | 12 | direct |
+| `graphqlExtra.ts` | 2 | 105 | 9 | direct |
+| `graphqlProbe.ts` | 2 | 256 | 10 | direct |
 | `injectionExtra.ts` | 2 | 132 | 9 | direct |
 | `injectionProbe.ts` | 2 | 270 | 13 | direct |
-| `sourceMaps.ts` | 2 | 241 | 20 | direct |
+| `sourceMaps.ts` | 2 | 241 | 18 | direct |
 | `supabase-probes.ts` | 2 | 104 | 7 | direct |
 | `apiDocsProbe.ts` | 1 | 129 | 9 | direct |
 | `compromisedScriptHosts.ts` | 1 | 67 | 4 | direct |
-| `crossAccountStep.ts` | 1 | 172 | 16 | direct |
+| `crossAccountStep.ts` | 1 | 163 | 17 | direct |
 | `deserializationProbe.ts` | 1 | 105 | 9 | direct |
 | `dnsChecks.ts` | 1 | 163 | 39 | direct |
 | `healthEndpointProbe.ts` | 1 | 114 | 10 | direct |
@@ -80,12 +80,12 @@ module does. `none` — neither, so no test exercises it at all.
 | `repoCheckCode.ts` | 6 | 132 | — | indirect, via repoCodeRules.test.ts, repoFalsePositives.test.ts, repoScan.test.ts |
 | `scannerCookies.ts` | 6 | 205 | — | indirect, via scanner.test.ts (split from scanner) |
 | `crawlerHeaders.ts` | 5 | 203 | — | indirect, via crawler.test.ts (split from crawler) |
-| `cveCheckLocal.ts` | 5 | 225 | — | indirect, via cveCheck.test.ts (split from cveCheck) |
+| `cveCheckLocal.ts` | 5 | 229 | — | indirect, via cveCheck.test.ts (split from cveCheck) |
 | `scannerTransportChecks.ts` | 5 | 99 | — | indirect, via scanner.test.ts (split from scanner) |
 | `secret-pattern-ai.ts` | 5 | 62 | — | indirect, via secret-pattern-generic.test.ts |
 | `accessControlFindings.ts` | 3 | 129 | — | indirect, via accessControlProbe.test.ts |
 | `probesFiles.ts` | 3 | 266 | — | indirect, via probes.test.ts (split from probes) |
-| `probesPage.ts` | 3 | 244 | — | indirect, via probes.test.ts (split from probes) |
+| `probesPage.ts` | 3 | 247 | — | indirect, via probes.test.ts (split from probes) |
 | `secret-pattern-jwt.ts` | 3 | 113 | — | indirect, via secret-pattern-generic.test.ts |
 | `baasProbesPocketbase.ts` | 2 | 133 | — | indirect, via baasProbes.test.ts (split from baasProbes) |
 | `crawlerCookies.ts` | 2 | 184 | — | indirect, via crawler.test.ts (split from crawler) |
@@ -142,7 +142,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `baasDepth.ts`
 
-*3 findings · 161 lines · 11 tests.*
+*3 findings · 162 lines · 11 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -222,7 +222,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `crossAccountStep.ts`
 
-*1 findings · 172 lines · 16 tests.*
+*1 findings · 163 lines · 17 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -230,7 +230,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `cveCheckLocal.ts`
 
-*5 findings · 225 lines · no test file.*
+*5 findings · 229 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -273,7 +273,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `firebase-probes.ts`
 
-*4 findings · 302 lines · 8 tests.*
+*4 findings · 303 lines · 8 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -292,7 +292,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `graphqlExtra.ts`
 
-*2 findings · 105 lines · 8 tests.*
+*2 findings · 105 lines · 9 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -301,7 +301,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `graphqlProbe.ts`
 
-*2 findings · 256 lines · 12 tests.*
+*2 findings · 256 lines · 10 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -542,7 +542,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `probesPage.ts`
 
-*3 findings · 244 lines · no test file.*
+*3 findings · 247 lines · no test file.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -560,7 +560,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `probesSupabase.ts`
 
-*4 findings · 176 lines · 1 tests.*
+*4 findings · 177 lines · 1 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -906,7 +906,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `sourceMaps.ts`
 
-*2 findings · 241 lines · 20 tests.*
+*2 findings · 241 lines · 18 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
@@ -923,7 +923,7 @@ module does. `none` — neither, so no test exercises it at all.
 
 ### `storageProbe.ts`
 
-*5 findings · 254 lines · 11 tests.*
+*5 findings · 263 lines · 11 tests.*
 
 | Finding | Severity | Category | CVSS | CWE | WSTG |
 |---|---|---|---:|---|---|
