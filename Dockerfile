@@ -21,8 +21,7 @@ RUN pnpm install --frozen-lockfile
 
 # -r runs in topological order, so the lib packages (db, api-zod,
 # api-client-react) are compiled before the two apps that
-# import their type output. mockup-sandbox is an unrelated demo artifact and is
-# excluded to keep the build lean.
+# import their type output.
 #
 # The root `build` script also runs a typecheck first; it is deliberately not
 # used here so that a pre-existing type error cannot block producing an image.
@@ -31,7 +30,7 @@ RUN pnpm install --frozen-lockfile
 # sitemap.xml and robots.txt), so it must be an ARG, not only a runtime env var. It is a public
 # URL, not a secret. Being declared in this stage only, it does not reach the runtime images.
 ARG APP_ORIGIN=https://secscan.us
-RUN pnpm -r --if-present --filter '!@workspace/mockup-sandbox' run build
+RUN pnpm -r --if-present run build
 
 # Prerender the public pages (home, learn, about, bot, privacy, terms) in headless
 # Chromium, so crawlers that run no JavaScript get the page and not an empty div.

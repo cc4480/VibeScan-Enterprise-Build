@@ -59,7 +59,6 @@ needs a rebuilt image.
 artifacts/
   api-server/      — Express API (src/routes, src/lib, src/middlewares)
   vibescan/        — React frontend (src/pages, src/components)
-  mockup-sandbox/  — Design component preview server
 lib/
   api-client-react/ — Generated API client + custom fetch
   api-zod/          — Shared Zod schemas (source of truth for API contracts)

@@ -150,7 +150,6 @@ in-process job queue — a scan is a queued job, not a request you hold open.
 artifacts/
   api-server/       Express 5 API — src/routes, src/lib (the scan engine), src/middlewares
   vibescan/         React 19 + Vite front end — src/pages, src/components
-  mockup-sandbox/   Design component preview server
 lib/
   api-spec/         openapi.yaml — the API contract source of truth
   api-zod/          Zod schemas generated from the spec

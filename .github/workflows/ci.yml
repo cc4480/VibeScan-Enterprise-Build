@@ -134,7 +134,7 @@ jobs:
       # typechecks: bundling resolves imports the compiler is happy to leave
       # unresolved.
       - name: Build
-        run: pnpm -r --if-present --filter '!@workspace/mockup-sandbox' run build
+        run: pnpm -r --if-present run build
 
       # Railway deploys from this same push independently of this workflow, so
       # this doesn't wait on it — IndexNow's own crawl isn't instant either.
