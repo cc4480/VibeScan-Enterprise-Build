@@ -12,6 +12,7 @@
  *   GITHUB_APP_SLUG from githubApp.ts).
  */
 import { githubAppConfig, signAppJwt, type GithubAppConfig } from "./githubApp";
+import { githubApi, githubWeb } from "./githubEndpoints";
 
 export interface GithubClientConfig { clientId: string; clientSecret: string }
 
@@ -35,7 +36,7 @@ export function connectConfigured(env: NodeJS.ProcessEnv = process.env): boolean
  */
 export function authorizeUrl(client: GithubClientConfig, state: string, redirectUri?: string): string {
   return (
-    `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(client.clientId)}&state=${encodeURIComponent(state)}` +
+    `${githubWeb()}/login/oauth/authorize?client_id=${encodeURIComponent(client.clientId)}&state=${encodeURIComponent(state)}` +
     (redirectUri ? `&redirect_uri=${encodeURIComponent(redirectUri)}` : "")
   );
 }
@@ -55,7 +56,7 @@ const GITHUB_HEADERS = { Accept: "application/vnd.github+json", "X-GitHub-Api-Ve
 export async function exchangeCode(code: string, client: GithubClientConfig, fetchFn: typeof fetch = fetch): Promise<string> {
   let res: Response;
   try {
-    res = await fetchFn("https://github.com/login/oauth/access_token", {
+    res = await fetchFn(`${githubWeb()}/login/oauth/access_token`, {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json", "User-Agent": "SecScan" },
       body: JSON.stringify({ client_id: client.clientId, client_secret: client.clientSecret, code }),
@@ -84,7 +85,7 @@ export async function userInstallations(userToken: string, appId: string, fetchF
   for (let page = 1; page <= MAX_PAGES; page++) {
     let res: Response;
     try {
-      res = await fetchFn(`https://api.github.com/user/installations?per_page=${PAGE_SIZE}&page=${page}`, {
+      res = await fetchFn(`${githubApi()}/user/installations?per_page=${PAGE_SIZE}&page=${page}`, {
         headers: { ...GITHUB_HEADERS, Authorization: `Bearer ${userToken}` },
         signal: AbortSignal.timeout(10_000),
       });
@@ -126,7 +127,7 @@ export async function installationRepositoryList(
 ): Promise<{ status: ConnectionStatus; repositories: ConnectedRepository[] }> {
   if (!cfg) return { status: "unavailable", repositories: [] };
   try {
-    const tokenRes = await fetchFn(`https://api.github.com/app/installations/${installationId}/access_tokens`, {
+    const tokenRes = await fetchFn(`${githubApi()}/app/installations/${installationId}/access_tokens`, {
       method: "POST",
       headers: { ...GITHUB_HEADERS, Authorization: `Bearer ${signAppJwt(cfg)}`, "Content-Type": "application/json" },
       body: JSON.stringify({ permissions: { metadata: "read" } }),
@@ -139,7 +140,7 @@ export async function installationRepositoryList(
 
     const repositories: ConnectedRepository[] = [];
     for (let page = 1; page <= MAX_PAGES; page++) {
-      const res = await fetchFn(`https://api.github.com/installation/repositories?per_page=${PAGE_SIZE}&page=${page}`, {
+      const res = await fetchFn(`${githubApi()}/installation/repositories?per_page=${PAGE_SIZE}&page=${page}`, {
         headers: { ...GITHUB_HEADERS, Authorization: `Bearer ${token}` },
         signal: AbortSignal.timeout(10_000),
       });

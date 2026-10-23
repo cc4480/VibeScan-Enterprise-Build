@@ -41,6 +41,7 @@ import { isCandidatePath, prioritise, MAX_FILES } from "./githubCandidates";
 import { configFinding, partialNote } from "./githubFindings";
 import { type GithubRepoRef } from "./githubSourceProbeRef";
 import { type GithubScanOutcome, NOT_SCANNED } from "./githubSourceProbeOutcome";
+import { githubApi, githubRaw } from "./githubEndpoints";
 export { parseGithubRepoRef } from "./githubSourceProbeRef";
 export { githubNotScannedReason, githubProbeOutcome } from "./githubSourceProbeOutcome";
 export type { GithubRepoRef } from "./githubSourceProbeRef";
@@ -136,7 +137,7 @@ export async function scanGithubRepoForSecrets(ref: GithubRepoRef): Promise<Scan
 export async function scanGithubRepo(ref: GithubRepoRef, opts: { timeoutMs?: number } = {}): Promise<GithubScanOutcome> {
   const timeoutMs = opts.timeoutMs ?? GITHUB_FETCH_TIMEOUT_MS;
 
-  const metaRes = await githubGet(`https://api.github.com/repos/${ref.owner}/${ref.repo}`, "json", timeoutMs);
+  const metaRes = await githubGet(`${githubApi()}/repos/${ref.owner}/${ref.repo}`, "json", timeoutMs);
   if (!metaRes) return NOT_SCANNED("unreachable");
   if (!metaRes.ok) return NOT_SCANNED(whyNotOk(metaRes, "not_public_or_missing"));
   const meta = metaRes.data as RepoMeta | null;
@@ -144,7 +145,7 @@ export async function scanGithubRepo(ref: GithubRepoRef, opts: { timeoutMs?: num
 
   const branch = ref.branch || meta.default_branch || "main";
   const treeRes = await githubGet(
-    `https://api.github.com/repos/${ref.owner}/${ref.repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+    `${githubApi()}/repos/${ref.owner}/${ref.repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
     "json",
     timeoutMs,
   );
@@ -169,7 +170,7 @@ export async function scanGithubRepo(ref: GithubRepoRef, opts: { timeoutMs?: num
 
   for (const entry of candidates) {
     const rawRes = await githubGet(
-      `https://raw.githubusercontent.com/${ref.owner}/${ref.repo}/${encodeURIComponent(branch)}/${entry.path.split("/").map(encodeURIComponent).join("/")}`,
+      `${githubRaw()}/${ref.owner}/${ref.repo}/${encodeURIComponent(branch)}/${entry.path.split("/").map(encodeURIComponent).join("/")}`,
       "text",
       timeoutMs,
     );

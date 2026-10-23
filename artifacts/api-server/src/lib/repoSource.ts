@@ -10,6 +10,7 @@
 import { githubGet, whyNotOk } from "./githubSourceProbe";
 import type { GithubScanOutcome } from "./githubSourceProbeOutcome";
 import type { RepoRef } from "./repoFinding";
+import { githubApi, githubRaw } from "./githubEndpoints";
 
 export interface TreeFile { path: string; size: number }
 
@@ -43,7 +44,7 @@ async function walkTree(ref: RepoRef, rootSha: string, timeoutMs: number, header
       if (!next) { if (inFlight === 0) return; await new Promise((r) => setTimeout(r, 20)); continue; }
       inFlight++;
       try {
-        const res = await githubGet(`https://api.github.com/repos/${ref.owner}/${ref.repo}/git/trees/${next.sha}`, "json", timeoutMs, headers);
+        const res = await githubGet(`${githubApi()}/repos/${ref.owner}/${ref.repo}/git/trees/${next.sha}`, "json", timeoutMs, headers);
         const body = res && res.ok ? (res.data as { tree?: TreeEntry[]; truncated?: boolean } | null) : null;
         if (!body?.tree) { truncated = true; continue; }
         if (body.truncated === true) truncated = true;
@@ -59,13 +60,13 @@ async function walkTree(ref: RepoRef, rootSha: string, timeoutMs: number, header
 }
 
 async function openRepo(ref: RepoRef, timeoutMs: number, headers: Record<string, string>, allowPrivate: boolean): Promise<OpenResult> {
-  const metaRes = await githubGet(`https://api.github.com/repos/${ref.owner}/${ref.repo}`, "json", timeoutMs, headers);
+  const metaRes = await githubGet(`${githubApi()}/repos/${ref.owner}/${ref.repo}`, "json", timeoutMs, headers);
   if (!metaRes) return { ok: false, status: "unreachable" };
   if (!metaRes.ok) return { ok: false, status: whyNotOk(metaRes, "not_public_or_missing") };
   const meta = metaRes.data as RepoMeta | null;
   if (!meta || (meta.private && !allowPrivate)) return { ok: false, status: "not_public_or_missing" };
   const branch = ref.branch || meta.default_branch || "main";
-  const treeRes = await githubGet(`https://api.github.com/repos/${ref.owner}/${ref.repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`, "json", timeoutMs, headers);
+  const treeRes = await githubGet(`${githubApi()}/repos/${ref.owner}/${ref.repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`, "json", timeoutMs, headers);
   if (!treeRes) return { ok: false, status: "unreachable" };
   if (treeRes.status === 409) return { ok: true, branch, tree: [], truncated: false }; // no commits
   if (!treeRes.ok) return { ok: false, status: whyNotOk(treeRes, "unreadable") };
@@ -101,7 +102,7 @@ export function publicGithubSource(ref: RepoRef, timeoutMs = 10_000): RepoSource
     via: "public",
     open: () => openRepo(ref, timeoutMs, publicApiHeaders(), false),
     async read(path, branch) {
-      const r = await githubGet(`https://raw.githubusercontent.com/${ref.owner}/${ref.repo}/${encodeURIComponent(branch)}/${encodePath(path)}`, "text", timeoutMs);
+      const r = await githubGet(`${githubRaw()}/${ref.owner}/${ref.repo}/${encodeURIComponent(branch)}/${encodePath(path)}`, "text", timeoutMs);
       return r && r.ok && typeof r.data === "string" ? r.data : null;
     },
   };
@@ -115,7 +116,7 @@ export function githubInstallationSource(ref: RepoRef, token: string, timeoutMs 
     open: () => openRepo(ref, timeoutMs, auth, true),
     async read(path, branch) {
       const r = await githubGet(
-        `https://api.github.com/repos/${ref.owner}/${ref.repo}/contents/${encodePath(path)}?ref=${encodeURIComponent(branch)}`,
+        `${githubApi()}/repos/${ref.owner}/${ref.repo}/contents/${encodePath(path)}?ref=${encodeURIComponent(branch)}`,
         "text", timeoutMs, { ...auth, Accept: "application/vnd.github.raw+json" },
       );
       return r && r.ok && typeof r.data === "string" ? r.data : null;

@@ -1,14 +1,26 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { generateKeyPairSync } from "node:crypto";
 import { diagnoseAccess, installationForRepo, installationsOwnedBy, parseInstallationOwners } from "./githubInstallationAccess";
+import { startGithubStub, useRealGithub, type GithubStub } from "./githubStub.testkit";
 
 // A throwaway key made for the test; nothing here is a GitHub credential.
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { type: "pkcs8", format: "pem" }, publicKeyEncoding: { type: "spki", format: "pem" } });
 const cfg = { appId: "123456", privateKey, slug: "test-app" };
 const repo = { owner: "acme", repo: "private-app" };
 const OWNERS = "1001=owner@example.com";
+const LOOKUP = "/repos/acme/private-app/installation";
+const TOKEN = "/app/installations/1001/access_tokens";
 
-const answer = (status: number, body: unknown) => vi.fn(async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
+// A real server that answers like GitHub; the code under test makes real requests to it.
+let gh: GithubStub;
+beforeAll(async () => { gh = await startGithubStub(); });
+afterAll(async () => { await gh.stop(); useRealGithub(); });
+beforeEach(() => {
+  gh.clear();
+  process.env["GITHUB_API_URL"] = gh.api;
+  process.env["GITHUB_WEB_URL"] = gh.web;
+  process.env["GITHUB_RAW_URL"] = gh.raw;
+});
 
 describe("parseInstallationOwners", () => {
   it("reads installation=email pairs, several emails, several installations", () => {
@@ -41,101 +53,110 @@ describe("installationsOwnedBy", () => {
 });
 
 describe("installationForRepo", () => {
+  const env = { GITHUB_INSTALLATION_OWNERS: OWNERS };
+
   it("returns the installation when the owner is listed and GitHub says it covers the repository", async () => {
-    const fetchFn = answer(200, { id: 1001 });
-    const id = await installationForRepo({ email: "owner@example.com", repo, env: { GITHUB_INSTALLATION_OWNERS: OWNERS }, cfg, fetchFn });
-    expect(id).toBe(1001);
-    const url = (fetchFn as unknown as { mock: { calls: [string][] } }).mock.calls[0]![0];
-    expect(url).toBe("https://api.github.com/repos/acme/private-app/installation");
+    gh.on("GET", "api", LOOKUP, { json: { id: 1001 } });
+    expect(await installationForRepo({ email: "owner@example.com", repo, env, cfg })).toBe(1001);
+    expect(gh.requests).toHaveLength(1);
+    expect(gh.requests[0]!.path).toBe(LOOKUP);
+    expect(String(gh.requests[0]!.headers["authorization"])).toMatch(/^Bearer /);
   });
 
   it("never reaches GitHub for an account that is not listed", async () => {
-    const fetchFn = answer(200, { id: 1001 });
-    const id = await installationForRepo({ email: "stranger@example.com", repo, env: { GITHUB_INSTALLATION_OWNERS: OWNERS }, cfg, fetchFn });
-    expect(id).toBeNull();
-    expect(fetchFn).not.toHaveBeenCalled();
+    gh.on("GET", "api", LOOKUP, { json: { id: 1001 } });
+    expect(await installationForRepo({ email: "stranger@example.com", repo, env, cfg })).toBeNull();
+    expect(gh.requests).toHaveLength(0);
   });
 
   it("refuses when the repository belongs to a different installation than the one the account owns", async () => {
-    const id = await installationForRepo({ email: "owner@example.com", repo, env: { GITHUB_INSTALLATION_OWNERS: OWNERS }, cfg, fetchFn: answer(200, { id: 9999 }) });
-    expect(id).toBeNull();
+    gh.on("GET", "api", LOOKUP, { json: { id: 9999 } });
+    expect(await installationForRepo({ email: "owner@example.com", repo, env, cfg })).toBeNull();
   });
 
   it("is null when the App is not installed on the repository, or GitHub refuses", async () => {
-    const env = { GITHUB_INSTALLATION_OWNERS: OWNERS };
-    expect(await installationForRepo({ email: "owner@example.com", repo, env, cfg, fetchFn: answer(404, { message: "Not Found" }) })).toBeNull();
-    expect(await installationForRepo({ email: "owner@example.com", repo, env, cfg, fetchFn: answer(500, {}) })).toBeNull();
+    gh.on("GET", "api", LOOKUP, { status: 404, json: { message: "Not Found" } });
+    expect(await installationForRepo({ email: "owner@example.com", repo, env, cfg })).toBeNull();
+    gh.on("GET", "api", LOOKUP, { status: 500, json: {} });
+    expect(await installationForRepo({ email: "owner@example.com", repo, env, cfg })).toBeNull();
   });
 
   it("fails closed when GitHub cannot be reached or answers nonsense", async () => {
-    const env = { GITHUB_INSTALLATION_OWNERS: OWNERS };
-    const down = vi.fn(async () => { throw new Error("network"); }) as unknown as typeof fetch;
-    expect(await installationForRepo({ email: "owner@example.com", repo, env, cfg, fetchFn: down })).toBeNull();
-    expect(await installationForRepo({ email: "owner@example.com", repo, env, cfg, fetchFn: answer(200, { id: "1001" }) })).toBeNull();
+    gh.on("GET", "api", LOOKUP, { json: { id: "1001" } });
+    expect(await installationForRepo({ email: "owner@example.com", repo, env, cfg })).toBeNull();
+    // Nothing listens on port 1: the connection is genuinely refused.
+    process.env["GITHUB_API_URL"] = "http://127.0.0.1:1";
+    expect(await installationForRepo({ email: "owner@example.com", repo, env, cfg })).toBeNull();
   });
 
   it("is null when the App is not configured on this server", async () => {
-    const fetchFn = answer(200, { id: 1001 });
-    expect(await installationForRepo({ email: "owner@example.com", repo, env: { GITHUB_INSTALLATION_OWNERS: OWNERS }, cfg: null, fetchFn })).toBeNull();
-    expect(fetchFn).not.toHaveBeenCalled();
+    gh.on("GET", "api", LOOKUP, { json: { id: 1001 } });
+    expect(await installationForRepo({ email: "owner@example.com", repo, env, cfg: null })).toBeNull();
+    expect(gh.requests).toHaveLength(0);
   });
 
   it("is null when no owners are configured at all", async () => {
-    expect(await installationForRepo({ email: "owner@example.com", repo, env: {}, cfg, fetchFn: answer(200, { id: 1001 }) })).toBeNull();
+    gh.on("GET", "api", LOOKUP, { json: { id: 1001 } });
+    expect(await installationForRepo({ email: "owner@example.com", repo, env: {}, cfg })).toBeNull();
   });
 });
 
 describe("diagnoseAccess", () => {
   const env = { GITHUB_INSTALLATION_OWNERS: OWNERS, GITHUB_APP_ID: "123456", GITHUB_APP_PRIVATE_KEY: privateKey };
-  const routes = (lookup: Response, tokenRes: Response) =>
-    vi.fn(async (url: string | URL | Request) => (String(url).endsWith("/installation") ? lookup : tokenRes)) as unknown as typeof fetch;
-  const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
 
   it("says only that the account is not listed, and never contacts GitHub, for anyone else", async () => {
-    const fetchFn = answer(200, { id: 1001 });
-    const d = await diagnoseAccess({ email: "stranger@example.com", repo, env, fetchFn });
+    gh.on("GET", "api", LOOKUP, { json: { id: 1001 } });
+    const d = await diagnoseAccess({ email: "stranger@example.com", repo, env });
     expect(d).toEqual({ signedInAs: "stranger@example.com", ownersConfigured: true, listed: false });
-    expect(fetchFn).not.toHaveBeenCalled();
+    expect(gh.requests).toHaveLength(0);
   });
 
   it("reports a missing owners variable as not configured", async () => {
-    const d = await diagnoseAccess({ email: "owner@example.com", repo, env: {}, fetchFn: answer(200, {}) });
+    const d = await diagnoseAccess({ email: "owner@example.com", repo, env: {} });
     expect(d).toMatchObject({ ownersConfigured: false, listed: false });
   });
 
   it("stops at the App credentials when they are missing", async () => {
-    const d = await diagnoseAccess({ email: "owner@example.com", repo, env: { GITHUB_INSTALLATION_OWNERS: OWNERS }, fetchFn: answer(200, {}) });
+    const d = await diagnoseAccess({ email: "owner@example.com", repo, env: { GITHUB_INSTALLATION_OWNERS: OWNERS } });
     expect(d).toMatchObject({ listed: true, appConfigured: false });
     expect(d.lookup).toBeUndefined();
+    expect(gh.requests).toHaveLength(0);
   });
 
   it("stops when the private key cannot sign", async () => {
     // Assembled from pieces so no key-shaped literal sits in the source: PEM markers around text that is not a key.
     const badKey = ["-----BEGIN ", "PRIVATE KEY-----", "\nbm90IGEgcmVhbCBrZXk=\n", "-----END ", "PRIVATE KEY-----"].join("");
-    const d = await diagnoseAccess({ email: "owner@example.com", repo, env: { ...env, GITHUB_APP_PRIVATE_KEY: badKey }, fetchFn: answer(200, {}) });
+    const d = await diagnoseAccess({ email: "owner@example.com", repo, env: { ...env, GITHUB_APP_PRIVATE_KEY: badKey } });
     expect(d).toMatchObject({ appConfigured: true, keySigns: false });
     expect(d.lookup).toBeUndefined();
+    expect(gh.requests).toHaveLength(0);
   });
 
   it("walks the whole way to a minted token, without returning it", async () => {
-    const d = await diagnoseAccess({ email: "owner@example.com", repo, env, fetchFn: routes(json(200, { id: 1001 }), json(201, { token: "TOKEN-VALUE-MUST-NOT-APPEAR", expires_at: "2030-01-01T00:00:00Z" })) });
+    gh.on("GET", "api", LOOKUP, { json: { id: 1001 } });
+    gh.on("POST", "api", TOKEN, { status: 201, json: { token: "TOKEN-VALUE-MUST-NOT-APPEAR", expires_at: "2030-01-01T00:00:00Z" } });
+    const d = await diagnoseAccess({ email: "owner@example.com", repo, env });
     expect(d).toMatchObject({ listed: true, appConfigured: true, keySigns: true, lookup: { status: 200, installationId: 1001, coveredByOwnedInstallation: true }, token: "minted" });
     expect(JSON.stringify(d)).not.toContain("TOKEN-VALUE-MUST-NOT-APPEAR");
     expect(JSON.stringify(d)).not.toContain("BEGIN");
   });
 
   it("shows when the App is not installed on the repository", async () => {
-    const d = await diagnoseAccess({ email: "owner@example.com", repo, env, fetchFn: routes(json(404, {}), json(201, {})) });
+    gh.on("GET", "api", LOOKUP, { status: 404, json: {} });
+    const d = await diagnoseAccess({ email: "owner@example.com", repo, env });
     expect(d).toMatchObject({ lookup: { status: 404, installationId: null, coveredByOwnedInstallation: false }, token: "skipped" });
   });
 
   it("shows when GitHub names an installation the account does not own", async () => {
-    const d = await diagnoseAccess({ email: "owner@example.com", repo, env, fetchFn: routes(json(200, { id: 9999 }), json(201, {})) });
+    gh.on("GET", "api", LOOKUP, { json: { id: 9999 } });
+    const d = await diagnoseAccess({ email: "owner@example.com", repo, env });
     expect(d).toMatchObject({ lookup: { installationId: 9999, coveredByOwnedInstallation: false }, token: "skipped" });
   });
 
   it("gives the reason when a token cannot be minted", async () => {
-    const d = await diagnoseAccess({ email: "owner@example.com", repo, env, fetchFn: routes(json(200, { id: 1001 }), json(422, {})) });
+    gh.on("GET", "api", LOOKUP, { json: { id: 1001 } });
+    gh.on("POST", "api", TOKEN, { status: 422, json: {} });
+    const d = await diagnoseAccess({ email: "owner@example.com", repo, env });
     expect(d.token).toBe("repository_not_shared");
   });
 });
@@ -151,16 +172,16 @@ describe("owners variable handling", () => {
   });
 
   it("tells a missing variable from one that is present but unreadable", async () => {
-    const missing = await diagnoseAccess({ email: "owner@example.com", repo, env: {}, fetchFn: answer(200, {}) });
+    const missing = await diagnoseAccess({ email: "owner@example.com", repo, env: {} });
     expect(missing).toMatchObject({ ownersConfigured: false, ownersVariable: "missing" });
     for (const bad of ["170782825", "owner@example.com", "170782825:owner@example.com", "abc=owner@example.com"]) {
-      const d = await diagnoseAccess({ email: "owner@example.com", repo, env: { GITHUB_INSTALLATION_OWNERS: bad }, fetchFn: answer(200, {}) });
+      const d = await diagnoseAccess({ email: "owner@example.com", repo, env: { GITHUB_INSTALLATION_OWNERS: bad } });
       expect(d).toMatchObject({ ownersConfigured: false, ownersVariable: "unreadable" });
     }
   });
 
   it("leaves the field out when the variable reads fine", async () => {
-    const d = await diagnoseAccess({ email: "stranger@example.com", repo, env: { GITHUB_INSTALLATION_OWNERS: OWNERS }, fetchFn: answer(200, {}) });
+    const d = await diagnoseAccess({ email: "stranger@example.com", repo, env: { GITHUB_INSTALLATION_OWNERS: OWNERS } });
     expect(d.ownersVariable).toBeUndefined();
   });
 });

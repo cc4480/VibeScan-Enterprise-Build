@@ -13,6 +13,7 @@
  *   Environment: GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY (the PEM, with newlines or \n escapes), GITHUB_APP_SLUG.
  */
 import { createSign } from "node:crypto";
+import { githubApi, githubWeb } from "./githubEndpoints";
 
 export interface GithubAppConfig { appId: string; privateKey: string; slug: string | null }
 
@@ -70,7 +71,7 @@ export async function installationToken(
   if (!Number.isInteger(installationId) || installationId <= 0) throw new GithubAppError("installation_missing", "no GitHub installation is connected");
   let res: Response;
   try {
-    res = await fetchFn(`https://api.github.com/app/installations/${installationId}/access_tokens`, {
+    res = await fetchFn(`${githubApi()}/app/installations/${installationId}/access_tokens`, {
       method: "POST",
       headers: { Authorization: `Bearer ${signAppJwt(cfg)}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "SecScan", "Content-Type": "application/json" },
       body: JSON.stringify({ repositories: [repo], permissions: { contents: "read", metadata: "read" } }),
@@ -89,5 +90,5 @@ export async function installationToken(
 
 /** The page where an owner installs the App and picks repositories. */
 export function installUrl(cfg: GithubAppConfig | null = githubAppConfig(), state = ""): string | null {
-  return cfg?.slug ? `https://github.com/apps/${cfg.slug}/installations/new${state ? `?state=${encodeURIComponent(state)}` : ""}` : null;
+  return cfg?.slug ? `${githubWeb()}/apps/${cfg.slug}/installations/new${state ? `?state=${encodeURIComponent(state)}` : ""}` : null;
 }

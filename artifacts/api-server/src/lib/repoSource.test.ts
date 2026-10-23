@@ -1,31 +1,36 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll } from "vitest";
 import { publicGithubSource, publicApiHeaders } from "./repoSource";
+import { startGithubStub, useRealGithub, type GithubStub } from "./githubStub.testkit";
 
 const ref = { owner: "acme", repo: "big" };
 
-/** A fake GitHub: answers each URL from a table, and records the calls. */
-function fakeGithub(routes: Record<string, unknown>) {
-  const calls: string[] = [];
-  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-    calls.push(url);
-    const key = Object.keys(routes).find((k) => url.endsWith(k));
-    if (!key) return new Response("{}", { status: 404 });
-    return new Response(JSON.stringify(routes[key]), { status: 200, headers: { "content-type": "application/json" } });
-  }));
-  return calls;
-}
+// A real server that answers like GitHub; the code under test makes real requests to it.
+let gh: GithubStub;
+const savedToken = process.env["GITHUB_PUBLIC_API_TOKEN"];
+beforeAll(async () => { gh = await startGithubStub(); });
+afterAll(async () => { await gh.stop(); useRealGithub(); });
+beforeEach(() => {
+  gh.clear();
+  process.env["GITHUB_API_URL"] = gh.api;
+  process.env["GITHUB_WEB_URL"] = gh.web;
+  process.env["GITHUB_RAW_URL"] = gh.raw;
+  delete process.env["GITHUB_PUBLIC_API_TOKEN"];
+});
+afterEach(() => {
+  if (savedToken === undefined) delete process.env["GITHUB_PUBLIC_API_TOKEN"];
+  else process.env["GITHUB_PUBLIC_API_TOKEN"] = savedToken;
+});
 
-afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+const META = "/repos/acme/big";
+const tree = (name: string) => `/repos/acme/big/git/trees/${name}`;
 
 describe("opening a repository whose file list GitHub cut off", () => {
   it("walks it folder by folder, so its size does not decide which files are seen", async () => {
-    fakeGithub({
-      "/repos/acme/big": { private: false, default_branch: "main" },
-      "/git/trees/main?recursive=1": { sha: "root", truncated: true, tree: [{ path: "a.txt", type: "blob", size: 1 }] },
-      "/git/trees/root": { tree: [{ path: "a.txt", type: "blob", size: 1 }, { path: "src", type: "tree", sha: "src1" }, { path: "sub", type: "commit", sha: "x" }] },
-      "/git/trees/src1": { tree: [{ path: "index.ts", type: "blob", size: 5 }, { path: "deep", type: "tree", sha: "deep1" }] },
-      "/git/trees/deep1": { tree: [{ path: "last.ts", type: "blob", size: 7 }] },
-    });
+    gh.on("GET", "api", META, { json: { private: false, default_branch: "main" } });
+    gh.on("GET", "api", tree("main"), { json: { sha: "root", truncated: true, tree: [{ path: "a.txt", type: "blob", size: 1 }] } });
+    gh.on("GET", "api", tree("root"), { json: { tree: [{ path: "a.txt", type: "blob", size: 1 }, { path: "src", type: "tree", sha: "src1" }, { path: "sub", type: "commit", sha: "x" }] } });
+    gh.on("GET", "api", tree("src1"), { json: { tree: [{ path: "index.ts", type: "blob", size: 5 }, { path: "deep", type: "tree", sha: "deep1" }] } });
+    gh.on("GET", "api", tree("deep1"), { json: { tree: [{ path: "last.ts", type: "blob", size: 7 }] } });
     const opened = await publicGithubSource(ref).open();
     expect(opened.ok).toBe(true);
     if (!opened.ok) return;
@@ -34,11 +39,10 @@ describe("opening a repository whose file list GitHub cut off", () => {
   });
 
   it("still says the list is partial when a folder cannot be listed", async () => {
-    fakeGithub({
-      "/repos/acme/big": { private: false, default_branch: "main" },
-      "/git/trees/main?recursive=1": { sha: "root", truncated: true, tree: [{ path: "a.txt", type: "blob", size: 1 }] },
-      "/git/trees/root": { tree: [{ path: "a.txt", type: "blob", size: 1 }, { path: "src", type: "tree", sha: "missing" }] },
-    });
+    gh.on("GET", "api", META, { json: { private: false, default_branch: "main" } });
+    gh.on("GET", "api", tree("main"), { json: { sha: "root", truncated: true, tree: [{ path: "a.txt", type: "blob", size: 1 }] } });
+    gh.on("GET", "api", tree("root"), { json: { tree: [{ path: "a.txt", type: "blob", size: 1 }, { path: "src", type: "tree", sha: "missing" }] } });
+    // tree("missing") is not served: GitHub answers 404 for it.
     const opened = await publicGithubSource(ref).open();
     expect(opened.ok && opened.truncated).toBe(true);
   });
@@ -46,24 +50,20 @@ describe("opening a repository whose file list GitHub cut off", () => {
 
 describe("the optional token for reading public repositories", () => {
   it("is sent to the API and never to the file host", async () => {
-    const seen: Array<{ url: string; auth: string | undefined }> = [];
-    vi.stubEnv("GITHUB_PUBLIC_API_TOKEN", "  github_pat_test_value  ");
-    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: { headers?: Record<string, string> }) => {
-      seen.push({ url, auth: init?.headers?.["Authorization"] });
-      if (url.endsWith("/repos/acme/big")) return new Response(JSON.stringify({ private: false, default_branch: "main" }), { status: 200 });
-      if (url.includes("/git/trees/")) return new Response(JSON.stringify({ tree: [{ path: "a.txt", type: "blob", size: 1 }] }), { status: 200 });
-      return new Response("hello", { status: 200 });
-    }));
+    process.env["GITHUB_PUBLIC_API_TOKEN"] = "  github_pat_test_value  ";
+    gh.on("GET", "api", META, { json: { private: false, default_branch: "main" } });
+    gh.on("GET", "api", tree("main"), { json: { tree: [{ path: "a.txt", type: "blob", size: 1 }] } });
+    gh.on("GET", "raw", "/acme/big/main/a.txt", { text: "hello" });
     const source = publicGithubSource(ref);
     const opened = await source.open();
     expect(opened.ok).toBe(true);
     if (opened.ok) await source.read("a.txt", opened.branch);
-    const api = seen.filter((c) => c.url.startsWith("https://api.github.com/"));
-    const raw = seen.filter((c) => c.url.startsWith("https://raw.githubusercontent.com/"));
+    const api = gh.requests.filter((r) => r.host === "api");
+    const raw = gh.requests.filter((r) => r.host === "raw");
     expect(api.length).toBeGreaterThan(0);
-    expect(api.every((c) => c.auth === "Bearer github_pat_test_value")).toBe(true);
-    expect(raw.length).toBe(1);
-    expect(raw[0]!.auth).toBeUndefined();
+    expect(api.every((r) => r.headers["authorization"] === "Bearer github_pat_test_value")).toBe(true);
+    expect(raw).toHaveLength(1);
+    expect(raw[0]!.headers["authorization"]).toBeUndefined();
   });
 
   it("is absent when not configured, so nothing changes for a deployment without one", () => {
@@ -72,8 +72,8 @@ describe("the optional token for reading public repositories", () => {
   });
 
   it("still refuses a private repository, whatever the token could see", async () => {
-    vi.stubEnv("GITHUB_PUBLIC_API_TOKEN", "github_pat_test_value");
-    fakeGithub({ "/repos/acme/big": { private: true, default_branch: "main" } });
+    process.env["GITHUB_PUBLIC_API_TOKEN"] = "github_pat_test_value";
+    gh.on("GET", "api", META, { json: { private: true, default_branch: "main" } });
     const opened = await publicGithubSource(ref).open();
     expect(opened).toMatchObject({ ok: false, status: "not_public_or_missing" });
   });

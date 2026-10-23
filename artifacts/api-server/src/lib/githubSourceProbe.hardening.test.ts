@@ -1,30 +1,25 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { parseGithubRepoRef, scanGithubRepo } from "./githubSourceProbe.js";
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
+import { parseGithubRepoRef, scanGithubRepo, isCandidatePath, githubNotScannedReason } from "./githubSourceProbe.js";
+import { startGithubStub, useRealGithub, type GithubStub } from "./githubStub.testkit";
 
+// A real server that answers like GitHub; the code under test makes real requests to it.
+let gh: GithubStub;
+beforeAll(async () => { gh = await startGithubStub(); });
+afterAll(async () => { await gh.stop(); useRealGithub(); });
 beforeEach(() => {
-  vi.stubGlobal("fetch", vi.fn());
+  gh.clear();
+  process.env["GITHUB_API_URL"] = gh.api;
+  process.env["GITHUB_WEB_URL"] = gh.web;
+  process.env["GITHUB_RAW_URL"] = gh.raw;
 });
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
-function jsonRes(body: unknown, ok = true): Response {
-  return new Response(JSON.stringify(body), { status: ok ? 200 : 404 });
-}
-function textRes(body: string, ok = true): Response {
-  return new Response(body, { status: ok ? 200 : 404 });
-}
-
-// ─── Hardening: reviewer scenarios, each written to fail on the first version ─────────────────
-
-import { isCandidatePath, githubNotScannedReason } from "./githubSourceProbe.js";
-
+const META = "/repos/acme/widgets";
+const TREE = "/repos/acme/widgets/git/trees/main";
+const publicRepo = () => gh.on("GET", "api", META, { json: { private: false, default_branch: "main" } });
+const rawFiles = () => gh.requests.filter((r) => r.host === "raw").map((r) => r.path);
 const REAL_SECRET = "Kq8Zr2Lm9Vb3Xt7Nc4Wd6Hs1Jp5Ae0Uo";
 
-function statusRes(status: number, body: unknown = {}, headers: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(body), { status, headers });
-}
-const urlsFetched = (): string[] => vi.mocked(fetch).mock.calls.map((c) => String(c[0]));
+// ─── Hardening: reviewer scenarios, each written to fail on the first version ─────────────────
 
 describe("parseGithubRepoRef: validation and branches", () => {
   it("honours a pasted /tree/<branch> URL instead of silently scanning the default branch", () => {
@@ -48,14 +43,12 @@ describe("parseGithubRepoRef: validation and branches", () => {
 
 describe("scanGithubRepo: the branch it was given", () => {
   it("reads the branch named in the reference, not the repository's default", async () => {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(jsonRes({ private: false, default_branch: "main" }))
-      .mockResolvedValueOnce(jsonRes({ tree: [{ path: ".env", type: "blob", size: 40 }] }))
-      .mockResolvedValueOnce(textRes("PORT=3000"));
+    publicRepo();
+    gh.on("GET", "api", "/repos/acme/widgets/git/trees/release%2F2.0", { json: { tree: [{ path: ".env", type: "blob", size: 40 }] } });
+    gh.on("GET", "raw", "/acme/widgets/release%2F2.0/.env", { text: "PORT=3000" });
     await scanGithubRepo({ owner: "acme", repo: "widgets", branch: "release/2.0" });
-    const urls = urlsFetched();
-    expect(urls[1]).toContain("/git/trees/release%2F2.0");
-    expect(urls[2]).toContain("/release%2F2.0/.env");
+    expect(gh.requests.map((r) => r.path)).toContain("/repos/acme/widgets/git/trees/release%2F2.0");
+    expect(rawFiles()).toEqual(["/acme/widgets/release%2F2.0/.env"]);
   });
 });
 
@@ -63,47 +56,44 @@ describe("scanGithubRepo: an honest reason for not scanning", () => {
   const ref = { owner: "acme", repo: "widgets" };
 
   it("does not call a GitHub outage 'private or does not exist'", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(statusRes(503));
+    gh.on("GET", "api", META, { status: 503, json: {} });
     const out = await scanGithubRepo(ref);
     expect(out.status).toBe("unreachable");
     expect(githubNotScannedReason(out.status)).not.toMatch(/private|does not exist/i);
   });
 
   it("still calls a 404 'private or missing'", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(statusRes(404));
-    expect((await scanGithubRepo(ref)).status).toBe("not_public_or_missing");
+    expect((await scanGithubRepo(ref)).status).toBe("not_public_or_missing"); // the stub has no such repository
   });
 
   it("calls a 403 with an exhausted quota a rate limit", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(statusRes(403, { message: "API rate limit exceeded" }, { "x-ratelimit-remaining": "0" }));
+    gh.on("GET", "api", META, { status: 403, json: { message: "API rate limit exceeded" }, headers: { "x-ratelimit-remaining": "0" } });
     expect((await scanGithubRepo(ref)).status).toBe("rate_limited");
   });
 
   it("does not call a blocked repository a rate limit", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(statusRes(403, { message: "Repository access blocked" }, { "x-ratelimit-remaining": "42" }));
+    gh.on("GET", "api", META, { status: 403, json: { message: "Repository access blocked" }, headers: { "x-ratelimit-remaining": "42" } });
     const out = await scanGithubRepo(ref);
     expect(out.status).toBe("blocked");
     expect(githubNotScannedReason(out.status)).not.toMatch(/rate limit/i);
   });
 
   it("treats a 451 as blocked", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(statusRes(451, { message: "Unavailable For Legal Reasons" }));
+    gh.on("GET", "api", META, { status: 451, json: { message: "Unavailable For Legal Reasons" } });
     expect((await scanGithubRepo(ref)).status).toBe("blocked");
   });
 
   it("says GitHub answered when the file list could not be read, rather than that it could not be reached", async () => {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(jsonRes({ private: false, default_branch: "main" }))
-      .mockResolvedValueOnce(statusRes(404, { message: "Not Found" }));
+    publicRepo();
+    gh.on("GET", "api", TREE, { status: 404, json: { message: "Not Found" } });
     const out = await scanGithubRepo(ref);
     expect(out.status).toBe("unreadable");
     expect(githubNotScannedReason(out.status)).not.toMatch(/could not be reached/i);
   });
 
   it("calls a tree 5xx unreachable", async () => {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(jsonRes({ private: false, default_branch: "main" }))
-      .mockResolvedValueOnce(statusRes(502));
+    publicRepo();
+    gh.on("GET", "api", TREE, { status: 502, json: {} });
     expect((await scanGithubRepo(ref)).status).toBe("unreachable");
   });
 });
@@ -112,12 +102,11 @@ describe("scanGithubRepo: reading nothing is not scanning", () => {
   const ref = { owner: "acme", repo: "widgets" };
 
   it("does not report 'scanned' when every candidate file failed to download", async () => {
-    // filesRead 0 with candidates present: GitHub's raw host rate-limited or failed every fetch. The
-    // first version returned 'scanned' and the scanner ledgered it as a clean run.
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(jsonRes({ private: false, default_branch: "main" }))
-      .mockResolvedValueOnce(jsonRes({ tree: [{ path: ".env", type: "blob", size: 40 }, { path: "config/app.json", type: "blob", size: 40 }] }))
-      .mockImplementation(async () => statusRes(429, "slow down"));
+    // filesRead 0 with candidates present: GitHub's raw host rate-limited or failed every fetch. The first version
+    // returned 'scanned' and the scanner ledgered it as a clean run.
+    publicRepo();
+    gh.on("GET", "api", TREE, { json: { tree: [{ path: ".env", type: "blob", size: 40 }, { path: "config/app.json", type: "blob", size: 40 }] } });
+    gh.on("GET", "raw", /^\/acme\/widgets\/main\//, { status: 429, text: "slow down" });
     const out = await scanGithubRepo(ref);
     expect(out.status).toBe("unreadable");
     expect(out.filesRead).toBe(0);
@@ -125,17 +114,15 @@ describe("scanGithubRepo: reading nothing is not scanning", () => {
   });
 
   it("still reports a repository with no candidate file as scanned (there was nothing to read)", async () => {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(jsonRes({ private: false, default_branch: "main" }))
-      .mockResolvedValueOnce(jsonRes({ tree: [{ path: "src/index.ts", type: "blob", size: 900 }] }));
+    publicRepo();
+    gh.on("GET", "api", TREE, { json: { tree: [{ path: "src/index.ts", type: "blob", size: 900 }] } });
     expect(await scanGithubRepo(ref)).toMatchObject({ status: "scanned", filesRead: 0 });
   });
 
   it("says when GitHub truncated the file list, so a partial scan does not read as a full one", async () => {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(jsonRes({ private: false, default_branch: "main" }))
-      .mockResolvedValueOnce(jsonRes({ truncated: true, tree: [{ path: ".env", type: "blob", size: 40 }] }))
-      .mockResolvedValueOnce(textRes("PORT=3000"));
+    publicRepo();
+    gh.on("GET", "api", TREE, { json: { truncated: true, tree: [{ path: ".env", type: "blob", size: 40 }] } });
+    gh.on("GET", "raw", "/acme/widgets/main/.env", { text: "PORT=3000" });
     const out = await scanGithubRepo(ref);
     expect(out.status).toBe("scanned");
     expect(out.truncated).toBe(true);
@@ -147,11 +134,9 @@ describe("scanGithubRepo: reading nothing is not scanning", () => {
   });
 
   it("reports the files it skipped for the cap", async () => {
-    const many = Array.from({ length: 40 }, (_, i) => ({ path: `.env.${String(i).padStart(2, "0")}`, type: "blob", size: 10 }));
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(jsonRes({ private: false, default_branch: "main" }))
-      .mockResolvedValueOnce(jsonRes({ tree: many }))
-      .mockImplementation(async () => textRes("PORT=3000"));
+    publicRepo();
+    gh.on("GET", "api", TREE, { json: { tree: Array.from({ length: 40 }, (_, i) => ({ path: `.env.${String(i).padStart(2, "0")}`, type: "blob", size: 10 })) } });
+    gh.on("GET", "raw", /^\/acme\/widgets\/main\//, { text: "PORT=3000" });
     const out = await scanGithubRepo(ref);
     expect(out.filesRead).toBe(25);
     expect(out.skipped).toBe(15);
@@ -161,30 +146,28 @@ describe("scanGithubRepo: reading nothing is not scanning", () => {
 
 describe("scanGithubRepo: the cap is spent on the files that matter", () => {
   it("reads the root .env and a service's .env before deep config files, however the tree is ordered", async () => {
-    // Git returns paths alphabetically. Thirty files under appNN/config/ sort ahead of services/api/.env
-    // and web/.env, which never reached the 25-file cap.
+    // Git returns paths alphabetically. Thirty files under appNN/config/ sort ahead of services/api/.env and web/.env,
+    // which never reached the 25-file cap.
     const deep = Array.from({ length: 30 }, (_, i) => ({ path: `app${String(i).padStart(2, "0")}/config/settings.json`, type: "blob", size: 50 }));
     const tree = [...deep, { path: "services/api/.env", type: "blob", size: 50 }, { path: "web/.env", type: "blob", size: 50 }, { path: ".env", type: "blob", size: 50 }]
       .sort((a, b) => a.path.localeCompare(b.path));
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(jsonRes({ private: false, default_branch: "main" }))
-      .mockResolvedValueOnce(jsonRes({ tree }))
-      .mockImplementation(async () => textRes("PORT=3000"));
+    publicRepo();
+    gh.on("GET", "api", TREE, { json: { tree } });
+    gh.on("GET", "raw", /^\/acme\/widgets\/main\//, { text: "PORT=3000" });
     await scanGithubRepo({ owner: "acme", repo: "widgets" });
-    const raw = urlsFetched().slice(2);
+    const raw = rawFiles();
     expect(raw.some((u) => u.endsWith("/main/.env"))).toBe(true);
     expect(raw.some((u) => u.endsWith("/main/services/api/.env"))).toBe(true);
     expect(raw.some((u) => u.endsWith("/main/web/.env"))).toBe(true);
-    expect(raw.length).toBe(25);
+    expect(raw).toHaveLength(25);
   });
 });
 
 describe("scanGithubRepo: secrets in the syntaxes config files use", () => {
   it("finds an unquoted .env password, which the JS patterns cannot read", async () => {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(jsonRes({ private: false, default_branch: "main" }))
-      .mockResolvedValueOnce(jsonRes({ tree: [{ path: ".env", type: "blob", size: 80 }] }))
-      .mockResolvedValueOnce(textRes(`PORT=3000\nJWT_SECRET=${REAL_SECRET}\n`));
+    publicRepo();
+    gh.on("GET", "api", TREE, { json: { tree: [{ path: ".env", type: "blob", size: 80 }] } });
+    gh.on("GET", "raw", "/acme/widgets/main/.env", { text: `PORT=3000\nJWT_SECRET=${REAL_SECRET}\n` });
     const out = await scanGithubRepo({ owner: "acme", repo: "widgets" });
     const f = out.findings.find((v) => /Config File/.test(v.name));
     expect(f).toBeDefined();
@@ -196,22 +179,20 @@ describe("scanGithubRepo: secrets in the syntaxes config files use", () => {
   });
 
   it("is quiet about the same key in an .env.example holding a placeholder", async () => {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(jsonRes({ private: false, default_branch: "main" }))
-      .mockResolvedValueOnce(jsonRes({ tree: [{ path: ".env.example", type: "blob", size: 80 }] }))
-      .mockResolvedValueOnce(textRes("JWT_SECRET=your-secret-here\nDATABASE_URL=postgres://postgres:postgres@localhost:5432/mydb\nSTRIPE_SECRET_KEY=sk_live_xxxxxxxxxxxxxxxxxxxxxxxx\n"));
-    const out = await scanGithubRepo({ owner: "acme", repo: "widgets" });
-    expect(out.findings).toEqual([]);
+    publicRepo();
+    gh.on("GET", "api", TREE, { json: { tree: [{ path: ".env.example", type: "blob", size: 80 }] } });
+    gh.on("GET", "raw", "/acme/widgets/main/.env.example", {
+      text: "JWT_SECRET=your-secret-here\nDATABASE_URL=postgres://postgres:postgres@localhost:5432/mydb\nSTRIPE_SECRET_KEY=sk_live_xxxxxxxxxxxxxxxxxxxxxxxx\n",
+    });
+    expect((await scanGithubRepo({ owner: "acme", repo: "widgets" })).findings).toEqual([]);
   });
 });
 
 describe("scanGithubRepo: bounded in time as well as in requests", () => {
   it("gives up on a response body that never arrives", async () => {
-    // The timer used to be cleared as soon as headers arrived; .json() and .text() then ran untimed.
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true, status: 200, headers: new Headers(),
-      json: () => new Promise(() => {}), text: () => new Promise(() => {}),
-    } as unknown as Response);
+    // The timer used to be cleared as soon as headers arrived; .json() and .text() then ran untimed. The server here
+    // sends the headers and the start of a body, then never finishes.
+    gh.on("GET", "api", META, { stallBody: true });
     const started = Date.now();
     const out = await scanGithubRepo({ owner: "acme", repo: "widgets" }, { timeoutMs: 300 });
     expect(out.status).toBe("unreachable");

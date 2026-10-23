@@ -16,6 +16,7 @@
  *   GITHUB_INSTALLATION_OWNERS="170782825=owner@example.com;98765=a@example.com,b@example.com"
  */
 import { GithubAppError, githubAppConfig, installationToken, signAppJwt, type GithubAppConfig } from "./githubApp";
+import { githubApi } from "./githubEndpoints";
 
 /** installation id -> lower-cased emails allowed to use it. Malformed entries are dropped, not guessed at. */
 export function parseInstallationOwners(raw: string | undefined): Map<number, Set<string>> {
@@ -71,7 +72,7 @@ export async function installationForRepo(input: {
   try {
     // Asks GitHub which installation (if any) covers this repository. 404: the App is not installed on it.
     const res = await fetchFn(
-      `https://api.github.com/repos/${encodeURIComponent(input.repo.owner)}/${encodeURIComponent(input.repo.repo)}/installation`,
+      `${githubApi()}/repos/${encodeURIComponent(input.repo.owner)}/${encodeURIComponent(input.repo.repo)}/installation`,
       {
         headers: { Authorization: `Bearer ${signAppJwt(cfg)}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "SecScan" },
         signal: AbortSignal.timeout(8_000),
@@ -140,7 +141,7 @@ export async function diagnoseAccess(input: {
   let installationId: number | null = null;
   try {
     const res = await fetchFn(
-      `https://api.github.com/repos/${encodeURIComponent(input.repo.owner)}/${encodeURIComponent(input.repo.repo)}/installation`,
+      `${githubApi()}/repos/${encodeURIComponent(input.repo.owner)}/${encodeURIComponent(input.repo.repo)}/installation`,
       {
         headers: { Authorization: `Bearer ${signAppJwt(cfg)}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "SecScan" },
         signal: AbortSignal.timeout(8_000),
