@@ -33,7 +33,7 @@ dbSuiteOf(describe)("persistReport and refundIfPaid (real Postgres)", () => {
     const [s] = await dbMod.db
       .insert(dbMod.scansTable)
       .values({
-        userId, userEmail: uniqueEmail("persist"), targetUrl: "https://persist.example/", tier: "deep", status: "running",
+        userId, userEmail: uniqueEmail("persist"), targetUrl: "https://persist.example/", tier: "deep", status: "scanning",
         credentialsEncrypted: "sealed-1", secondaryCredentialsEncrypted: "sealed-2", ...(paidWith ? { paidWith } : {}),
       })
       .returning({ id: dbMod.scansTable.id });

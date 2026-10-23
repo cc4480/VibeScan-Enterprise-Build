@@ -29,7 +29,7 @@ dbSuiteOf(describe)("processRepoOnlyJob (real Postgres, real GitHub)", () => {
   async function scan(targetUrl: string) {
     const [s] = await dbMod.db
       .insert(dbMod.scansTable)
-      .values({ userId, userEmail: uniqueEmail("repojob"), targetUrl, tier: "deep", status: "running", paidWith: "credit" })
+      .values({ userId, userEmail: uniqueEmail("repojob"), targetUrl, tier: "deep", status: "scanning", paidWith: "credit" })
       .returning({ id: dbMod.scansTable.id });
     return s!.id;
   }

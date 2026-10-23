@@ -425,7 +425,7 @@ dbSuiteOf(describe)("monitoring (real Postgres)", () => {
       await exhaustFreeScans(p);
       await setCredits(p, 5);
       const { getBoss } = await import("../lib/queue");
-      await (await getBoss()).stop({ graceful: false, wait: true });
+      await (await getBoss()).stop({ graceful: false });
       const res = await create(p, site());
       expect(res.status).toBe(201);
       expect(await subsOf(p)).toHaveLength(1);

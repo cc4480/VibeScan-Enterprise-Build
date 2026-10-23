@@ -201,7 +201,7 @@ dbSuiteOf(describe)("checkout subscriptions (real Postgres, stand-in Stripe)", (
 
     it("reports a fresh account as three free scans, no credits and no plan", async () => {
       app.as(person());
-      const body = await (await fetch(`${app.base}/billing/status`)).json();
+      const body = (await (await fetch(`${app.base}/billing/status`)).json()) as any;
       expect(body).toMatchObject({ freeScansRemaining: 3, credits: 0, paymentsEnabled: true });
       expect(body.subscription ?? null).toBeNull();
     });

@@ -22,7 +22,7 @@ dbSuiteOf(describe)("createLiveProgress (real Postgres)", () => {
   const newScan = async () => {
     const [s] = await dbMod.db
       .insert(dbMod.scansTable)
-      .values({ userId: "live-progress", userEmail: uniqueEmail("live"), targetUrl: "https://live.example/", tier: "deep", status: "running" })
+      .values({ userId: "live-progress", userEmail: uniqueEmail("live"), targetUrl: "https://live.example/", tier: "deep", status: "scanning" })
       .returning({ id: dbMod.scansTable.id });
     scanIds.push(s!.id);
     return s!.id;
