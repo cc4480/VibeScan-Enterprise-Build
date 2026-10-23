@@ -1,5 +1,9 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { checkRobotsTxt, checkSecurityTxt } from "./probes.js";
+import { useRouteSite } from "./routeSite.testkit";
+
+// The site is a real web server on loopback (lib/routeSite.testkit.ts); what it serves at each path is set per test.
+const site = await useRouteSite();
 
 /**
  * Both found by the 2026-09-30 verification of the sweep, both Info-level, both wrong statements:
@@ -9,58 +13,54 @@ import { checkRobotsTxt, checkSecurityTxt } from "./probes.js";
  *    inside "Administratoren", "Adminkandidaturen" and "Requests_for_adminship".
  */
 
-const originalFetch = globalThis.fetch;
-afterEach(() => {
-  globalThis.fetch = originalFetch;
-});
-
+/** Serve these paths as text; any other path answers `fallback`. */
 function serve(routes: Record<string, { status?: number; body?: string }>, fallback = { status: 404, body: "Not Found" }) {
-  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    const hit = routes[url] ?? fallback;
-    return new Response(hit.body ?? "", { status: hit.status ?? 200, headers: { "content-type": "text/plain" } });
-  }) as typeof fetch;
+  const table: Record<string, { status: number; body: string; ct: string }> = {};
+  for (const [path, hit] of Object.entries(routes)) table[path] = { status: hit.status ?? 200, body: hit.body ?? "", ct: "text/plain" };
+  site.routes(table);
+  site.otherwise(() => ({ status: fallback.status, body: fallback.body, ct: "text/plain" }));
 }
 
 describe("checkSecurityTxt", () => {
-  const site = "https://example.com/";
-  const wk = "https://example.com/.well-known/security.txt";
-  const root = "https://example.com/security.txt";
+  const home = `${site.origin}/`;
+  const wk = "/.well-known/security.txt";
+  const root = "/security.txt";
 
   it("makes no claim when both paths were refused (HTTP 403)", async () => {
     serve({ [wk]: { status: 403 }, [root]: { status: 403 } });
-    expect(await checkSecurityTxt(site)).toEqual([]);
+    expect(await checkSecurityTxt(home)).toEqual([]);
   });
 
   it("makes no claim when one path was refused, 429-limited, unreachable or erroring", async () => {
     for (const status of [401, 403, 429, 500, 503]) {
       serve({ [wk]: { status }, [root]: { status: 404 } });
-      expect(await checkSecurityTxt(site), String(status)).toEqual([]);
+      expect(await checkSecurityTxt(home), String(status)).toEqual([]);
     }
-    globalThis.fetch = (async () => { throw new Error("connect ETIMEDOUT"); }) as typeof fetch;
-    expect(await checkSecurityTxt(site)).toEqual([]);
+    site.routes({});
+    site.otherwise(() => ({ drop: true })); // the site cuts every connection
+    expect(await checkSecurityTxt(home)).toEqual([]);
   });
 
   it("still reports it missing when both paths answer 404", async () => {
     serve({ [wk]: { status: 404 }, [root]: { status: 404 } });
-    const [v] = await checkSecurityTxt(site);
+    const [v] = await checkSecurityTxt(home);
     expect(v!.name).toBe("Missing security.txt (RFC 9116)");
     expect(v!.evidence).toContain("HTTP 404");
   });
 
   it("still reports a page that is not an RFC 9116 file, and accepts a real one", async () => {
     serve({ [wk]: { status: 200, body: "<html>welcome</html>" }, [root]: { status: 404 } });
-    expect(await checkSecurityTxt(site)).toHaveLength(1);
+    expect(await checkSecurityTxt(home)).toHaveLength(1);
     serve({ [wk]: { status: 200, body: "Contact: mailto:security@example.com\nExpires: 2027-01-01T00:00:00Z\n" } });
-    expect(await checkSecurityTxt(site)).toEqual([]);
+    expect(await checkSecurityTxt(home)).toEqual([]);
   });
 });
 
 describe("checkRobotsTxt sensitive paths", () => {
-  const robots = (lines: string[]) => serve({ "https://example.com/robots.txt": { status: 200, body: `User-agent: *\n${lines.map((l) => `Disallow: ${l}`).join("\n")}\n` } });
+  const robots = (lines: string[]) => serve({ "/robots.txt": { status: 200, body: `User-agent: *\n${lines.map((l) => `Disallow: ${l}`).join("\n")}\n` } });
   const listed = async (lines: string[]) => {
     robots(lines);
-    const [v] = await checkRobotsTxt("https://example.com/");
+    const [v] = await checkRobotsTxt(`${site.origin}/`);
     return v ? (v.evidence ?? "").split("\n").filter((l) => l.startsWith("Disallow:")).map((l) => l.slice(10)) : [];
   };
 

@@ -26,6 +26,8 @@ export interface Answer {
   /** Content type; JSON by default, since most probed documents are. */
   ct?: string;
   headers?: Record<string, string>;
+  /** Cut the connection without answering, as an unreachable site does. */
+  drop?: boolean;
 }
 
 export type AnswerFn = (req: Seen) => Answer | undefined | Promise<Answer | undefined>;
@@ -62,6 +64,7 @@ export async function startRouteSite(): Promise<RouteSite> {
       };
       seen.push(rec);
       const answer = table[rec.path] ?? (fallback ? await fallback(rec) : undefined);
+      if (answer?.drop) { req.socket.destroy(); return; }
       if (!answer) { res.writeHead(404, { "content-type": "text/plain" }).end("Not Found"); return; }
       res.writeHead(answer.status ?? 200, { "content-type": answer.ct ?? "application/json", ...(answer.headers ?? {}) });
       res.end(answer.body ?? "");

@@ -1,5 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { PATH_PROBES } from "./crawler-data.js";
+import { checkRateLimiting, checkRobotsTxt } from "./probes.js";
+import { useRouteSite } from "./routeSite.testkit";
+
+// The site is a real web server on loopback (lib/routeSite.testkit.ts); what it answers is set per test.
+const site = await useRouteSite();
 
 /**
  * Regression tests for false positives found by scanning google.com.
@@ -8,43 +13,29 @@ import { PATH_PROBES } from "./crawler-data.js";
  * suppression is narrowed back to where it was.
  */
 
-const originalFetch = globalThis.fetch;
-afterEach(() => {
-  globalThis.fetch = originalFetch;
-  vi.restoreAllMocks();
-});
-
 function respondWith(body: string, headers: Record<string, string>, status = 200) {
-  globalThis.fetch = (async () =>
-    new Response(body, { status, headers })) as typeof fetch;
+  site.otherwise(() => ({ body, status, headers, ct: headers["content-type"] ?? "text/html" }));
 }
 
 describe("rate limiting behind a CDN", () => {
-  beforeEach(() => vi.resetModules());
-
   it("does not claim google.com has no rate limiting", async () => {
     // google.com answers `Server: gws`. Only `gfe` was matched, so the most
     // rate-limited site on the internet was reported as having none.
     respondWith("<html></html>", { server: "gws" });
-    const { checkRateLimiting } = await import("./probes.js");
-    expect(await checkRateLimiting("https://www.google.com/")).toEqual([]);
+    expect(await checkRateLimiting(`${site.origin}/`)).toEqual([]);
   });
 
   it("still suppresses for the other Google frontends", async () => {
     for (const server of ["gfe", "ESF", "sffe", "Golfe2"]) {
-      vi.resetModules();
       respondWith("<html></html>", { server });
-      const { checkRateLimiting } = await import("./probes.js");
-      expect(await checkRateLimiting("https://example.com/"), server).toEqual([]);
+        expect(await checkRateLimiting(`${site.origin}/`), server).toEqual([]);
     }
   });
 
   it("still records a plain origin with no rate-limit signal", async () => {
     // The suppression must not have become a blanket amnesty.
-    vi.resetModules();
     respondWith("<html></html>", { server: "nginx" });
-    const { checkRateLimiting } = await import("./probes.js");
-    const found = await checkRateLimiting("https://example.com/");
+    const found = await checkRateLimiting(`${site.origin}/`);
     expect(found).toHaveLength(1);
     expect(found[0]!.name).toBe("Rate Limiting Not Advertised in Response Headers");
   });
@@ -54,10 +45,8 @@ describe("rate limiting behind a CDN", () => {
     // limits; across 30 sites this fired on 15. The check can see whether rate
     // limiting is ADVERTISED and nothing more, so it must not carry weight in
     // the grade — info scores 0 in computeRiskScore.
-    vi.resetModules();
     respondWith("<html></html>", { server: "nginx" });
-    const { checkRateLimiting } = await import("./probes.js");
-    const found = await checkRateLimiting("https://example.com/");
+    const found = await checkRateLimiting(`${site.origin}/`);
     expect(found[0]!.severity).toBe("info");
     expect(found[0]!.cvssScore).toBe(0);
     expect(found[0]!.name).not.toMatch(/no rate limiting/i);
@@ -65,8 +54,6 @@ describe("rate limiting behind a CDN", () => {
 });
 
 describe("robots.txt sensitive-path disclosure", () => {
-  beforeEach(() => vi.resetModules());
-
   it("does not flag public API and dashboard paths", async () => {
     // Real lines from google.com/robots.txt. These are documented public
     // endpoints; matching them on the substrings "/api/" and "dashboard"
@@ -81,18 +68,15 @@ describe("robots.txt sensitive-path disclosure", () => {
       ].join("\n"),
       { "content-type": "text/plain" },
     );
-    const { checkRobotsTxt } = await import("./probes.js");
-    expect(await checkRobotsTxt("https://www.google.com/")).toEqual([]);
+    expect(await checkRobotsTxt(`${site.origin}/`)).toEqual([]);
   });
 
   it("still flags paths that are genuinely not meant to be public", async () => {
-    vi.resetModules();
     respondWith(
       ["User-agent: *", "Disallow: /admin/", "Disallow: /.env", "Disallow: /backup/"].join("\n"),
       { "content-type": "text/plain" },
     );
-    const { checkRobotsTxt } = await import("./probes.js");
-    const found = await checkRobotsTxt("https://example.com/");
+    const found = await checkRobotsTxt(`${site.origin}/`);
     expect(found).toHaveLength(1);
     expect(found[0]!.name).toMatch(/Discloses Sensitive Application Paths/);
   });
