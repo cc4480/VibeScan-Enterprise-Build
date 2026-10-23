@@ -96,7 +96,7 @@ suite("OAuth tokens (real Postgres)", () => {
 
     it("refuses an expired code", async () => {
       const code = await authorize();
-      await dbMod.db.execute(sql`UPDATE oauth_codes SET expires_at = now() - interval '1 second'`);
+      await dbMod.db.execute(sql`UPDATE oauth_codes SET expires_at = now() - interval '1 minute'`);
       expect((await exchange(code)).ok).toBe(false);
     });
 
@@ -108,7 +108,7 @@ suite("OAuth tokens (real Postgres)", () => {
   describe("access tokens", () => {
     it("stop working after their hour", async () => {
       const t = await mint();
-      await dbMod.db.execute(sql`UPDATE api_tokens SET expires_at = now() - interval '1 second'`);
+      await dbMod.db.execute(sql`UPDATE api_tokens SET expires_at = now() - interval '1 minute'`);
       expect(await mcp(t.access_token)).toBeNull();
     });
 
@@ -153,7 +153,7 @@ suite("OAuth tokens (real Postgres)", () => {
 
     it("refuses an expired refresh token", async () => {
       const t = await mint();
-      await dbMod.db.execute(sql`UPDATE oauth_refresh_tokens SET expires_at = now() - interval '1 second'`);
+      await dbMod.db.execute(sql`UPDATE oauth_refresh_tokens SET expires_at = now() - interval '1 minute'`);
       expect((await oauth.refreshTokens({ refreshToken: t.refresh_token, clientId })).ok).toBe(false);
     });
   });
