@@ -1,5 +1,6 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { runStorageProbe } from "./storageProbe.js";
+import { useRouteSite } from "./routeSite.testkit";
 
 /**
  * First tests for this module. Its only importer is scanner.ts, which has no
@@ -9,17 +10,17 @@ import { runStorageProbe } from "./storageProbe.js";
  * (that is how assets are served), and a bucket that refuses to list is
  * correctly configured. A finding requires the bucket to actually return a
  * listing. Everything below tests that line.
+ *
+ * The buckets are asked at a real web server on loopback (STORAGE_PROBE_ORIGIN, lib/routeSite.testkit.ts) that answers
+ * every listing request the way the test says; the page still names the bucket's real provider address.
  */
 
-const originalFetch = globalThis.fetch;
-afterEach(() => {
-  globalThis.fetch = originalFetch;
-  vi.restoreAllMocks();
-});
+const site = await useRouteSite();
+beforeAll(() => { process.env["STORAGE_PROBE_ORIGIN"] = site.origin; });
+afterAll(() => { delete process.env["STORAGE_PROBE_ORIGIN"]; });
 
 function answerWith(body: string, ct = "application/xml", status = 200) {
-  globalThis.fetch = (async () =>
-    new Response(body, { status, headers: { "content-type": ct } })) as typeof fetch;
+  site.otherwise(() => ({ body, ct, status }));
 }
 
 const S3_LISTING = `<?xml version="1.0" encoding="UTF-8"?>

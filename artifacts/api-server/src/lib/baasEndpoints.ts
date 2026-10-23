@@ -33,3 +33,10 @@ export const firestoreApi = (): string => noSlash(set("FIRESTORE_API_URL")) || "
 
 /** Firebase Storage's REST API. */
 export const firebaseStorageApi = (): string => noSlash(set("FIREBASE_STORAGE_API_URL")) || "https://firebasestorage.googleapis.com";
+
+/**
+ * Where cloud-storage listings are requested. Unset, a bucket is asked at its provider (`{bucket}.s3.amazonaws.com`,
+ * `storage.googleapis.com`, `{account}.blob.core.windows.net`). STORAGE_PROBE_ORIGIN replaces all three with one server,
+ * which gets `/s3/{bucket}`, `/gcs/{bucket}` or `/azure/{account}/{container}`; null means "use the provider".
+ */
+export const storageProbeOrigin = (): string | null => noSlash(set("STORAGE_PROBE_ORIGIN")) || null;

@@ -13,6 +13,7 @@
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 import { scanFetch } from "./http";
+import { storageProbeOrigin } from "./baasEndpoints";
 import { bucketLooksOwned, judgeBucket, listedKeys } from "./storageOwnership";
 import { extractS3Buckets, extractGcsBuckets, type AzureBlob, extractAzureBlobs } from "./storageProbeExtract";
 
@@ -141,10 +142,13 @@ function bucketFinding(
 
 async function checkS3Bucket(bucket: string, host: string): Promise<ScanVulnerability | null> {
   // Try virtual-hosted style (current AWS recommendation)
-  const urls = [
-    `https://${bucket}.s3.amazonaws.com/?list-type=2&max-keys=${SAMPLE_KEYS}`,
-    `https://s3.amazonaws.com/${bucket}/?list-type=2&max-keys=${SAMPLE_KEYS}`,
-  ];
+  const via = storageProbeOrigin();
+  const urls = via
+    ? [`${via}/s3/${bucket}/?list-type=2&max-keys=${SAMPLE_KEYS}`]
+    : [
+        `https://${bucket}.s3.amazonaws.com/?list-type=2&max-keys=${SAMPLE_KEYS}`,
+        `https://s3.amazonaws.com/${bucket}/?list-type=2&max-keys=${SAMPLE_KEYS}`,
+      ];
 
   for (const url of urls) {
     const r = await safeGet(url);
@@ -164,10 +168,13 @@ async function checkS3Bucket(bucket: string, host: string): Promise<ScanVulnerab
 }
 
 async function checkGcsBucket(bucket: string, host: string): Promise<ScanVulnerability | null> {
-  const urls = [
-    `https://storage.googleapis.com/${bucket}?maxResults=${SAMPLE_KEYS}`,
-    `https://storage.googleapis.com/storage/v1/b/${bucket}/o?maxResults=${SAMPLE_KEYS}`,
-  ];
+  const via = storageProbeOrigin();
+  const urls = via
+    ? [`${via}/gcs/${bucket}?maxResults=${SAMPLE_KEYS}`]
+    : [
+        `https://storage.googleapis.com/${bucket}?maxResults=${SAMPLE_KEYS}`,
+        `https://storage.googleapis.com/storage/v1/b/${bucket}/o?maxResults=${SAMPLE_KEYS}`,
+      ];
 
   for (const url of urls) {
     const r = await safeGet(url);
@@ -188,7 +195,9 @@ async function checkGcsBucket(bucket: string, host: string): Promise<ScanVulnera
 
 async function checkAzureBlob(blob: AzureBlob, host: string): Promise<ScanVulnerability | null> {
   // Azure requires ?restype=container&comp=list for listing
-  const url = `https://${blob.account}.blob.core.windows.net/${blob.container}?restype=container&comp=list&maxresults=${SAMPLE_KEYS}`;
+  const via = storageProbeOrigin();
+  const base = via ? `${via}/azure/${blob.account}` : `https://${blob.account}.blob.core.windows.net`;
+  const url = `${base}/${blob.container}?restype=container&comp=list&maxresults=${SAMPLE_KEYS}`;
   const r = await safeGet(url);
   if (!r || r.status !== 200) return null;
   if (!isAzureListingResponse(r.body)) return null;
