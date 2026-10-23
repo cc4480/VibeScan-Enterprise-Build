@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { serve, SESSION, ep } from "./apiProbe.testkit";
 import { runWithScanHttp } from "./http.js";
 import { runApiProbes } from "./apiProbe.js";
@@ -63,8 +63,6 @@ describe("isNotFoundBody", () => {
 });
 
 describe("catch-all fingerprint when the body echoes the requested path", () => {
-  afterEach(() => vi.unstubAllGlobals());
-
   it("matches a probed path whose echo changes the body length", async () => {
     const port = await serve((req, res) => {
       const path = new URL(req.url ?? "/", "http://x").pathname;
@@ -87,16 +85,16 @@ describe("catch-all fingerprint when the body echoes the requested path", () => 
 });
 
 describe("reflected XSS evidence", () => {
-  afterEach(() => vi.unstubAllGlobals());
-
   it("names the path that reflected, not the page the scan started on", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL) => {
-      const u = new URL(String(input));
-      const reflects = u.pathname === "/search";
-      const body = reflects ? `<html><body>Results for: ${u.searchParams.get("q")}</body></html>` : "<html><body>Home</body></html>";
-      return { status: 200, text: async () => body, headers: new Headers({ "content-type": "text/html" }) } as unknown as Response;
-    }));
-    const findings = await runInjectionProbes("https://example.com/", `<a href="/search?q=test">Search</a>`);
+    // A real server: only /search reflects its query into the page.
+    const port = await serve((req, res) => {
+      const u = new URL(req.url ?? "/", "http://x");
+      const body = u.pathname === "/search" ? "<html><body>Results for: " + u.searchParams.get("q") + "</body></html>" : "<html><body>Home</body></html>";
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end(body);
+    });
+    const origin = "http://127.0.0.1:" + port;
+    const findings = await runWithScanHttp({ targetUrl: origin + "/" }, () => runInjectionProbes(origin + "/", '<a href="/search?q=test">Search</a>'));
     const xss = findings.find((f) => f.name === "Reflected Cross-Site Scripting (XSS)");
     expect(xss?.evidence).toContain("Endpoint: /search?q=");
   });

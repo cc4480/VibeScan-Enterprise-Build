@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
+import { capturedLog, fieldsOf } from "./captureLog.testkit";
 import {
   legacyBearerAllowed,
   parseSunset,
@@ -126,45 +127,42 @@ describe("parseSunset", () => {
 });
 
 describe("logLegacyBearerStatus", () => {
-  function logs() {
-    return { info: vi.fn(), error: vi.fn() };
-  }
-
   it("logs an error once for an unparseable sunset, and says the path is staying open", () => {
-    const log = logs();
-    logLegacyBearerStatus(log, { LEGACY_BEARER_SUNSET: "next tuesday" }, NOW);
-    expect(log.error).toHaveBeenCalledTimes(1);
-    const [fields, msg] = log.error.mock.calls[0]!;
-    expect(fields).toEqual({ variable: "LEGACY_BEARER_SUNSET", value: "next tuesday" });
-    expect(msg).toMatch(/not an ISO 8601 date/);
-    expect(msg).toMatch(/will NOT be sunset/);
-    expect(log.info.mock.calls[0]![0]).toMatchObject({ legacyBearer: "open" });
+    const c = capturedLog();
+    logLegacyBearerStatus(c.log, { LEGACY_BEARER_SUNSET: "next tuesday" }, NOW);
+    const errors = c.at("error");
+    expect(errors).toHaveLength(1);
+    expect(fieldsOf(errors[0]!)).toEqual({ variable: "LEGACY_BEARER_SUNSET", value: "next tuesday" });
+    expect(errors[0]!.msg).toMatch(/not an ISO 8601 date/);
+    expect(errors[0]!.msg).toMatch(/will NOT be sunset/);
+    expect(fieldsOf(c.at("info")[0]!)).toMatchObject({ legacyBearer: "open" });
   });
 
   it("does not echo an arbitrarily long value", () => {
-    const log = logs();
-    logLegacyBearerStatus(log, { LEGACY_BEARER_SUNSET: "x".repeat(500) }, NOW);
-    expect((log.error.mock.calls[0]![0] as { value: string }).value).toHaveLength(64);
+    const c = capturedLog();
+    logLegacyBearerStatus(c.log, { LEGACY_BEARER_SUNSET: "x".repeat(500) }, NOW);
+    expect((fieldsOf(c.at("error")[0]!) as { value: string }).value).toHaveLength(64);
   });
 
   it("is quiet about errors for unset and valid values, and reports the state", () => {
-    const unset = logs();
-    logLegacyBearerStatus(unset, {}, NOW);
-    expect(unset.error).not.toHaveBeenCalled();
-    expect(unset.info.mock.calls[0]![0]).toMatchObject({ legacyBearer: "open", sunset: undefined });
+    const unset = capturedLog();
+    logLegacyBearerStatus(unset.log, {}, NOW);
+    expect(unset.at("error")).toHaveLength(0);
+    expect(fieldsOf(unset.at("info")[0]!)).toMatchObject({ legacyBearer: "open" });
+    expect(fieldsOf(unset.at("info")[0]!).sunset).toBeUndefined();
 
-    const future = logs();
-    logLegacyBearerStatus(future, { LEGACY_BEARER_SUNSET: "2026-12-01" }, NOW);
-    expect(future.error).not.toHaveBeenCalled();
-    expect(future.info.mock.calls[0]![0]).toMatchObject({ legacyBearer: "open", sunset: "2026-12-01T00:00:00.000Z" });
+    const future = capturedLog();
+    logLegacyBearerStatus(future.log, { LEGACY_BEARER_SUNSET: "2026-12-01" }, NOW);
+    expect(future.at("error")).toHaveLength(0);
+    expect(fieldsOf(future.at("info")[0]!)).toMatchObject({ legacyBearer: "open", sunset: "2026-12-01T00:00:00.000Z" });
 
-    const past = logs();
-    logLegacyBearerStatus(past, { LEGACY_BEARER_SUNSET: "2026-01-01" }, NOW);
-    expect(past.info.mock.calls[0]![0]).toMatchObject({ legacyBearer: "closed", closedBy: "LEGACY_BEARER_SUNSET" });
+    const past = capturedLog();
+    logLegacyBearerStatus(past.log, { LEGACY_BEARER_SUNSET: "2026-01-01" }, NOW);
+    expect(fieldsOf(past.at("info")[0]!)).toMatchObject({ legacyBearer: "closed", closedBy: "LEGACY_BEARER_SUNSET" });
 
-    const off = logs();
-    logLegacyBearerStatus(off, { ALLOW_LEGACY_ANONYMOUS_BEARER: "false", LEGACY_BEARER_SUNSET: "2099-01-01" }, NOW);
-    expect(off.info.mock.calls[0]![0]).toMatchObject({ legacyBearer: "closed", closedBy: "ALLOW_LEGACY_ANONYMOUS_BEARER" });
+    const off = capturedLog();
+    logLegacyBearerStatus(off.log, { ALLOW_LEGACY_ANONYMOUS_BEARER: "false", LEGACY_BEARER_SUNSET: "2099-01-01" }, NOW);
+    expect(fieldsOf(off.at("info")[0]!)).toMatchObject({ legacyBearer: "closed", closedBy: "ALLOW_LEGACY_ANONYMOUS_BEARER" });
   });
 });
 
@@ -200,55 +198,55 @@ describe("createLegacyBearerReporter", () => {
 
   function make(extra: { maxEntries?: number; windowMs?: number } = {}) {
     let t = 1_000_000;
-    const warn = vi.fn();
-    const reporter = createLegacyBearerReporter({ log: { warn }, now: () => t, ...extra });
-    return { reporter, warn, advance: (ms: number) => void (t += ms) };
+    const c = capturedLog();
+    const reporter = createLegacyBearerReporter({ log: c.log, now: () => t, ...extra });
+    return { reporter, warns: () => c.at("warn"), advance: (ms: number) => void (t += ms) };
   }
 
   it("logs the first use at warn with the user id and route", () => {
-    const { reporter, warn } = make();
+    const { reporter, warns } = make();
     expect(reporter.report(U1, "GET /api/scans")).toBe(true);
-    expect(warn).toHaveBeenCalledTimes(1);
-    const [fields, msg] = warn.mock.calls[0]!;
-    expect(fields).toEqual({ event: "legacy_anonymous_bearer", userId: U1, route: "GET /api/scans" });
-    expect(msg).toMatch(/legacy anonymous bearer/);
+    expect(warns()).toHaveLength(1);
+    const first = warns()[0]!;
+    expect(fieldsOf(first)).toEqual({ event: "legacy_anonymous_bearer", userId: U1, route: "GET /api/scans" });
+    expect(first.msg).toMatch(/legacy anonymous bearer/);
   });
 
   it("stays quiet for the same user id for 24 hours, then logs again", () => {
-    const { reporter, warn, advance } = make();
+    const { reporter, warns, advance } = make();
     reporter.report(U1, "GET /a");
     advance(60_000);
     expect(reporter.report(U1, "GET /b")).toBe(false);
     advance(DAY - 60_001);
     expect(reporter.report(U1, "GET /c")).toBe(false);
-    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warns()).toHaveLength(1);
 
     advance(1);
     expect(reporter.report(U1, "GET /d")).toBe(true);
-    expect(warn).toHaveBeenCalledTimes(2);
-    expect(warn.mock.calls[1]![0]).toMatchObject({ route: "GET /d" });
+    expect(warns()).toHaveLength(2);
+    expect(fieldsOf(warns()[1]!)).toMatchObject({ route: "GET /d" });
   });
 
   it("de-duplicates per user id, not globally", () => {
-    const { reporter, warn } = make();
+    const { reporter, warns } = make();
     expect(reporter.report(U1, "GET /a")).toBe(true);
     expect(reporter.report(U2, "GET /a")).toBe(true);
     expect(reporter.report(U1, "GET /a")).toBe(false);
     expect(reporter.report(U2, "GET /a")).toBe(false);
-    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warns()).toHaveLength(2);
   });
 
   it("measures the 24 hours from the last LOG, so a busy user is still logged once a day", () => {
-    const { reporter, warn, advance } = make();
+    const { reporter, warns, advance } = make();
     reporter.report(U1, "x");
     for (let i = 0; i < 23; i++) {
       advance(60 * 60_000);
       reporter.report(U1, "x");
     }
-    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warns()).toHaveLength(1);
     advance(60 * 60_000);
     reporter.report(U1, "x");
-    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warns()).toHaveLength(2);
   });
 
   it("prunes expired entries, so the Map does not grow without bound", () => {
@@ -273,10 +271,10 @@ describe("createLegacyBearerReporter", () => {
   });
 
   it("is hard-capped even when nothing has expired", () => {
-    const { reporter, warn } = make({ maxEntries: 100 });
+    const { reporter, warns } = make({ maxEntries: 100 });
     for (let i = 0; i < 1000; i++) reporter.report(`user-${i}`, "x");
     expect(reporter.size()).toBeLessThanOrEqual(100);
-    expect(warn).toHaveBeenCalledTimes(1000);
+    expect(warns()).toHaveLength(1000);
     // The newest are remembered, the oldest were evicted.
     expect(reporter.report("user-999", "x")).toBe(false);
     expect(reporter.report("user-0", "x")).toBe(true);
@@ -291,8 +289,8 @@ describe("createLegacyBearerReporter", () => {
   });
 
   it("logs nothing but the event, the user id and the route", () => {
-    const { reporter, warn } = make();
+    const { reporter, warns } = make();
     reporter.report(U1, "GET /api/scans");
-    expect(Object.keys(warn.mock.calls[0]![0] as object).sort()).toEqual(["event", "route", "userId"]);
+    expect(Object.keys(fieldsOf(warns()[0]!)).sort()).toEqual(["event", "route", "userId"]);
   });
 });

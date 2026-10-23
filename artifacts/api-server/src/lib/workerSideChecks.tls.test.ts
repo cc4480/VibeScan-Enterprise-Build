@@ -2,7 +2,8 @@
  * How the worker folds the TLS configuration check and the (opt-in) SSL Labs assessment into a scan:
  * the findings, the ledger lines, and what a report says when SSL Labs is off.
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { capturedLog } from "./captureLog.testkit";
 import {
   TLS_CHECK_TEST,
   mergeTlsCheck,
@@ -39,20 +40,25 @@ const result = (over: Partial<TlsHandshakeResult> = {}): TlsHandshakeResult => (
   ...over,
 });
 
-const log = () => ({ info: vi.fn(), warn: vi.fn() });
+// A real logger whose output is captured, so a test reads what was really logged.
+const log = () => capturedLog();
+const savedLabs = process.env["SSLLABS_ENABLED"];
 const scan = () => ({ vulnerabilities: [], tlsGrade: null, tests: [] }) as unknown as ScanResult;
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  if (savedLabs === undefined) delete process.env["SSLLABS_ENABLED"];
+  else process.env["SSLLABS_ENABLED"] = savedLabs;
+});
 
 describe("sslLabsEnabled", () => {
   it("is off unless SSLLABS_ENABLED is exactly 'true'", () => {
-    vi.stubEnv("SSLLABS_ENABLED", "");
+    process.env["SSLLABS_ENABLED"] = "";
     expect(sslLabsEnabled()).toBe(false);
     for (const v of ["1", "yes", "TRUE", "false", "on"]) {
-      vi.stubEnv("SSLLABS_ENABLED", v);
+      process.env["SSLLABS_ENABLED"] = v;
       expect(sslLabsEnabled(), v).toBe(false);
     }
-    vi.stubEnv("SSLLABS_ENABLED", "true");
+    process.env["SSLLABS_ENABLED"] = "true";
     expect(sslLabsEnabled()).toBe(true);
   });
 });
@@ -61,21 +67,21 @@ describe("mergeTlsCheck", () => {
   it("adds the check's findings to the scan and returns them", () => {
     const r = scan();
     const l = log();
-    const run = mergeTlsCheck(r, { status: "inspected", result: result({ trusted: false, trustError: "DEPTH_ZERO_SELF_SIGNED_CERT", certificate: { ...result().certificate!, selfSigned: true } }) }, l as never, NOW);
+    const run = mergeTlsCheck(r, { status: "inspected", result: result({ trusted: false, trustError: "DEPTH_ZERO_SELF_SIGNED_CERT", certificate: { ...result().certificate!, selfSigned: true } }) }, l.log, NOW);
     expect(run.findings.map((f) => f.name)).toEqual(["Self-Signed TLS Certificate"]);
     expect(r.vulnerabilities).toEqual(run.findings);
     expect(r.tlsGrade).toBeNull();
-    expect(l.info).toHaveBeenCalledOnce();
+    expect(l.at("info")).toHaveLength(1);
   });
 
   it("adds nothing when the check was skipped or failed, and says why in the log", () => {
     for (const status of ["skipped", "failed"] as const) {
       const r = scan();
       const l = log();
-      const run = mergeTlsCheck(r, { status, reason: "no route" }, l as never, NOW);
+      const run = mergeTlsCheck(r, { status, reason: "no route" }, l.log, NOW);
       expect(run.findings).toEqual([]);
       expect(r.vulnerabilities).toEqual([]);
-      expect(l.warn.mock.calls.length + l.info.mock.calls.length).toBe(1);
+      expect(l.at("warn").length + l.at("info").length).toBe(1);
     }
   });
 });
@@ -97,7 +103,7 @@ describe("tlsCheckRecord", () => {
 
   it("names the findings it raised, so the check-by-check view can place them", () => {
     const r = scan();
-    const merged = mergeTlsCheck(r, { status: "inspected", result: result({ protocols: { ...result().protocols, "TLSv1": { status: "accepted" } } }) }, log() as never, NOW);
+    const merged = mergeTlsCheck(r, { status: "inspected", result: result({ protocols: { ...result().protocols, "TLSv1": { status: "accepted" } } }) }, log().log, NOW);
     const rec = tlsCheckRecord(merged, 5, NOW);
     expect(rec.findings).toBe(1);
     expect(rec.found).toEqual(["Deprecated TLS Protocol Versions Accepted"]);
@@ -137,7 +143,7 @@ describe("recordSideTests: what the report lists", () => {
       allowActiveProbes: false,
       parallelStartedAt: Date.now(),
       live: { add: (t) => { added.push(t); }, finish: async () => {} },
-      log: log() as never,
+      log: log().log,
     });
   }
 

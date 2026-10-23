@@ -1,6 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
-
-vi.mock("./http", () => ({ scanFetch: async () => null }));
+import { describe, it, expect } from "vitest";
 
 import { expectsIntegrity, isDynamicByDesign, isFirstParty } from "./sriPolicy";
 import { checkSRI } from "./probes";
