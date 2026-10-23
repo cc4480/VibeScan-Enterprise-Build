@@ -9,18 +9,14 @@
  *  - A bare refusal (almost no body: 400, 403, 406, 429, 451, 503) is an interception: findings withheld, no grade.
  *  - An error page with real content (404, 500, 502...) is kept, but what was read from it is information only.
  */
-import { describe, it, expect, vi, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, afterAll } from "vitest";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import { useHstsPreloadStub } from "./hstsPreloadStub.testkit";
 
-vi.mock("./browser", () => ({
-  isSpa: () => false,
-  renderPage: async () => null,
-  initBrowser: async () => {},
-  closeBrowser: async () => {},
-}));
-// Not what is under test, and the lookup would leave the machine.
-vi.mock("./scannerHstsPreload", () => ({ isHstsPreloaded: async () => false }));
+// The preload lookup is a real server on loopback that lists nothing; the start pages here are not single-page apps,
+// so the real headless browser is never needed.
+await useHstsPreloadStub();
 
 import { runScan, gradeForResult, computeRiskScore } from "./scanner";
 import { detectChallengePage } from "./challengePage";
@@ -35,7 +31,6 @@ async function serve(handler: http.RequestListener): Promise<string> {
   await new Promise<void>((r) => s.listen(0, "127.0.0.1", r));
   return `http://127.0.0.1:${(s.address() as AddressInfo).port}/`;
 }
-beforeEach(() => vi.clearAllMocks());
 
 const names = (r: { vulnerabilities: Array<{ name: string }> }) => r.vulnerabilities.map((v) => v.name);
 const find = (r: { vulnerabilities: ScanVulnerability[] }, re: RegExp) => r.vulnerabilities.find((v) => re.test(v.name));
