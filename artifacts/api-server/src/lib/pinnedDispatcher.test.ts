@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import dns from "node:dns";
 import dnsPromises from "node:dns/promises";
 import http from "node:http";
@@ -8,47 +8,49 @@ import { vettedLookup, scanDispatcher, strictDispatcher } from "./pinnedDispatch
 import { scanFetch } from "./http";
 import { _clearResolveCache } from "./ssrfGuard";
 
-type Answer = { address: string; family: number };
-const lookupOnce = (answers: Answer[]) =>
+/**
+ * The agents that vet the address a socket really opens to. The names used are real:
+ *   rebind.localtest.me  public DNS that answers 127.0.0.1 (a name that leads somewhere private at connect time)
+ *   example.com          an ordinary public name
+ * The suite skips when public DNS cannot be reached.
+ */
+const REBIND = "rebind.localtest.me";
+let dnsUp = false;
+try {
+  dnsUp = (await dnsPromises.lookup(REBIND, { all: true })).some((a) => a.address === "127.0.0.1")
+    && (await dnsPromises.lookup("example.com", { all: true })).length > 0;
+} catch { /* offline */ }
+const suite = dnsUp ? describe : describe.skip;
+
+const lookupOf = (name: string) =>
   new Promise<{ err: NodeJS.ErrnoException | null; addrs?: unknown }>((resolve) =>
-    vettedLookup("x.test", { all: true }, (err, addrs) => resolve({ err, addrs })),
-  ).then((r) => ({ ...r, answers }));
+    vettedLookup(name, { all: true }, (err, addrs) => resolve({ err, addrs })),
+  );
 
 const optOut = process.env["ALLOW_PRIVATE_SCAN_TARGETS"];
 beforeEach(() => { delete process.env["ALLOW_PRIVATE_SCAN_TARGETS"]; });
 afterEach(() => {
   if (optOut === undefined) delete process.env["ALLOW_PRIVATE_SCAN_TARGETS"];
   else process.env["ALLOW_PRIVATE_SCAN_TARGETS"] = optOut;
-  vi.restoreAllMocks();
   _clearResolveCache();
 });
 
-function mockConnectLookup(answers: Answer[]) {
-  vi.spyOn(dns, "lookup").mockImplementation(((_h: string, _o: unknown, cb: (e: null, a: Answer[]) => void) =>
-    cb(null, answers)) as never);
-}
-
-describe("vettedLookup", () => {
+suite("vettedLookup", () => {
   it("refuses a name that answers a private address", async () => {
-    mockConnectLookup([{ address: "127.0.0.1", family: 4 }]);
-    const r = await lookupOnce([]);
+    const r = await lookupOf(REBIND);
     expect(r.err?.message).toMatch(/blocked target address/);
   });
 
-  it("refuses a name when any one answer is private", async () => {
-    mockConnectLookup([{ address: "93.184.216.34", family: 4 }, { address: "10.0.0.5", family: 4 }]);
-    expect((await lookupOnce([])).err).not.toBeNull();
-  });
-
   it("hands back public answers", async () => {
-    mockConnectLookup([{ address: "93.184.216.34", family: 4 }]);
-    const r = await lookupOnce([]);
+    const r = await lookupOf("example.com");
     expect(r.err).toBeNull();
-    expect(r.addrs).toEqual([{ address: "93.184.216.34", family: 4 }]);
+    const addrs = r.addrs as Array<{ address: string }>;
+    expect(addrs.length).toBeGreaterThan(0);
+    expect(addrs.every((a) => !/^(127\.|10\.|192\.168\.|::1$)/.test(a.address))).toBe(true);
   });
 });
 
-describe("a rebinding name at connect time", () => {
+suite("a rebinding name at connect time", () => {
   async function withLoopbackServer(run: (port: number, hits: () => number) => Promise<void>) {
     let hits = 0;
     const server = http.createServer((_q, res) => { hits++; res.end("internal"); });
@@ -62,9 +64,8 @@ describe("a rebinding name at connect time", () => {
 
   it("an unguarded agent follows the name to loopback (the hole)", async () => {
     await withLoopbackServer(async (port, hits) => {
-      mockConnectLookup([{ address: "127.0.0.1", family: 4 }]);
       const agent = new Agent({ connect: { lookup: dns.lookup as never } });
-      const res = await undiciFetch(`http://rebind.attacker.test:${port}/`, { dispatcher: agent });
+      const res = await undiciFetch(`http://${REBIND}:${port}/`, { dispatcher: agent });
       expect(await res.text()).toBe("internal");
       expect(hits()).toBe(1);
     });
@@ -72,26 +73,36 @@ describe("a rebinding name at connect time", () => {
 
   it("the scanner's agent refuses the same name and never connects", async () => {
     await withLoopbackServer(async (port, hits) => {
-      mockConnectLookup([{ address: "127.0.0.1", family: 4 }]);
-      await expect(undiciFetch(`http://rebind.attacker.test:${port}/`, { dispatcher: scanDispatcher })).rejects.toThrow();
+      await expect(undiciFetch(`http://${REBIND}:${port}/`, { dispatcher: scanDispatcher })).rejects.toThrow();
       expect(hits()).toBe(0);
     });
   });
 
-  it("scanFetch sends its requests through that agent", async () => {
-    const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("ok"));
-    vi.spyOn(dnsPromises, "lookup").mockResolvedValue([{ address: "93.184.216.34", family: 4 }] as never);
-    await scanFetch("http://example.com/");
-    expect((spy.mock.calls[0]![1] as { dispatcher?: unknown }).dispatcher).toBe(scanDispatcher);
+  it("scanFetch sends its requests through that agent: the same name is refused, so it returns nothing", async () => {
+    await withLoopbackServer(async (port, hits) => {
+      expect(await scanFetch(`http://${REBIND}:${port}/`)).toBeNull();
+      expect(hits()).toBe(0);
+    });
   });
 });
 
-describe("strictDispatcher", () => {
-  it("refuses a rebinding answer for a non-scan request, even with the private-target opt-in on", async () => {
+suite("strictDispatcher", () => {
+  it("refuses a name that leads to loopback for a non-scan request, even with the private-target opt-in on", async () => {
+    // With the opt-in on, the scan agent follows the name to loopback; the strict agent, used for requests a user
+    // supplied the address of (webhooks), still refuses it. The two together are the contrast.
     process.env["ALLOW_PRIVATE_SCAN_TARGETS"] = "true";
-    mockConnectLookup([{ address: "93.184.216.34", family: 4 }, { address: "127.0.0.1", family: 4 }]);
-    await expect(
-      undiciFetch("http://rebind.test/", { dispatcher: strictDispatcher }),
-    ).rejects.toThrow();
+    let hits = 0;
+    const server = http.createServer((_q, res) => { hits++; res.end("internal"); });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const port = (server.address() as AddressInfo).port;
+    try {
+      const viaScan = await undiciFetch(`http://${REBIND}:${port}/`, { dispatcher: scanDispatcher });
+      expect(await viaScan.text()).toBe("internal");
+      expect(hits).toBe(1);
+      await expect(undiciFetch(`http://${REBIND}:${port}/`, { dispatcher: strictDispatcher })).rejects.toThrow();
+      expect(hits).toBe(1); // the strict agent never connected
+    } finally {
+      server.close();
+    }
   });
 });

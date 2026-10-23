@@ -1,6 +1,5 @@
 import { serve } from "./http.testkit";
-import { describe, it, expect, vi } from "vitest";
-import http from "node:http";
+import { describe, it, expect } from "vitest";
 import { scanFetch, SCANNER_USER_AGENT } from "./http.js";
 
 describe("scanFetch redirects", () => {
@@ -88,17 +87,17 @@ describe("scanFetch transport", () => {
 describe("scan abort signal", () => {
   it("fails requests at once once the scan's signal is aborted", async () => {
     const { runWithScanHttp, scanFetch } = await import("./http");
-    const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("ok"));
+    const { port, seen } = await serve((_req, res) => { res.writeHead(200); res.end("ok"); });
+    const url = `http://127.0.0.1:${port}/`;
     const ac = new AbortController();
-    const out = await runWithScanHttp({ targetUrl: "http://127.0.0.1/", signal: ac.signal }, async () => {
-      const before = await scanFetch("http://127.0.0.1/");
+    const out = await runWithScanHttp({ targetUrl: url, signal: ac.signal }, async () => {
+      const before = await scanFetch(url);
       ac.abort();
-      const after = await scanFetch("http://127.0.0.1/");
+      const after = await scanFetch(url);
       return { before, after };
     });
     expect(out.before?.body).toBe("ok");
     expect(out.after).toBeNull();
-    expect(spy).toHaveBeenCalledTimes(1);
-    spy.mockRestore();
+    expect(seen).toHaveLength(1); // the aborted request never reached the server
   });
 });

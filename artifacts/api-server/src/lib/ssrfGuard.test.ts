@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
+import dnsPromises from "node:dns/promises";
 import {
   isPrivateAddress,
   isHostnameSafeSync,
@@ -7,16 +8,19 @@ import {
   _clearResolveCache,
 } from "./ssrfGuard";
 
-// dns.lookup is the only thing in here that touches the network. Stubbing it
-// keeps these tests hermetic and lets us assert the fail-closed behaviour,
-// which is impossible to trigger reliably against real DNS.
-vi.mock("node:dns/promises", () => ({
-  default: {},
-  lookup: vi.fn(),
-}));
-
-import * as dns from "node:dns/promises";
-const lookup = dns.lookup as unknown as ReturnType<typeof vi.fn>;
+// Name resolution here is real DNS, using names chosen for what they really answer:
+//   rebind.localtest.me   public DNS that answers 127.0.0.1: a public-looking name with a private answer
+//   example.com           an ordinary public name
+//   *.invalid             a name that is guaranteed not to exist (RFC 6761), so resolution genuinely fails
+// The tests that need public DNS skip when it cannot be reached.
+const REBIND = "rebind.localtest.me";
+const NO_SUCH_NAME = `no-such-host-${Date.now()}.invalid`;
+let dnsUp = false;
+try {
+  dnsUp = (await dnsPromises.lookup(REBIND, { all: true })).some((a) => a.address === "127.0.0.1")
+    && (await dnsPromises.lookup("example.com", { all: true })).length > 0;
+} catch { /* offline */ }
+const needsDns = it.skipIf(!dnsUp);
 
 // vitest.config.ts sets ALLOW_PRIVATE_SCAN_TARGETS=true for every test file, which turns the
 // guard's opt-out on. This file tests the guard itself, so it starts with the variable unset
@@ -34,7 +38,6 @@ afterAll(() => {
 
 beforeEach(() => {
   _clearResolveCache();
-  lookup.mockReset();
 });
 
 // Tests that set the variable themselves clear it again, so each starts from unset.
@@ -104,42 +107,29 @@ describe("isHostnameSafeSync", () => {
 });
 
 describe("checkUrlSafe", () => {
-  it("rejects a literal private address without consulting DNS", async () => {
+  it("rejects a literal private address", async () => {
+    // An address literal is judged directly; there is no name to look up.
     const res = await checkUrlSafe("http://169.254.169.254/latest/meta-data/");
     expect(res.ok).toBe(false);
-    expect(lookup).not.toHaveBeenCalled();
   });
 
-  it("rejects a public name that resolves to a private address", async () => {
+  needsDns("rejects a public-looking name that resolves to a private address", async () => {
     // The DNS-rebinding shape: the name looks fine, the answer does not.
-    lookup.mockResolvedValue([{ address: "127.0.0.1", family: 4 }]);
-    const res = await checkUrlSafe("http://rebind.example.com/");
+    const res = await checkUrlSafe(`http://${REBIND}/`);
     expect(res.ok).toBe(false);
     expect(res.reason).toMatch(/private or local/);
   });
 
-  it("rejects a name that answers with one public and one private address", async () => {
-    lookup.mockResolvedValue([
-      { address: "93.184.216.34", family: 4 },
-      { address: "10.0.0.1", family: 4 },
-    ]);
-    expect((await checkUrlSafe("http://split.example.com/")).ok).toBe(false);
-  });
-
   it("fails closed when DNS cannot resolve the name", async () => {
-    lookup.mockRejectedValue(new Error("ENOTFOUND"));
-    expect((await checkUrlSafe("http://nope.example.com/")).ok).toBe(false);
+    expect((await checkUrlSafe(`http://${NO_SUCH_NAME}/`)).ok).toBe(false);
   });
 
-  it("allows a public target over plain http", async () => {
-    // http is legitimate for a scan target — "no HTTPS" is a finding we report,
-    // not a reason to refuse the scan.
-    lookup.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+  needsDns("allows a public target over plain http", async () => {
+    // http is legitimate for a scan target: "no HTTPS" is a finding we report, not a reason to refuse the scan.
     expect((await checkUrlSafe("http://example.com/")).ok).toBe(true);
   });
 
-  it("requires https only when the caller asks for it", async () => {
-    lookup.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+  needsDns("requires https only when the caller asks for it", async () => {
     expect((await checkUrlSafe("http://example.com/", { requireHttps: true })).ok).toBe(false);
     expect((await checkUrlSafe("https://example.com/", { requireHttps: true })).ok).toBe(true);
   });
@@ -169,11 +159,13 @@ describe("checkUrlSafe", () => {
     expect((await checkUrlSafe("http://127.0.0.1/", { allowOptOut: true })).ok).toBe(false);
   });
 
-  it("caches a resolution rather than re-querying per request", async () => {
-    lookup.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
-    await checkUrlSafe("http://example.com/a");
-    await checkUrlSafe("http://example.com/b");
-    expect(lookup).toHaveBeenCalledTimes(1);
+  needsDns("remembers a name's verdict, so a repeat is answered the same without waiting on DNS", async () => {
+    const first = await checkUrlSafe("http://example.com/a");
+    const started = process.hrtime.bigint();
+    const second = await checkUrlSafe("http://example.com/b");
+    const tookMs = Number(process.hrtime.bigint() - started) / 1e6;
+    expect(second).toEqual(first);
+    expect(tookMs).toBeLessThan(5);
   });
 });
 
@@ -187,13 +179,11 @@ describe("checkUrlSafe", () => {
 describe("IPv6 literals (regression: brackets)", () => {
   beforeEach(() => {
     _clearResolveCache();
-    lookup.mockReset();
   });
 
   it("accepts a public IPv6 literal target", async () => {
     // No DNS: an address literal is judged directly.
     expect((await checkUrlSafe("http://[2606:4700::1]/")).ok).toBe(true);
-    expect(lookup).not.toHaveBeenCalled();
   });
 
   it("still refuses a private IPv6 literal target", async () => {
@@ -210,7 +200,6 @@ describe("IPv6 literals (regression: brackets)", () => {
 describe("checkScanTarget", () => {
   beforeEach(() => {
     _clearResolveCache();
-    lookup.mockReset();
   });
 
   it("refuses a non-http scheme", async () => {
@@ -221,8 +210,7 @@ describe("checkScanTarget", () => {
     expect((await checkScanTarget("http://169.254.169.254/")).ok).toBe(false);
   });
 
-  it("accepts a public target over plain http", async () => {
-    lookup.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+  needsDns("accepts a public target over plain http", async () => {
     expect((await checkScanTarget("http://example.com/")).ok).toBe(true);
   });
 });

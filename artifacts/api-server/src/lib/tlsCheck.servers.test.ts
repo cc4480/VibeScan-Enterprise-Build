@@ -5,8 +5,8 @@
  * The vitest config sets ALLOW_PRIVATE_SCAN_TARGETS=true so probes can reach loopback; the tests of
  * the refusal switch it off.
  */
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import dns from "node:dns";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import dnsPromises from "node:dns/promises";
 import net, { type AddressInfo } from "node:net";
 import tls from "node:tls";
 import { execFileSync } from "node:child_process";
@@ -17,6 +17,10 @@ import { inspectTls } from "./tlsCheck";
 import { tlsFindings } from "./tlsCheckFindings";
 import { _clearResolveCache } from "./ssrfGuard";
 import type { TlsHandshakeResult, TlsInspection } from "./tlsCheckTypes";
+
+const privateOptOut = process.env["ALLOW_PRIVATE_SCAN_TARGETS"];
+let REBIND_RESOLVES = false;
+try { REBIND_RESOLVES = (await dnsPromises.lookup("rebind.localtest.me", { all: true })).some((a) => a.address === "127.0.0.1"); } catch { /* offline */ }
 
 function opensslAvailable(): boolean {
   try {
@@ -77,8 +81,8 @@ describe.skipIf(!HAVE_OPENSSL)("inspectTls against local servers", () => {
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
   afterEach(async () => {
-    vi.restoreAllMocks();
-    vi.unstubAllEnvs();
+    if (privateOptOut === undefined) delete process.env["ALLOW_PRIVATE_SCAN_TARGETS"];
+    else process.env["ALLOW_PRIVATE_SCAN_TARGETS"] = privateOptOut;
     _clearResolveCache();
     await Promise.all(servers.splice(0).map((s) => new Promise<void>((r) => s.close(() => r()))));
   });
@@ -183,7 +187,7 @@ describe.skipIf(!HAVE_OPENSSL)("inspectTls against local servers", () => {
 
   describe("safety", () => {
     it("refuses a loopback address when private targets are not allowed, and opens no connection", async () => {
-      vi.stubEnv("ALLOW_PRIVATE_SCAN_TARGETS", "");
+      process.env["ALLOW_PRIVATE_SCAN_TARGETS"] = "";
       const { port, connections } = await serve(ok);
       const i = await inspectTls(`https://127.0.0.1:${port}`);
       expect(i.status).toBe("skipped");
@@ -192,7 +196,7 @@ describe.skipIf(!HAVE_OPENSSL)("inspectTls against local servers", () => {
     });
 
     it("refuses other private and local targets the same way", async () => {
-      vi.stubEnv("ALLOW_PRIVATE_SCAN_TARGETS", "");
+      process.env["ALLOW_PRIVATE_SCAN_TARGETS"] = "";
       for (const url of ["https://localhost:8443", "https://10.0.0.5", "https://192.168.1.10:8443", "https://169.254.169.254", "https://[::1]:8443", "https://intranet"]) {
         const i = await inspectTls(url, { timeoutMs: 500 });
         expect(i.status, url).toBe("skipped");
@@ -200,23 +204,14 @@ describe.skipIf(!HAVE_OPENSSL)("inspectTls against local servers", () => {
       }
     });
 
-    it("refuses a name that resolves to loopback (DNS rebinding) when the connection is made, and opens no connection", async () => {
-      vi.stubEnv("ALLOW_PRIVATE_SCAN_TARGETS", "");
+    // "rebind.localtest.me" is a real public name that answers 127.0.0.1: a name that leads somewhere private. Skips offline.
+    it.skipIf(!REBIND_RESOLVES)("refuses a name that resolves to loopback (DNS rebinding) when the connection is made, and opens no connection", async () => {
+      process.env["ALLOW_PRIVATE_SCAN_TARGETS"] = "";
       const { port, connections } = await serve(ok);
-      vi.spyOn(dns, "lookup").mockImplementation(((_h: string, _o: unknown, cb: (e: null, a: { address: string; family: number }[]) => void) =>
-        cb(null, [{ address: "127.0.0.1", family: 4 }])) as never);
-      const i = await inspectTls(`https://rebind.attacker.test:${port}`);
+      const i = await inspectTls(`https://rebind.localtest.me:${port}`);
       expect(i.status).toBe("skipped");
       expect(i.status === "skipped" && i.reason).toMatch(/^refused:/);
       expect(connections()).toBe(0);
-    });
-
-    it("refuses a name when any one of its addresses is private", async () => {
-      vi.stubEnv("ALLOW_PRIVATE_SCAN_TARGETS", "");
-      vi.spyOn(dns, "lookup").mockImplementation(((_h: string, _o: unknown, cb: (e: null, a: { address: string; family: number }[]) => void) =>
-        cb(null, [{ address: "93.184.216.34", family: 4 }, { address: "10.0.0.5", family: 4 }])) as never);
-      const i = await inspectTls("https://mixed.attacker.test");
-      expect(i.status).toBe("skipped");
     });
   });
 

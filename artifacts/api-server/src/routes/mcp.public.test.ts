@@ -1,17 +1,16 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import express from "express";
 import request from "supertest";
+import { useRealDb, TEST_DATABASE_URL, openDb, uniqueEmail } from "../lib/realDb.testkit";
+
+useRealDb();
 
 /**
- * Without a token, directories may connect and list the tools (so their health
- * checks pass) — and nothing else. Every tool call still needs a token.
+ * Without a token, directories may connect and list the tools (so their health checks pass) and nothing else. Every tool
+ * call still needs a token. The token checks run against real tokens in a REAL Postgres (BILLING_TEST_DATABASE_URL).
  */
 
-vi.mock("../lib/apiTokens", () => ({
-  authenticateApiToken: async (header?: string) =>
-    header === "Bearer ssk_good" ? { id: "u1", email: "owner@example.com", firstName: null, lastName: null, profileImageUrl: null } : null,
-}));
-
+// Imported only now: the db module this pulls in must be built against the real database URL set above.
 const { default: mcpRouter, isPublicMcpRequest } = await import("./mcp");
 
 const app = express();
@@ -95,12 +94,66 @@ describe("POST /mcp without a token", () => {
       .send([rpc("tools/list", {}, 1), rpc("tools/call", { name: "get_account", arguments: {} }, 2)]);
     expect(res.status).toBe(401);
   });
+});
+
+describe.skipIf(!TEST_DATABASE_URL)("POST /mcp tool calls, with real tokens (real Postgres)", () => {
+  let dbMod: typeof import("@workspace/db");
+  let tokens: typeof import("../lib/apiTokens");
+  let userId: string;
+  let email: string;
+  let mcpToken: string;
+  let apiToken: string;
+
+  async function issue(scope: "mcp" | "api") {
+    const g = tokens.generateToken();
+    await dbMod.db.insert(dbMod.apiTokensTable).values({ userId, name: `t-${scope}`, tokenHash: g.hash, prefix: g.prefix, scope });
+    return g.token;
+  }
+
+  beforeAll(async () => {
+    dbMod = await openDb();
+    tokens = await import("../lib/apiTokens");
+    email = uniqueEmail("mcp");
+    const [u] = await dbMod.db.insert(dbMod.usersTable).values({ email }).returning({ id: dbMod.usersTable.id });
+    userId = u!.id;
+    mcpToken = await issue("mcp");
+    apiToken = await issue("api");
+  }, 60_000);
+
+  afterAll(async () => {
+    const { eq } = await import("drizzle-orm");
+    await dbMod.db.delete(dbMod.apiTokensTable).where(eq(dbMod.apiTokensTable.userId, userId));
+    await dbMod.db.delete(dbMod.usersTable).where(eq(dbMod.usersTable.id, userId));
+    await dbMod?.pool?.end?.();
+  });
+
+  const call = (token: string) =>
+    request(app)
+      .post("/mcp")
+      .set({ ...HEADERS, Authorization: `Bearer ${token}` })
+      .send(rpc("tools/call", { name: "get_account", arguments: {} }));
 
   it("refuses a tool call with a wrong token", async () => {
-    const res = await request(app)
-      .post("/mcp")
-      .set({ ...HEADERS, Authorization: "Bearer ssk_wrong" })
-      .send(rpc("tools/call", { name: "get_account", arguments: {} }));
-    expect(res.status).toBe(401);
+    expect((await call("ssk_wrong")).status).toBe(401);
+  });
+
+  it("refuses a token that was valid but has been revoked", async () => {
+    const revoked = await issue("mcp");
+    const { eq } = await import("drizzle-orm");
+    await dbMod.db.update(dbMod.apiTokensTable).set({ revokedAt: new Date() }).where(eq(dbMod.apiTokensTable.tokenHash, tokens.hashToken(revoked)));
+    expect((await call(revoked)).status).toBe(401);
+  });
+
+  it("refuses an API-scope token: it opens the REST API, not MCP", async () => {
+    expect((await call(apiToken)).status).toBe(401);
+  });
+
+  it("answers a tool call for a real MCP token, as that token's user", async () => {
+    const res = await call(mcpToken);
+    expect(res.status).toBe(200);
+    const result = payload(res).result;
+    expect(result.isError).not.toBe(true);
+    // The account tool reports this user's allowance (a brand-new user has all three free scans).
+    expect(result.content[0].text).toMatch(/free scans?/i);
   });
 });
