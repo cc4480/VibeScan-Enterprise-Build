@@ -43,12 +43,13 @@ export interface TestApp {
 }
 
 /** Mounts `router` under /api behind the same `req.isAuthenticated()` / `req.user` / `req.log` shape the real app gives it. */
-export function startApp(router: IRouter, opts: { json?: boolean } = {}): TestApp {
+export function startApp(router: IRouter, opts: { json?: boolean; log?: pino.Logger } = {}): TestApp {
   let current: TestUser | null = null;
+  const silentLog = pino({ level: "silent" });
   const app = express();
   if (opts.json !== false) app.use(express.json());
   app.use((req, _res, next) => {
-    Object.assign(req, { isAuthenticated: () => current !== null, user: current, log: pino({ level: "silent" }) });
+    Object.assign(req, { isAuthenticated: () => current !== null, user: current, log: opts.log ?? silentLog });
     next();
   });
   app.use("/api", router);
