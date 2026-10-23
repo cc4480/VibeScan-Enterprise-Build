@@ -4,7 +4,12 @@ import { htmlToPlainText } from "./htmlToText";
 import { isSuppressed } from "./emailSuppression";
 import { notificationPrefs, shouldNotify, type AlertKind } from "./notificationPrefs";
 
-export const RESEND_API = "https://api.resend.com/emails";
+/**
+ * Where mail is sent. Resend's API unless RESEND_BASE_URL says otherwise: an operator routing through a
+ * compatible relay, or a test that needs to receive the messages the real code builds, sets it.
+ */
+const RESEND_BASE = (process.env["RESEND_BASE_URL"] ?? "https://api.resend.com").replace(/\/+$/, "");
+export const RESEND_API = `${RESEND_BASE}/emails`;
 
 /**
  * Escape text that came from a monitored site before it goes into email HTML.
@@ -22,7 +27,7 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-export const RESEND_AUDIENCES_API = "https://api.resend.com/audiences";
+export const RESEND_AUDIENCES_API = `${RESEND_BASE}/audiences`;
 
 /**
  * Whether BULK mail may go to this address at all.

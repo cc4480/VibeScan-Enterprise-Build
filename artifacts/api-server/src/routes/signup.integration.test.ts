@@ -10,45 +10,33 @@
  *
  * NEVER point it at a database whose data matters: it truncates users.
  */
-import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
 import express from "express";
 import request from "supertest";
+import { startMailSink, type MailSink } from "../lib/mailSink.testkit";
 
 const URL_ = process.env["SIGNUP_TEST_DATABASE_URL"];
 const suite = URL_ ? describe : describe.skip;
 if (URL_) process.env["DATABASE_URL"] = URL_;
 
-// The code that would have been emailed, per address.
-const sent = new Map<string, string>();
-// Addresses that were told "you already have an account" instead of being sent a code.
-const notices: string[] = [];
-// Makes every send fail, as a suppressed address or a provider outage would.
-let failSends = false;
-vi.mock("../lib/mailer", () => ({
-  sendLoginCode: async (to: string, code: string) => {
-    if (failSends) throw new Error("send failed");
-    sent.set(to, code);
-  },
-  sendSignupExistingAccountEmail: async (to: string) => {
-    if (failSends) throw new Error("send failed");
-    notices.push(to);
-  },
-  sendWelcomeEmail: async () => {},
-  addToMarketingAudience: async () => {},
-  sendEmailVerification: async () => {},
-  sendPasswordReset: async () => {},
-}));
-// Each test picks the network it signs up from.
-vi.mock("../lib/clientIp", () => ({
-  clientIp: (req: { headers: Record<string, string | undefined> }) => req.headers["x-test-ip"] ?? "198.51.100.1",
-}));
+// Mail goes through the real mailer to a real local endpoint (lib/mailSink.testkit.ts), which records it.
+let sink: MailSink;
+const NOTICE_SUBJECT = "You already have a SecScan.us account";
+/** Addresses that were told "you already have an account" instead of being sent a code. */
+const notices = () => sink.mail.filter((m) => m.subject === NOTICE_SUBJECT).map((m) => m.to[0]);
+/** Sign-in codes mailed, in total. */
+const codesSent = () => sink.mail.filter((m) => /sign-in code/i.test(m.subject)).length;
+const codeTo = (email: string) => sink.loginCodeTo(email);
 
 let app: express.Express;
 let dbMod: typeof import("@workspace/db");
 
 suite("sign-up (real Postgres)", () => {
   beforeAll(async () => {
+    sink = await startMailSink();
+    // Behind Cloudflare the client address is the last X-Forwarded-For entry, which is how each test picks its network.
+    process.env["BEHIND_CLOUDFLARE"] = "true";
     dbMod = await import("@workspace/db");
     await dbMod.migrateToLatest(URL_!);
     const { default: accountRouter } = await import("./account");
@@ -64,20 +52,16 @@ suite("sign-up (real Postgres)", () => {
   beforeEach(async () => {
     const { sql } = await import("drizzle-orm");
     await dbMod.db.execute(sql`TRUNCATE users, pending_registrations, sessions CASCADE`);
-    sent.clear();
-    notices.length = 0;
-    failSends = false;
+    sink.clear();
     // The per-address limiter is in memory and keyed by address, so tests that
     // reuse one must not inherit each other's count.
     const { attempts } = await import("./accountShared");
     attempts.clear();
   }, 30_000);
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   afterAll(async () => {
+    await sink?.stop();
+    delete process.env["BEHIND_CLOUDFLARE"];
     await dbMod?.pool?.end?.();
   });
 
@@ -85,9 +69,9 @@ suite("sign-up (real Postgres)", () => {
   // limiter never interferes; the NETWORK is chosen via the address.
   let ipSeq = 0;
   const start = (email: string, ip: string, password = "correct horse battery") =>
-    request(app).post("/account/register").set("x-test-ip", ip).send({ email, password });
+    request(app).post("/account/register").set("x-forwarded-for", ip).send({ email, password });
   const finish = (challenge: string, code: string, ip = `203.0.113.${++ipSeq}`) =>
-    request(app).post("/account/register/verify").set("x-test-ip", ip).send({ challenge, code });
+    request(app).post("/account/register/verify").set("x-forwarded-for", ip).send({ challenge, code });
 
   const users = async () => {
     const { usersTable } = dbMod;
@@ -100,7 +84,7 @@ suite("sign-up (real Postgres)", () => {
     expect(res.body).toMatchObject({ codeRequired: true, sentTo: "ne*@example.com" });
     expect(await users()).toHaveLength(0);
 
-    const done = await finish(res.body.challenge, sent.get("new@example.com")!);
+    const done = await finish(res.body.challenge, codeTo("new@example.com")!);
     expect(done.status).toBe(201);
     expect(done.body.user.email).toBe("new@example.com");
     expect(done.headers["set-cookie"]?.[0]).toMatch(/sid=/);
@@ -112,14 +96,14 @@ suite("sign-up (real Postgres)", () => {
 
   it("refuses a wrong code and creates nothing", async () => {
     const res = await start("wrong@example.com", "198.51.100.11");
-    const done = await finish(res.body.challenge, "000000" === sent.get("wrong@example.com") ? "111111" : "000000");
+    const done = await finish(res.body.challenge, "000000" === codeTo("wrong@example.com") ? "111111" : "000000");
     expect(done.status).toBe(401);
     expect(await users()).toHaveLength(0);
   });
 
   it("spends the challenge after five wrong codes, even for the right one", async () => {
     const res = await start("guess@example.com", "198.51.100.12");
-    const right = sent.get("guess@example.com")!;
+    const right = codeTo("guess@example.com")!;
     const wrong = right === "000000" ? "111111" : "000000";
     for (let i = 0; i < 5; i++) expect((await finish(res.body.challenge, wrong)).status).toBe(401);
     expect((await finish(res.body.challenge, right)).status).toBe(401);
@@ -129,12 +113,12 @@ suite("sign-up (real Postgres)", () => {
   it("allows 2 accounts per network, refuses the 3rd — and sends it no code", async () => {
     for (const email of ["a@example.com", "b@example.com"]) {
       const res = await start(email, "198.51.100.20");
-      expect((await finish(res.body.challenge, sent.get(email)!)).status).toBe(201);
+      expect((await finish(res.body.challenge, codeTo(email)!)).status).toBe(201);
     }
     const third = await start("c@example.com", "198.51.100.20");
     expect(third.status).toBe(429);
     expect(third.body.error).toMatch(/limit/);
-    expect(sent.has("c@example.com")).toBe(false);
+    expect((codeTo("c@example.com") !== undefined)).toBe(false);
     expect(await users()).toHaveLength(2);
   });
 
@@ -144,7 +128,7 @@ suite("sign-up (real Postgres)", () => {
       ["v6b@example.com", "2001:db8:1:2:ffff::9"],
     ] as const) {
       const res = await start(email, ip);
-      expect((await finish(res.body.challenge, sent.get(email)!)).status).toBe(201);
+      expect((await finish(res.body.challenge, codeTo(email)!)).status).toBe(201);
     }
     expect((await start("v6c@example.com", "2001:db8:1:2:aaaa:bbbb:cccc:dddd")).status).toBe(429);
     // A different /64 is a different network.
@@ -159,7 +143,7 @@ suite("sign-up (real Postgres)", () => {
     }
     // ...but only two may finish.
     const results = [];
-    for (const p of pending) results.push((await finish(p.res.body.challenge, sent.get(p.email)!)).status);
+    for (const p of pending) results.push((await finish(p.res.body.challenge, codeTo(p.email)!)).status);
     expect(results).toEqual([201, 201, 429]);
     expect(await users()).toHaveLength(2);
   });
@@ -184,8 +168,8 @@ suite("sign-up (real Postgres)", () => {
   /** Create an account through the real flow and return its row, to show later that nothing touched it. */
   async function existingAccount(email: string, ip: string) {
     const res = await start(email, ip);
-    expect((await finish(res.body.challenge, sent.get(email)!)).status).toBe(201);
-    sent.clear();
+    expect((await finish(res.body.challenge, codeTo(email)!)).status).toBe(201);
+    sink.clear();
     const { attempts } = await import("./accountShared");
     attempts.clear();
     const [row] = await users();
@@ -220,9 +204,9 @@ suite("sign-up (real Postgres)", () => {
       expect(fresh.headers["set-cookie"]).toBeUndefined();
 
       // The new address got a code; the existing one got the notice and no code.
-      expect(sent.has("fresh@example.com")).toBe(true);
-      expect(sent.has("owner@example.com")).toBe(false);
-      expect(notices).toEqual(["owner@example.com"]);
+      expect((codeTo("fresh@example.com") !== undefined)).toBe(true);
+      expect((codeTo("owner@example.com") !== undefined)).toBe(false);
+      expect(notices()).toEqual(["owner@example.com"]);
 
       // And the existing account is exactly as it was.
       const rows = await users();
@@ -238,7 +222,7 @@ suite("sign-up (real Postgres)", () => {
       const dup = await start("owner@example.com", "198.51.100.54");
       const real = await start("fresh@example.com", "198.51.100.55");
 
-      const realCode = sent.get("fresh@example.com")!;
+      const realCode = codeTo("fresh@example.com")!;
       const realWrong = await finish(real.body.challenge, realCode === "000000" ? "111111" : "000000");
       expect(realWrong.status).toBe(401);
 
@@ -253,16 +237,23 @@ suite("sign-up (real Postgres)", () => {
     });
 
     it("does the same work as a new address: the password is hashed on both paths", async () => {
+      // Not observable by counting calls, so by cost: hashing is deliberately slow, and an existing address that
+      // skipped it would answer far faster than a new one, which would itself reveal that the account exists.
       await existingAccount("owner@example.com", "198.51.100.56");
-      const password = await import("../lib/password");
-      const hash = vi.spyOn(password, "hashPassword");
+      const { hashPassword } = await import("../lib/password");
+      const t0 = Date.now();
+      await hashPassword("a password to time");
+      const oneHash = Date.now() - t0;
 
-      expect((await start("fresh@example.com", "198.51.100.57")).status).toBe(202);
-      expect(hash).toHaveBeenCalledTimes(1);
-      hash.mockClear();
-
-      expect((await start("owner@example.com", "198.51.100.58")).status).toBe(202);
-      expect(hash).toHaveBeenCalledTimes(1);
+      const timed = async (email: string, ip: string) => {
+        const t = Date.now();
+        expect((await start(email, ip)).status).toBe(202);
+        return Date.now() - t;
+      };
+      const fresh = await timed("fresh@example.com", "198.51.100.57");
+      const existing = await timed("owner@example.com", "198.51.100.58");
+      expect(fresh).toBeGreaterThanOrEqual(oneHash * 0.5);
+      expect(existing).toBeGreaterThanOrEqual(oneHash * 0.5);
     });
 
     it("does not claim a legacy anonymous identity for an account that already exists", async () => {
@@ -272,7 +263,7 @@ suite("sign-up (real Postgres)", () => {
 
       const res = await request(app)
         .post("/account/register")
-        .set("x-test-ip", "198.51.100.60")
+        .set("x-forwarded-for", "198.51.100.60")
         .set("Authorization", `Bearer ${anonId}`)
         .send({ email: "owner@example.com", password: "correct horse battery" });
 
@@ -286,10 +277,9 @@ suite("sign-up (real Postgres)", () => {
     it("is refused by a capped network exactly as a new address is, and is sent nothing", async () => {
       for (const email of ["a@example.com", "b@example.com"]) {
         const res = await start(email, "198.51.100.61");
-        expect((await finish(res.body.challenge, sent.get(email)!)).status).toBe(201);
+        expect((await finish(res.body.challenge, codeTo(email)!)).status).toBe(201);
       }
-      notices.length = 0;
-      sent.clear();
+      sink.clear();
 
       const existing = await start("a@example.com", "198.51.100.61");
       const fresh = await start("c@example.com", "198.51.100.61");
@@ -298,13 +288,13 @@ suite("sign-up (real Postgres)", () => {
       expect(fresh.status).toBe(429);
       expect(existing.body).toEqual(fresh.body);
       // A capped network cannot use sign-up to mail anyone, existing account or not.
-      expect(notices).toEqual([]);
-      expect(sent.size).toBe(0);
+      expect(notices()).toEqual([]);
+      expect(sink.mail).toHaveLength(0);
     });
 
     it("fails the same way as a new address when the email cannot be sent", async () => {
       await existingAccount("owner@example.com", "198.51.100.62");
-      failSends = true;
+      sink.respondWith(500); // the provider is refusing mail
 
       const dup = await start("owner@example.com", "198.51.100.63");
       const fresh = await start("fresh@example.com", "198.51.100.64");
@@ -331,14 +321,14 @@ suite("sign-up (real Postgres)", () => {
       expect(forNew.status).toBe(429);
       expect(forExisting.body).toEqual(forNew.body);
       // Those ten each mailed someone, but the eleventh did not.
-      expect(notices.filter((n) => n === "owner@example.com")).toHaveLength(10);
+      expect(notices().filter((n) => n === "owner@example.com")).toHaveLength(10);
     }, 60_000);
   });
 
   it("still refuses to create an account at step two if the address was taken in the meantime, and starts no session", async () => {
     // Reachable only with a valid code, i.e. by someone who can read that mailbox, so it is not an oracle.
     const res = await start("race@example.com", "198.51.100.70");
-    const code = sent.get("race@example.com")!;
+    const code = codeTo("race@example.com")!;
     await dbMod.db.insert(dbMod.usersTable).values({ email: "race@example.com" });
 
     const done = await finish(res.body.challenge, code);
