@@ -26,14 +26,17 @@ export interface OsvStub {
   vulnerable: Set<string>;
   answers: Map<string, Advisory[]>;
   asked: string[];
+  /** Drop the next this-many connections without answering, as a failing network would. */
+  dropNext: number;
   stop(): Promise<void>;
 }
 
 export async function startOsvStub(): Promise<OsvStub> {
   const sockets = new Set<Socket>();
-  const state: OsvStub = { vulnerable: new Set(), answers: new Map(), asked: [], stop: async () => {} };
+  const state: OsvStub = { vulnerable: new Set(), answers: new Map(), asked: [], dropNext: 0, stop: async () => {} };
 
   const server = http.createServer((req, res) => {
+    if (state.dropNext > 0) { state.dropNext--; req.socket.destroy(); return; }
     const chunks: Buffer[] = [];
     req.on("data", (c) => chunks.push(c));
     req.on("end", () => {

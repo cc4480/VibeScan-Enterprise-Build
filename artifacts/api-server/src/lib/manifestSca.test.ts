@@ -1,10 +1,17 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import { exactVersion, parsePackageJson, scaFromManifest } from "./manifestSca";
+import { startOsvStub } from "./osvStub.testkit";
+import { osvCache } from "./cveCheckOsv";
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
+// OSV is a real local server that answers like OSV.dev (lib/osvStub.testkit.ts); the answers are decided in each test.
+const osv = await startOsvStub();
+beforeEach(() => {
+  osvCache.clear();
+  osv.answers = new Map();
+  osv.asked.length = 0;
+  osv.dropNext = 0;
 });
+afterAll(() => osv.stop());
 
 describe("exactVersion", () => {
   it("accepts a pinned version", () => {
@@ -79,7 +86,7 @@ describe("parsePackageJson", () => {
   });
 });
 
-describe("scaFromManifest", () => {
+describe("scaFromManifest (against a real server that answers like OSV)", () => {
   const advisory = (id: string, cvss: string, fixed: string, summary?: string) => ({
     id,
     aliases: [id],
@@ -90,19 +97,11 @@ describe("scaFromManifest", () => {
 
   it("emits ONE finding per package, not one per advisory", async () => {
     // Eleven advisories against one dependency describe one action: upgrade it.
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          vulns: [
-            advisory("CVE-2020-8203", "9.8", "4.17.21", "Prototype pollution"),
-            advisory("CVE-2021-23337", "7.2", "4.17.20"),
-            advisory("CVE-2020-28500", "5.3", "4.17.19"),
-          ],
-        }),
-      }),
-    );
+    osv.answers.set("npm:lodash@4.17.15", [
+      advisory("CVE-2020-8203", "9.8", "4.17.21", "Prototype pollution"),
+      advisory("CVE-2021-23337", "7.2", "4.17.20"),
+      advisory("CVE-2020-28500", "5.3", "4.17.19"),
+    ]);
     const out = await scaFromManifest([{ name: "lodash", version: "4.17.15" }], "/package.json");
     expect(out).toHaveLength(1);
     expect(out[0]!.name).toBe("Vulnerable dependency: lodash 4.17.15");
@@ -111,21 +110,16 @@ describe("scaFromManifest", () => {
     // And the fix must clear ALL of them, not just the worst.
     expect(out[0]!.solution).toContain("4.17.21");
     expect(out[0]!.description).toContain("CVE-2020-8203");
+    expect(osv.asked).toEqual(["npm:lodash@4.17.15"]);
   });
 
   it("says nothing about a package with no advisories", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ vulns: [] }) }));
     expect(await scaFromManifest([{ name: "clean-pkg", version: "1.0.0" }], "/package.json")).toEqual([]);
+    expect(osv.asked).toEqual(["npm:clean-pkg@1.0.0"]); // it really asked
   });
 
   it("reports higher confidence than a fingerprint guess, and names the source", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ vulns: [advisory("CVE-2021-1", "7.5", "2.0.0")] }),
-      }),
-    );
+    osv.answers.set("npm:pkg@1.0.0", [advisory("CVE-2021-1", "7.5", "2.0.0")]);
     const [f] = await scaFromManifest([{ name: "pkg", version: "1.0.0" }], "/package.json");
     // version_heuristic sits at 48 because it is inferred. This was read.
     expect(f!.confidence).toBeGreaterThan(80);
@@ -134,15 +128,9 @@ describe("scaFromManifest", () => {
   });
 
   it("survives an OSV failure without losing the other packages", async () => {
-    let call = 0;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockImplementation(async () => {
-        call += 1;
-        if (call === 1) throw new Error("network down");
-        return { ok: true, json: async () => ({ vulns: [advisory("CVE-2021-2", "9.1", "3.0.0")] }) };
-      }),
-    );
+    osv.answers.set("npm:first@1.0.0", [advisory("CVE-2021-2", "9.1", "3.0.0")]);
+    osv.answers.set("npm:second@1.0.0", [advisory("CVE-2021-2", "9.1", "3.0.0")]);
+    osv.dropNext = 1; // the first connection to the server dies without an answer
     const out = await scaFromManifest(
       [
         { name: "first", version: "1.0.0" },
@@ -155,9 +143,7 @@ describe("scaFromManifest", () => {
   });
 
   it("does nothing when there are no packages", async () => {
-    const fetchSpy = vi.fn();
-    vi.stubGlobal("fetch", fetchSpy);
     expect(await scaFromManifest([], "/package.json")).toEqual([]);
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(osv.asked).toHaveLength(0);
   });
 });
