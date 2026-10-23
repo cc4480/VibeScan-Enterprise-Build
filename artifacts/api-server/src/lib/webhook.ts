@@ -193,6 +193,16 @@ const EVENT_TO_KIND: Record<WebhookEventType, AlertKind> = {
   security_drift: "drift",
 };
 
+/**
+ * What happened to a delivery. Callers may ignore it (delivery is best effort and never throws); it is returned so the
+ * outcome is observable without reading logs.
+ */
+export interface WebhookOutcome {
+  status: "delivered" | "skipped_preferences" | "blocked_url" | "failed";
+  /** Requests actually sent: 0 when skipped or blocked, 2 when the first was not accepted and was retried. */
+  attempts: number;
+}
+
 export async function fireWebhook(
   webhookUrl: string,
   event: WebhookEventType,
@@ -203,7 +213,7 @@ export async function fireWebhook(
   // this, and an optional argument is one a future call site forgets — which
   // would silently reintroduce exactly that.
   notify: { userId: string; severity?: string | null },
-): Promise<void> {
+): Promise<WebhookOutcome> {
   // Do NOT log the webhook URL — it may contain secret tokens in the path/query.
   const log = logger.child({ event, subscriptionId });
 
@@ -213,13 +223,13 @@ export async function fireWebhook(
   const prefs = await notificationPrefs(notify.userId);
   if (!shouldNotify(prefs, { kind: EVENT_TO_KIND[event], severity: notify.severity, channel: "webhook" })) {
     log.info("Webhook skipped — user's notification preferences");
-    return;
+    return { status: "skipped_preferences", attempts: 0 };
   }
 
   const safe = await isWebhookUrlSafe(webhookUrl);
   if (!safe) {
     log.warn("Webhook URL blocked by SSRF guard — skipping delivery");
-    return;
+    return { status: "blocked_url", attempts: 0 };
   }
 
   const payload: WebhookPayload = {
@@ -232,18 +242,26 @@ export async function fireWebhook(
 
   const body = buildSlackBody(payload);
 
+  let attempts = 0;
   try {
+    attempts = 1;
     const ok = await postWebhook(webhookUrl, body);
     if (!ok) {
       log.warn("Webhook returned non-2xx — retrying once");
       await new Promise((r) => setTimeout(r, 1000));
+      attempts = 2;
       const ok2 = await postWebhook(webhookUrl, body);
-      if (!ok2) log.warn("Webhook retry also failed — giving up");
-      else log.info("Webhook retry succeeded");
-    } else {
-      log.info("Webhook delivered");
+      if (!ok2) {
+        log.warn("Webhook retry also failed — giving up");
+        return { status: "failed", attempts };
+      }
+      log.info("Webhook retry succeeded");
+      return { status: "delivered", attempts };
     }
+    log.info("Webhook delivered");
+    return { status: "delivered", attempts };
   } catch (err) {
     log.warn({ err }, "Webhook delivery error (non-fatal)");
+    return { status: "failed", attempts };
   }
 }
