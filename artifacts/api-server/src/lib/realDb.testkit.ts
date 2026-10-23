@@ -32,17 +32,19 @@ export async function makeUser(dbMod: typeof import("@workspace/db"), tag: strin
   return u!.id;
 }
 
+export type TestUser = { id: string; email?: string | null };
+
 export interface TestApp {
   server: Server;
   /** `http://127.0.0.1:<port>/api` */
   base: string;
   /** Who the next requests are signed in as; null for signed out. */
-  as(user: { id: string } | null): void;
+  as(user: TestUser | null): void;
 }
 
 /** Mounts `router` under /api behind the same `req.isAuthenticated()` / `req.user` / `req.log` shape the real app gives it. */
 export function startApp(router: IRouter, opts: { json?: boolean } = {}): TestApp {
-  let current: { id: string } | null = null;
+  let current: TestUser | null = null;
   const app = express();
   if (opts.json !== false) app.use(express.json());
   app.use((req, _res, next) => {
