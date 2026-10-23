@@ -12,8 +12,8 @@
 
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
+import { dohEndpoint } from "./dnsChecksCore";
 
-const DOH_ENDPOINT = "https://cloudflare-dns.com/dns-query";
 const TIMEOUT_MS = 8_000;
 /** Provider unclaimed-resource pages are tiny; a large page is a live site. */
 const MAX_ERROR_PAGE_CHARS = 20_000;
@@ -40,7 +40,7 @@ async function dohQuery(name: string, type: string): Promise<DnsAnswer[]> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const url = `${DOH_ENDPOINT}?name=${encodeURIComponent(name)}&type=${type}&ct=application/dns-json`;
+    const url = `${dohEndpoint()}?name=${encodeURIComponent(name)}&type=${type}&ct=application/dns-json`;
     const res = await fetch(url, {
       headers: { Accept: "application/dns-json" },
       signal: controller.signal,

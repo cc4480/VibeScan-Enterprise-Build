@@ -1,11 +1,11 @@
 /** DNS record and subdomain enumeration. */
 import * as dns from "node:dns/promises";
 import { COMMON_SUBDOMAINS } from "./recon-data";
+import { dohEndpoint } from "./dnsChecksCore";
 import { type DnsRecord, type SubdomainEntry } from "./reconTypes";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-export const DOH_ENDPOINT = "https://cloudflare-dns.com/dns-query";
 
 export const DNS_TIMEOUT_MS = 8_000;
 
@@ -24,7 +24,7 @@ export async function dohQuery(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), DNS_TIMEOUT_MS);
   try {
-    const url = `${DOH_ENDPOINT}?name=${encodeURIComponent(name)}&type=${type}&ct=application/dns-json`;
+    const url = `${dohEndpoint()}?name=${encodeURIComponent(name)}&type=${type}&ct=application/dns-json`;
     const res = await fetch(url, {
       headers: { Accept: "application/dns-json" },
       signal: controller.signal,

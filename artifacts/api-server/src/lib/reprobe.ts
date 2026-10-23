@@ -15,6 +15,7 @@
 import type { ScanVulnerability } from "./scanner";
 import { APP_DOMAIN } from "./appOrigin";
 import { scanFetch } from "./http";
+import { dohEndpoint } from "./dnsChecksCore";
 
 const REPROBE_MIN = 50;
 const REPROBE_MAX = 70;
@@ -88,7 +89,7 @@ export async function reprobe(
   // Probe 3: DNS TXT probe — corroborates SPF/DMARC/email-security findings
   const dnsProbe = (hasBorderlineDns && targetHostname)
     ? fetch(
-        `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(targetHostname)}&type=TXT`,
+        `${dohEndpoint()}?name=${encodeURIComponent(targetHostname)}&type=TXT`,
         { headers: { Accept: "application/dns-json" }, signal: globalCtrl.signal },
       ).then((res) => res.json() as Promise<{ Answer?: Array<{ data: string }> }>)
        .then((data) => data.Answer?.map((a) => a.data.toLowerCase()) ?? [] as string[])

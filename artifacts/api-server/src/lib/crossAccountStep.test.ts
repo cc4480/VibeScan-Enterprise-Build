@@ -42,30 +42,42 @@ const server = http.createServer((req, res) => {
   shop.hits.push(`${req.method} ${req.url}`);
   const cookie = req.headers.cookie ?? "";
   const signedIn = /sid=(alice|bob|auto)/.test(cookie);
-  const html = (status: number, body: string, extra: Record<string, string> = {}) => res.writeHead(status, { "content-type": "text/html", ...extra }).end(body);
+  const html = (status: number, body: string, extra: Record<string, string> = {}): void => {
+    res.writeHead(status, { "content-type": "text/html", ...extra }).end(body);
+  };
 
   if (req.url === "/signup" && shop.signup !== "absent") {
     if (req.method === "GET") {
-      return html(200, `<h1>Sign up</h1><form method="POST" action="/signup"><input type="email" name="email"><input type="password" name="password"><button>Create account</button></form>`);
+      html(200, `<h1>Sign up</h1><form method="POST" action="/signup"><input type="email" name="email"><input type="password" name="password"><button>Create account</button></form>`);
+      return;
     }
     let body = "";
     req.on("data", (c) => (body += c));
     req.on("end", () => {
       shop.posted.push(decodeURIComponent(body));
-      if (shop.signup === "session") return html(302, "", { location: "/dashboard", "set-cookie": "sid=auto; Path=/" });
-      if (shop.signup === "verify") return html(200, "<p>Thanks! Please verify your email address to continue: check your inbox for the confirmation link.</p>");
-      return html(200, "<p>Thanks, we will be in touch.</p>");
+      if (shop.signup === "session") html(302, "", { location: "/dashboard", "set-cookie": "sid=auto; Path=/" });
+      else if (shop.signup === "verify") html(200, "<p>Thanks! Please verify your email address to continue: check your inbox for the confirmation link.</p>");
+      else html(200, "<p>Thanks, we will be in touch.</p>");
     });
     return;
   }
   if (req.url === "/dashboard") {
-    return signedIn ? html(200, "<h1>Your dashboard</h1><p>Orders, invoices and team members.</p>") : html(302, "", { location: "/signup" });
+    if (signedIn) html(200, "<h1>Your dashboard</h1><p>Orders, invoices and team members.</p>");
+    else html(302, "", { location: "/signup" });
+    return;
   }
-  if (req.url === "/" ) return html(200, "<h1>Acme shop</h1><p>Welcome to the shop.</p>");
+  if (req.url === "/") {
+    html(200, "<h1>Acme shop</h1><p>Welcome to the shop.</p>");
+    return;
+  }
   if (req.url === "/orders/1042") {
-    if (!signedIn) return html(401, "<h1>Please log in</h1><form><input type='password' name='p'></form>");
-    if (/sid=alice/.test(cookie)) return shop.aliceCanRead ? html(200, ORDER) : html(404, "Not found");
-    return shop.idor ? html(200, ORDER) : html(403, "Forbidden");
+    if (!signedIn) html(401, "<h1>Please log in</h1><form><input type='password' name='p'></form>");
+    else if (/sid=alice/.test(cookie)) {
+      if (shop.aliceCanRead) html(200, ORDER);
+      else html(404, "Not found");
+    } else if (shop.idor) html(200, ORDER);
+    else html(403, "Forbidden");
+    return;
   }
   html(404, "Not found");
 });

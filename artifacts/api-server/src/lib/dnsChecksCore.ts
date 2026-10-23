@@ -2,7 +2,10 @@
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 
-export const DOH_ENDPOINT = "https://cloudflare-dns.com/dns-query";
+/** The DNS-over-HTTPS resolver. DOH_ENDPOINT_URL points it elsewhere (tests run a real resolver on loopback); read per call. */
+export function dohEndpoint(): string {
+  return process.env["DOH_ENDPOINT_URL"] || "https://cloudflare-dns.com/dns-query";
+}
 
 export const DNS_TIMEOUT_MS = 8_000;
 
@@ -63,7 +66,7 @@ async function dnsQueryOnce(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), DNS_TIMEOUT_MS);
   try {
-    const url = `${DOH_ENDPOINT}?name=${encodeURIComponent(name)}&type=${type}&ct=application/dns-json`;
+    const url = `${dohEndpoint()}?name=${encodeURIComponent(name)}&type=${type}&ct=application/dns-json`;
     const res = await fetch(url, {
       headers: { Accept: "application/dns-json" },
       signal: controller.signal,
