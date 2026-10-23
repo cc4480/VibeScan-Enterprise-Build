@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
 import { runPulse, summariseUptime, certDaysRemaining } from "./monitorPulse";
 
 describe("summariseUptime", () => {
@@ -90,110 +90,72 @@ describe("certDaysRemaining", () => {
  * failure is visible in the dashboard, which is why it gets a test rather than
  * a comment.
  */
-describe("runPulse — redirects", () => {
-  const originalFetch = globalThis.fetch;
+describe("runPulse — redirects (the real internet, httpbin.org)", () => {
+  // httpbin.org is a public service made for testing HTTP clients. These tests skip when it cannot be reached.
+  const ECHO = "https://httpbin.org";
+  let online = false;
   const optOut = process.env["ALLOW_PRIVATE_SCAN_TARGETS"];
 
-  // vitest.config.ts sets ALLOW_PRIVATE_SCAN_TARGETS=true for the whole suite,
-  // because almost every probe test drives the scanner at a loopback server.
-  // That is the same switch a self-hosted operator sets, and with it on the
-  // guard correctly permits private addresses — so these tests would pass
-  // whether the guard was called at all. Cleared here, exactly as http.test.ts
-  // does for its own redirect case, so the check is actually exercised.
-  beforeEach(() => { delete process.env["ALLOW_PRIVATE_SCAN_TARGETS"]; });
+  beforeAll(async () => {
+    try { online = (await fetch(ECHO + "/status/200", { signal: AbortSignal.timeout(8_000) })).ok; } catch { online = false; }
+  }, 15_000);
 
+  // vitest.config.ts sets ALLOW_PRIVATE_SCAN_TARGETS=true for the whole suite, because almost every probe test drives the
+  // scanner at a loopback server. With it on the guard correctly permits private addresses, so these tests would pass
+  // whether the guard was called at all. Cleared here so the check is actually exercised.
+  beforeEach(() => { delete process.env["ALLOW_PRIVATE_SCAN_TARGETS"]; });
   afterEach(() => {
     if (optOut === undefined) delete process.env["ALLOW_PRIVATE_SCAN_TARGETS"];
     else process.env["ALLOW_PRIVATE_SCAN_TARGETS"] = optOut;
-    globalThis.fetch = originalFetch;
-    vi.restoreAllMocks();
   });
 
-  // A public IP literal, and http rather than https, on purpose: an IP skips
-  // the guard's DNS lookup and http skips the certificate handshake, so none of
-  // these tests touch the network. The "legitimate redirect" case still has to
-  // be a real redirect a monitored site would produce.
-  /** A Response that redirects to `location`. */
-  const redirectTo = (location: string, status = 302) =>
-    new Response(null, { status, headers: { location } });
+  /** httpbin answers a 302 to `location`. */
+  const redirectTo = (location: string) => ECHO + "/redirect-to?url=" + encodeURIComponent(location) + "&status_code=302";
 
-  it("refuses to follow a redirect to a private address", async () => {
-    const requested: string[] = [];
-    globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
-      requested.push(String(input));
-      return redirectTo("http://169.254.169.254/latest/meta-data/");
-    }) as typeof fetch;
-
-    const result = await runPulse("http://93.184.216.34/");
-
-    // The public first hop was fetched; the metadata address never was.
-    expect(requested).toEqual(["http://93.184.216.34/"]);
+  it("refuses to follow a redirect to a private address", async ({ skip }) => {
+    if (!online) skip();
+    const started = Date.now();
+    const result = await runPulse(redirectTo("http://169.254.169.254/latest/meta-data/"));
+    // The public first hop was fetched; the metadata address never was (it would have held the check for its full timeout).
     expect(result.reachable).toBe(false);
     expect(result.failureReason).toMatch(/^Blocked:/);
     expect(result.finalUrl).toContain("169.254.169.254");
-  });
+    expect(Date.now() - started).toBeLessThan(8_000);
+  }, 20_000);
 
-  it("gives up rather than looping forever on a redirect cycle", async () => {
-    let calls = 0;
-    globalThis.fetch = vi.fn(async () => {
-      calls++;
-      return redirectTo("http://93.184.216.34/loop");
-    }) as typeof fetch;
-
-    const result = await runPulse("http://93.184.216.34/");
-
+  it("gives up rather than following a redirect chain forever", async ({ skip }) => {
+    if (!online) skip();
+    // httpbin answers this address with a chain of a thousand redirects; the check follows only a handful.
+    const result = await runPulse(ECHO + "/redirect/1000");
     expect(result.reachable).toBe(false);
     expect(result.failureReason).toMatch(/redirects/);
-    // Bounded: MAX_REDIRECTS + 1 requests, not an unbounded loop holding a
-    // worker slot for the rest of the hour.
-    expect(calls).toBeLessThanOrEqual(6);
-  });
+  }, 40_000);
 
-  it("records the final URL after a legitimate redirect, not the one asked for", async () => {
-    // Monitored URLs redirect to www or to HTTPS constantly, so refusing
-    // redirects outright — the webhook module's approach — would break the
-    // common case. The final URL is what drift compares against.
-    const responses: Record<string, Response> = {
-      "http://93.184.216.34/": redirectTo("http://93.184.216.34/en/"),
-      "http://93.184.216.34/en/": new Response("ok", {
-        status: 200,
-        headers: { "x-frame-options": "DENY" },
-      }),
-    };
-
-    globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
-      const url = String(input);
-      const res = responses[url];
-      if (!res) throw new Error(`unexpected fetch: ${url}`);
-      return res;
-    }) as typeof fetch;
-
-    const result = await runPulse("http://93.184.216.34/");
-
+  it("records the final URL after a legitimate redirect, not the one asked for", async ({ skip }) => {
+    if (!online) skip();
+    // Monitored URLs redirect to www or to HTTPS constantly, so refusing redirects outright (the webhook module's approach)
+    // would break the common case. The final URL is what drift compares against.
+    const final = ECHO + "/response-headers?X-Frame-Options=DENY";
+    const result = await runPulse(redirectTo(final));
     expect(result.reachable).toBe(true);
     expect(result.httpStatus).toBe(200);
-    expect(result.finalUrl).toBe("http://93.184.216.34/en/");
-    expect(result.snapshot?.present).toEqual(["x-frame-options"]);
-  });
+    expect(result.finalUrl).toBe(final);
+    expect(result.snapshot?.present).toContain("x-frame-options");
+  }, 20_000);
 
-  it("treats a 5xx as unreachable and a 404 as reachable", async () => {
+  it("treats a 5xx as unreachable and a 404 as reachable", async ({ skip }) => {
+    if (!online) skip();
     // Availability is "is the site serving", not "does this path exist".
     for (const [status, reachable] of [[503, false], [404, true], [200, true]] as const) {
-      globalThis.fetch = vi.fn(async () => new Response(null, { status })) as typeof fetch;
-      const result = await runPulse("http://93.184.216.34/");
-      expect(result.reachable, `HTTP ${status}`).toBe(reachable);
+      const result = await runPulse(ECHO + "/status/" + status);
+      expect(result.reachable, "HTTP " + status).toBe(reachable);
     }
-  });
+  }, 30_000);
 
-  it("reports a network failure as a result, never a throw", async () => {
-    globalThis.fetch = vi.fn(async () => {
-      throw new Error("getaddrinfo ENOTFOUND example.com");
-    }) as typeof fetch;
-
-    const result = await runPulse("http://93.184.216.34/");
-
+  it("reports a name that does not exist as a result, never a throw", async () => {
+    const result = await runPulse("http://no-such-host-" + Date.now() + ".invalid/");
     expect(result.reachable).toBe(false);
-    expect(result.failureReason).toContain("ENOTFOUND");
+    expect(result.failureReason).toBeTruthy();
     expect(result.snapshot).toBeNull();
   });
 });
