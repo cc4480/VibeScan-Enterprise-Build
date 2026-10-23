@@ -1,5 +1,9 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { runBaasProbes } from "./baasProbes.js";
+import { useRouteSite } from "./routeSite.testkit";
+
+// The site is a real web server on loopback (lib/routeSite.testkit.ts); what it serves at each path is set per test.
+const site = await useRouteSite();
 
 /**
  * First tests for this module. Nothing reached it before: its only importer is
@@ -7,27 +11,12 @@ import { runBaasProbes } from "./baasProbes.js";
  * untested confirmation step expensive.
  */
 
-const originalFetch = globalThis.fetch;
-afterEach(() => {
-  globalThis.fetch = originalFetch;
-  vi.restoreAllMocks();
-});
-
 /** Routes by pathname; anything unlisted 404s. */
 function serve(routes: Record<string, { body: string; status?: number }>) {
-  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    const path = new URL(url).pathname;
-    const hit = routes[path];
-    if (!hit) return new Response("Not Found", { status: 404 });
-    return new Response(hit.body, {
-      status: hit.status ?? 200,
-      headers: { "content-type": "application/json" },
-    });
-  }) as typeof fetch;
+  site.routes(routes);
 }
 
-const PB_PAGE = '<html><body><script>const pb = new PocketBase("https://example.com");pb.collection("users")</script></body></html>';
+const PB_PAGE = `<html><body><script>const pb = new PocketBase("${site.origin}");pb.collection("users")</script></body></html>`;
 
 // What PocketBase actually answers on /api/health.
 const PB_HEALTH = JSON.stringify({ code: 200, message: "API is healthy.", data: {} });
@@ -41,7 +30,7 @@ describe("runBaasProbes — a real PocketBase with open collections", () => {
       },
     });
 
-    const vulns = await runBaasProbes("https://example.com/", PB_PAGE);
+    const vulns = await runBaasProbes(`${site.origin}/`, PB_PAGE);
     expect(vulns.length).toBeGreaterThan(0);
     expect(vulns[0]!.severity).toBe("critical");
     expect(vulns[0]!.name).toMatch(/PocketBase/);
@@ -51,14 +40,8 @@ describe("runBaasProbes — a real PocketBase with open collections", () => {
 
 describe("runBaasProbes — does not invent one", () => {
   it("makes no requests when the page never mentions a BaaS", async () => {
-    const calls: string[] = [];
-    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
-      calls.push(String(input));
-      return new Response("{}", { status: 200 });
-    }) as typeof fetch;
-
-    expect(await runBaasProbes("https://example.com/", "<html><body>hello</body></html>")).toEqual([]);
-    expect(calls).toEqual([]);
+    expect(await runBaasProbes(`${site.origin}/`, "<html><body>hello</body></html>")).toEqual([]);
+    expect(site.seen).toEqual([]);
   });
 
   it("stands down when the health endpoint is not PocketBase", async () => {
@@ -70,7 +53,7 @@ describe("runBaasProbes — does not invent one", () => {
     });
 
     const page = "<html><body><article>Why we moved off PocketBase last year</article></body></html>";
-    expect(await runBaasProbes("https://example.com/", page)).toEqual([]);
+    expect(await runBaasProbes(`${site.origin}/`, page)).toEqual([]);
   });
 
   it("does not report a generic API whose health endpoint says status ok", async () => {
@@ -85,7 +68,7 @@ describe("runBaasProbes — does not invent one", () => {
     });
 
     const page = "<html><body><p>We use pocketbase for prototypes.</p></body></html>";
-    expect(await runBaasProbes("https://example.com/", page)).toEqual([]);
+    expect(await runBaasProbes(`${site.origin}/`, page)).toEqual([]);
   });
 
   it("reports nothing when collections require auth", async () => {
@@ -94,7 +77,7 @@ describe("runBaasProbes — does not invent one", () => {
       "/api/collections/users/records": { body: JSON.stringify({ code: 403, message: "Only admins can access." }), status: 403 },
     });
 
-    expect(await runBaasProbes("https://example.com/", PB_PAGE)).toEqual([]);
+    expect(await runBaasProbes(`${site.origin}/`, PB_PAGE)).toEqual([]);
   });
 
   it("survives a URL it cannot parse", async () => {
@@ -110,7 +93,7 @@ describe("runBaasProbes — public-by-design and empty lists", () => {
 
   it("PocketBase 200 with empty items is not HIGH (list rule filtering to nothing) — clean twin", async () => {
     serve({ "/api/health": { body: PB_HEALTH }, "/api/collections/users/records": { body: list([]) } });
-    const vulns = await runBaasProbes("https://example.com/", PB_PAGE);
+    const vulns = await runBaasProbes(`${site.origin}/`, PB_PAGE);
     expect(vulns.filter((v) => HIGH_OR_WORSE.includes(v.severity))).toEqual([]);
     expect(vulns).toHaveLength(1);
     expect(vulns[0]!.severity).toBe("info");
@@ -121,7 +104,7 @@ describe("runBaasProbes — public-by-design and empty lists", () => {
       "/api/health": { body: PB_HEALTH },
       "/api/collections/products/records": { body: list([{ id: "p1", name: "Mug", price: 3 }]) },
     });
-    const vulns = await runBaasProbes("https://example.com/", PB_PAGE);
+    const vulns = await runBaasProbes(`${site.origin}/`, PB_PAGE);
     expect(vulns).toHaveLength(1);
     expect(vulns[0]!.severity).toBe("info");
   });
@@ -131,12 +114,12 @@ describe("runBaasProbes — public-by-design and empty lists", () => {
       "/api/health": { body: PB_HEALTH },
       "/api/collections/posts/records": { body: list([{ id: "p1", title: "x", author_email: "a@b.co" }]) },
     });
-    const vulns = await runBaasProbes("https://example.com/", PB_PAGE);
+    const vulns = await runBaasProbes(`${site.origin}/`, PB_PAGE);
     expect(vulns[0]!.severity).toBe("critical");
   });
 
   const AW_PAGE =
-    '<script>import { Client } from "appwrite"; new Client().setEndpoint("https://aw.example.com/v1").setProject("abcdef0123456789abcd")</script>';
+    `<script>import { Client } from "appwrite"; new Client().setEndpoint("${site.origin}/v1").setProject("abcdef0123456789abcd")</script>`;
   const awServe = (docs: unknown[], collection: string) =>
     serve({
       "/v1/health": { body: "{}" },
@@ -145,14 +128,14 @@ describe("runBaasProbes — public-by-design and empty lists", () => {
 
   it("Appwrite empty documents is not HIGH — clean twin", async () => {
     awServe([], "users");
-    const vulns = await runBaasProbes("https://example.com/", AW_PAGE);
+    const vulns = await runBaasProbes(`${site.origin}/`, AW_PAGE);
     expect(vulns.filter((v) => HIGH_OR_WORSE.includes(v.severity))).toEqual([]);
   });
 
   it("Appwrite documents from users are still CRITICAL; from posts are INFO", async () => {
     awServe([{ $id: "1", email: "a@b.co" }], "users");
-    expect((await runBaasProbes("https://example.com/", AW_PAGE))[0]!.severity).toBe("critical");
+    expect((await runBaasProbes(`${site.origin}/`, AW_PAGE))[0]!.severity).toBe("critical");
     awServe([{ $id: "1", title: "Hello" }], "posts");
-    expect((await runBaasProbes("https://example.com/", AW_PAGE))[0]!.severity).toBe("info");
+    expect((await runBaasProbes(`${site.origin}/`, AW_PAGE))[0]!.severity).toBe("info");
   });
 });

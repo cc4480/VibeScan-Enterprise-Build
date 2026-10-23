@@ -31,26 +31,17 @@ describe("blocked target addresses", () => {
     // so hop 0 is permitted to reach a loopback stand-in and hop 1 is judged
     // under the shipping default.
     const attempted: string[] = [];
-    const original = globalThis.fetch;
-    globalThis.fetch = (async (input: string | URL | Request) => {
-      attempted.push(String(input));
+    const { port } = await serve((req, res) => {
+      attempted.push(req.url ?? "");
       delete process.env["ALLOW_PRIVATE_SCAN_TARGETS"];
-      return new Response(null, {
-        status: 302,
-        headers: { location: "http://169.254.169.254/latest/meta-data/" },
-      });
-    }) as typeof fetch;
+      res.writeHead(302, { location: "http://169.254.169.254/latest/meta-data/" }).end();
+    });
 
     process.env["ALLOW_PRIVATE_SCAN_TARGETS"] = "true";
-    try {
-      expect(await scanFetch("http://127.0.0.1:9/")).toBeNull();
-    } finally {
-      globalThis.fetch = original;
-    }
+    expect(await scanFetch(`http://127.0.0.1:${port}/`)).toBeNull();
 
-    // The metadata address was never put on the wire.
-    expect(attempted).toHaveLength(1);
-    expect(attempted[0]).toContain("127.0.0.1");
+    // The loopback server was asked once; the metadata address was never put on the wire.
+    expect(attempted).toEqual(["/"]);
   });
 });
 
