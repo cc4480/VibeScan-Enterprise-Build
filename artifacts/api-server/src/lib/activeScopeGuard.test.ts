@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { activeProbesStillAllowed } from "./activeScopeGuard";
 
 describe("activeProbesStillAllowed", () => {
@@ -14,9 +14,10 @@ describe("activeProbesStillAllowed", () => {
     expect(await activeProbesStillAllowed("https://example.com/", "https://www.example.com/", async () => false))
       .toEqual({ allowed: false, redirectedTo: "www.example.com" });
 
-    const verify = vi.fn(async () => true);
+    const asked: string[] = [];
+    const verify = async (url: string) => { asked.push(url); return true; };
     expect(await activeProbesStillAllowed("https://example.com/", "https://www.example.com/", verify)).toEqual({ allowed: true });
-    expect(verify).toHaveBeenCalledWith("https://www.example.com/");
+    expect(asked).toEqual(["https://www.example.com/"]);
   });
 
   it("withdraws active probing when the site redirects to somebody else's host", async () => {
@@ -31,9 +32,10 @@ describe("activeProbesStillAllowed", () => {
 
   it("withdraws it for www -> apex unless the apex is verified as well", async () => {
     expect((await activeProbesStillAllowed("https://www.example.com/", "https://example.com/")).allowed).toBe(false);
-    const verify = vi.fn(async () => true);
+    const asked: string[] = [];
+    const verify = async (url: string) => { asked.push(url); return true; };
     expect((await activeProbesStillAllowed("https://www.example.com/", "https://example.com/", verify)).allowed).toBe(true);
-    expect(verify).toHaveBeenCalledWith("https://example.com/");
+    expect(asked).toEqual(["https://example.com/"]);
   });
 
   it("fails closed when the verification lookup throws or says no", async () => {

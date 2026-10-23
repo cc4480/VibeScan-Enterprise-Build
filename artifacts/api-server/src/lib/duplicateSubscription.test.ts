@@ -25,7 +25,6 @@ vi.mock("./stripe", () => ({
     };
   },
 }));
-vi.mock("./logger", () => ({ logger: { child: () => ({ warn: vi.fn(), error: vi.fn() }) } }));
 
 import { dropDuplicateSubscription } from "./duplicateSubscription";
 

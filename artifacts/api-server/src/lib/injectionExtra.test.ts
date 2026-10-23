@@ -1,25 +1,32 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { runExtraInjectionProbes, evaluatedSyntax } from "./injectionExtra";
 import { rendersAsHtml } from "./injectionProbe";
+import { serve as listen, closeServers } from "./testkit";
 
-afterEach(() => vi.unstubAllGlobals());
-const ORIGIN = "https://shop.example.com";
+afterEach(closeServers);
 
-/** A fake server: `page(url)` returns the body, `headers(url)` any extra response headers. */
-function serve(page: (u: URL) => string, headers: (u: URL) => Record<string, string> = () => ({})) {
-  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-    const u = new URL(url);
-    return new Response(page(u), { status: 200, headers: headers(u) });
-  }));
+// A real server on loopback: `page(url)` returns the body, `headers(url)` any extra response headers. Every request it
+// receives is recorded, so a test can say what the probe did and did not send.
+let origin = "";
+let hits: string[] = [];
+async function serve(page: (u: URL) => string, headers: (u: URL) => Record<string, string> = () => ({})) {
+  hits = [];
+  const port = await listen((req, res) => {
+    hits.push(req.url ?? "");
+    const u = new URL(req.url ?? "/", "http://127.0.0.1");
+    res.writeHead(200, { "content-type": "text/html", ...headers(u) });
+    res.end(page(u));
+  });
+  origin = `http://127.0.0.1:${port}`;
 }
-const run = (cases = [{ path: "/greet", param: "name" }]) => runExtraInjectionProbes(ORIGIN, cases);
+const run = (cases = [{ path: "/greet", param: "name" }]) => runExtraInjectionProbes(origin, cases);
 
 /** Evaluates ${a*b}: what a vulnerable template engine does. */
 const evaluate = (v: string) => v.replace(/\$\{(\d+)\*(\d+)\}/g, (_m, a, b) => String(Number(a) * Number(b)));
 
 describe("server-side template injection", () => {
   it("flags a server that evaluates an expression, and names the syntax", async () => {
-    serve((u) => `<h1>Hello ${evaluate(u.searchParams.get("name") ?? "")}</h1>`);
+    await serve((u) => `<h1>Hello ${evaluate(u.searchParams.get("name") ?? "")}</h1>`);
     const out = await run();
     expect(out.map((f) => f.name)).toEqual(["Server-Side Template Injection"]);
     expect(out[0]!.evidence).toContain("${ }");
@@ -27,12 +34,12 @@ describe("server-side template injection", () => {
   });
 
   it("clean twin: a server that echoes the expression as text does not fire", async () => {
-    serve((u) => `<h1>Hello ${u.searchParams.get("name")}</h1>`);
+    await serve((u) => `<h1>Hello ${u.searchParams.get("name")}</h1>`);
     expect(await run()).toEqual([]);
   });
 
   it("clean twin: a page that merely contains the product number elsewhere does not fire", async () => {
-    serve(() => `<p>Order 28146 shipped</p>`);
+    await serve(() => `<p>Order 28146 shipped</p>`);
     expect(await run()).toEqual([]);
   });
 
@@ -47,7 +54,7 @@ describe("server-side template injection", () => {
 
 describe("header injection", () => {
   it("flags a server that writes the line break into its headers", async () => {
-    serve(() => "ok", (u) => {
+    await serve(() => "ok", (u) => {
       const v = u.searchParams.get("name") ?? "";
       const m = /\r\n(x-sq-[a-z0-9]+): (\S+)/.exec(v);
       return m ? { [m[1]!]: m[2]! } : {};
@@ -57,27 +64,29 @@ describe("header injection", () => {
   });
 
   it("clean twin: a server that encodes or strips the line break does not fire", async () => {
-    serve(() => "ok", () => ({ "x-echo": "sanitised" }));
+    await serve(() => "ok", () => ({ "x-echo": "sanitised" }));
     expect(await run()).toEqual([]);
   });
 });
 
 describe("safety", () => {
   it("never probes an endpoint whose name says it performs an action", async () => {
-    serve(() => "ok");
+    await serve(() => "ok");
     await run([{ path: "/account/delete", param: "id" }]);
-    expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
+    expect(hits).toHaveLength(0);
   });
 
   it("tests at most ten parameters", async () => {
-    serve(() => "ok");
+    await serve(() => "ok");
     await run(Array.from({ length: 30 }, (_, i) => ({ path: "/p", param: `p${i}` })));
     // two requests per parameter
-    expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(20);
+    expect(hits).toHaveLength(20);
   });
 
   it("treats a network failure as nothing found", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("boom"); }));
+    // A port that was open and is now closed: the connection is genuinely refused.
+    await serve(() => "ok");
+    await closeServers();
     expect(await run()).toEqual([]);
   });
 });

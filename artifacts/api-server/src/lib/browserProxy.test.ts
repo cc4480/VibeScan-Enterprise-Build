@@ -2,10 +2,12 @@
  * The headless browser's name resolution goes through the vetted proxy, against a real Chromium.
  *
  * The address rule is replaced with "allow everything", standing in for a pre-check that a rebinding
- * name has already fooled; what is left to stop the fetch is the proxy's connect-time vetting.
+ * name has already fooled; what is left to stop the fetch is the proxy's connect-time vetting. The rebinding name is
+ * a real one: *.localtest.me is public DNS that answers 127.0.0.1, so the browser really resolves a name to loopback.
+ * Skips when that name cannot be resolved (no network).
  */
-import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from "vitest";
-import dns from "node:dns";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
+import dns from "node:dns/promises";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { initBrowser, closeBrowser, renderPage } from "./browser";
@@ -19,7 +21,9 @@ try {
   chromiumAvailable = true;
 } catch { /* no playwright, or no browser installed */ }
 // A configured upstream proxy replaces the vetted one (see browserProxy.ts), so there is nothing to test.
-const suite = chromiumAvailable && !process.env["HTTPS_PROXY"] && !process.env["HTTP_PROXY"] ? describe : describe.skip;
+let nameResolves = false;
+try { nameResolves = (await dns.lookup("rebind.localtest.me", { all: true })).some((a) => a.address === "127.0.0.1"); } catch { /* offline */ }
+const suite = chromiumAvailable && nameResolves && !process.env["HTTPS_PROXY"] && !process.env["HTTP_PROXY"] ? describe : describe.skip;
 
 const optOut = process.env["ALLOW_PRIVATE_SCAN_TARGETS"];
 let hits = 0;
@@ -38,28 +42,22 @@ suite("browser through the vetted proxy (real Chromium)", () => {
   afterEach(() => {
     hits = 0;
     __setBrowserUrlRule(null);
-    vi.restoreAllMocks();
     if (optOut === undefined) delete process.env["ALLOW_PRIVATE_SCAN_TARGETS"];
     else process.env["ALLOW_PRIVATE_SCAN_TARGETS"] = optOut;
   });
 
-  const mapNameToLoopback = () =>
-    vi.spyOn(dns, "lookup").mockImplementation(((_h: string, _o: unknown, cb: (e: null, a: unknown[]) => void) =>
-      cb(null, [{ address: "127.0.0.1", family: 4 }])) as never);
   const render = (url: string) => runWithScanHttp({ targetUrl: url } as never, () => renderPage(url));
 
   it("does not fetch a name that resolves to loopback at connect time, even when the pre-check passed", async () => {
-    mapNameToLoopback();
     __setBrowserUrlRule(async () => true);
-    await render(`http://rebind.attacker.test:${port}/`);
+    await render(`http://rebind.localtest.me:${port}/`);
     expect(hits).toBe(0);
   }, 60_000);
 
   it("does reach it through the proxy when the operator opts in (proving the traffic goes via the proxy)", async () => {
     process.env["ALLOW_PRIVATE_SCAN_TARGETS"] = "true";
-    mapNameToLoopback();
     __setBrowserUrlRule(async () => true);
-    const page = await render(`http://optin.test:${port}/`);
+    const page = await render(`http://optin.localtest.me:${port}/`);
     expect(hits).toBeGreaterThan(0);
     expect(JSON.stringify(page)).toContain("internal page");
   }, 60_000);

@@ -1,16 +1,22 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { ScanVulnerability } from "./scanner";
-
-const scanFetch = vi.fn(async (_url: string, _opts: { method?: string }) => ({
-  status: 200,
-  body: "",
-  headers: { "access-control-allow-origin": "https://other.example" } as Record<string, string>,
-}));
-
-vi.mock("./http", () => ({ scanFetch: (url: string, opts: { method?: string }) => scanFetch(url, opts) }));
-vi.mock("./appOrigin", () => ({ APP_DOMAIN: "secscan.us" }));
-
 import { reprobe } from "./reprobe";
+import { serve, closeServers } from "./testkit";
+
+// A real server on loopback that reflects a foreign origin in its CORS header and records every method it receives,
+// so the test says what the re-probe actually sent rather than what a stub was asked.
+let methods: string[] = [];
+let target = "";
+beforeEach(async () => {
+  methods = [];
+  const port = await serve((req, res) => {
+    methods.push(req.method ?? "");
+    res.writeHead(200, { "access-control-allow-origin": "https://other.example", "content-type": "text/html" });
+    res.end("");
+  });
+  target = `http://127.0.0.1:${port}/`;
+});
+afterEach(closeServers);
 
 const log = { info: () => {}, warn: () => {} };
 
@@ -26,23 +32,17 @@ const corsFinding = (): ScanVulnerability => ({
   confidence: 60,
 } as unknown as ScanVulnerability);
 
-const sentMethods = () => scanFetch.mock.calls.map((c) => c[1]?.method);
-
 describe("reprobe active OPTIONS probe", () => {
-  beforeEach(() => {
-    scanFetch.mockClear();
-  });
-
   it("does not send the OPTIONS request with a crafted Origin when the scan is not verified", async () => {
-    await reprobe("https://unverified.example/", [corsFinding()], log);
-    await reprobe("https://unverified.example/", [corsFinding()], log, { allowActiveProbes: false });
-    expect(sentMethods()).not.toContain("OPTIONS");
+    await reprobe(target, [corsFinding()], log);
+    await reprobe(target, [corsFinding()], log, { allowActiveProbes: false });
+    expect(methods).not.toContain("OPTIONS");
     // The passive GET still runs; only the active probe is withheld.
-    expect(sentMethods()).toContain("GET");
+    expect(methods).toContain("GET");
   });
 
   it("sends the OPTIONS request once the scan is verified", async () => {
-    await reprobe("https://owned.example/", [corsFinding()], log, { allowActiveProbes: true });
-    expect(sentMethods()).toContain("OPTIONS");
+    await reprobe(target, [corsFinding()], log, { allowActiveProbes: true });
+    expect(methods).toContain("OPTIONS");
   });
 });
