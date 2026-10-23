@@ -1,24 +1,40 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-
-// scanFetch (the hostname body check) is mocked per-test; the DoH CNAME lookup
-// uses global fetch, stubbed below.
-const scanFetchMock = vi.fn();
-vi.mock("./http.js", () => ({ scanFetch: (...a: unknown[]) => scanFetchMock(...a) }));
-
+import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
+import { useDohStub } from "./dohStub.testkit";
 import { checkSubdomainTakeover } from "./subdomainTakeover.js";
 
-function doh(cname: string): Response {
-  return new Response(JSON.stringify({ Status: 0, Answer: [{ name: "x", type: 5, TTL: 60, data: cname }] }), {
-    status: 200,
-    headers: { "content-type": "application/dns-json" },
-  });
+// The CNAME comes from a real DNS-over-HTTPS server on loopback (lib/dohStub.testkit.ts). The hostname's own web server
+// is a real HTTP server too: TAKEOVER_PROBE_ORIGIN sends the check's request to it, naming the hostname in X-Probe-Host,
+// so what the server answers is decided here and which hostname it was asked about is recorded.
+const doh = await useDohStub();
+
+const site = { status: 200, body: "", hosts: [] as string[] };
+const server = http.createServer((req, res) => {
+  site.hosts.push(String(req.headers["x-probe-host"]));
+  res.writeHead(site.status, { "content-type": "text/html" }).end(site.body);
+});
+await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+process.env["TAKEOVER_PROBE_ORIGIN"] = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+afterAll(() => new Promise<void>((r) => {
+  delete process.env["TAKEOVER_PROBE_ORIGIN"];
+  server.closeAllConnections();
+  server.close(() => r());
+}));
+
+const CNAME = 5;
+/** The hostname is a CNAME to `target`, and its web server answers with this. */
+function serve(host: string, target: string, status: number, body: string) {
+  doh.set(host, "CNAME", [{ data: target, type: CNAME }]);
+  site.status = status;
+  site.body = body;
 }
 
 beforeEach(() => {
-  vi.stubGlobal("fetch", vi.fn(async () => doh("reddit.map.fastly.net")));
-  scanFetchMock.mockReset();
+  site.status = 200;
+  site.body = "";
+  site.hosts.length = 0;
 });
-afterEach(() => vi.unstubAllGlobals());
 
 describe("checkSubdomainTakeover — Host-routing false positive", () => {
   it("does NOT flag a live Fastly-fronted site whose hostname serves real content", async () => {
@@ -26,17 +42,19 @@ describe("checkSubdomainTakeover — Host-routing false positive", () => {
     // *.fastly.net, but the real hostname serves the real site. The buggy
     // version fetched the raw CNAME target, which returns Fastly's
     // "unknown domain" error and looked like a takeover.
-    scanFetchMock.mockResolvedValue({ status: 200, body: "<!doctype html><html><body>Welcome to Reddit</body></html>" });
+    serve("www.reddit.com", "reddit.map.fastly.net", 200, "<!doctype html><html><body>Welcome to Reddit</body></html>");
 
     const findings = await checkSubdomainTakeover("https://www.reddit.com");
     expect(findings).toEqual([]);
   });
 
   it("STILL flags a genuinely dangling CNAME whose hostname returns the provider's unclaimed error", async () => {
-    scanFetchMock.mockResolvedValue({
-      status: 404,
-      body: "Fastly error: unknown domain: abandoned.example.com. Please check that this domain has been added to a service.",
-    });
+    serve(
+      "abandoned.example.com",
+      "reddit.map.fastly.net",
+      404,
+      "Fastly error: unknown domain: abandoned.example.com. Please check that this domain has been added to a service.",
+    );
 
     const findings = await checkSubdomainTakeover("https://abandoned.example.com");
     expect(findings.length).toBe(1);
@@ -46,55 +64,45 @@ describe("checkSubdomainTakeover — Host-routing false positive", () => {
     expect(findings[0]!.severity).toBe("medium");
   });
 
-  it("fetches the hostname, never the raw CNAME target", async () => {
-    scanFetchMock.mockResolvedValue({ status: 200, body: "real site" });
+  it("asks for the hostname, never the raw CNAME target", async () => {
+    serve("www.reddit.com", "reddit.map.fastly.net", 200, "real site");
     await checkSubdomainTakeover("https://www.reddit.com");
-    // every scanFetch call must target the hostname, not *.fastly.net
-    for (const call of scanFetchMock.mock.calls) {
-      expect(String(call[0])).toContain("www.reddit.com");
-      expect(String(call[0])).not.toContain("fastly.net");
+    expect(site.hosts.length).toBeGreaterThan(0);
+    for (const host of site.hosts) {
+      expect(host).toBe("www.reddit.com");
     }
   });
 });
 
 describe("checkSubdomainTakeover — live hosts that merely CNAME to a provider", () => {
-  const cnameTo = (target: string) => vi.stubGlobal("fetch", vi.fn(async () => doh(target)));
-  const site = (host: string) => checkSubdomainTakeover(`https://${host}`);
+  const site_ = (host: string) => checkSubdomainTakeover(`https://${host}`);
 
   it("does NOT flag a live minified Netlify page that mentions netlify and 404 on one line", async () => {
-    cnameTo("app.netlify.app");
-    scanFetchMock.mockResolvedValue({
-      status: 200,
-      body: '<html><script>/* built on netlify */var e="404";</script><body>Welcome</body></html>',
-    });
-    expect(await site("www.example.com")).toEqual([]);
+    serve("www.example.com", "app.netlify.app", 200, '<html><script>/* built on netlify */var e="404";</script><body>Welcome</body></html>');
+    expect(await site_("www.example.com")).toEqual([]);
   });
 
   it("does NOT flag a live Fly.io API whose root answers 404 Not Found with a JSON body", async () => {
-    cnameTo("api.fly.dev");
-    scanFetchMock.mockResolvedValue({ status: 200, body: "404 Not Found" });
-    expect(await site("api.example.com")).toEqual([]);
+    serve("api.example.com", "api.fly.dev", 200, "404 Not Found");
+    expect(await site_("api.example.com")).toEqual([]);
   });
 
   it("does NOT flag a Vercel API-only project whose route answers 404: NOT_FOUND", async () => {
-    cnameTo("api.vercel.app");
-    scanFetchMock.mockResolvedValue({ status: 404, body: "The page could not be found\n\nNOT_FOUND\n404: NOT_FOUND" });
-    expect(await site("api.example.com")).toEqual([]);
+    serve("api.example.com", "api.vercel.app", 404, "The page could not be found\n\nNOT_FOUND\n404: NOT_FOUND");
+    expect(await site_("api.example.com")).toEqual([]);
   });
 
   it("does NOT flag a live Ghost or Tumblr page whose copy quotes the fingerprint phrase", async () => {
     const copy = "<article>Why the thing you were looking for is no longer here, or never was — and Whatever you were looking for doesn't currently exist at this address</article>";
-    cnameTo("blog.ghost.io");
-    scanFetchMock.mockResolvedValue({ status: 200, body: copy });
-    expect(await site("blog.example.com")).toEqual([]);
-    cnameTo("x.tumblr.com");
-    expect(await site("t.example.com")).toEqual([]);
+    serve("blog.example.com", "blog.ghost.io", 200, copy);
+    expect(await site_("blog.example.com")).toEqual([]);
+    serve("t.example.com", "x.tumblr.com", 200, copy);
+    expect(await site_("t.example.com")).toEqual([]);
   });
 
   it("does NOT flag a large live error-styled page even with an error status", async () => {
-    cnameTo("x.ghost.io");
-    scanFetchMock.mockResolvedValue({ status: 404, body: "The thing you were looking for is no longer here, or never was" + " x".repeat(15_000) });
-    expect(await site("blog.example.com")).toEqual([]);
+    serve("blog.example.com", "x.ghost.io", 404, "The thing you were looking for is no longer here, or never was" + " x".repeat(15_000));
+    expect(await site_("blog.example.com")).toEqual([]);
   });
 });
 
@@ -110,8 +118,7 @@ describe("checkSubdomainTakeover — real unclaimed-resource pages are still det
     ["GitHub Pages", "x.github.io", 404, "<p>There isn't a GitHub Pages site here.</p>", "critical"],
   ];
   it.each(cases)("%s", async (name, target, status, body, severity) => {
-    vi.stubGlobal("fetch", vi.fn(async () => doh(target)));
-    scanFetchMock.mockResolvedValue({ status, body });
+    serve("gone.example.com", target, status, body);
     const findings = await checkSubdomainTakeover("https://gone.example.com");
     expect(findings).toHaveLength(1);
     expect(findings[0]!.name).toContain(name);
@@ -120,16 +127,14 @@ describe("checkSubdomainTakeover — real unclaimed-resource pages are still det
   });
 
   it("Netlify and Fly.io bare 404s are reported only as unverified, low-confidence candidates", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => doh("x.netlify.app")));
-    scanFetchMock.mockResolvedValue({ status: 404, body: "Not Found - Request ID: 01HABCDEF-XYZ" });
+    serve("gone.example.com", "x.netlify.app", 404, "Not Found - Request ID: 01HABCDEF-XYZ");
     let f = await checkSubdomainTakeover("https://gone.example.com");
     expect(f[0]!.name).toContain("Unverified");
     expect(f[0]!.severity).toBe("medium");
     expect(f[0]!.confidence).toBeLessThan(50);
     expect(f[0]!.description).toMatch(/verify/i);
 
-    vi.stubGlobal("fetch", vi.fn(async () => doh("x.fly.dev")));
-    scanFetchMock.mockResolvedValue({ status: 404, body: "404 Not Found" });
+    serve("gone.example.com", "x.fly.dev", 404, "404 Not Found");
     f = await checkSubdomainTakeover("https://gone.example.com");
     expect(f[0]!.severity).toBe("medium");
   });

@@ -77,10 +77,10 @@ import { readBodyBounded } from "./httpBody";
 
 // ─── HTTP helper ──────────────────────────────────────────────────────────────
 
-async function safeGet(url: string): Promise<{ status: number; body: string } | null> {
+async function safeGet(url: string, host?: string): Promise<{ status: number; body: string } | null> {
   // manual: a dangling CNAME is identified by the parked provider's own
   // response, so a redirect must not be followed away from it.
-  const res = await scanFetch(url, { redirect: "manual", timeoutMs: TIMEOUT_MS });
+  const res = await scanFetch(url, { redirect: "manual", timeoutMs: TIMEOUT_MS, ...(host ? { headers: { "x-probe-host": host } } : {}) });
   return res ? { status: res.status, body: res.body } : null;
 }
 
@@ -116,9 +116,12 @@ export async function checkSubdomainTakeover(
   // the hostname itself — because that is the Host an attacker (and a visitor)
   // would send — while a claimed, working site serves its real page there. So
   // the hostname is the only correct place to look.
-  const result =
-    (await safeGet(`https://${hostname}/`)) ??
-    (await safeGet(`http://${hostname}/`));
+  // TAKEOVER_PROBE_ORIGIN sends the same request to one fixed address naming the hostname in an X-Probe-Host header (fetch
+  // will not send a Host of its own choosing), which is how tests reach a server of their own; unset, the hostname is fetched itself.
+  const via = process.env["TAKEOVER_PROBE_ORIGIN"];
+  const result = via
+    ? await safeGet(`${via.replace(/\/$/, "")}/`, hostname)
+    : ((await safeGet(`https://${hostname}/`)) ?? (await safeGet(`http://${hostname}/`)));
 
   if (!result) return [];
 
