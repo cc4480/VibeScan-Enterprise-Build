@@ -12,8 +12,7 @@
  *   - left no trace in the report of an account it had created on the customer's site;
  *   - had no test at all.
  *
- * Decisions are ordered so nothing is created unless every earlier condition holds, and the
- * network-touching pieces are injectable so the whole sequence can be tested.
+ * Decisions are ordered so nothing is created unless every earlier condition holds.
  */
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
@@ -41,11 +40,6 @@ export interface CrossAccountStepInput {
   ledger: TestLedger;
   /** Names of check groups that could not run; the scanner turns a non-empty list into a coverage finding. */
   unrunFamilies: string[];
-}
-
-export interface CrossAccountDeps {
-  attempt?: typeof attemptAutoSecondAccount;
-  probe?: typeof runAccessControlProbesDetailed;
 }
 
 function accountNotice(email: string, usable: boolean): ScanVulnerability {
@@ -83,11 +77,8 @@ function attemptReason(a: { skippedReason?: string; submitted?: boolean; email?:
 
 export async function runCrossAccountStep(
   input: CrossAccountStepInput,
-  deps: CrossAccountDeps = {},
 ): Promise<ScanVulnerability[]> {
   const { ledger, primary } = input;
-  const attempt = deps.attempt ?? attemptAutoSecondAccount;
-  const probe = deps.probe ?? runAccessControlProbesDetailed;
 
   if (!input.allowActiveProbes) {
     ledger.skip("active", NAME, NOT_VERIFIED);
@@ -132,7 +123,7 @@ export async function runCrossAccountStep(
     }
     let made;
     try {
-      made = await attempt(input.finalUrl);
+      made = await attemptAutoSecondAccount(input.finalUrl);
     } catch (err) {
       console.error("[scan] auto second-account creation failed", err);
       input.unrunFamilies.push(NAME);
@@ -155,7 +146,7 @@ export async function runCrossAccountStep(
     .trackOutcome(
       "active",
       NAME,
-      probe({ urls, primary, secondary, secondaryAutoCreated: autoCreated }).then((r) => ({
+      runAccessControlProbesDetailed({ urls, primary, secondary, secondaryAutoCreated: autoCreated }).then((r) => ({
         findings: r.findings,
         ...(r.compared === 0
           ? { notTested: r.notTested ?? "nothing was compared: none of the record URLs could be read by the first account, or a request for the second account or the anonymous check did not complete" }
