@@ -2,13 +2,14 @@
  * The CLI that the GitHub Action wraps (deploy/cli/secscan.mjs). It lives outside
  * the workspace so it can be published on its own; its tests live here.
  */
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
+import { useRealDb, TEST_DATABASE_URL, openDb, startApp, uniqueEmail, type TestApp } from "./realDb.testkit";
+
+useRealDb();
 // @ts-ignore -- a plain ESM script with no declaration file
 import { parseArgs, countAtOrAbove, policyFailure, formatSummary, run, EXIT } from "../../../../deploy/cli/secscan.mjs";
 
 afterEach(() => {
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
   delete process.env["SECSCAN_TOKEN"];
 });
 
@@ -91,86 +92,151 @@ describe("formatSummary", () => {
   });
 });
 
-describe("run: exit codes", () => {
-  function api(routes: Record<string, () => { status?: number; body: unknown }>) {
-    vi.stubGlobal("fetch", async (url: string, init?: { method?: string }) => {
-      const path = new URL(url).pathname.replace("/api/v1", "");
-      const key = `${init?.method ?? "GET"} ${path}`;
-      const handler = routes[key] ?? routes[`* ${path.split("/").slice(0, 3).join("/")}`];
-      if (!handler) throw new Error(`no handler for ${key}`);
-      const r = handler();
-      const text = typeof r.body === "string" ? r.body : JSON.stringify(r.body);
-      return { ok: (r.status ?? 200) < 400, status: r.status ?? 200, text: async () => text };
-    });
+describe.skipIf(!TEST_DATABASE_URL)("run: exit codes (the CLI against the real /api/v1, real Postgres)", () => {
+  let dbMod: typeof import("@workspace/db");
+  let eq: typeof import("drizzle-orm").eq;
+  let tokens: typeof import("./apiTokens");
+  let app: TestApp;
+  let api: string;
+  const users: string[] = [];
+
+  /** A user holding a live api-scope token. */
+  async function account() {
+    const [u] = await dbMod.db.insert(dbMod.usersTable).values({ email: uniqueEmail("cli") }).returning({ id: dbMod.usersTable.id });
+    users.push(u!.id);
+    const g = tokens.generateToken();
+    await dbMod.db.insert(dbMod.apiTokensTable).values({ userId: u!.id, name: "cli", tokenHash: g.hash, prefix: g.prefix, scope: "api" });
+    return { id: u!.id, token: g.token };
   }
-  const done = (over = {}) => ({ id: "s1", url: "https://a.example", status: "complete", grade: "B", findings: { critical: 0, high: 0, medium: 0, low: 0, info: 1, total: 1 }, coverage: { ran: 5, skipped: 0, failed: 0, total: 5 }, ...over });
-  const out = () => ({ log: vi.fn(), err: vi.fn(), write: vi.fn() });
+
+  /**
+   * The scan worker is not running here, so a stand-in for its result is written to the database: once the CLI has created
+   * its scan, the row is finished (or failed) with the report the worker would have saved. The API and the CLI are real.
+   */
+  async function finishWhenCreated(userId: string, result: { status: "complete" | "failed"; error?: string; vulnerabilities?: unknown[]; grade?: string }) {
+    for (let i = 0; i < 100; i++) {
+      const [scan] = await dbMod.db.select().from(dbMod.scansTable).where(eq(dbMod.scansTable.userId, userId));
+      // The API marks the row paid, then queued once the job is on the queue; finish it only after that, or the API overwrites the result.
+      if (scan && scan.status === "queued") {
+        await dbMod.db.update(dbMod.scansTable).set({ status: result.status, error: result.error ?? null, completedAt: new Date() }).where(eq(dbMod.scansTable.id, scan.id));
+        if (result.status === "complete") {
+          const tests = [{ group: "g", name: "a", status: "ran", findings: 0, durationMs: 1 }];
+          await dbMod.db.insert(dbMod.reportsTable).values({
+            scanId: scan.id, userId, targetUrl: scan.targetUrl, tier: "deep", duration: 1,
+            data: { summary: { grade: result.grade ?? "B", riskScore: 20 }, vulnerabilities: result.vulnerabilities ?? [], tests } as never,
+          });
+        }
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    throw new Error("the CLI never created a scan");
+  }
+
+  /** The CLI's output channels are parameters of run(); these record what it was told. */
+  const io = () => {
+    const logs: string[] = [];
+    const errs: string[] = [];
+    const writes: Array<[string, string]> = [];
+    return { logs, errs, writes, io: { log: (m: string) => void logs.push(m), err: (m: string) => void errs.push(m), write: (p: string, d: string) => void writes.push([p, d]) } };
+  };
+  const target = () => "http://127.0.0.1:9/cli-" + Date.now();
+
+  beforeAll(async () => {
+    dbMod = await openDb();
+    ({ eq } = await import("drizzle-orm"));
+    tokens = await import("./apiTokens");
+    const { default: v1 } = await import("../routes/v1");
+    app = startApp(v1 as never);
+    api = app.base + "/v1";
+  }, 60_000);
+
+  afterAll(async () => {
+    app?.server.close();
+    const { inArray } = await import("drizzle-orm");
+    if (users.length) {
+      await dbMod.db.delete(dbMod.reportsTable).where(inArray(dbMod.reportsTable.userId, users));
+      await dbMod.db.delete(dbMod.scansTable).where(inArray(dbMod.scansTable.userId, users));
+      await dbMod.db.delete(dbMod.apiTokensTable).where(inArray(dbMod.apiTokensTable.userId, users));
+      await dbMod.db.delete(dbMod.usersTable).where(inArray(dbMod.usersTable.id, users));
+    }
+    await dbMod?.pool?.end?.();
+  });
 
   it("0 when the scan finishes and passes", async () => {
-    api({ "POST /scans": () => ({ status: 202, body: { id: "s1" } }), "GET /scans/s1": () => ({ body: done() }) });
-    const io = out();
-    expect(await run(["scan", "https://a.example", ...TOKEN], io)).toBe(EXIT.ok);
-    expect(io.log).toHaveBeenCalledWith("PASS");
-  });
+    const a = await account();
+    const o = io();
+    const [code] = await Promise.all([run(["scan", target(), "--token", a.token, "--api", api], o.io), finishWhenCreated(a.id, { status: "complete" })]);
+    expect(code).toBe(EXIT.ok);
+    expect(o.logs).toContain("PASS");
+  }, 40_000);
 
   it("1 when a finding is at the chosen level", async () => {
-    api({ "POST /scans": () => ({ status: 202, body: { id: "s1" } }), "GET /scans/s1": () => ({ body: done({ findings: { critical: 0, high: 1, medium: 0, low: 0, info: 0, total: 1 } }) }) });
-    const io = out();
-    expect(await run(["scan", "https://a.example", ...TOKEN], io)).toBe(EXIT.policy);
-    expect(io.err).toHaveBeenCalledWith(expect.stringContaining("FAIL: 1 finding at high or worse"));
-  });
+    const a = await account();
+    const o = io();
+    const [code] = await Promise.all([
+      run(["scan", target(), "--token", a.token, "--api", api], o.io),
+      finishWhenCreated(a.id, { status: "complete", vulnerabilities: [{ severity: "high", name: "x", category: "c" }] }),
+    ]);
+    expect(code).toBe(EXIT.policy);
+    expect(o.errs.some((m) => m.includes("FAIL: 1 finding at high or worse"))).toBe(true);
+  }, 40_000);
 
   it("writes SARIF and JSON files when asked", async () => {
-    api({
-      "POST /scans": () => ({ status: 202, body: { id: "s1" } }),
-      "GET /scans/s1": () => ({ body: done() }),
-      "GET /scans/s1/sarif": () => ({ body: { version: "2.1.0" } }),
-      "GET /scans/s1/report": () => ({ body: { report: {} } }),
-    });
-    const io = out();
-    await run(["scan", "https://a.example", ...TOKEN, "--sarif", "o.sarif", "--json", "o.json"], io);
-    expect(io.write).toHaveBeenCalledWith("o.sarif", expect.stringContaining("2.1.0"));
-    expect(io.write).toHaveBeenCalledWith("o.json", expect.any(String));
-  });
+    const a = await account();
+    const o = io();
+    await Promise.all([
+      run(["scan", target(), "--token", a.token, "--api", api, "--sarif", "o.sarif", "--json", "o.json"], o.io),
+      finishWhenCreated(a.id, { status: "complete", vulnerabilities: [{ name: "Open Redirect Vulnerability", severity: "medium", description: "d", evidence: "GET https://a.example/r", solution: "s" }] }),
+    ]);
+    const sarif = o.writes.find(([p]) => p === "o.sarif");
+    expect(sarif).toBeDefined();
+    expect(JSON.parse(sarif![1]).version).toBe("2.1.0");
+    expect(o.writes.some(([p]) => p === "o.json")).toBe(true);
+  }, 40_000);
 
   it("2 when the scan itself fails", async () => {
-    api({ "POST /scans": () => ({ status: 202, body: { id: "s1" } }), "GET /scans/s1": () => ({ body: done({ status: "failed", error: "Failed to reach target URL" }) }) });
-    const io = out();
-    expect(await run(["scan", "https://a.example", ...TOKEN], io)).toBe(EXIT.scan);
-    expect(io.err).toHaveBeenCalledWith(expect.stringContaining("Failed to reach target URL"));
-  });
+    const a = await account();
+    const o = io();
+    const [code] = await Promise.all([
+      run(["scan", target(), "--token", a.token, "--api", api], o.io),
+      finishWhenCreated(a.id, { status: "failed", error: "Failed to reach target URL" }),
+    ]);
+    expect(code).toBe(EXIT.scan);
+    expect(o.errs.some((m) => m.includes("Failed to reach target URL"))).toBe(true);
+  }, 40_000);
 
   it("2 on timeout, and says the scan keeps running", async () => {
-    api({ "POST /scans": () => ({ status: 202, body: { id: "s1" } }), "GET /scans/s1": () => ({ body: done({ status: "scanning" }) }) });
-    let now = 0;
-    vi.spyOn(Date, "now").mockImplementation(() => (now += 100_000));
-    const io = out();
-    expect(await run(["scan", "https://a.example", ...TOKEN, "--timeout", "10"], io)).toBe(EXIT.scan);
-    expect(io.err).toHaveBeenCalledWith(expect.stringContaining("keeps running"));
-  });
+    // The scan never finishes. The API holds each status request for up to a minute, so this takes about that long.
+    const a = await account();
+    const o = io();
+    const code = await run(["scan", target(), "--token", a.token, "--api", api, "--timeout", "10"], o.io);
+    expect(code).toBe(EXIT.scan);
+    expect(o.errs.some((m) => m.includes("keeps running"))).toBe(true);
+  }, 120_000);
 
   it("3 when the token is refused", async () => {
-    api({ "POST /scans": () => ({ status: 401, body: { error: { code: "unauthorized", message: "Missing or invalid API token." } } }) });
-    const io = out();
-    expect(await run(["scan", "https://a.example", ...TOKEN], io)).toBe(EXIT.api);
-    expect(io.err).toHaveBeenCalledWith(expect.stringContaining("Token refused"));
+    const o = io();
+    expect(await run(["scan", target(), "--token", "ssk_never_issued", "--api", api], o.io)).toBe(EXIT.api);
+    expect(o.errs.some((m) => m.includes("Token refused"))).toBe(true);
   });
 
   it("3 when the API cannot be reached", async () => {
-    vi.stubGlobal("fetch", async () => { throw new Error("getaddrinfo ENOTFOUND"); });
-    const io = out();
-    expect(await run(["scan", "https://a.example", ...TOKEN], io)).toBe(EXIT.api);
+    // Nothing listens on port 1: the connection is genuinely refused.
+    expect(await run(["scan", target(), "--token", "ssk_x", "--api", "http://127.0.0.1:1/api/v1"], io().io)).toBe(EXIT.api);
   });
 
   it("2 for the website's own refusal, such as no scans left", async () => {
-    api({ "POST /scans": () => ({ status: 402, body: { error: { code: "payment_required", message: "No scans left" } } }) });
-    expect(await run(["scan", "https://a.example", ...TOKEN], out())).toBe(EXIT.scan);
-  });
+    const a = await account();
+    for (let i = 0; i < 3; i++) {
+      await dbMod.db.insert(dbMod.scansTable).values({ userId: a.id, userEmail: "used@example.com", targetUrl: "https://used.example/", tier: "deep", status: "complete" });
+    }
+    expect(await run(["scan", target(), "--token", a.token, "--api", api], io().io)).toBe(EXIT.scan);
+  }, 20_000);
 
   it("2 for bad usage, before any request is made", async () => {
-    const fetchSpy = vi.fn();
-    vi.stubGlobal("fetch", fetchSpy);
-    expect(await run(["scan"], out())).toBe(EXIT.scan);
-    expect(fetchSpy).not.toHaveBeenCalled();
+    const o = io();
+    expect(await run(["scan"], o.io)).toBe(EXIT.scan);
+    expect(o.errs.length).toBeGreaterThan(0);
   });
 });
