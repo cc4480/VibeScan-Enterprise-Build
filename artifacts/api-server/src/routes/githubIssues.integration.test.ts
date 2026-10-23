@@ -32,6 +32,15 @@ dbSuiteOf(describe)("GitHub issues for findings (real Postgres, local GitHub)", 
       ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
     });
   const asAlice = () => app.as(alice);
+  // This suite's own rows: the table may also hold rows other test files left behind (the account-deletion test seeds one in every table).
+  async function destRows() {
+    const { inArray } = await import("drizzle-orm");
+    return dbMod.db.select().from(dbMod.githubIssueDestinationsTable).where(inArray(dbMod.githubIssueDestinationsTable.userId, users));
+  }
+  async function issueRows() {
+    const { inArray } = await import("drizzle-orm");
+    return dbMod.db.select().from(dbMod.githubIssuesTable).where(inArray(dbMod.githubIssuesTable.userId, users));
+  }
 
   /** A report for `userId` holding the findings, returned with their ids. */
   async function report(userId: string, targetUrl = "https://shop.example.com/", over: Array<Record<string, unknown>> = []) {
@@ -117,7 +126,7 @@ dbSuiteOf(describe)("GitHub issues for findings (real Postgres, local GitHub)", 
       const check = gh.requests.find((r) => r.path === `/repos/${REPO}`)!;
       expect(check.headers["authorization"]).toBe(`Bearer ${TOKEN}`);
       // What is stored is ciphertext.
-      const [row] = await dbMod.db.select().from(dbMod.githubIssueDestinationsTable);
+      const [row] = await destRows();
       expect(row!.repoFullName).toBe(REPO);
       expect(row!.tokenEncrypted).not.toContain(TOKEN);
       expect(row!.tokenEncrypted.split(".")).toHaveLength(3);
@@ -134,7 +143,7 @@ dbSuiteOf(describe)("GitHub issues for findings (real Postgres, local GitHub)", 
       await api("/integrations/github-issues", { method: "PUT", body: { repo: REPO, token: TOKEN } });
       await api("/integrations/github-issues", { method: "PUT", body: { repo: "acme/other", token: TOKEN } });
       expect(await (await api("/integrations/github-issues")).json()).toMatchObject({ repo: "acme/other" });
-      expect(await dbMod.db.select().from(dbMod.githubIssueDestinationsTable)).toHaveLength(1);
+      expect(await destRows()).toHaveLength(1);
     });
 
     it.each([
@@ -166,7 +175,7 @@ dbSuiteOf(describe)("GitHub issues for findings (real Postgres, local GitHub)", 
       const res = await api("/integrations/github-issues", { method: "PUT", body: { repo: REPO, token: TOKEN } });
       expect(res.status).toBe(status);
       expect((await res.json()).code).toBe(code);
-      expect(await dbMod.db.select().from(dbMod.githubIssueDestinationsTable)).toHaveLength(0);
+      expect(await destRows()).toHaveLength(0);
     });
 
     it("says so when GitHub cannot be reached", async () => {
@@ -267,7 +276,7 @@ dbSuiteOf(describe)("GitHub issues for findings (real Postgres, local GitHub)", 
       // One request filed it and the other was handed that issue, and GitHub was asked once.
       expect([a.status, b.status].sort()).toEqual([200, 201]);
       expect(posted()).toHaveLength(1);
-      expect(await dbMod.db.select().from(dbMod.githubIssuesTable)).toHaveLength(1);
+      expect(await issueRows()).toHaveLength(1);
     });
 
     it("needs a connected repository first", async () => {
@@ -303,12 +312,13 @@ dbSuiteOf(describe)("GitHub issues for findings (real Postgres, local GitHub)", 
       const res = await file(reportId, "f-csp");
       expect(res.status).toBe(status);
       expect((await res.json()).code).toBe(code);
-      expect(await dbMod.db.select().from(dbMod.githubIssuesTable)).toHaveLength(0);
+      expect(await issueRows()).toHaveLength(0);
     });
 
     it("says so when the saved token can no longer be read, rather than failing obscurely", async () => {
       await connect();
-      await dbMod.db.update(dbMod.githubIssueDestinationsTable).set({ tokenEncrypted: "AAAA.BBBB.CCCC" });
+      const { eq } = await import("drizzle-orm");
+      await dbMod.db.update(dbMod.githubIssueDestinationsTable).set({ tokenEncrypted: "AAAA.BBBB.CCCC" }).where(eq(dbMod.githubIssueDestinationsTable.userId, alice.id));
       const reportId = await report(alice.id);
       const res = await file(reportId, "f-csp");
       expect(res.status).toBe(409);
