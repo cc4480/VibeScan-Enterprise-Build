@@ -48,6 +48,40 @@ export interface NotificationPrefs {
   emailOptedOut: boolean;
   optedOutKinds: Set<AlertKind>;
   minSeverity: Severity;
+  /** Null or absent: no quiet hours. */
+  quietHours?: QuietHours | null;
+}
+
+/** A daily window in the user's own time zone. Start inclusive, end exclusive, whole hours 0-23; start after end wraps midnight. */
+export interface QuietHours {
+  start: number;
+  end: number;
+  /** An IANA zone name. */
+  timezone: string;
+}
+
+/** Whether `name` is a time zone this runtime knows. */
+export function isValidTimezone(name: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: name });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether `now` falls inside the window. An unreadable zone is not quiet: never hold an alert on a guess. */
+export function inQuietHours(qh: QuietHours | null | undefined, now: Date = new Date()): boolean {
+  if (!qh || qh.start === qh.end) return false;
+  let hour: number;
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: qh.timezone, hour: "numeric", hourCycle: "h23" }).formatToParts(now);
+    hour = Number(parts.find((p) => p.type === "hour")?.value);
+  } catch {
+    return false;
+  }
+  if (!Number.isInteger(hour)) return false;
+  return qh.start < qh.end ? hour >= qh.start && hour < qh.end : hour >= qh.start || hour < qh.end;
 }
 
 /** Today's behaviour: everything on, no floor. Used when a user has no row. */
@@ -96,10 +130,22 @@ export function highestSeverity(items: Array<{ severity?: string | null }>): Sev
  */
 export function shouldNotify(
   prefs: NotificationPrefs,
-  opts: { kind: AlertKind; severity?: string | null; channel: Channel },
+  opts: { kind: AlertKind; severity?: string | null; channel: Channel; now?: Date },
 ): boolean {
   if (opts.channel === "email" && prefs.emailOptedOut) return false;
   if (prefs.optedOutKinds.has(opts.kind)) return false;
+
+  // Quiet hours hold back everything except what cannot wait: a critical finding, an expiring certificate
+  // (each warning is sent once, so a held one would never come), and an outage or recovery. The held ones
+  // are still in the dashboard.
+  if (
+    inQuietHours(prefs.quietHours, opts.now) &&
+    opts.kind !== "cert_expiry" &&
+    opts.kind !== "availability" &&
+    !(opts.severity != null && opts.severity !== "" && normaliseSeverity(opts.severity) === "critical")
+  ) {
+    return false;
+  }
 
   // cert_expiry and scan_complete carry no severity — a days-remaining count
   // is not a severity, and treating its absence as "info" would hide expiry
@@ -125,6 +171,9 @@ export async function notificationPrefs(userId: string): Promise<NotificationPre
         availability: usersTable.notifyAvailabilityOptedOut,
         drift: usersTable.notifyDriftOptedOut,
         minSeverity: usersTable.notifyMinSeverity,
+        qhStart: usersTable.quietHoursStart,
+        qhEnd: usersTable.quietHoursEnd,
+        qhZone: usersTable.quietHoursTimezone,
       })
       .from(usersTable)
       .where(eq(usersTable.id, userId))
@@ -144,6 +193,7 @@ export async function notificationPrefs(userId: string): Promise<NotificationPre
       emailOptedOut: row.emailOptedOut,
       optedOutKinds,
       minSeverity: normaliseSeverity(row.minSeverity),
+      quietHours: row.qhStart != null && row.qhEnd != null && row.qhZone ? { start: row.qhStart, end: row.qhEnd, timezone: row.qhZone } : null,
     };
   } catch (err) {
     // Fails OPEN, like alertEmailsAllowed: an extra email is an annoyance, a

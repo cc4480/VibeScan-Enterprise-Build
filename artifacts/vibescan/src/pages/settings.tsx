@@ -7,6 +7,7 @@ import { AiEditorsSection } from "@/components/ai-editors";
 import { GithubIssuesSection } from "@/components/github-issues-section";
 import { TrustPagesSection } from "@/components/trust-pages-section";
 import { TeamSection } from "@/components/team-section";
+import { QuietHoursSection } from "@/components/quiet-hours-section";
 import { ConnectedAppsSection } from "@/components/connected-apps";
 import { BillingSummary } from "@/components/billing-summary";
 import { PrivacyCard } from "@/components/privacy-card";
@@ -253,6 +254,8 @@ export default function SettingsPage() {
                 ))}
               </div>
             </div>
+
+            <QuietHoursSection value={prefs.quietHours} saving={saving} onChange={(quietHours) => updatePref({ quietHours })} />
           </div>
         ) : null}
       </div>

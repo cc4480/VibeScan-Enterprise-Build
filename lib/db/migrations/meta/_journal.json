@@ -267,6 +267,13 @@
       "when": 1792785209676,
       "tag": "0037_monitor_scan_interval",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1792785974950,
+      "tag": "0038_quiet_hours",
+      "breakpoints": true
     }
   ]
 }

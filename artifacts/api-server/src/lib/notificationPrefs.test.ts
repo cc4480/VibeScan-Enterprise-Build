@@ -3,6 +3,8 @@ import {
   shouldNotify,
   defaultPrefs,
   normaliseSeverity,
+  inQuietHours,
+  isValidTimezone,
   type NotificationPrefs,
   type AlertKind,
 } from "./notificationPrefs";
@@ -105,5 +107,70 @@ describe("normaliseSeverity", () => {
     expect(normaliseSeverity("banana")).toBe("critical");
     expect(normaliseSeverity(null)).toBe("critical");
     expect(normaliseSeverity(undefined)).toBe("critical");
+  });
+});
+
+describe("quiet hours", () => {
+  // 03:00 UTC is 04:00 in London (a January date, so London is on GMT).
+  const night = new Date("2026-01-15T03:00:00Z");
+  const noon = new Date("2026-01-15T12:00:00Z");
+  const overnight = { start: 22, end: 7, timezone: "UTC" };
+
+  it("a window that wraps midnight covers late evening and early morning, not the day", () => {
+    expect(inQuietHours(overnight, new Date("2026-01-15T23:30:00Z"))).toBe(true);
+    expect(inQuietHours(overnight, night)).toBe(true);
+    expect(inQuietHours(overnight, noon)).toBe(false);
+  });
+
+  it("start is inclusive and end is exclusive", () => {
+    expect(inQuietHours(overnight, new Date("2026-01-15T22:00:00Z"))).toBe(true);
+    expect(inQuietHours(overnight, new Date("2026-01-15T07:00:00Z"))).toBe(false);
+    expect(inQuietHours(overnight, new Date("2026-01-15T06:59:00Z"))).toBe(true);
+  });
+
+  it("reads the hour in the person's own time zone", () => {
+    // 03:00 UTC is 22:00 the evening before in New York (EST), which is inside 22-7.
+    expect(inQuietHours({ ...overnight, timezone: "America/New_York" }, night)).toBe(true);
+    // 12:00 UTC is 21:00 in Tokyo, just before the window.
+    expect(inQuietHours({ ...overnight, timezone: "Asia/Tokyo" }, noon)).toBe(false);
+    expect(inQuietHours({ start: 9, end: 17, timezone: "Asia/Tokyo" }, night)).toBe(true); // 12:00 in Tokyo
+  });
+
+  it("a same-day window works, and none, an empty window or a bad zone is never quiet", () => {
+    expect(inQuietHours({ start: 9, end: 17, timezone: "UTC" }, noon)).toBe(true);
+    expect(inQuietHours({ start: 9, end: 17, timezone: "UTC" }, night)).toBe(false);
+    expect(inQuietHours(null, night)).toBe(false);
+    expect(inQuietHours({ start: 5, end: 5, timezone: "UTC" }, night)).toBe(false);
+    expect(inQuietHours({ start: 0, end: 23, timezone: "Not/AZone" }, night)).toBe(false);
+  });
+
+  it("validates zone names", () => {
+    expect(isValidTimezone("Europe/London")).toBe(true);
+    expect(isValidTimezone("Not/AZone")).toBe(false);
+    expect(isValidTimezone("")).toBe(false);
+  });
+
+  it("holds back what can wait, on both channels, and lets through what cannot", () => {
+    const p = prefs({ quietHours: overnight });
+    for (const channel of ["email", "webhook"] as const) {
+      expect(shouldNotify(p, { kind: "scan_complete", channel, now: night })).toBe(false);
+      expect(shouldNotify(p, { kind: "cve", channel, severity: "high", now: night })).toBe(false);
+      expect(shouldNotify(p, { kind: "regression", channel, severity: "medium", now: night })).toBe(false);
+      expect(shouldNotify(p, { kind: "drift", channel, severity: "low", now: night })).toBe(false);
+      // Cannot wait: a critical finding, an expiring certificate (sent once), an outage.
+      expect(shouldNotify(p, { kind: "cve", channel, severity: "CRITICAL", now: night })).toBe(true);
+      expect(shouldNotify(p, { kind: "cert_expiry", channel, now: night })).toBe(true);
+      expect(shouldNotify(p, { kind: "availability", channel, now: night })).toBe(true);
+    }
+  });
+
+  it("changes nothing outside the window, or without quiet hours", () => {
+    expect(shouldNotify(prefs({ quietHours: overnight }), { kind: "scan_complete", channel: "email", now: noon })).toBe(true);
+    expect(shouldNotify(prefs(), { kind: "scan_complete", channel: "email", now: night })).toBe(true);
+  });
+
+  it("does not override the other preferences", () => {
+    const p = prefs({ quietHours: overnight, optedOutKinds: new Set<AlertKind>(["cert_expiry"]) });
+    expect(shouldNotify(p, { kind: "cert_expiry", channel: "email", now: night })).toBe(false);
   });
 });

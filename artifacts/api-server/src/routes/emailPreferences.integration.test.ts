@@ -131,4 +131,46 @@ dbSuiteOf(describe)("/account/email-preferences (real Postgres)", () => {
       expect((await row(id)).notifyMinSeverity).toBe(before);
     });
   });
+
+  describe("quiet hours", () => {
+    const window = { start: 22, end: 7, timezone: "Europe/London" };
+
+    it("is off by default, and saves, returns and clears a window", async () => {
+      const id = await fresh("prefs-quiet");
+      expect((await get()).quietHours).toBeNull();
+      const saved = (await (await put({ quietHours: window })).json()) as any;
+      expect(saved.quietHours).toEqual(window);
+      expect((await get()).quietHours).toEqual(window);
+      const r = await row(id);
+      expect([r.quietHoursStart, r.quietHoursEnd, r.quietHoursTimezone]).toEqual([22, 7, "Europe/London"]);
+      expect(((await (await put({ quietHours: null })).json()) as any).quietHours).toBeNull();
+      const cleared = await row(id);
+      expect([cleared.quietHoursStart, cleared.quietHoursEnd, cleared.quietHoursTimezone]).toEqual([null, null, null]);
+    });
+
+    it("is read back by the delivery check", async () => {
+      const id = await fresh("prefs-quiet-read");
+      await put({ quietHours: { start: 0, end: 23, timezone: "UTC" } });
+      const { notificationPrefs } = await import("../lib/notificationPrefs");
+      expect((await notificationPrefs(id)).quietHours).toEqual({ start: 0, end: 23, timezone: "UTC" });
+    });
+
+    it("rejects an incomplete, empty or invalid window and stores nothing", async () => {
+      const id = await fresh("prefs-quiet-bad");
+      for (const bad of [{}, { start: 22, end: 7 }, { start: 5, end: 5, timezone: "UTC" }, { start: 24, end: 7, timezone: "UTC" },
+        { start: -1, end: 7, timezone: "UTC" }, { start: 1.5, end: 7, timezone: "UTC" }, { start: "22", end: 7, timezone: "UTC" },
+        { start: 22, end: 7, timezone: "Not/AZone" }, { start: 22, end: 7, timezone: "" }, "nope"]) {
+        expect((await put({ quietHours: bad })).status).toBe(400);
+      }
+      const r = await row(id);
+      expect([r.quietHoursStart, r.quietHoursEnd, r.quietHoursTimezone]).toEqual([null, null, null]);
+    });
+
+    it("leaves a saved window alone when other preferences change", async () => {
+      await fresh("prefs-quiet-keep");
+      await put({ quietHours: window });
+      const after = (await (await put({ minSeverity: "high" })).json()) as any;
+      expect(after.quietHours).toEqual(window);
+    });
+  });
 });

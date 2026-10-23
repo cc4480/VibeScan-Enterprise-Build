@@ -191,6 +191,15 @@ export interface EmailPreferences {
   };
   /** Only alerts at or above this severity are sent. "info" means everything. */
   minSeverity: AlertSeverity;
+  /** A daily window when alerts below Critical are held back; null means none. */
+  quietHours: QuietHours | null;
+}
+
+/** Whole hours 0-23 in the zone named; start inclusive, end exclusive; start after end wraps midnight. */
+export interface QuietHours {
+  start: number;
+  end: number;
+  timezone: string;
 }
 
 export type AlertSeverity = "info" | "low" | "medium" | "high" | "critical";
@@ -208,6 +217,7 @@ export interface EmailPreferenceUpdate {
   monitorAlerts?: boolean;
   alerts?: Partial<EmailPreferences["alerts"]>;
   minSeverity?: AlertSeverity;
+  quietHours?: QuietHours | null;
 }
 
 export async function setEmailPreferences(

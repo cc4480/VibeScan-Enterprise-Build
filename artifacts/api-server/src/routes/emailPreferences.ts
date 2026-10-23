@@ -11,6 +11,7 @@ import { Router, type IRouter } from "express";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { verifyUnsubscribeToken } from "../lib/emailPrefs";
+import { isValidTimezone } from "../lib/notificationPrefs";
 import { setMarketingSubscription } from "../lib/mailer";
 
 const router: IRouter = Router();
@@ -46,6 +47,9 @@ interface PrefsRow {
   availability?: boolean;
   drift?: boolean;
   minSeverity?: string | null;
+  quietHoursStart?: number | null;
+  quietHoursEnd?: number | null;
+  quietHoursTimezone?: string | null;
 }
 
 /**
@@ -70,6 +74,10 @@ function presentPrefs(row: PrefsRow | undefined) {
       drift: !row?.drift,
     },
     minSeverity: row?.minSeverity ?? "info",
+    quietHours:
+      row?.quietHoursStart != null && row.quietHoursEnd != null && row.quietHoursTimezone
+        ? { start: row.quietHoursStart, end: row.quietHoursEnd, timezone: row.quietHoursTimezone }
+        : null,
   };
 }
 
@@ -91,6 +99,9 @@ router.get("/account/email-preferences", async (req, res): Promise<void> => {
         availability: usersTable.notifyAvailabilityOptedOut,
         drift: usersTable.notifyDriftOptedOut,
         minSeverity: usersTable.notifyMinSeverity,
+        quietHoursStart: usersTable.quietHoursStart,
+        quietHoursEnd: usersTable.quietHoursEnd,
+        quietHoursTimezone: usersTable.quietHoursTimezone,
       })
       .from(usersTable)
       .where(eq(usersTable.id, req.user.id));
@@ -108,9 +119,9 @@ router.put("/account/email-preferences", async (req, res): Promise<void> => {
     return;
   }
 
-  const { productUpdates, monitorAlerts, alerts, minSeverity } = req.body ?? {};
+  const { productUpdates, monitorAlerts, alerts, minSeverity, quietHours } = req.body ?? {};
 
-  const changes: Record<string, boolean | string> = {};
+  const changes: Record<string, boolean | string | number | null> = {};
   if (typeof productUpdates === "boolean") changes["marketingOptedOut"] = !productUpdates;
   if (typeof monitorAlerts === "boolean") changes["alertEmailsOptedOut"] = !monitorAlerts;
 
@@ -129,6 +140,26 @@ router.put("/account/email-preferences", async (req, res): Promise<void> => {
       return;
     }
     changes["notifyMinSeverity"] = minSeverity;
+  }
+
+  if (quietHours !== undefined) {
+    // null turns quiet hours off. Anything else must be a complete, valid window: a half-stored one
+    // would hold alerts back at hours the person never chose.
+    if (quietHours === null) {
+      changes["quietHoursStart"] = null;
+      changes["quietHoursEnd"] = null;
+      changes["quietHoursTimezone"] = null;
+    } else {
+      const { start, end, timezone } = (quietHours ?? {}) as Record<string, unknown>;
+      const hour = (n: unknown): n is number => Number.isInteger(n) && (n as number) >= 0 && (n as number) <= 23;
+      if (!hour(start) || !hour(end) || start === end || typeof timezone !== "string" || !isValidTimezone(timezone)) {
+        res.status(400).json({ error: "quietHours must be null, or { start, end, timezone } with two different whole hours 0-23 and a valid time zone name" });
+        return;
+      }
+      changes["quietHoursStart"] = start;
+      changes["quietHoursEnd"] = end;
+      changes["quietHoursTimezone"] = timezone;
+    }
   }
 
   if (Object.keys(changes).length === 0) {
@@ -152,6 +183,9 @@ router.put("/account/email-preferences", async (req, res): Promise<void> => {
         availability: usersTable.notifyAvailabilityOptedOut,
         drift: usersTable.notifyDriftOptedOut,
         minSeverity: usersTable.notifyMinSeverity,
+        quietHoursStart: usersTable.quietHoursStart,
+        quietHoursEnd: usersTable.quietHoursEnd,
+        quietHoursTimezone: usersTable.quietHoursTimezone,
       });
 
     // The audience is the list a broadcast actually sends to, so a preference

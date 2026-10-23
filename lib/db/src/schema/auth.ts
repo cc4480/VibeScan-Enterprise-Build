@@ -85,6 +85,14 @@ export const usersTable = pgTable("users", {
     enum: ["info", "low", "medium", "high", "critical"],
   }).notNull().default("info"),
 
+  // Quiet hours: a daily window, in the user's own time zone, when alerts below Critical are not
+  // sent (certificate expiry and outage alerts always are). All three are set together or all null.
+  // Start is inclusive, end exclusive, whole hours 0-23; a start after the end wraps midnight.
+  quietHoursStart: integer("quiet_hours_start"),
+  quietHoursEnd: integer("quiet_hours_end"),
+  /** An IANA zone name such as "Europe/London". */
+  quietHoursTimezone: text("quiet_hours_timezone"),
+
   // ── Account credentials ────────────────────────────────────────────────────
   // Null for anonymous identities: a row whose id is the UUID the browser
   // generated and sends as a bearer token. Setting this promotes that same row
