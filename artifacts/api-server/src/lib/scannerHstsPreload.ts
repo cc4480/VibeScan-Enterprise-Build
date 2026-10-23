@@ -1,5 +1,10 @@
 import { isIP } from "node:net";
 
+/** The preload list's status API. HSTS_PRELOAD_API_URL points it elsewhere (tests run a server of their own); read per call. */
+export function hstsPreloadApiUrl(): string {
+  return process.env["HSTS_PRELOAD_API_URL"] || "https://hstspreload.org/api/v2/status";
+}
+
 /** Names that cannot be on a public preload list, so there is nothing to ask about and no reason to send them anywhere. */
 const NEVER_PRELOADED = /(^|\.)(local|localhost|internal|intranet|lan|home|corp|test|example|invalid)$/i;
 
@@ -38,7 +43,7 @@ export async function isHstsPreloaded(hostname: string): Promise<boolean> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 5_000);
   try {
-    const res = await fetch(`https://hstspreload.org/api/v2/status?domain=${encodeURIComponent(host)}`, { signal: ctrl.signal });
+    const res = await fetch(`${hstsPreloadApiUrl()}?domain=${encodeURIComponent(host)}`, { signal: ctrl.signal });
     if (!res.ok) return false;
     const json = (await res.json()) as { status?: string };
     return json.status === "preloaded";

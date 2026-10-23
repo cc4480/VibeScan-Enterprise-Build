@@ -1,6 +1,7 @@
 /** Probes that read the page and its transport: error disclosure, HTTPS redirect, rate limiting. */
 import type { ScanVulnerability } from "./scanner";
 import { vuln, safeGet } from "./probesCore";
+import { hstsPreloadApiUrl } from "./scannerHstsPreload";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 7. ERROR PAGE DISCLOSURE
@@ -118,9 +119,11 @@ export async function checkHttpsRedirect(targetUrl: string): Promise<ScanVulnera
   // difference is that a transient blip no longer costs a true finding, and a
   // genuine failure to check now surfaces in the scan-coverage note rather than
   // reading as "checked, fine".
-  let result = await safeGet(`http://${hostname}/`, { redirect: "follow" }, 8_000);
+  // HTTP_REDIRECT_PROBE_URL replaces the plain-HTTP address that is requested (port 80 of the host), so a test can serve it.
+  const plainUrl = process.env["HTTP_REDIRECT_PROBE_URL"] || `http://${hostname}/`;
+  let result = await safeGet(plainUrl, { redirect: "follow" }, 8_000);
   if (!result) {
-    result = await safeGet(`http://${hostname}/`, { redirect: "follow" }, 8_000);
+    result = await safeGet(plainUrl, { redirect: "follow" }, 8_000);
   }
   if (!result) {
     throw new Error(`could not reach http://${hostname}/ to test the HTTPS redirect`);
@@ -150,7 +153,7 @@ export async function checkHttpsRedirect(targetUrl: string): Promise<ScanVulnera
 
   try {
     const preloadRes = await safeGet(
-      `https://hstspreload.org/api/v2/status?domain=${encodeURIComponent(apex)}`,
+      `${hstsPreloadApiUrl()}?domain=${encodeURIComponent(apex)}`,
       {},
       5_000,
     );

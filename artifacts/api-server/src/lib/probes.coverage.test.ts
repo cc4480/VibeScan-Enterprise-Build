@@ -1,4 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
+import { useHstsPreloadStub } from "./hstsPreloadStub.testkit";
+import { runAllProbes, checkHttpsRedirect } from "./probes.js";
 
 /**
  * A check that fails must be reported as not-run, never as clean.
@@ -8,39 +12,52 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
  * nothing from it. "The check crashed" and "the check ran and your site is fine"
  * produced byte-identical output, at the same grade. Silence has to mean one
  * thing only.
+ *
+ * The site being scanned is https://example.test/, a name that never resolves, so every request to it really fails. The
+ * plain-HTTP address the redirect check requests (HTTP_REDIRECT_PROBE_URL) and the HSTS preload API are real servers on
+ * loopback: one is made to drop connections or answer, the other says whether the site is preloaded.
  */
 
-const scanFetchMock = vi.fn();
+const preload = await useHstsPreloadStub();
 
-vi.mock("./http", () => ({
-  scanFetch: (...args: unknown[]) => scanFetchMock(...args),
-}));
+/** The site's plain-HTTP side. `dropFirst` connections are cut without an answer; after that it answers `status`. */
+const plain = { dropFirst: 0, status: 200, requests: 0 };
+const plainServer = http.createServer((req, res) => {
+  plain.requests++;
+  if (plain.dropFirst > 0) { plain.dropFirst--; req.socket.destroy(); return; }
+  res.writeHead(plain.status, { "content-type": "text/html" }).end("<html><body>plain http site</body></html>");
+});
+await new Promise<void>((r) => plainServer.listen(0, "127.0.0.1", r));
+const PLAIN_URL = `http://127.0.0.1:${(plainServer.address() as AddressInfo).port}/`;
 
-vi.mock("./spaCatchAll", () => ({
-  detectCatchAll: async () => null,
-  matchesCatchAll: () => false,
+// A port nothing listens on: the connection is refused.
+const unusedPort = await new Promise<number>((resolve) => {
+  const s = http.createServer();
+  s.listen(0, "127.0.0.1", () => { const p = (s.address() as AddressInfo).port; s.close(() => resolve(p)); });
+});
+const DEAD_URL = `http://127.0.0.1:${unusedPort}/`;
+
+afterAll(() => new Promise<void>((r) => {
+  delete process.env["HTTP_REDIRECT_PROBE_URL"];
+  plainServer.closeAllConnections();
+  plainServer.close(() => r());
 }));
 
 beforeEach(() => {
-  scanFetchMock.mockReset();
+  plain.dropFirst = 0;
+  plain.status = 200;
+  plain.requests = 0;
+  process.env["HTTP_REDIRECT_PROBE_URL"] = PLAIN_URL;
 });
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
-async function load() {
-  return import("./probes.js");
-}
+const SITE = "https://example.test/";
 
 describe("runAllProbes failure reporting", () => {
   it("names the check that threw instead of dropping it", async () => {
-    // Every fetch rejects, so checkHttpsRedirect exhausts its retry and throws.
-    scanFetchMock.mockRejectedValue(new Error("connection reset"));
-
-    const { runAllProbes } = await load();
+    // The plain-HTTP address refuses every connection, so checkHttpsRedirect exhausts its retry and throws.
+    process.env["HTTP_REDIRECT_PROBE_URL"] = DEAD_URL;
     const failures: string[] = [];
-    await runAllProbes("https://example.test/", "<html></html>", false, (name) => {
+    await runAllProbes(SITE, "<html></html>", false, (name) => {
       failures.push(name);
     });
 
@@ -48,20 +65,11 @@ describe("runAllProbes failure reporting", () => {
   });
 
   it("does not report a failure when the check simply finds nothing", async () => {
-    // A reachable target that redirects properly: the check answers, finds no
-    // problem, and must not appear as "could not be completed".
-    scanFetchMock.mockResolvedValue({
-      status: 200,
-      body: "",
-      headers: {},
-      setCookies: [],
-      finalUrl: "https://example.test/",
-      redirected: true,
-    });
-
-    const { runAllProbes } = await load();
+    // A reachable plain-HTTP side on a preloaded host: the check answers, finds no problem, and must not appear as
+    // "could not be completed".
+    preload.statuses.set("example.test", "preloaded");
     const failures: string[] = [];
-    await runAllProbes("https://example.test/", "<html></html>", false, (name) => {
+    await runAllProbes(SITE, "<html></html>", false, (name) => {
       failures.push(name);
     });
 
@@ -71,70 +79,31 @@ describe("runAllProbes failure reporting", () => {
   it("still returns the findings from checks that did succeed", async () => {
     // One failing check must not take the whole family down with it — the
     // surviving checks' findings still have to reach the report.
-    scanFetchMock.mockImplementation((url: string) => {
-      if (url.startsWith("http://")) return Promise.reject(new Error("nope"));
-      return Promise.resolve({
-        status: 200,
-        body: "",
-        headers: {},
-        setCookies: [],
-        finalUrl: url,
-        redirected: false,
-      });
-    });
-
-    const { runAllProbes } = await load();
+    process.env["HTTP_REDIRECT_PROBE_URL"] = DEAD_URL;
+    const page = `<html><head><script src="https://widgets.vendor.test/loader.js"></script></head><body></body></html>`;
     const failures: string[] = [];
-    const findings = await runAllProbes("https://example.test/", "<html></html>", false, (name) => {
+    const findings = await runAllProbes(SITE, page, false, (name) => {
       failures.push(name);
     });
 
     expect(failures).toContain("HTTP to HTTPS redirect");
-    // security.txt answered 200 without RFC 9116 fields, so it reports.
-    expect(findings.some((f) => /security\.txt/i.test(f.name))).toBe(true);
+    // The page carries a third-party script with no integrity hash, so the page-reading check still reports.
+    expect(findings.some((f) => /Subresource Integrity/i.test(f.name))).toBe(true);
   });
 
   it("works without a callback, for callers that do not pass one", async () => {
-    scanFetchMock.mockRejectedValue(new Error("connection reset"));
-    const { runAllProbes } = await load();
-    await expect(
-      runAllProbes("https://example.test/", "<html></html>", false),
-    ).resolves.toBeInstanceOf(Array);
+    process.env["HTTP_REDIRECT_PROBE_URL"] = DEAD_URL;
+    await expect(runAllProbes(SITE, "<html></html>", false)).resolves.toBeInstanceOf(Array);
   });
 });
 
 describe("checkHttpsRedirect retry", () => {
   it("retries once before giving up, so one blip does not lose the finding", async () => {
     // First HTTP attempt fails, second succeeds and shows no redirect to HTTPS.
-    let httpAttempts = 0;
-    scanFetchMock.mockImplementation((url: string) => {
-      if (url.startsWith("http://")) {
-        httpAttempts++;
-        if (httpAttempts === 1) return Promise.resolve(null);
-        return Promise.resolve({
-          status: 200,
-          body: "",
-          headers: {},
-          setCookies: [],
-          finalUrl: "http://example.test/",
-          redirected: false,
-        });
-      }
-      // The HSTS preload lookup — answer "not preloaded".
-      return Promise.resolve({
-        status: 200,
-        body: '{"status":"unknown"}',
-        headers: {},
-        setCookies: [],
-        finalUrl: url,
-        redirected: false,
-      });
-    });
+    plain.dropFirst = 1;
+    const findings = await checkHttpsRedirect(SITE);
 
-    const { checkHttpsRedirect } = await load();
-    const findings = await checkHttpsRedirect("https://example.test/");
-
-    expect(httpAttempts).toBe(2);
+    expect(plain.requests).toBe(2);
     expect(findings).toHaveLength(1);
     expect(findings[0]!.name).toBe("HTTP Traffic Not Redirected to HTTPS");
   });
@@ -143,9 +112,8 @@ describe("checkHttpsRedirect retry", () => {
     // Fails open on the finding — a network error is not evidence of a missing
     // redirect, so it must not be reported as one — but it is no longer
     // indistinguishable from success either.
-    scanFetchMock.mockResolvedValue(null);
-    const { checkHttpsRedirect } = await load();
-    await expect(checkHttpsRedirect("https://example.test/")).rejects.toThrow(/could not reach/i);
+    process.env["HTTP_REDIRECT_PROBE_URL"] = DEAD_URL;
+    await expect(checkHttpsRedirect(SITE)).rejects.toThrow(/could not reach/i);
   });
 });
 
@@ -160,26 +128,19 @@ describe("runAllProbes reads subresource integrity from the page as the server s
   const shell = `<html><head><script src="/assets/app.js"></script></head><body><div id="root"></div></body></html>`;
   const rendered = `<html><head><script src="/assets/app.js"></script>${injected}</head><body><div id="root"><h1>App</h1></div></body></html>`;
 
-  beforeEach(() => {
-    scanFetchMock.mockRejectedValue(new Error("offline"));
-  });
-
   it("does not report a script that only the rendered page contains", async () => {
-    const { runAllProbes } = await load();
-    const findings = await runAllProbes("https://example.test/", rendered, false, undefined, undefined, undefined, shell);
+    const findings = await runAllProbes(SITE, rendered, false, undefined, undefined, undefined, shell);
     expect(findings.some((f) => SRI.test(f.name))).toBe(false);
   });
 
   it("clean twin: still reports a third-party script the site's own HTML carries", async () => {
-    const { runAllProbes } = await load();
     const authored = `<html><head>${injected}</head><body></body></html>`;
-    const findings = await runAllProbes("https://example.test/", rendered, false, undefined, undefined, undefined, authored);
+    const findings = await runAllProbes(SITE, rendered, false, undefined, undefined, undefined, authored);
     expect(findings.some((f) => SRI.test(f.name))).toBe(true);
   });
 
   it("without a separate as-served page it reads the page it was given, as before", async () => {
-    const { runAllProbes } = await load();
-    const findings = await runAllProbes("https://example.test/", rendered, false);
+    const findings = await runAllProbes(SITE, rendered, false);
     expect(findings.some((f) => SRI.test(f.name))).toBe(true);
   });
 });
