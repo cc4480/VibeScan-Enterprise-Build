@@ -1,5 +1,32 @@
-import { describe, it, expect } from "vitest";
-import { detectAgentEnvironment, redactForLlm } from "./deepseek.js";
+import { describe, it, expect, afterAll } from "vitest";
+import http from "node:http";
+import type { AddressInfo, Socket } from "node:net";
+
+// The AI provider is a real local server: LLM_ENDPOINT (the operator setting that points the call at any
+// OpenAI-compatible provider) is aimed at it before the module loads. A test sets what it answers and reads what the
+// call sent.
+const provider = { reply: null as unknown, sentBody: null as string | null };
+const sockets = new Set<Socket>();
+const providerServer = http.createServer((req, res) => {
+  const chunks: Buffer[] = [];
+  req.on("data", (c) => chunks.push(c));
+  req.on("end", () => {
+    provider.sentBody = Buffer.concat(chunks).toString("utf8");
+    if (provider.reply) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(provider.reply) } }] }));
+    } else {
+      res.writeHead(500).end("{}");
+    }
+  });
+});
+providerServer.on("connection", (sock) => { sockets.add(sock); sock.on("close", () => sockets.delete(sock)); });
+await new Promise<void>((r) => providerServer.listen(0, "127.0.0.1", r));
+process.env["LLM_ENDPOINT"] = `http://127.0.0.1:${(providerServer.address() as AddressInfo).port}/v1/chat/completions`;
+afterAll(() => new Promise<void>((r) => { for (const sock of sockets) sock.destroy(); providerServer.close(() => r()); }));
+
+// Imported only now: the endpoint is read when the module loads.
+const { detectAgentEnvironment, redactForLlm, callDeepSeek } = await import("./deepseek.js");
 
 describe("detectAgentEnvironment", () => {
   it("detects Lovable by tech prefix", () => {
@@ -108,26 +135,19 @@ describe("the AI analysis is grounded in the scan's own findings", () => {
     tests: any[] = [],
     reply: unknown = null,
   ): Promise<{ system: string; user: string; sent: Sent; result: any }> {
-    const { callDeepSeek } = await import("./deepseek.js");
-    const realFetch = globalThis.fetch;
     const realKey = process.env.DEEPSEEK_API_KEY;
-    let sent: Sent | null = null;
     process.env.DEEPSEEK_API_KEY = "test-key";
-    globalThis.fetch = (async (_u: unknown, init: { body: string }) => {
-      sent = JSON.parse(init.body);
-      return reply
-        ? new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(reply) } }] }), { status: 200 })
-        : new Response("{}", { status: 500 });
-    }) as unknown as typeof fetch;
+    provider.reply = reply;
+    provider.sentBody = null;
     let result: any;
     try {
       result = await callDeepSeek("https://example.com", vulns, ["Astro", "React"], "deep", tests);
     } finally {
-      globalThis.fetch = realFetch;
       if (realKey === undefined) delete process.env.DEEPSEEK_API_KEY;
       else process.env.DEEPSEEK_API_KEY = realKey;
     }
-    return { system: sent!.messages[0]!.content, user: sent!.messages[1]!.content, sent: sent!, result };
+    const sent: Sent = JSON.parse(provider.sentBody!);
+    return { system: sent.messages[0]!.content, user: sent.messages[1]!.content, sent, result };
   }
   const capturePrompt = () => capture();
 
