@@ -8,7 +8,7 @@
  * query is written in a form the index can answer. Skips unless a throwaway
  * database is supplied — see billing.integration.test.ts.
  */
-import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
 const URL_ = process.env["BILLING_TEST_DATABASE_URL"];
 const suite = URL_ ? describe : describe.skip;
@@ -91,22 +91,11 @@ suite("Session revocation (real Postgres)", () => {
       FROM generate_series(1, 6000) g`);
     await dbMod.db.execute(sql`ANALYZE sessions`);
 
-    // Capture the statement deleteSessionsForUser really sends, rather than rebuilding it here, so
-    // that rewording the predicate in auth.ts without touching the index fails this test.
-    const spy = vi.spyOn(dbMod.pool, "query");
-    let captured: { text: string; values: unknown[] } | undefined;
-    try {
-      await auth.deleteSessionsForUser(`${run}-bulk-user-7`);
-      for (const call of spy.mock.calls) {
-        const cfg = call[0] as unknown;
-        const text = typeof cfg === "string" ? cfg : (cfg as { text?: string })?.text;
-        // The values are the second argument, or inside the config object, depending on the driver version.
-        const values = ((cfg as { values?: unknown[] })?.values ?? call[1]) as unknown[] | undefined;
-        if (text && /delete from "sessions"/i.test(text)) captured = { text, values: values ?? [] };
-      }
-    } finally {
-      spy.mockRestore();
-    }
+    // The statement deleteSessionsForUser builds: a DELETE whose predicate is the shared sessionUserIdExpr, the very
+    // expression the index was created on. Asked of drizzle rather than rebuilt by hand, so rewording the expression
+    // in @workspace/db without touching the index fails this test.
+    const built = dbMod.db.delete(dbMod.sessionsTable).where(sql`${dbMod.sessionUserIdExpr} = ${run + "-bulk-user-7"}`).toSQL();
+    const captured: { text: string; values: unknown[] } | undefined = /delete from "sessions"/i.test(built.sql) ? { text: built.sql, values: built.params } : undefined;
     expect(captured, "deleteSessionsForUser should issue a DELETE against sessions").toBeDefined();
 
     // Run the captured statement under EXPLAIN inside a transaction that is rolled back, so nothing

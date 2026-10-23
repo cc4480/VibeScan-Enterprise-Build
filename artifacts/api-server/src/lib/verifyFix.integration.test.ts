@@ -4,21 +4,11 @@
  * throwaway database is supplied (see billing.integration.test.ts); run with
  * --no-file-parallelism alongside the other integration suites.
  */
-import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 
 const URL_ = process.env["BILLING_TEST_DATABASE_URL"];
 const suite = URL_ ? describe : describe.skip;
 if (URL_) process.env["DATABASE_URL"] = URL_;
-
-const queued: unknown[] = [];
-const queue = { fail: false };
-vi.mock("./queue", () => ({
-  enqueueScan: async (job: unknown) => {
-    if (queue.fail) throw new Error("queue down");
-    queued.push(job);
-    return "job-1";
-  },
-}));
 
 const t = (name: string, status = "ran") => ({ group: "g", name, status, findings: 0, durationMs: 1 });
 const CSP = "Missing Content-Security-Policy (CSP)";
@@ -42,8 +32,6 @@ suite("verify a fix (real Postgres)", () => {
   afterAll(async () => { await dbMod?.pool?.end?.(); });
   beforeEach(async () => {
     await dbMod.db.execute(sql`TRUNCATE finding_verifications, reports, scans CASCADE`);
-    queued.length = 0;
-    queue.fail = false;
   });
 
   async function reportWith(userId: string, vulns: unknown[], tests: unknown[], credentialed = false) {
@@ -54,6 +42,11 @@ suite("verify a fix (real Postgres)", () => {
   }
   const start = (userId: string, reportId: string, findingId: string) => verify.startVerification({ userId, userEmail: "u@example.com", reportId, findingId });
   const rowsOf = async () => dbMod.db.select().from(dbMod.findingVerificationsTable);
+  /** The jobs the real queue holds for this test's verification scans (the scans table is emptied before each test). */
+  const queuedJobs = async () => {
+    const r = await dbMod.db.execute(sql`select data from pgboss.job where name = 'scan-job' and data->>'scanId' in (select id::text from scans where origin = 'verify')`);
+    return r.rows.map((row) => (row as { data: Record<string, unknown> }).data);
+  };
 
   describe("who may verify what", () => {
     it("refuses another user's report and an id that is not in the report, with the same answer", async () => {
@@ -85,7 +78,7 @@ suite("verify a fix (real Postgres)", () => {
       const [scan] = await db.select().from(scansTable).where(eq(scansTable.id, (r as { scanId: string }).scanId));
       expect(scan).toMatchObject({ origin: "verify", status: "queued", targetUrl: "https://a.example/", paidWith: null });
       expect((await rowsOf())[0]).toMatchObject({ verdict: "pending", findingId: "f1", userId: "u1" });
-      expect(queued[0]).toMatchObject({ scanId: scan!.id, verificationId: (r as { verificationId: string }).verificationId });
+      expect((await queuedJobs())[0]).toMatchObject({ scanId: scan!.id, verificationId: (r as { verificationId: string }).verificationId });
     });
 
     it("does not start a second check while one is pending: it returns the first", async () => {
@@ -93,7 +86,7 @@ suite("verify a fix (real Postgres)", () => {
       const a = await start("u1", rid, "f1");
       const b = await start("u1", rid, "f1");
       expect(b).toEqual(a);
-      expect(queued).toHaveLength(1);
+      expect(await queuedJobs()).toHaveLength(1);
     });
 
     it("stops at ten a day", async () => {
@@ -113,14 +106,20 @@ suite("verify a fix (real Postgres)", () => {
       expect(await rowsOf()).toHaveLength(10);
     });
 
+    // The queue really is down: pg-boss is stopped, then started again.
     it("fails cleanly, leaving nothing pending, when the queue is down", async () => {
-      queue.fail = true;
+      const { getBoss } = await import("./queue");
+      const boss = await getBoss();
       const rid = await reportWith("u1", [finding("f1", CSP)], [t(HEADERS)]);
-      expect(await start("u1", rid, "f1")).toMatchObject({ ok: false, status: 503 });
-      expect((await rowsOf())[0]).toMatchObject({ verdict: "failed" });
-      queue.fail = false;
+      await boss.stop({ graceful: false });
+      try {
+        expect(await start("u1", rid, "f1")).toMatchObject({ ok: false, status: 503 });
+        expect((await rowsOf())[0]).toMatchObject({ verdict: "failed" });
+      } finally {
+        await boss.start();
+      }
       expect((await start("u1", rid, "f1")).ok).toBe(true);
-    });
+    }, 60_000);
   });
 
   describe("the verdict", () => {

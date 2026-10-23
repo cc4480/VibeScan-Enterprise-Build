@@ -191,6 +191,30 @@ dbSuiteOf(describe)("monitoring (real Postgres)", () => {
       expect((await create(p, url)).status).toBe(409);
       expect((await subsOf(p)).filter((s) => s.status === "active")).toHaveLength(1);
     });
+
+    it("does not let parallel creates exceed the plan's site limit", async () => {
+      // The plan count and the insert run under a per-user lock; without it parallel creates all count one site
+      // fewer than the limit and all insert.
+      process.env["MONITORING_REQUIRES_PLAN"] = "true";
+      const p = person();
+      as(p);
+      await plan(p, { plan: "solo", urlLimit: 2 });
+      const results = await Promise.all(Array.from({ length: 5 }, () => create(p, site())) /* five is the per-account hourly limit */);
+      expect(results.filter((r) => r.status === 201)).toHaveLength(2);
+      expect(results.filter((r) => r.status === 403)).toHaveLength(3);
+      expect((await subsOf(p)).filter((x) => x.status === "active")).toHaveLength(2);
+    });
+
+    it("does not create the same monitor twice when parallel creates name one URL", async () => {
+      const p = person();
+      as(p);
+      await plan(p, { plan: "unlimited", urlLimit: 5 });
+      const url = site();
+      const results = await Promise.all(Array.from({ length: 4 }, () => create(p, url)));
+      expect(results.filter((r) => r.status === 201)).toHaveLength(1);
+      expect(results.filter((r) => r.status === 409)).toHaveLength(3);
+      expect(await subsOf(p)).toHaveLength(1);
+    });
   });
 
   // Once plans are enforced an account with no plan keeps one free site, so a person who tried the product has a

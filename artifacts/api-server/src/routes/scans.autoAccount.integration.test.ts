@@ -3,7 +3,7 @@
  * Postgres (so migration 0024 is proven too). Runs only with GHWIRE_TEST_DATABASE_URL (a disposable
  * database; it truncates scans and users).
  */
-import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import express from "express";
 import request from "supertest";
 
@@ -16,8 +16,6 @@ if (URL_) {
   process.env["ENCRYPTION_KEY"] = Buffer.alloc(32, 7).toString("base64");
 }
 
-vi.mock("../lib/queue", () => ({ enqueueScan: vi.fn(async () => undefined) }));
-vi.mock("../lib/ssrfGuard", () => ({ checkScanTarget: async () => ({ ok: true }) }));
 
 let app: express.Express;
 let dbMod: typeof import("@workspace/db");
@@ -55,48 +53,48 @@ suite("scan creation: automatic second account opt-in (real Postgres)", () => {
   }
 
   it("is off by default", async () => {
-    const res = await request(app).post("/scans").send({ targetUrl: "https://default.example", credentials: SESSION });
+    const res = await request(app).post("/scans").send({ targetUrl: "http://127.0.0.1:9/default", credentials: SESSION });
     expect(res.status, res.text.replace(/<[^>]+>/g, " ").slice(0, 400)).toBe(201);
-    expect(await flagFor("https://default.example")).toBe(false);
+    expect(await flagFor("http://127.0.0.1:9/default")).toBe(false);
   });
 
   it("is stored as on only when asked for", async () => {
-    const res = await request(app).post("/scans").send({ targetUrl: "https://on.example", credentials: SESSION, autoSecondAccount: true });
+    const res = await request(app).post("/scans").send({ targetUrl: "http://127.0.0.1:9/on", credentials: SESSION, autoSecondAccount: true });
     expect(res.status, res.text.replace(/<[^>]+>/g, " ").slice(0, 400)).toBe(201);
-    expect(await flagFor("https://on.example")).toBe(true);
+    expect(await flagFor("http://127.0.0.1:9/on")).toBe(true);
   });
 
   it("is not stored as on when the requester supplied a second account of their own", async () => {
     const res = await request(app)
       .post("/scans")
-      .send({ targetUrl: "https://own.example", credentials: SESSION, secondaryCredentials: OTHER, autoSecondAccount: true });
+      .send({ targetUrl: "http://127.0.0.1:9/own", credentials: SESSION, secondaryCredentials: OTHER, autoSecondAccount: true });
     expect(res.status, res.text.replace(/<[^>]+>/g, " ").slice(0, 400)).toBe(201);
-    expect(await flagFor("https://own.example")).toBe(false);
+    expect(await flagFor("http://127.0.0.1:9/own")).toBe(false);
   });
 
   it("is refused without credentials, before anything is charged or stored", async () => {
-    const res = await request(app).post("/scans").send({ targetUrl: "https://nocreds.example", autoSecondAccount: true });
+    const res = await request(app).post("/scans").send({ targetUrl: "http://127.0.0.1:9/nocreds", autoSecondAccount: true });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/needs credentials/);
-    expect(await flagFor("https://nocreds.example")).toBeUndefined();
+    expect(await flagFor("http://127.0.0.1:9/nocreds")).toBeUndefined();
   });
 
   it("is refused with a 400 when the same session is given as both accounts", async () => {
-    const res = await request(app).post("/scans").send({ targetUrl: "https://same.example", credentials: SESSION, secondaryCredentials: { ...SESSION, cookie: " sid=abc " } });
+    const res = await request(app).post("/scans").send({ targetUrl: "http://127.0.0.1:9/same", credentials: SESSION, secondaryCredentials: { ...SESSION, cookie: " sid=abc " } });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/same account as the first/i);
-    expect(await flagFor("https://same.example")).toBeUndefined();
+    expect(await flagFor("http://127.0.0.1:9/same")).toBeUndefined();
   });
 
   it("is refused when the same form login is given twice", async () => {
     const form = { mode: "form", authorized: true, loginUrl: "https://x.example/login", username: "ada@example.com", password: "pw" } as const;
-    const res = await request(app).post("/scans").send({ targetUrl: "https://sameform.example", credentials: form, secondaryCredentials: { ...form, username: "ADA@example.com" } });
+    const res = await request(app).post("/scans").send({ targetUrl: "http://127.0.0.1:9/sameform", credentials: form, secondaryCredentials: { ...form, username: "ADA@example.com" } });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/same account/i);
   });
 
   it("still accepts two different sessions", async () => {
-    const res = await request(app).post("/scans").send({ targetUrl: "https://diff.example", credentials: SESSION, secondaryCredentials: OTHER });
+    const res = await request(app).post("/scans").send({ targetUrl: "http://127.0.0.1:9/diff", credentials: SESSION, secondaryCredentials: OTHER });
     expect(res.status).toBe(201);
   });
 });
