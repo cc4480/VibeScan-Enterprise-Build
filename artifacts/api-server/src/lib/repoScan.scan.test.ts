@@ -1,17 +1,12 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import { startOsvStub } from "./osvStub.testkit";
+import { osvCache } from "./cveCheckOsv";
 
-// OSV is the only network the dependency check uses; the answer is decided here.
-const osv = vi.hoisted(() => ({ vulnerable: new Set<string>() }));
-vi.mock("./cveCheck", async (orig) => {
-  const real = await orig<typeof import("./cveCheck")>();
-  return {
-    ...real,
-    queryOsv: async (name: string, version: string) =>
-      osv.vulnerable.has(`${name}@${version}`)
-        ? [{ id: "GHSA-test-0001", aliases: ["CVE-2026-0001"], summary: "Prototype pollution", severity: [{ type: "CVSS_V3", score: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H" }], affected: [{ ranges: [{ type: "SEMVER", events: [{ introduced: "0" }, { fixed: "4.17.21" }] }] }] }]
-        : [],
-  };
-});
+// OSV is the only network the dependency check uses. It is a real local server that answers like OSV.dev
+// (lib/osvStub.testkit.ts), so the real client's queries, cache and error handling all run; the answers are decided here.
+const osv = await startOsvStub();
+beforeEach(() => osvCache.clear()); // a verdict cached by an earlier test would otherwise answer for this one
+afterAll(() => osv.stop());
 
 import { supabaseMigrationFindings } from "./repoCheckSupabase";
 import { ciConfigFindings } from "./repoCheckCi";

@@ -6,6 +6,9 @@ export const OSV_TIMEOUT_MS = 8_000;
 
 export const OSV_ENDPOINT = "https://api.osv.dev/v1/query";
 
+/** Where OSV is asked: osv.dev unless OSV_API_URL points at a compatible server (a mirror an operator runs, or a test). Read on each call. */
+export const osvEndpoint = (): string => process.env["OSV_API_URL"]?.trim() || OSV_ENDPOINT;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // IN-PROCESS CACHE — avoids duplicate OSV.dev calls for same version
 // ─────────────────────────────────────────────────────────────────────────────
@@ -35,6 +38,10 @@ export class BoundedMap<K, V> {
     this.map.delete(key);
     this.map.set(key, value);
     return value;
+  }
+
+  clear(): void {
+    this.map.clear();
   }
 
   set(key: K, value: V): void {
@@ -97,7 +104,7 @@ export async function queryOsv(packageName: string, version: string, ecosystem: 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), OSV_TIMEOUT_MS);
   try {
-    const res = await fetch(OSV_ENDPOINT, {
+    const res = await fetch(osvEndpoint(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
