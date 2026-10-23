@@ -19,6 +19,9 @@ export const monitorSubscriptionsTable = pgTable("monitor_subscriptions", {
   // is lost. Null means running. Kept separate from status so a pause is never confused with a
   // cancellation or an unpaid plan, and resuming needs no re-subscription.
   pausedAt: timestamp("paused_at", { withTimezone: true }),
+  // Days between full rescans, when the owner chose one (3, 7, 14 or 30). Null means the
+  // default: the grade sets the cadence. Never more often than the grade cadence's 3-day floor.
+  scanIntervalDays: integer("scan_interval_days"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [

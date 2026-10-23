@@ -35,6 +35,27 @@ describe("nextScanDelayDays", () => {
   });
 });
 
+describe("nextScanDelayDays — an owner-chosen interval", () => {
+  it("replaces the grade cadence after a graded scan, either way", () => {
+    expect(nextScanDelayDays("A", { intervalDays: 3 })).toBe(3);
+    expect(nextScanDelayDays("F", { intervalDays: 30 })).toBe(30);
+  });
+
+  it("is not used after a scan that was intercepted (N/A): that retries at the short cadence", () => {
+    expect(nextScanDelayDays("N/A", { intervalDays: 30 })).toBe(3);
+  });
+
+  it("never beats the free-plan floor", () => {
+    expect(nextScanDelayDays("A", { intervalDays: 3, minDays: 7 })).toBe(7);
+    expect(nextScanDelayDays("A", { intervalDays: 14, minDays: 7 })).toBe(14);
+  });
+
+  it("null or absent keeps the grade cadence", () => {
+    expect(nextScanDelayDays("A", { intervalDays: null })).toBe(14);
+    expect(nextScanDelayDays("B", {})).toBe(7);
+  });
+});
+
 describe("nextScanDelayDays — grades outside A-F", () => {
   /**
    * A scan a bot-protection layer answered is graded "N/A": the worker withheld

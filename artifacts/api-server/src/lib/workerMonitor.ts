@@ -61,7 +61,7 @@ export async function recordMonitorScan(input: MonitorScanInput): Promise<void> 
           log.warn({ err, monitorSubscriptionId }, "Could not read the plan; not applying the free-site rescan floor");
         }
       }
-      const gradeCadenceAt = computeNextScanAt(grade, completedAt, { minDays: floorDays });
+      const gradeCadenceAt = computeNextScanAt(grade, completedAt, { minDays: floorDays, intervalDays: sub?.scanIntervalDays });
       const nextScanAt = resolveNextScanAt(sub?.nextScanAt ?? null, gradeCadenceAt, completedAt);
 
       // .returning() so the log reflects what actually happened.

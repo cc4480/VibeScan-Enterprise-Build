@@ -260,6 +260,13 @@
       "when": 1792765278998,
       "tag": "0036_team_members",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1792785209676,
+      "tag": "0037_monitor_scan_interval",
+      "breakpoints": true
     }
   ]
 }

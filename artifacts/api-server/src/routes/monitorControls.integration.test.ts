@@ -85,6 +85,68 @@ dbSuiteOf(describe)("PATCH /monitor/subscriptions/:id/pause (real Postgres)", ()
     expect(await pausedAtOf(id)).toBeNull();
   });
 
+  describe("PATCH /monitor/subscriptions/:id/interval", () => {
+    const setInterval = (id: string, b: unknown) =>
+      fetch(`${app.base}/monitor/subscriptions/${id}/interval`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(b) });
+    const rowOf = async (id: string) => {
+      const [row] = await dbMod.db.select().from(dbMod.monitorSubscriptionsTable).where(eq(dbMod.monitorSubscriptionsTable.id, id));
+      return row!;
+    };
+    const scanned = async (daysAgo: number) => {
+      const id = await subscription();
+      const lastScanAt = new Date(Date.now() - daysAgo * 86_400_000);
+      await dbMod.db.update(dbMod.monitorSubscriptionsTable).set({ lastScanAt, nextScanAt: new Date(Date.now() + 14 * 86_400_000) }).where(eq(dbMod.monitorSubscriptionsTable.id, id));
+      return { id, lastScanAt };
+    };
+
+    it("stores the choice and re-times the next scan from the last one", async () => {
+      app.as({ id: owner });
+      const { id, lastScanAt } = await scanned(2);
+      const res = await setInterval(id, { days: 7 });
+      expect(res.status).toBe(200);
+      const row = await rowOf(id);
+      expect(row.scanIntervalDays).toBe(7);
+      expect(row.nextScanAt!.getTime()).toBe(lastScanAt.getTime() + 7 * 86_400_000);
+    });
+
+    it("a shorter interval than the time since the last scan makes the monitor due now", async () => {
+      app.as({ id: owner });
+      const { id } = await scanned(10);
+      await setInterval(id, { days: 3 });
+      expect((await rowOf(id)).nextScanAt!.getTime()).toBeLessThan(Date.now());
+    });
+
+    it("null goes back to the default and leaves the next scan alone", async () => {
+      app.as({ id: owner });
+      const { id } = await scanned(2);
+      await setInterval(id, { days: 30 });
+      const before = (await rowOf(id)).nextScanAt;
+      expect((await setInterval(id, { days: null })).status).toBe(200);
+      const row = await rowOf(id);
+      expect(row.scanIntervalDays).toBeNull();
+      expect(row.nextScanAt).toEqual(before);
+    });
+
+    it("refuses a number that is not on offer, so nothing scans more often than every 3 days", async () => {
+      app.as({ id: owner });
+      const id = await subscription();
+      for (const days of [1, 2, 5, 0, -7, "7", 3.5]) expect((await setInterval(id, { days })).status).toBe(400);
+      expect((await setInterval(id, {})).status).toBe(400);
+      expect((await rowOf(id)).scanIntervalDays).toBeNull();
+    });
+
+    it("is the owner's alone, active monitors only, and needs a sign-in", async () => {
+      const id = await subscription();
+      app.as({ id: stranger });
+      expect((await setInterval(id, { days: 7 })).status).toBe(404);
+      app.as({ id: owner });
+      expect((await setInterval(await subscription("cancelled"), { days: 7 })).status).toBe(409);
+      app.as(null);
+      expect((await setInterval(id, { days: 7 })).status).toBe(401);
+      expect((await rowOf(id)).scanIntervalDays).toBeNull();
+    });
+  });
+
   it("rejects a body that is not a boolean, and a signed-out caller", async () => {
     const id = await subscription();
     app.as({ id: owner });

@@ -18,12 +18,15 @@ export const SWEEP_QUEUE      = "monitor-sweep";
  * so a D or F grade, which would otherwise rescan every 3 days, waits 7. A paid
  * plan passes no floor and keeps the grade-based cadence.
  */
-export function nextScanDelayDays(grade: string, opts: { minDays?: number } = {}): number {
-  const days = grade === "A" ? 14 : grade === "B" || grade === "C" ? 7 : 3; // D or F: 3
+export function nextScanDelayDays(grade: string, opts: { minDays?: number; intervalDays?: number | null } = {}): number {
+  // An owner-chosen interval replaces the grade cadence, but only after a real graded scan: an
+  // intercepted scan (grade N/A) is retried at the short cadence whatever was chosen.
+  const graded = /^[A-F]$/.test(grade);
+  const days = opts.intervalDays && graded ? opts.intervalDays : grade === "A" ? 14 : grade === "B" || grade === "C" ? 7 : 3; // D or F: 3
   return Math.max(days, opts.minDays ?? 0);
 }
 
-export function computeNextScanAt(grade: string, from: Date = new Date(), opts: { minDays?: number } = {}): Date {
+export function computeNextScanAt(grade: string, from: Date = new Date(), opts: { minDays?: number; intervalDays?: number | null } = {}): Date {
   const days = nextScanDelayDays(grade, opts);
   return new Date(from.getTime() + days * 24 * 60 * 60 * 1000);
 }

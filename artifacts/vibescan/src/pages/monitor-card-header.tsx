@@ -2,6 +2,7 @@ import type { SubscriptionCardState } from "./monitor-card-state";
 import { AlertTriangle, Trash2, ExternalLink, Loader2, RefreshCw, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MonitorPauseButton } from "@/components/monitor-pause-button";
+import { MonitorIntervalSelect } from "@/components/monitor-interval-select";
 import { type MonitorSubscription } from "@/lib/monitor-api";
 import { relativeTime, formatMs } from "./monitor-format";
 import { siteStatus, STATUS_TONE } from "./monitor-card-sections";
@@ -77,6 +78,7 @@ export function SubscriptionHeader({ sub, card }: { sub: MonitorSubscription; ca
             {scanning ? "Scanning…" : "Scan Now"}
           </button>
         )}
+        {isActive && <MonitorIntervalSelect sub={sub} />}
         {isActive && <MonitorPauseButton sub={sub} />}
         {isActive && (
           <button

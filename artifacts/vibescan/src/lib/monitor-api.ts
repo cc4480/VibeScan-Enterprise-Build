@@ -14,6 +14,8 @@ export interface MonitorSubscription {
   webhookUrl: string | null;
   /** When the owner paused this monitor; null while it is running. */
   pausedAt: string | null;
+  /** Days between full rescans, when the owner picked one; null means the default (set by the grade). */
+  scanIntervalDays: number | null;
   createdAt: string;
   lastReport: { id: string; grade: string | null; riskScore: number | null } | null;
   alertCount: number;
@@ -119,6 +121,17 @@ export async function createMonitorSubscription(
 
 export async function cancelMonitorSubscription(id: string): Promise<void> {
   await customFetch(`/api/monitor/subscriptions/${id}`, { method: "DELETE" });
+}
+
+export const SCAN_INTERVAL_CHOICES = [3, 7, 14, 30] as const;
+
+/** `null` goes back to the default, where the site's grade sets how often it is rescanned. */
+export async function setMonitorInterval(id: string, days: number | null): Promise<void> {
+  await customFetch(`/api/monitor/subscriptions/${id}/interval`, {
+    method: "PATCH",
+    body: JSON.stringify({ days }),
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 export async function setMonitorPaused(id: string, paused: boolean): Promise<void> {
