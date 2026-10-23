@@ -239,6 +239,13 @@
       "when": 1792555735473,
       "tag": "0033_scans_user_created_index",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792763963668,
+      "tag": "0034_github_issues",
+      "breakpoints": true
     }
   ]
 }

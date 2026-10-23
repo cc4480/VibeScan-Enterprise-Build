@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSeo } from "@/lib/seo";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Mail, CreditCard, Bot } from "lucide-react";
+import { Loader2, Mail, CreditCard, Bot, Github } from "lucide-react";
 import { AiEditorsSection } from "@/components/ai-editors";
+import { GithubIssuesSection } from "@/components/github-issues-section";
 import { ConnectedAppsSection } from "@/components/connected-apps";
 import { BillingSummary } from "@/components/billing-summary";
 import { PrivacyCard } from "@/components/privacy-card";
@@ -92,6 +93,21 @@ export default function SettingsPage() {
         <div className="mt-8 pt-6 border-t border-white/10">
           <ConnectedAppsSection />
         </div>
+      </div>
+
+      <div className="glass-panel p-6 sm:p-10 rounded-3xl mb-8">
+        <div className="flex items-start gap-4 mb-6">
+          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20 shrink-0">
+            <Github className="w-6 h-6 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold mb-1">GitHub issues</h2>
+            <p className="text-sm text-muted-foreground">
+              Turn a finding into a GitHub issue from the report, with the evidence, the fix and a link back. Each problem on a site is filed once.
+            </p>
+          </div>
+        </div>
+        <GithubIssuesSection />
       </div>
 
       <div className="glass-panel p-6 sm:p-10 rounded-3xl mb-8">
