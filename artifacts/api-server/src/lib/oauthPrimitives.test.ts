@@ -1,7 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
-
-vi.mock("@workspace/db", () => ({ db: {}, oauthClientsTable: {} }));
-vi.mock("drizzle-orm", () => ({ eq: () => ({}) }));
+import { describe, it, expect } from "vitest";
 
 import { challengeFor, isValidChallenge, isValidVerifier, verifyPkce } from "./oauthPkce";
 import { checkRedirectUri, validateRegistration, normaliseClientName, redirectUriAllowed, describeRedirect } from "./oauthClients";
