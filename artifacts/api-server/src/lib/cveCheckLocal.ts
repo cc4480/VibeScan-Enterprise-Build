@@ -35,7 +35,11 @@ export const LOCAL_DATA_STALE_DAYS = 90;
  * refreshes nightly on its own. Judging them together let a healthy nightly
  * fetch hide stale hand-maintained tables indefinitely.
  */
-export function warnIfLocalDataStale(): void {
+export function warnIfLocalDataStale(opts: { now?: number; log?: Pick<typeof logger, "warn" | "debug"> } = {}): void {
+  // The clock and the logger default to the real ones. A caller can hand in a moment and a logger of its own, so the
+  // 90-day rule can be checked at a date far from today without waiting for it.
+  const now = opts.now ?? Date.now();
+  const log = opts.log ?? logger;
   // The two data sets have separate maintenance paths and must be judged
   // separately. eolFetcher.ts refreshes the EOL cycles from endoflife.date
   // daily and automatically; the CVE range tables below (NGINX_VULN_RANGES,
@@ -48,10 +52,10 @@ export function warnIfLocalDataStale(): void {
   // that exists precisely to nag about them could never fire while the daily
   // job was healthy — which is exactly when nobody is looking.
   const bundledDate = new Date(LOCAL_VULN_DATA_UPDATED);
-  const bundledAgeDays = Math.floor((Date.now() - bundledDate.getTime()) / 86_400_000);
+  const bundledAgeDays = Math.floor((now - bundledDate.getTime()) / 86_400_000);
 
   if (bundledAgeDays > LOCAL_DATA_STALE_DAYS) {
-    logger.warn(
+    log.warn(
       {
         bundledDate: bundledDate.toISOString(),
         ageDays: bundledAgeDays,
@@ -71,10 +75,10 @@ export function warnIfLocalDataStale(): void {
   const liveDate = getEolDataFetchedAt();
   const eolDate = liveDate && liveDate > bundledDate ? liveDate : bundledDate;
   const eolSource = liveDate && liveDate > bundledDate ? "live EOL refresh" : "bundled tables";
-  const eolAgeDays = Math.floor((Date.now() - eolDate.getTime()) / 86_400_000);
+  const eolAgeDays = Math.floor((now - eolDate.getTime()) / 86_400_000);
 
   if (eolAgeDays > LOCAL_DATA_STALE_DAYS) {
-    logger.warn(
+    log.warn(
       {
         effectiveDate: eolDate.toISOString(),
         source: eolSource,
@@ -90,7 +94,7 @@ export function warnIfLocalDataStale(): void {
   }
 
   if (bundledAgeDays <= LOCAL_DATA_STALE_DAYS && eolAgeDays <= LOCAL_DATA_STALE_DAYS) {
-    logger.debug(
+    log.debug(
       {
         bundledDate: bundledDate.toISOString(),
         eolDate: eolDate.toISOString(),
@@ -103,7 +107,7 @@ export function warnIfLocalDataStale(): void {
 
 // PHP EOL dates — versions that are fully end-of-life as of 2026
 
-export function checkLocalVulns(detected: DetectedVersion[]): ScanVulnerability[] {
+export function checkLocalVulns(detected: DetectedVersion[], now: Date = new Date()): ScanVulnerability[] {
   const findings: ScanVulnerability[] = [];
 
   for (const d of detected) {
@@ -114,7 +118,7 @@ export function checkLocalVulns(detected: DetectedVersion[]): ScanVulnerability[
       const majorMinor = d.version.split(".").slice(0, 2).join(".");
       const phpEol = getLivePhpEol();
       const eolMsg = phpEol[majorMinor] || phpEol[major];
-      const eol = eolMsg ? classifyEol(eolMsg) : null;
+      const eol = eolMsg ? classifyEol(eolMsg, now) : null;
       if (eol?.state === "eol") {
         findings.push(vuln({
           name: `PHP ${d.version} is End-of-Life`,

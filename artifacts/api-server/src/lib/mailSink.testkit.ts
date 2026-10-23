@@ -77,13 +77,14 @@ export async function startMailSink(): Promise<MailSink> {
   process.env["RESEND_API_KEY"] = "re_test_sink_only";
 
   const messages = () => mail.filter((m) => m.path.startsWith("/emails"));
+  const to = (email: string) => messages().filter((m) => m.to.map((t) => t.toLowerCase()).includes(email.toLowerCase()));
   return {
     mail,
     respondWith: (s) => { status = s; },
     clear: () => { mail.length = 0; status = 200; },
-    to: (email) => messages().filter((m) => m.to.map((t) => t.toLowerCase()).includes(email.toLowerCase())),
+    to,
     loginCodeTo(email) {
-      const hit = [...this.to(email)].reverse().find((m) => /is your .* sign-in code/i.test(m.subject));
+      const hit = [...to(email)].reverse().find((m) => /is your .* sign-in code/i.test(m.subject));
       return hit ? hit.subject.match(/^([\d\s]+) is your/)?.[1]?.replace(/\s+/g, "") : undefined;
     },
     stop: () => new Promise<void>((resolve) => server.close(() => resolve())),

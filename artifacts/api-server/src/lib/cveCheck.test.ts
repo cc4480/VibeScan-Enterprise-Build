@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 
 // cveCheck.ts pulls in @workspace/db transitively, which throws at module load
 // without DATABASE_URL. pg.Pool connects lazily, so a placeholder that resolves
@@ -7,13 +7,6 @@ import { describe, it, expect, vi } from "vitest";
 // checkForKnownVulnerabilities() never sends to OSV.dev.
 process.env["DATABASE_URL"] ||=
   "postgresql://placeholder:placeholder@127.0.0.1:1/placeholder";
-
-vi.mock("./eolFetcher", () => ({
-  getLivePhpEol: () => null,
-  getLiveNginxEolCycles: () => new Set<string>(),
-  getLiveApacheEolCycles: () => new Set<string>(),
-  getEolDataFetchedAt: () => null,
-}));
 
 /**
  * NGINX_VULN_RANGES and APACHE_VULN_RANGES had no tests at all before the

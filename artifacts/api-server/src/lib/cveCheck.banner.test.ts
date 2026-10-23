@@ -1,45 +1,37 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
+import { setEolCache } from "./eolFetcherData";
 
 process.env["DATABASE_URL"] ||= "postgresql://placeholder:placeholder@127.0.0.1:1/placeholder";
 
-// Live EOL data as the nightly refresh stores it: PHP 8.2's entry is the future-tense early
-// warning, 8.1 is past, and nginx 1.24 is an EOL upstream cycle.
-vi.mock("./eolFetcher", () => ({
-  getLivePhpEol: () => ({ "8.1": "Reached EOL in December 2025", "8.2": "Reaches EOL in December 2026" }),
-  getLiveNginxEolCycles: () => new Set(["1.18", "1.24"]),
-  getLiveApacheEolCycles: () => new Set<string>(["2.2"]),
-  getEolDataFetchedAt: () => null,
-}));
+// Live EOL data as the nightly refresh stores it, put in the real in-process cache: PHP 8.2's entry is the
+// future-tense early warning, 8.1 is past, and nginx 1.24 is an EOL upstream cycle.
+beforeAll(() =>
+  setEolCache({
+    phpEol: { "8.1": "Reached EOL in December 2025", "8.2": "Reaches EOL in December 2026" },
+    nginxEolCycles: new Set(["1.18", "1.24"]),
+    apacheEolCycles: new Set(["2.2"]),
+    fetchedAt: new Date(),
+  }),
+);
 
-async function detect(headers: Record<string, string>) {
+/** The real check; `now` is the date end-of-life is judged against (the real clock when omitted). */
+async function detect(headers: Record<string, string>, now?: Date) {
   const { checkForKnownVulnerabilities } = await import("./cveCheck.js");
-  return checkForKnownVulnerabilities("", headers);
+  return checkForKnownVulnerabilities("", headers, now ? { now } : {});
 }
 
 describe("PHP end-of-life is judged against the date", () => {
   it("a still-supported branch is an INFO early warning, never 'is End-of-Life'", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-09-30T12:00:00Z"));
-    try {
-      const f = await detect({ "x-powered-by": "PHP/8.2.28" });
-      expect(f).toHaveLength(1);
-      expect(f[0]!.severity).toBe("info");
-      expect(f[0]!.name).not.toContain("is End-of-Life");
-      expect(f[0]!.name).toContain("Reaches End-of-Life in December 2026");
-    } finally {
-      vi.useRealTimers();
-    }
+    const f = await detect({ "x-powered-by": "PHP/8.2.28" }, new Date("2026-09-30T12:00:00Z"));
+    expect(f).toHaveLength(1);
+    expect(f[0]!.severity).toBe("info");
+    expect(f[0]!.name).not.toContain("is End-of-Life");
+    expect(f[0]!.name).toContain("Reaches End-of-Life in December 2026");
   });
   it("the same entry becomes HIGH once its month has passed", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2027-01-15T12:00:00Z"));
-    try {
-      const f = await detect({ "x-powered-by": "PHP/8.2.28" });
-      expect(f[0]!.severity).toBe("high");
-      expect(f[0]!.name).toBe("PHP 8.2.28 is End-of-Life");
-    } finally {
-      vi.useRealTimers();
-    }
+    const f = await detect({ "x-powered-by": "PHP/8.2.28" }, new Date("2027-01-15T12:00:00Z"));
+    expect(f[0]!.severity).toBe("high");
+    expect(f[0]!.name).toBe("PHP 8.2.28 is End-of-Life");
   });
   it("a past-EOL upstream PHP is still HIGH", async () => {
     const f = await detect({ "x-powered-by": "PHP/8.1.9" });

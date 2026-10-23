@@ -1,79 +1,59 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
+import { Writable } from "node:stream";
+import pino from "pino";
+import { warnIfLocalDataStale } from "./cveCheck";
+import { setEolCache } from "./eolFetcherData";
 
-// cveCheck.ts pulls in @workspace/db transitively, which throws at module load
-// without DATABASE_URL. pg.Pool connects lazily, so a placeholder that resolves
-// nowhere is enough for a pure logging function and touches no network.
-process.env["DATABASE_URL"] ||=
-  "postgresql://placeholder:placeholder@127.0.0.1:1/placeholder";
-
-const warn = vi.fn();
-
-vi.mock("./logger", () => ({
-  logger: { warn, debug: vi.fn(), info: vi.fn(), error: vi.fn() },
-}));
-
-const getEolDataFetchedAt = vi.fn<() => Date | null>();
-
-vi.mock("./eolFetcher", () => ({
-  getEolDataFetchedAt: () => getEolDataFetchedAt(),
-  getLivePhpEol: () => null,
-  getLiveNginxEolCycles: () => null,
-  getLiveApacheEolCycles: () => null,
-}));
-
-/** Every message the logger was warned with, joined for substring matching. */
-function warnings(): string {
-  return warn.mock.calls.map((c) => String(c[1] ?? "")).join("\n");
+/** A real logger whose output is captured, so the test reads what was actually logged at warn level. */
+function capturedLogger() {
+  const lines: Array<{ level: number; msg: string }> = [];
+  const log = pino({ level: "debug" }, new Writable({ write(chunk, _enc, cb) { lines.push(JSON.parse(String(chunk))); cb(); } }));
+  return { log, warnings: () => lines.filter((l) => l.level === 40).map((l) => l.msg).join("\n"), warned: () => lines.some((l) => l.level === 40) };
 }
 
+/** The live EOL refresh, as the nightly job leaves it in the in-process cache. */
+const refreshedAt = (iso: string) =>
+  setEolCache({ phpEol: {}, nginxEolCycles: new Set(), apacheEolCycles: new Set(), fetchedAt: new Date(iso) });
+
 describe("warnIfLocalDataStale", () => {
-  beforeEach(() => {
-    warn.mockClear();
-    getEolDataFetchedAt.mockReset();
-    vi.useFakeTimers();
-  });
+  // Each test sets the live refresh time itself; the clock is passed in rather than waited for.
+  beforeEach(() => refreshedAt("2020-01-01T00:00:00Z"));
 
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  // The regression this file exists for. The nightly endoflife.date job kept
-  // the EOL half fresh, and because both halves shared one "effective date",
-  // that reset the clock on the hand-maintained CVE tables as well — so the
-  // warning that exists to nag about them stayed silent for as long as the
-  // daily job kept succeeding.
-  it("warns about the hand-maintained tables even when the EOL refresh is fresh", async () => {
+  // The regression this file exists for. The nightly endoflife.date job kept the EOL half fresh, and because both
+  // halves shared one "effective date", that reset the clock on the hand-maintained CVE tables as well, so the warning
+  // that exists to nag about them stayed silent for as long as the daily job kept succeeding.
+  it("warns about the hand-maintained tables even when the EOL refresh is fresh", () => {
     // Bundled tables last reviewed 2026-09-21; well past the 90-day threshold.
-    vi.setSystemTime(new Date("2027-01-20T12:00:00Z"));
-    getEolDataFetchedAt.mockReturnValue(new Date("2027-01-20T03:00:00Z"));
+    refreshedAt("2027-01-20T03:00:00Z");
+    const c = capturedLogger();
+    warnIfLocalDataStale({ now: Date.parse("2027-01-20T12:00:00Z"), log: c.log });
 
-    const { warnIfLocalDataStale } = await import("./cveCheck.js");
-    warnIfLocalDataStale();
-
-    expect(warn).toHaveBeenCalled();
-    expect(warnings()).toMatch(/hand-maintained cve tables/i);
+    expect(c.warned()).toBe(true);
+    expect(c.warnings()).toMatch(/hand-maintained cve tables/i);
     // The EOL half is genuinely fresh, so it must not also complain.
-    expect(warnings()).not.toMatch(/EOL data is \d+ days old/i);
+    expect(c.warnings()).not.toMatch(/EOL data is \d+ days old/i);
   });
 
-  it("warns about EOL data when the nightly job has stopped running", async () => {
-    vi.setSystemTime(new Date("2027-01-20T12:00:00Z"));
-    getEolDataFetchedAt.mockReturnValue(new Date("2026-01-01T03:00:00Z"));
+  it("warns about EOL data when the nightly job has stopped running", () => {
+    refreshedAt("2026-01-01T03:00:00Z");
+    const c = capturedLogger();
+    warnIfLocalDataStale({ now: Date.parse("2027-01-20T12:00:00Z"), log: c.log });
 
-    const { warnIfLocalDataStale } = await import("./cveCheck.js");
-    warnIfLocalDataStale();
-
-    expect(warnings()).toMatch(/EOL data is \d+ days old/i);
+    expect(c.warnings()).toMatch(/EOL data is \d+ days old/i);
   });
 
-  it("stays silent when both halves are inside the threshold", async () => {
+  it("stays silent when both halves are inside the threshold", () => {
     // A date shortly after the bundled review date keeps both halves fresh.
-    vi.setSystemTime(new Date("2026-10-05T12:00:00Z"));
-    getEolDataFetchedAt.mockReturnValue(new Date("2026-10-05T03:00:00Z"));
+    refreshedAt("2026-10-05T03:00:00Z");
+    const c = capturedLogger();
+    warnIfLocalDataStale({ now: Date.parse("2026-10-05T12:00:00Z"), log: c.log });
 
-    const { warnIfLocalDataStale } = await import("./cveCheck.js");
-    warnIfLocalDataStale();
+    expect(c.warned()).toBe(false);
+  });
 
-    expect(warn).not.toHaveBeenCalled();
+  it("uses the real clock and logger when none are given", () => {
+    // Today is well inside 90 days of the bundled review, and the call must simply not throw.
+    refreshedAt(new Date().toISOString());
+    expect(() => warnIfLocalDataStale()).not.toThrow();
   });
 });

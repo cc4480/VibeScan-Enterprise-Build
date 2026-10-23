@@ -30,6 +30,8 @@ export type { OsvVuln } from "./cveCheckOsv";
 export async function checkForKnownVulnerabilities(
   html: string,
   headers: Record<string, string>,
+  /** The moment end-of-life dates are judged against. The real clock unless a caller needs another date. */
+  opts: { now?: Date } = {},
 ): Promise<ScanVulnerability[]> {
   const detected = extractVersionedTechnologies(html, headers);
   if (detected.length === 0) return [];
@@ -37,7 +39,7 @@ export async function checkForKnownVulnerabilities(
   const findings: ScanVulnerability[] = [];
 
   // 1. Local checks (instant, no network)
-  findings.push(...checkLocalVulns(detected));
+  findings.push(...checkLocalVulns(detected, opts.now));
 
   // 2. OSV.dev queries for npm + CMS packages (parallel, cached per version)
   const osvTargets = detected.filter((d) => d.ecosystem !== "local");
