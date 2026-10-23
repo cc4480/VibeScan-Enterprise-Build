@@ -1,5 +1,9 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { runApiDocsProbe } from "./apiDocsProbe.js";
+import { useRouteSite } from "./routeSite.testkit";
+
+// The site is a real web server on loopback (lib/routeSite.testkit.ts); what it serves at each path is set per test.
+const site = await useRouteSite();
 
 /**
  * First tests for this module. Its only importer is scanner.ts, which has no
@@ -11,23 +15,8 @@ import { runApiDocsProbe } from "./apiDocsProbe.js";
  * landing on a marketing page, and nothing was holding them in place.
  */
 
-const originalFetch = globalThis.fetch;
-afterEach(() => {
-  globalThis.fetch = originalFetch;
-  vi.restoreAllMocks();
-});
-
 function serve(routes: Record<string, { body: string; status?: number; ct?: string }>) {
-  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    const path = new URL(url).pathname;
-    const hit = routes[path];
-    if (!hit) return new Response("Not Found", { status: 404 });
-    return new Response(hit.body, {
-      status: hit.status ?? 200,
-      headers: { "content-type": hit.ct ?? "application/json" },
-    });
-  }) as typeof fetch;
+  site.routes(routes);
 }
 
 const pad = (s: string, n = 400) => s + " ".repeat(Math.max(0, n - s.length));
@@ -48,7 +37,7 @@ describe("runApiDocsProbe — confirms a real spec", () => {
   it("reports an OpenAPI 3 document", async () => {
     serve({ "/openapi.json": { body: realSpec } });
 
-    const vulns = await runApiDocsProbe("https://example.com/");
+    const vulns = await runApiDocsProbe(`${site.origin}/`);
     expect(vulns).toHaveLength(1);
     // A reachable spec is INFO, not a vulnerability: publishing an OpenAPI spec
     // is mainstream intentional practice (Stripe, Vercel, Cloudflare all do it),
@@ -70,7 +59,7 @@ describe("runApiDocsProbe — confirms a real spec", () => {
       },
     });
 
-    const vulns = await runApiDocsProbe("https://example.com/");
+    const vulns = await runApiDocsProbe(`${site.origin}/`);
     expect(vulns).toHaveLength(1);
     expect(vulns[0]!.evidence).toMatch(/UI bundle script detected/);
   });
@@ -87,7 +76,7 @@ describe("runApiDocsProbe — does not invent one", () => {
       },
     });
 
-    expect(await runApiDocsProbe("https://example.com/")).toEqual([]);
+    expect(await runApiDocsProbe(`${site.origin}/`)).toEqual([]);
   });
 
   it("ignores JSON that happens to contain a paths key", async () => {
@@ -98,7 +87,7 @@ describe("runApiDocsProbe — does not invent one", () => {
       },
     });
 
-    expect(await runApiDocsProbe("https://example.com/")).toEqual([]);
+    expect(await runApiDocsProbe(`${site.origin}/`)).toEqual([]);
   });
 
   it("ignores a spec-shaped document with no version field", async () => {
@@ -108,28 +97,27 @@ describe("runApiDocsProbe — does not invent one", () => {
       },
     });
 
-    expect(await runApiDocsProbe("https://example.com/")).toEqual([]);
+    expect(await runApiDocsProbe(`${site.origin}/`)).toEqual([]);
   });
 
   it("ignores the SPA catch-all shell served at every path", async () => {
     // The app answers 200 with its shell for anything, including the random
     // nonce path detectCatchAll probes first.
     const shell = pad("<!doctype html><html><head><title>Dashboard</title></head><body><div id=root></div></body></html>", 800);
-    globalThis.fetch = (async () =>
-      new Response(shell, { status: 200, headers: { "content-type": "text/html" } })) as typeof fetch;
+    site.otherwise(() => ({ body: shell, ct: "text/html" }));
 
-    expect(await runApiDocsProbe("https://example.com/")).toEqual([]);
+    expect(await runApiDocsProbe(`${site.origin}/`)).toEqual([]);
   });
 
   it("ignores a thin response below the minimum body size", async () => {
     serve({ "/openapi.json": { body: '{"openapi":"3.0.0","info":{},"paths":{}}' } });
 
-    expect(await runApiDocsProbe("https://example.com/")).toEqual([]);
+    expect(await runApiDocsProbe(`${site.origin}/`)).toEqual([]);
   });
 
   it("reports nothing when every documentation path 404s", async () => {
     serve({});
-    expect(await runApiDocsProbe("https://example.com/")).toEqual([]);
+    expect(await runApiDocsProbe(`${site.origin}/`)).toEqual([]);
   });
 
   it("returns nothing for a URL it cannot parse", async () => {
