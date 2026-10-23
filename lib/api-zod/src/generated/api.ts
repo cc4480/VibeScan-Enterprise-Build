@@ -144,6 +144,8 @@ export const CreateScanHeader = zod.object({
     .describe("Opaque session token — `Bearer <sid>`."),
 });
 
+export const createScanBodyAutoSecondAccountDefault = false;
+
 export const CreateScanBody = zod.object({
   targetUrl: zod.string(),
   tier: zod.enum(["deep"]).optional(),
@@ -161,18 +163,20 @@ export const CreateScanBody = zod.object({
         ),
       cookie: zod
         .string()
+        .max(8192)
         .nullish()
         .describe("Cookie header value, for mode `session`."),
       bearerToken: zod
         .string()
+        .max(4096)
         .nullish()
         .describe("Bearer token, for mode `session`."),
       loginUrl: zod
         .string()
         .nullish()
         .describe("URL of the sign-in page, for mode `form`."),
-      username: zod.string().nullish(),
-      password: zod.string().nullish(),
+      username: zod.string().max(500).nullish(),
+      password: zod.string().max(500).nullish(),
     })
     .optional()
     .describe(
@@ -192,18 +196,20 @@ export const CreateScanBody = zod.object({
         ),
       cookie: zod
         .string()
+        .max(8192)
         .nullish()
         .describe("Cookie header value, for mode `session`."),
       bearerToken: zod
         .string()
+        .max(4096)
         .nullish()
         .describe("Bearer token, for mode `session`."),
       loginUrl: zod
         .string()
         .nullish()
         .describe("URL of the sign-in page, for mode `form`."),
-      username: zod.string().nullish(),
-      password: zod.string().nullish(),
+      username: zod.string().max(500).nullish(),
+      password: zod.string().max(500).nullish(),
     })
     .describe(
       "Optional credentials so the scan can test the authenticated surface. Encrypted at rest and discarded when the scan finishes. Requires `authorized` to be true, since logging into a system automatically is a different legal posture from an unauthenticated header check. Use a dedicated low-privilege test account, never an administrator login.",
@@ -211,6 +217,18 @@ export const CreateScanBody = zod.object({
     .optional()
     .describe(
       "A second, separate account. Supplying one enables broken access control testing: the scan asks for the same records as both accounts and as an anonymous visitor, and reports when the second account is served the first account's data. Use two ordinary accounts that own different data, not an admin and a user.",
+    ),
+  autoSecondAccount: zod
+    .boolean()
+    .default(createScanBodyAutoSecondAccountDefault)
+    .describe(
+      "Opt in to letting the scan create a disposable second account through the target's public signup form, so the broken access control test can run with only one login supplied. It submits that form once with a made-up address at example.com, and works only when signup gives a signed-in session immediately (no email confirmation). The report names the account so it can be deleted. Requires `credentials`, and is ignored when `secondaryCredentials` is supplied.",
+    ),
+  githubRepoUrl: zod
+    .string()
+    .optional()
+    .describe(
+      "A public GitHub repository to read for committed secrets, as `https:\/\/github.com\/owner\/repo` (or `owner\/repo`). Only public repositories are read, with no token, and only GitHub is contacted for it, never the scan target. Leave it out to skip the source scan.",
     ),
 });
 
@@ -352,6 +370,12 @@ export const GetReportResponse = zod.object({
           .optional()
           .describe(
             "The AI coding tool\/platform detected from the scanned app's tech stack, used to format agentFixPrompt.",
+          ),
+        source: zod
+          .enum(["ai", "template"])
+          .optional()
+          .describe(
+            "ai when the AI writer produced this analysis; template when it was assembled from the findings because the AI writer gave none.",
           ),
       })
       .optional(),
@@ -506,7 +530,12 @@ export const ListReportSharesHeader = zod.object({
 
 export const ListReportSharesResponseItem = zod.object({
   id: zod.string(),
-  token: zod.string(),
+  token: zod
+    .string()
+    .optional()
+    .describe(
+      "The link's token. Present only in the response that creates the share; the server stores a hash and cannot return it again.",
+    ),
   expiresAt: zod.date().nullish(),
   createdAt: zod.date(),
   revokedAt: zod.date().nullish(),
@@ -518,7 +547,7 @@ export const ListReportSharesResponse = zod.array(ListReportSharesResponseItem);
  */
 export const RevokeReportShareParams = zod.object({
   id: zod.coerce.string(),
-  token: zod.coerce.string(),
+  shareId: zod.coerce.string(),
 });
 
 export const RevokeReportShareHeader = zod.object({
@@ -617,6 +646,12 @@ export const GetSharedReportResponse = zod.object({
           .describe(
             "The AI coding tool\/platform detected from the scanned app's tech stack, used to format agentFixPrompt.",
           ),
+        source: zod
+          .enum(["ai", "template"])
+          .optional()
+          .describe(
+            "ai when the AI writer produced this analysis; template when it was assembled from the findings because the AI writer gave none.",
+          ),
       })
       .optional(),
     recon: zod
@@ -673,72 +708,6 @@ export const GetCreditsHeader = zod.object({
 
 export const GetCreditsResponse = zod.object({
   balance: zod.number(),
-});
-
-/**
- * @summary Get whether the current user has a personal DeepSeek API key configured
- */
-export const GetDeepseekKeyStatusHeader = zod.object({
-  Authorization: zod
-    .string()
-    .optional()
-    .describe("Opaque session token — `Bearer <sid>`."),
-});
-
-export const GetDeepseekKeyStatusResponse = zod.object({
-  configured: zod.boolean(),
-  last4: zod
-    .string()
-    .nullable()
-    .describe(
-      "Last 4 characters of the configured key, for display only. Null if unconfigured.",
-    ),
-});
-
-/**
- * @summary Set (or replace) the current user's personal DeepSeek API key
- */
-export const SetDeepseekKeyHeader = zod.object({
-  Authorization: zod
-    .string()
-    .optional()
-    .describe("Opaque session token — `Bearer <sid>`."),
-});
-
-export const setDeepseekKeyBodyApiKeyMin = 10;
-
-export const SetDeepseekKeyBody = zod.object({
-  apiKey: zod.string().min(setDeepseekKeyBodyApiKeyMin),
-});
-
-export const SetDeepseekKeyResponse = zod.object({
-  configured: zod.boolean(),
-  last4: zod
-    .string()
-    .nullable()
-    .describe(
-      "Last 4 characters of the configured key, for display only. Null if unconfigured.",
-    ),
-});
-
-/**
- * @summary Remove the current user's personal DeepSeek API key
- */
-export const DeleteDeepseekKeyHeader = zod.object({
-  Authorization: zod
-    .string()
-    .optional()
-    .describe("Opaque session token — `Bearer <sid>`."),
-});
-
-export const DeleteDeepseekKeyResponse = zod.object({
-  configured: zod.boolean(),
-  last4: zod
-    .string()
-    .nullable()
-    .describe(
-      "Last 4 characters of the configured key, for display only. Null if unconfigured.",
-    ),
 });
 
 /**

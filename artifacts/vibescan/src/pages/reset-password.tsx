@@ -1,23 +1,20 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation } from "wouter";
 import { useSeo } from "@/lib/seo";
 import { AuthShell, AuthForm, Field } from "@/components/auth-shell";
 import { resetPassword, accountErrorMessage } from "@/lib/account-api";
+import { tokenInUrl, clearTokenFromUrl } from "@/lib/url-token";
 
 const MIN_PASSWORD_LENGTH = 10;
 
-function tokenFromUrl(): string {
-  if (typeof window === "undefined") return "";
-  return new URLSearchParams(window.location.search).get("token") ?? "";
-}
-
 export default function ResetPasswordPage() {
-  useSeo({ title: "Choose a new password — Seclayer", noindex: true });
+  useSeo({ title: "Choose a new password — SecScan.us", noindex: true });
 
   const [, setLocation] = useLocation();
   // Read once on mount: the value comes from the emailed link and does not
-  // change while the page is open.
-  const [token] = useState(tokenFromUrl);
+  // change while the page is open. The address bar is cleared after the read.
+  const [token] = useState(() => tokenInUrl(typeof window === "undefined" ? undefined : window));
+  useEffect(() => clearTokenFromUrl(typeof window === "undefined" ? undefined : window), []);
   const [password, setPassword] = useState("");
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -1,18 +1,25 @@
-# Seclayer
+# SecScan
 
 > Automated black-box security scanning for web applications — built for vibe coders who ship fast.
 
-Seclayer performs automated black-box security scans on web applications you own or are
-authorised to test. Paste a URL and receive a plain-English security report powered by DeepSeek
-AI, usually within ten minutes, with no installs or agents required.
+## Disambiguation
+
+"SecScan" is a name shared by several unrelated projects. This one is the hosted web
+application security scanner at https://secscan.us, with its reference documentation at
+https://secscan.info. It is not the Go secret-scanning CLI of the same name, not
+secscan.io, and not any of the similarly named GitHub projects.
+
+SecScan performs automated black-box security scans on web applications you own or are
+authorised to test. Paste a URL and receive a plain-English security report powered by AI,
+usually in under a minute, with no installs or agents required.
 
 Every scan is a full scan. There are no tiers to choose between.
 
-Seclayer is an automated scanner, not a manual penetration test. It is not passive: it sends
+SecScan is an automated scanner, not a manual penetration test. It is not passive: it sends
 real probe traffic to the target, including injection payloads and a port scan. Scan only what
 you own or have permission to test.
 
-## What Seclayer does
+## What SecScan does
 
 - Runs automated black-box security scans against a publicly reachable web application
 - Aligned with the OWASP Top 10. Strongest on security misconfiguration (A05), cryptographic
@@ -26,11 +33,11 @@ you own or have permission to test.
   bundle, then tests each endpoint for missing authentication, IDOR, BFLA, injection, excessive
   data exposure, rate limiting and mass assignment
 - Assigns a letter grade (A through F) with a numeric risk score (0–100)
-- Generates plain-English reports via DeepSeek that explain findings and prioritise fixes
-- Provides per-agent fix prompts tailored to Cursor, Claude Code, Lovable, Bolt and Replit AI
-- Offers continuous monitoring with weekly rescans and daily CVE feed matching
+- Generates plain-English reports via AI that explain findings and prioritise fixes
+- Provides one universal fix prompt that works pasted into any AI coding tool (Claude Code, Cursor, Codex, GitHub Copilot, Grok Build, Lovable, Bolt, Replit and others)
+- Offers continuous monitoring (the SecScan Unlimited plan): hourly uptime and header checks, rescans on a schedule set by your grade, and hourly CVE matching
 
-## Who Seclayer is for
+## Who SecScan is for
 
 Vibe coders, solo founders, indie developers and dev agencies who build with AI code generation
 tools (Cursor, Lovable, Bolt, Replit) and need to verify security before launching — or after
@@ -38,8 +45,17 @@ every coding session.
 
 ## Pricing
 
-Free during early access. Every scan and continuous monitoring are free while the platform is
-being fine-tuned. There is no checkout and no paid tier at present.
+Every account gets 3 free scans every month (renewing on the 1st, UTC), every check included, with every
+finding and fix unlocked. Free accounts also get free re-tests to confirm a fix (10 a day, no scan used),
+their first site watched free (hourly uptime, certificate and header checks, with email alerts; adding the
+site uses one free scan for its first full scan), a grade badge for a README (for a domain the account has
+verified) that shows only the grade and the scan date, and scanning from AI editors over MCP or the REST
+API on the same free scans.
+
+- SecScan Unlimited — $19/month: unlimited full scans (fair use: up to 5 scans an hour and 20 a day
+  per account) and up to 5 sites watched around the clock. Cancel any time.
+
+The paid plan is not yet available for purchase; it will be handled by Stripe when it opens.
 
 ## Security checks performed
 
@@ -79,8 +95,27 @@ Components: known-CVE matching and end-of-life version detection
 2. Optionally supply credentials so the scan can test the authenticated surface, and a second
    account so it can test access control between users
 3. The scanner fetches the target, renders it if it is a single-page app, discovers its API
-   surface, runs its probes, and calls DeepSeek for analysis
+   surface, runs its probes, and calls its AI provider for analysis
 4. Receive a report with grade, risk score, findings and fix prompts
+
+## Use from AI editors (MCP)
+
+SecScan runs as a remote MCP server, so Claude Code, Cursor and other MCP-capable
+editors can scan a site and read the report without leaving the editor.
+
+1. In SecScan, open Settings -> AI editors and create a token (shown once).
+2. Claude Code: claude mcp add --scope user --transport http secscan https://secscan.us/api/mcp --header "Authorization: Bearer <token>"
+   Cursor: add {"mcpServers":{"secscan":{"url":"https://secscan.us/api/mcp","headers":{"Authorization":"Bearer <token>"}}}} to ~/.cursor/mcp.json
+3. Ask the editor to scan your site.
+
+Tools: scan_url, get_scan_status (can wait for the result), get_report (findings, fixes and a
+fix prompt for the editor), list_recent_scans, list_verified_domains, start_domain_verification
+and check_domain_verification (unlock active tests), get_account (scans left and plan),
+list_monitors, add_monitor, monitor_scan_now (continuous monitoring), and dismiss_finding (mark
+a confirmed false positive). Everything from an editor follows exactly the same rules as the
+website: scans, new monitors and rescans use the account's free scans, plan scans or credits,
+and active tests run only on verified domains. Tokens work only for the MCP endpoint and can be
+revoked any time.
 
 ## Scope and safety
 
@@ -97,11 +132,27 @@ Components: known-CVE matching and end-of-life version detection
 
 - Built on: Node.js / Express, React / Vite, PostgreSQL, pg-boss queue
 - Deployed as two services: a web tier and a separate scanner tier that consumes a job queue
-- AI: DeepSeek (deepseek-chat model)
-- Auth: email and password with verified email; anonymous scanning is also supported
+- AI: LLM-generated report analysis
+- Auth: email and password with verified email; a free account with a verified email is required to scan
 - No agents, browser extensions or code changes required
+
+## Reference documentation
+
+The full text of every check this scanner runs, in one file: https://secscan.us/llms-full.txt
+
+Full documentation lives on https://secscan.info, which has its own llms.txt at
+https://secscan.info/llms.txt:
+
+- https://secscan.info/coverage — every check, by module, with severities
+- https://secscan.info/how-it-works — how a scan proceeds, and the verification gate
+- https://secscan.info/reports — how to read a report
+- https://secscan.info/monitoring — continuous monitoring and CVE matching
+- https://secscan.info/false-positives — false-positive methodology
+- https://secscan.info/guides — remediation guide per finding
 
 ## Contact
 
 Website: https://secscan.us
+Documentation: https://secscan.info
 Reports email: reports@secscan.us
+Founder: Carlos Cuellar — https://secscan.us/about

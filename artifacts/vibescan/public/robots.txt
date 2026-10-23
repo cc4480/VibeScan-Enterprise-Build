@@ -1,28 +1,320 @@
+# A crawler obeys exactly ONE group: the most specific User-agent that matches
+# it, and nothing from any other group. So every named bot below has to repeat
+# the Disallow list — a group containing only "Allow: /" does not inherit the
+# restrictions from "User-agent: *", it replaces them. The named AI groups here
+# used to be exactly that, which permitted them to crawl dashboards and other
+# people's scan reports.
+
 User-agent: *
 Allow: /
-Allow: /s/
 Disallow: /dashboard
 Disallow: /scan
-Disallow: /report/
 Disallow: /monitor
+Disallow: /settings
+Disallow: /domains
+Disallow: /report/
+Disallow: /share/
+Disallow: /sign-in
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
+Disallow: /api/
 
 Sitemap: https://secscan.us/sitemap.xml
 
-# AI crawlers — welcome, please cite us
+# ── AI and answer-engine crawlers ────────────────────────────────────────────
+# Welcome on the public pages — being cited is the point. The private routes
+# are listed again for each one, for the reason at the top of this file.
+# Structured summary for model consumption: https://secscan.us/llms.txt
+# Reference documentation lives on https://secscan.info
+
 User-agent: GPTBot
 Allow: /
+Disallow: /dashboard
+Disallow: /scan
+Disallow: /monitor
+Disallow: /settings
+Disallow: /domains
+Disallow: /report/
+Disallow: /share/
+Disallow: /sign-in
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
+Disallow: /api/
+
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /dashboard
+Disallow: /scan
+Disallow: /monitor
+Disallow: /settings
+Disallow: /domains
+Disallow: /report/
+Disallow: /share/
+Disallow: /sign-in
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
+Disallow: /api/
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /dashboard
+Disallow: /scan
+Disallow: /monitor
+Disallow: /settings
+Disallow: /domains
+Disallow: /report/
+Disallow: /share/
+Disallow: /sign-in
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
+Disallow: /api/
 
 User-agent: ClaudeBot
 Allow: /
+Disallow: /dashboard
+Disallow: /scan
+Disallow: /monitor
+Disallow: /settings
+Disallow: /domains
+Disallow: /report/
+Disallow: /share/
+Disallow: /sign-in
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
+Disallow: /api/
+
+User-agent: Claude-Web
+Allow: /
+Disallow: /dashboard
+Disallow: /scan
+Disallow: /monitor
+Disallow: /settings
+Disallow: /domains
+Disallow: /report/
+Disallow: /share/
+Disallow: /sign-in
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
+Disallow: /api/
+
+User-agent: anthropic-ai
+Allow: /
+Disallow: /dashboard
+Disallow: /scan
+Disallow: /monitor
+Disallow: /settings
+Disallow: /domains
+Disallow: /report/
+Disallow: /share/
+Disallow: /sign-in
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
+Disallow: /api/
 
 User-agent: PerplexityBot
 Allow: /
+Disallow: /dashboard
+Disallow: /scan
+Disallow: /monitor
+Disallow: /settings
+Disallow: /domains
+Disallow: /report/
+Disallow: /share/
+Disallow: /sign-in
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
+Disallow: /api/
+
+User-agent: Perplexity-User
+Allow: /
+Disallow: /dashboard
+Disallow: /scan
+Disallow: /monitor
+Disallow: /settings
+Disallow: /domains
+Disallow: /report/
+Disallow: /share/
+Disallow: /sign-in
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
+Disallow: /api/
 
 User-agent: Google-Extended
 Allow: /
+Disallow: /dashboard
+Disallow: /scan
+Disallow: /monitor
+Disallow: /settings
+Disallow: /domains
+Disallow: /report/
+Disallow: /share/
+Disallow: /sign-in
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
+Disallow: /api/
 
 User-agent: Applebot
 Allow: /
+Disallow: /dashboard
+Disallow: /scan
+Disallow: /monitor
+Disallow: /settings
+Disallow: /domains
+Disallow: /report/
+Disallow: /share/
+Disallow: /sign-in
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
+Disallow: /api/
+
+User-agent: Applebot-Extended
+Allow: /
+Disallow: /dashboard
+Disallow: /scan
+Disallow: /monitor
+Disallow: /settings
+Disallow: /domains
+Disallow: /report/
+Disallow: /share/
+Disallow: /sign-in
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
+Disallow: /api/
 
 User-agent: Amazonbot
 Allow: /
+Disallow: /dashboard
+Disallow: /scan
+Disallow: /monitor
+Disallow: /settings
+Disallow: /domains
+Disallow: /report/
+Disallow: /share/
+Disallow: /sign-in
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
+Disallow: /api/
+
+User-agent: CCBot
+Allow: /
+Disallow: /dashboard
+Disallow: /scan
+Disallow: /monitor
+Disallow: /settings
+Disallow: /domains
+Disallow: /report/
+Disallow: /share/
+Disallow: /sign-in
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
+Disallow: /api/
+
+User-agent: DuckAssistBot
+Allow: /
+Disallow: /dashboard
+Disallow: /scan
+Disallow: /monitor
+Disallow: /settings
+Disallow: /domains
+Disallow: /report/
+Disallow: /share/
+Disallow: /sign-in
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
+Disallow: /api/
+
+User-agent: meta-externalagent
+Allow: /
+Disallow: /dashboard
+Disallow: /scan
+Disallow: /monitor
+Disallow: /settings
+Disallow: /domains
+Disallow: /report/
+Disallow: /share/
+Disallow: /sign-in
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
+Disallow: /api/
+
+User-agent: MistralAI-User
+Allow: /
+Disallow: /dashboard
+Disallow: /scan
+Disallow: /monitor
+Disallow: /settings
+Disallow: /domains
+Disallow: /report/
+Disallow: /share/
+Disallow: /sign-in
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /oauth/
+Disallow: /feedback
+Disallow: /api/

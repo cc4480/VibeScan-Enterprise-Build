@@ -22,8 +22,6 @@ dist
 
 # Host/editor/CI noise
 .claude
-.replit
-.replitignore
 .vscode
 .idea
 *.log
@@ -31,3 +29,15 @@ npm-debug.log*
 Dockerfile
 .dockerignore
 docker-compose.yml
+
+# Database dumps and migration snapshots. Neither is needed to build or run an image, and a dump
+# of real data baked into a layer would outlive the server it came from. lib/db/migrations/*.sql
+# is NOT matched by these patterns: the builder copies it, and the runtime stage ships it.
+deploy/home-server/migration/
+backups/
+deploy/**/*.dump
+deploy/**/*.sql.gz
+deploy/**/*.sql
+backups/**/*.dump
+backups/**/*.sql.gz
+backups/**/*.sql

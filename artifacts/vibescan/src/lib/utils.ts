@@ -27,7 +27,7 @@ export function getSeverityColors(severity: string) {
 
 export function getGradeColor(grade: string) {
   switch (grade.toUpperCase()) {
-    case "A": return "text-emerald-400";
+    case "A": return "text-green-400";
     case "B": return "text-lime-400";
     case "C": return "text-yellow-400";
     case "D": return "text-orange-400";

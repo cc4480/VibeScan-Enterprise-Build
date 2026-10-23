@@ -1,76 +1,67 @@
-export type AgentEnvironment = "lovable" | "nextjs" | "bolt" | "wordpress" | "supabase" | "generic";
+import { hostStackNotes, type HostEnvironment } from "./deepseekPromptsHosts";
 
+export type AgentEnvironment = "lovable" | "nextjs" | "bolt" | "wordpress" | "supabase" | HostEnvironment | "generic";
+
+/**
+ * What the model is told about the fix prompt it writes.
+ *
+ * There is ONE prompt for every tool. A report cannot know which assistant the reader will paste it
+ * into (Claude Code, Cursor, Codex, GitHub Copilot, Windsurf, Grok Build, Gemini, ChatGPT, or an app
+ * builder such as Lovable, Bolt, Replit or v0), and the reader may use several. So the prompt names no
+ * tool and uses no tool's commands, modes or @-mentions. What the scan can tell about the site's stack
+ * goes in as STACK NOTES: facts about where fixes live on that platform, useful to any tool.
+ */
 export function agentPromptInstructions(agent: AgentEnvironment, domain: string): string {
+  return `FIX PROMPT: ONE universal prompt, pasted unchanged into whichever AI coding tool the reader uses (Claude Code, Cursor, Codex, GitHub Copilot, Windsurf, Grok Build, Gemini, ChatGPT, or an app builder such as Lovable, Bolt, Replit or v0). You do not know which.
+
+Rules for agentFixPrompt:
+- Tool-neutral: never name an AI tool, and never use a tool's own commands, slash commands, @-mentions, mode names or UI steps
+- Self-contained, plain text with markdown headings, not wrapped in a code fence. It must make sense with no other context
+- Open with: "I ran an automated security scan on ${domain} and found the issues below. Please fix them in this project's codebase. If you cannot read or edit files here, give me the exact change to make for each issue instead."
+- One section per finding: a heading "### <number>. <Finding name> (<SEVERITY>)", then four labelled lines, each starting a new line: "Problem:" (one sentence), "Fix:" (the exact change: code, config lines or a setting), "Where to look:" (what to search for and which kind of file; call a file name likely, never invent a path) and "Check:" (one way to confirm it is fixed, such as a header to look for or a request that should now fail)
+- Every section has all four labels, with no exceptions. With more than 8 findings, merge closely related ones into one section (name each finding in it) so there are never more than 8 sections; shorten the wording, never drop a label
+- Most severe first. An exposed secret is always first, and the instruction is to rotate it as well as remove it
+- Ask for the smallest change that fixes each issue, to search the whole project for the same insecure pattern and fix every place, to leave unrelated code alone, and to add a package only if a fix needs one
+- If a finding does not apply to how the project is built, tell the assistant to say so rather than guess
+- Close with: "When you are done, list each file you changed and what you changed, anything you could not fix and why, and run the project's build or tests if it has them."
+- Keep under 4500 characters
+
+STACK NOTES (facts about this site's stack, for the assistant; leave out any that do not help with a finding):
+${stackNotes(agent)}`;
+}
+
+function stackNotes(agent: AgentEnvironment): string {
   switch (agent) {
     case "lovable":
-      return `AGENT TARGET: Lovable (AI web app builder — https://lovable.dev)
-The user built this app with Lovable. Generate the agentFixPrompt as a Lovable chat message the user pastes directly into the Lovable chat interface.
-
-Rules for agentFixPrompt:
-- Open with: "Please fix these security issues in my app:"
-- Write conversationally — Lovable understands natural language, not file paths
-- DO NOT reference file paths; describe what needs to change in plain English
-- For Supabase issues: include Supabase dashboard instructions (e.g. "In the Supabase dashboard → Table Editor → [table], click 'Enable RLS'")
-- For header/cookie fixes: say what setting to add, e.g. "Add a Content-Security-Policy header in the server settings"
-- Close with: "Apply all of these fixes and tell me what you changed."
-- Keep under 2000 characters`;
+    case "bolt":
+      return `Built with a chat-based app builder.
+- Describe each change in plain terms as well as in code; the builder applies changes through its chat and settings
+- For Supabase issues include the dashboard path, for example Table Editor, choose the table, Enable RLS
+- For headers or cookies, say what setting to add and where in the server or host settings`;
 
     case "nextjs":
-      return `AGENT TARGET: Cursor or Claude Code (IDE AI agent with full file access on a Next.js project)
-The site runs Next.js — the developer likely uses Cursor Composer, Claude Code, or GitHub Copilot.
-
-Rules for agentFixPrompt:
-- Open with: "I ran a security scan on ${domain} and found these issues. Please fix them in my Next.js codebase."
-- For each finding: specify the exact file to edit (e.g. \`middleware.ts\`, \`next.config.ts\`, \`app/api/route.ts\`)
-- Show exact code snippets — before/after blocks where helpful
-- Include npm/pnpm install commands if new packages are needed
-- Reference Next.js-specific APIs: middleware for security headers, next.config for rewrites, app/api/ for route handlers
-- Close with: "Show me the exact code change for each file."`;
-
-    case "bolt":
-      return `AGENT TARGET: Bolt.new or Replit Agent (full-file editing agent)
-The site was built with Bolt.new or a similar full-file editing environment.
-
-Rules for agentFixPrompt:
-- Open with: "Fix these security issues in my app:"
-- For each finding: specify the full file path and describe the complete change
-- Prefer complete file content over partial diffs — Bolt.new works best with full files
-- Include package.json dependency additions if new packages are needed
-- Use clear file headers: "=== FILE: src/lib/auth.ts ==="
-- Close with: "Make all of these changes. Show me each complete updated file."`;
+      return `Next.js project.
+- Security headers go in next.config (headers()) or middleware.ts; route handlers live under app/api or pages/api
+- Name the exact file to edit and show before and after code where it helps; include install commands only if a new package is needed`;
 
     case "wordpress":
-      return `AGENT TARGET: WordPress (CMS platform)
-The site runs WordPress — fixes should use plugins, wp-config.php, or .htaccess.
-
-Rules for agentFixPrompt:
-- Open with: "Fix these security issues on my WordPress site:"
-- For each finding: give WordPress-specific remediation (plugin name to install, wp-config.php line to add, .htaccess rule, or Admin Panel path)
-- Prefer plugin solutions: e.g. "Install Wordfence Security and configure..." rather than raw PHP code
-- Reference Admin Panel paths: e.g. "Settings → General", "Users → Your Profile"
-- Close with: "Implement all of these WordPress security hardening steps."`;
+      return `WordPress site.
+- Fixes use plugins, wp-config.php, .htaccess or Admin Panel settings; prefer a named plugin or setting over raw PHP where one exists
+- Give Admin Panel paths, for example Settings, General`;
 
     case "supabase":
-      return `AGENT TARGET: Supabase (Backend-as-a-Service)
-The app uses Supabase. Structure fixes as SQL + dashboard instructions + code changes.
+      return `Supabase backend.
+- Group fixes into three labeled parts: "SQL to run in the Supabase SQL Editor" (exact CREATE POLICY and ALTER TABLE ... ENABLE ROW LEVEL SECURITY statements), "Supabase Dashboard changes" (navigation paths and toggles), "Code changes" (environment variables and client setup)
+- The anon key is meant to be public; the protection is Row Level Security, and the service_role key must never reach client code`;
 
-Rules for agentFixPrompt:
-- Open with: "Fix these security issues in my Supabase app:"
-- Group fixes into three labeled sections:
-  1. "SQL to run in Supabase SQL Editor:" — exact CREATE POLICY, ALTER TABLE, ENABLE ROW LEVEL SECURITY statements
-  2. "Supabase Dashboard changes:" — specific navigation paths and toggle settings
-  3. "Code changes:" — environment variable and client initialization fixes
-- Close with: "Apply all SQL policies, change the dashboard settings, and update the code."`;
+    case "vercel":
+    case "netlify":
+    case "firebase":
+    case "hosted":
+      return hostStackNotes(agent);
 
     case "generic":
     default:
-      return `AGENT TARGET: Generic AI coding agent (Cursor, Claude, GitHub Copilot)
-
-Rules for agentFixPrompt:
-- Open with: "I ran an automated security scan on ${domain} and found the following security issues that need to be fixed in my codebase."
-- For each finding use a markdown heading like "### 1. <Finding Name> (<SEVERITY>)" followed by a one-sentence description and the exact remediation to implement
-- Close with: "Please fix all of the above issues in my codebase. For each fix, show me the exact code change."
-- Use plain text with markdown headings only — do not wrap in a code fence
-- Keep under 3000 characters`;
+      return "No specific stack was detected; use each finding's own remediation.";
   }
 }

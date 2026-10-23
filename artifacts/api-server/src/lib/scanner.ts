@@ -1,336 +1,38 @@
 /**
  * Black-box HTTP security scanner.
  *
- * Stage 1 (this file): Fetches the target URL, analyses response headers,
- * cookies, TLS, CORS, and page content — produces an initial vulnerability list.
- *
- * Stage 2 (parallel, via worker.ts): SSL Labs TLS assessment.
- *
- * Stage 3 (parallel probes): Active HTTP probes via probes.ts,
- * DNS security checks via dnsChecks.ts, and JavaScript secret scanning
- * via jsScanner.ts — all run concurrently with stage 2.
+ * Stage 1 (this file): fetches the target, checks headers, cookies, CORS and the
+ * page, then runs the probe stage and the active API stage (scanner<Part>.ts).
+ * Stage 2 (worker.ts): SSL Labs TLS assessment, in parallel.
  */
 
-import { randomUUID } from "node:crypto";
-
-/**
- * Checks whether a hostname appears to be on the HSTS preload list.
- *
- * Uses the hstspreload.org submission-tracking API. Note: this API only knows
- * about domains submitted through their website. Domains hardcoded in Chrome's
- * preload list (google.com, youtube.com, etc.) are not tracked there and will
- * return "unknown". For those, we fall back to a behavioral signal: if the
- * HTTP version of the domain serves content without redirecting to HTTPS, the
- * site is likely relying on browser preloading.
- *
- * Returns true to SUPPRESS the HSTS finding; false to allow it (at MEDIUM).
- * Always fails-safe: any network error returns false so the check still runs.
- */
-// Domains hardcoded in Chrome's built-in HSTS preload list that are NOT
-// tracked by hstspreload.org's submission API (which only knows about
-// user-submitted entries, not Chrome's built-in set).
-const CHROME_BUILTIN_PRELOADED = new Set([
-  "google.com", "youtube.com", "gmail.com", "android.com", "appspot.com",
-  "blogger.com", "chromium.org", "googleapis.com", "googlesyndication.com",
-  "googleusercontent.com", "gstatic.com", "ytimg.com", "doubleclick.net",
-  "apple.com", "icloud.com", "github.com", "github.io", "githubusercontent.com",
-  "facebook.com", "instagram.com", "whatsapp.com", "twitter.com", "x.com",
-  "linkedin.com", "microsoft.com", "live.com", "outlook.com", "office.com",
-  "paypal.com", "amazon.com", "stripe.com", "cloudflare.com",
-  "wordpress.com", "shopify.com", "dropbox.com", "box.com",
-  "tumblr.com", "medium.com", "reddit.com", "wikipedia.org",
-]);
-
-async function isHstsPreloaded(hostname: string): Promise<boolean> {
-  const apex = hostname.replace(/^www\./, "");
-
-  // Fast path: known Chrome built-in preloaded domains not tracked by hstspreload.org
-  if (CHROME_BUILTIN_PRELOADED.has(apex)) return true;
-
-  // ── hstspreload.org tracking API ─────────────────────────────────────────
-  // This API only tracks domains submitted via their form. Domains natively
-  // hardcoded in Chrome (google.com, youtube.com, etc.) return "unknown".
-  let apiKnows = false;
-  try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 5_000);
-    const res = await fetch(
-      `https://hstspreload.org/api/v2/status?domain=${encodeURIComponent(apex)}`,
-      { signal: ctrl.signal },
-    );
-    clearTimeout(timer);
-    if (res.ok) {
-      const json = (await res.json()) as { status?: string };
-      if (json.status === "preloaded") return true;  // confirmed on list
-      if (json.status === "pending")   return false; // submitted, not yet live
-      // status === "unknown" — domain may still be natively preloaded; fall through
-      apiKnows = json.status === "preloaded" || json.status === "pending";
-    }
-  } catch { /* fall through */ }
-
-  if (apiKnows) return false;
-
-  // ── Behavioral fallback for natively preloaded domains ───────────────────
-  // If http:// traffic automatically upgrades to https://, the domain is
-  // enforcing HTTPS one way or another — suppress the HSTS finding.
-  const httpRes = await scanFetch(`http://${apex}/`, { timeoutMs: 5_000 });
-  if (httpRes?.finalUrl.startsWith("https://")) return true;
-
-  return false;
-}
-
-import { runWithScanHttp, scanFetch, scanFetchOrThrow, sessionWasLost, type ScanCredentials as ScanHttpCredentials } from "./http";
-import { runAllProbes } from "./probes";
-import { checkDnsSecurity } from "./dnsChecks";
-import { scanJavaScriptForSecrets } from "./jsScanner";
-import { crawlAndCheck } from "./crawler";
-import { checkForKnownVulnerabilities, extractVersionedTechnologies } from "./cveCheck";
-import { analyzeJwts } from "./jwtAnalysis";
-import { checkSubdomainTakeover } from "./subdomainTakeover";
-import { checkPathTraversal } from "./pathTraversal";
-import { runInjectionProbes } from "./injectionProbe";
-import { checkSourceMaps } from "./sourceMaps";
-import { checkVibeStackSecurity } from "./vibeStackProbes";
+import { headerVal, type PageContext, type ScanVulnerability, type ScanResult, type RunScanAuth, type RunScanExtras } from "./scannerTypes";
+import { runProbeStage } from "./scannerProbeStage";
+import { loadStartPage } from "./scannerStartPage";
+import { coverageNotes } from "./scannerCoverageNotes";
+import { settleFindings } from "./scannerSettle";
+import { runActiveApiStage } from "./scannerActiveStage";
+import { transportFindings } from "./scannerTransportChecks";
+import { cspFindings } from "./scannerCspChecks";
+import { headerFindings } from "./scannerHeaderChecks";
+import { pageFindings } from "./scannerPageChecks";
+import { analyzeCookies } from "./scannerCookies";
+import { technologiesWithVersions } from "./scannerTech";
+import {
+  sessionLostFinding, interceptedFinding, activeProbesSkippedFinding, capFindingsReadFromErrorPage,
+  platformGateFinding, rootErrorFinding, landedElsewhereFinding,
+} from "./scannerCoverage";
+import { activeProbesStillAllowed } from "./activeScopeGuard";
+import { detectChallengePage } from "./challengePage.js";
+import { detectPlatformGate, landedElsewhere } from "./platformGate";
+import { runWithScanHttp, sessionWasLost } from "./http";
+import { TestLedger, foundNames, type TestRecord } from "./testLedger";
+import { runCrossAccountStep } from "./crossAccountStep";
 import { autoEnrichConfidence } from "./scoring";
-import { detectTechnologies } from "./techFingerprint";
-import { runBaasProbes } from "./baasProbes";
-import { runGraphqlProbe } from "./graphqlProbe";
-import { runApiDocsProbe } from "./apiDocsProbe";
-import { runNextjsProbe } from "./nextjsProbe";
-import { runStorageProbe } from "./storageProbe";
-import { runAccessControlProbes } from "./accessControlProbe";
-import { collectApiSurface, runApiProbes } from "./apiProbe";
-import { runSsrfProbes } from "./ssrfProbe";
-import type { ApiEndpoint } from "./apiSurface";
-import { isSpa, renderPage } from "./browser";
-import { checkScanTarget, checkHostname } from "./ssrfGuard";
-import { SCANNER_USER_AGENT } from "./appOrigin";
 
-export interface ScanVulnerability {
-  id: string;
-  name: string;
-  severity: "critical" | "high" | "medium" | "low" | "info";
-  category: string;
-  description: string;
-  evidence?: string | null;
-  solution: string;
-  cweId?: string | null;
-  cvssScore?: number | null;
-  wstgId?: string | null;
-  /** Confidence score 0–100: how certain we are this is a real finding, not a false positive */
-  confidence?: number | null;
-}
-
-export interface ScanResult {
-  targetUrl: string;
-  finalUrl: string;
-  statusCode: number;
-  server: string | null;
-  tlsGrade: string | null;
-  technologies: string[];
-  vulnerabilities: ScanVulnerability[];
-  requestDurationMs: number;
-  rawHeaders: Record<string, string>;
-  /** URLs of inner pages actually fetched during the deep crawl (excludes the root URL) */
-  pagesScanned: string[];
-  /** High-value probe paths that returned HTTP 404 during the crawl (see CrawlResult.probedNotFound) */
-  probedNotFound: string[];
-  /** True when the root page was rendered via headless browser (SPA detected) */
-  renderedWithBrowser?: boolean;
-}
-
-const FETCH_TIMEOUT_MS = 20_000;
-
-function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
-  return { id: randomUUID(), ...partial };
-}
-
-function headerVal(headers: Record<string, string>, name: string): string | undefined {
-  const lower = name.toLowerCase();
-  const key = Object.keys(headers).find((k) => k.toLowerCase() === lower);
-  return key ? headers[key] : undefined;
-}
-
-// detectTechnologies extracted to techFingerprint.ts
-
-// Cookies set by third-party infrastructure (CDN proxies, load balancers, etc.)
-// that the site owner has no ability to modify.  Flagging these produces
-// unfixable false positives — the fix would require contacting the infra vendor.
-const INFRA_COOKIE_NAMES = new Set([
-  "gaesa",        // Replit CDN / proxy
-  "__cf_bm",      // Cloudflare Bot Management
-  "__cflb",       // Cloudflare Load Balancing
-  "_cfuvid",      // Cloudflare UVID
-  "cf_clearance", // Cloudflare challenge clearance
-  "__utmz",       // Google Analytics (legacy)
-  "__utma",       // Google Analytics (legacy)
-  "_ga",          // Google Analytics
-  "_gid",         // Google Analytics
-  "_gat",         // Google Analytics throttle
-  "bm_sz",        // Akamai Bot Manager — set by CDN, not the site operator
-  "bm_sv",        // Akamai Bot Manager session
-  "ak_bmsc",      // Akamai Bot Manager session cookie
-  "_abck",        // Akamai Bot Manager
-]);
-
-// Cookies whose name suggests they actually carry session/auth state — a
-// missing Secure/HttpOnly/SameSite flag on one of these is a real
-// session-hijack or CSRF risk. Cookies that DON'T match (UI-state flags like
-// "logged_in=yes", analytics/tracking IDs like "_octo" or "_ga") pose much
-// less real-world risk since there's no session to steal or forge, so they're
-// reported as a separate, lower-severity finding instead of being lumped in
-// with genuine session cookies. Without this split, a scan of any site that
-// merely sets a non-sensitive marker cookie (which is extremely common —
-// e.g. GitHub's "logged_in" flag) gets penalized as if it leaked a session
-// token.
-const SESSION_COOKIE_PATTERN =
-  /session|token|jwt|csrf|xsrf|login|credential|phpsessid|jsessionid|connect\.sid|remember_?me|auth_?token|access_?token|refresh_?token|\bsid\b/i;
-
-function isLikelySessionCookie(name: string): boolean {
-  return SESSION_COOKIE_PATTERN.test(name);
-}
-
-function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[] {
-  if (!setCookieHeader) return [];
-
-  const cookies = setCookieHeader.split(/\n|,(?=[^;])/);
-
-  // Collect affected cookie names per problem type instead of emitting one
-  // finding per cookie — a site that sets 10 cookies should not score 10×
-  // worse than a site that sets 1. Each type of misconfiguration is one issue.
-  // Session-like and non-session cookies are tracked separately (see
-  // SESSION_COOKIE_PATTERN above) since the real-world risk differs a lot.
-  const noSecure: string[] = [];
-  const noSecureOther: string[] = [];
-  const noHttpOnly: string[] = [];
-  const noHttpOnlyOther: string[] = [];
-  const noSameSite: string[] = [];
-  const noSameSiteOther: string[] = [];
-
-  for (const cookie of cookies) {
-    if (!cookie.trim()) continue;
-    // Skip malformed Set-Cookie fragments that have no name=value pair.
-    // These are date fragments produced when "expires=Wed, 03-Jan-2025" is
-    // mis-split at the comma (the regex above can't distinguish that comma from
-    // a multi-cookie separator). A valid Set-Cookie first segment MUST contain "=".
-    const firstSegment = cookie.split(";")[0] ?? "";
-    if (!firstSegment.includes("=")) continue;
-    const namePart = firstSegment.split("=")[0]?.trim() ?? "cookie";
-
-    // Skip cookies owned by third-party infrastructure — the site operator
-    // cannot add Secure/HttpOnly/SameSite to cookies they don't set.
-    if (INFRA_COOKIE_NAMES.has(namePart.toLowerCase())) continue;
-
-    const isSession = isLikelySessionCookie(namePart);
-
-    if (!/secure/i.test(cookie))   (isSession ? noSecure : noSecureOther).push(namePart);
-    if (!/httponly/i.test(cookie)) (isSession ? noHttpOnly : noHttpOnlyOther).push(namePart);
-    if (!/samesite/i.test(cookie)) (isSession ? noSameSite : noSameSiteOther).push(namePart);
-  }
-
-  const findings: ScanVulnerability[] = [];
-
-  if (noSecure.length > 0) {
-    const list = noSecure.join(", ");
-    const plural = noSecure.length > 1;
-    findings.push(vuln({
-      name: "Session Cookie Missing Secure Flag",
-      severity: "high",
-      category: "Session Management",
-      description: `${noSecure.length} likely session/auth cookie${plural ? "s are" : " is"} set without the Secure flag (${list}). ${plural ? "They can" : "It can"} be transmitted over unencrypted HTTP connections, making ${plural ? "them" : "it"} susceptible to interception.`,
-      evidence: `Affected cookie${plural ? "s" : ""}: ${list}`,
-      solution: "Add the Secure attribute to all session cookies: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax",
-      cweId: "CWE-614",
-      cvssScore: 6.5,
-      wstgId: "WSTG-SESS-02",
-    }));
-  }
-
-  if (noSecureOther.length > 0) {
-    const list = noSecureOther.join(", ");
-    const plural = noSecureOther.length > 1;
-    findings.push(vuln({
-      name: "Non-Session Cookie Missing Secure Flag",
-      severity: "low",
-      category: "Session Management",
-      description: `${noSecureOther.length} cookie${plural ? "s" : ""} without an obvious session/auth purpose ${plural ? "are" : "is"} set without the Secure flag (${list}). These don't appear to carry authentication state, so the practical risk is low — but worth fixing for defense in depth.`,
-      evidence: `Affected cookie${plural ? "s" : ""}: ${list}`,
-      solution: "Add the Secure attribute to all cookies where practical: Set-Cookie: name=value; Secure; SameSite=Lax",
-      cweId: "CWE-614",
-      cvssScore: 3.1,
-      wstgId: "WSTG-SESS-02",
-      confidence: 70,
-    }));
-  }
-
-  if (noHttpOnly.length > 0) {
-    const list = noHttpOnly.join(", ");
-    const plural = noHttpOnly.length > 1;
-    findings.push(vuln({
-      name: "Session Cookie Missing HttpOnly Flag",
-      severity: "medium",
-      category: "Session Management",
-      description: `${noHttpOnly.length} likely session/auth cookie${plural ? "s are" : " is"} set without the HttpOnly flag (${list}), allowing client-side JavaScript to access ${plural ? "them" : "it"}. This can enable session theft via XSS.`,
-      evidence: `Affected cookie${plural ? "s" : ""}: ${list}`,
-      solution: "Add the HttpOnly attribute to all session cookies: Set-Cookie: name=value; HttpOnly; Secure; SameSite=Lax",
-      cweId: "CWE-1004",
-      cvssScore: 5.3,
-      wstgId: "WSTG-SESS-02",
-    }));
-  }
-
-  if (noHttpOnlyOther.length > 0) {
-    const list = noHttpOnlyOther.join(", ");
-    const plural = noHttpOnlyOther.length > 1;
-    findings.push(vuln({
-      name: "Non-Session Cookie Readable by JavaScript",
-      severity: "info",
-      category: "Session Management",
-      description: `${noHttpOnlyOther.length} cookie${plural ? "s" : ""} without an obvious session/auth purpose ${plural ? "are" : "is"} readable by client-side JavaScript (${list}). Many such cookies (UI-state flags, analytics IDs) are intentionally client-readable, so this is informational unless the cookie actually holds sensitive data.`,
-      evidence: `Affected cookie${plural ? "s" : ""}: ${list}`,
-      solution: "If any of these cookies hold sensitive data, add HttpOnly. If they're purely UI-state or analytics markers, no action is needed.",
-      cweId: "CWE-1004",
-      cvssScore: 2.6,
-      wstgId: "WSTG-SESS-02",
-      confidence: 60,
-    }));
-  }
-
-  if (noSameSite.length > 0) {
-    const list = noSameSite.join(", ");
-    const plural = noSameSite.length > 1;
-    findings.push(vuln({
-      name: "Session Cookie Missing SameSite Attribute",
-      severity: "medium",
-      category: "CSRF Protection",
-      description: `${noSameSite.length} likely session/auth cookie${plural ? "s lack" : " lacks"} the SameSite attribute (${list}), making the application potentially vulnerable to Cross-Site Request Forgery (CSRF) attacks.`,
-      evidence: `Affected cookie${plural ? "s" : ""}: ${list}`,
-      solution: "Set SameSite=Lax or SameSite=Strict on all session cookies: Set-Cookie: name=value; Secure; HttpOnly; SameSite=Lax",
-      cweId: "CWE-352",
-      cvssScore: 4.3,
-      wstgId: "WSTG-SESS-02",
-    }));
-  }
-
-  if (noSameSiteOther.length > 0) {
-    const list = noSameSiteOther.join(", ");
-    const plural = noSameSiteOther.length > 1;
-    findings.push(vuln({
-      name: "Non-Session Cookie Missing SameSite Attribute",
-      severity: "info",
-      category: "CSRF Protection",
-      description: `${noSameSiteOther.length} cookie${plural ? "s" : ""} without an obvious session/auth purpose ${plural ? "lack" : "lacks"} the SameSite attribute (${list}). Since these don't appear to gate authenticated actions, CSRF risk from them specifically is minimal.`,
-      evidence: `Affected cookie${plural ? "s" : ""}: ${list}`,
-      solution: "Set SameSite=Lax on these cookies where practical, though the CSRF risk here is low.",
-      cweId: "CWE-352",
-      cvssScore: 2.1,
-      wstgId: "WSTG-SESS-02",
-      confidence: 60,
-    }));
-  }
-
-  return findings;
-}
+export type { ScanVulnerability, ScanResult, RunScanAuth, RunScanExtras } from "./scannerTypes";
+export { withholdInterceptedFindings } from "./scannerCoverage";
+export { computeRiskScore, computeGrade, GRADE_INCOMPLETE, gradeForResult } from "./scannerGrade";
 
 /**
  * Establishes the per-scan HTTP context (see lib/http.ts) and runs the scan
@@ -339,34 +41,28 @@ function analyzeCookies(setCookieHeader: string | undefined): ScanVulnerability[
  *
  * Split from the body only to avoid indenting the whole function.
  */
-export interface RunScanAuth {
-  credentials: ScanHttpCredentials;
-  /**
-   * A second account. Present only when the user supplied one, and the sole
-   * trigger for access-control testing — the comparison needs two identities
-   * that own different data.
-   */
-  secondary?: ScanHttpCredentials;
-  /** Recognises a signed-out response. */
-  detectSignedOut?: (body: string, finalUrl: string, requestedUrl: string) => boolean;
-  /** Signs back in when the session expires mid-scan. */
-  onSessionLost?: () => Promise<ScanHttpCredentials | null>;
-}
-
 export async function runScan(
   targetUrl: string,
   tier: string,
+  // Whether the caller established that this user may have offensive traffic
+  // sent to this target. Required rather than defaulted: a scan entry point
+  // that forgets to decide should fail to compile, not quietly attack someone.
+  allowActiveProbes: boolean,
   auth?: RunScanAuth,
   // Correlates out-of-band callbacks back to this scan. Optional so a monitor
   // rescan or a test can call runScan without one; SSRF detection is simply
   // skipped when it and a callback host are both absent.
   scanId?: string | null,
+  // Hears each test the moment it is recorded, for the live progress page.
+  onTest?: (record: TestRecord) => void,
+  extra?: RunScanExtras,
 ): Promise<ScanResult> {
   // Credentials go into the scan context, where lib/http.ts attaches them only
   // to in-scope requests and drops them on any redirect that leaves the target.
   return runWithScanHttp(
     {
       targetUrl,
+      ...(extra?.signal ? { signal: extra.signal } : {}),
       ...(auth
         ? {
             credentials: auth.credentials,
@@ -375,589 +71,161 @@ export async function runScan(
           }
         : {}),
     },
-    () => runScanInner(targetUrl, tier, auth, scanId ?? null),
+    () => runScanInner(targetUrl, tier, allowActiveProbes, auth, scanId ?? null, onTest, extra),
   );
-}
-
-/**
- * Finding raised when the scan's session expired partway through.
- *
- * Not a vulnerability in the target, but the user has to know: after the
- * session dropped, every "nothing found" means "not looked at" rather than
- * "looked at and clean", and a report that hid that would be misleading.
- */
-function sessionLostFinding(): ScanVulnerability {
-  return vuln({
-    name: "Scan session expired before the scan finished",
-    severity: "info",
-    category: "Scan Coverage",
-    description:
-      "The credentials you supplied stopped working partway through this scan — the target began returning its sign-in page. Pages checked after that point were seen signed out, so results for the authenticated part of the app are incomplete. This is a limitation of the scan, not a vulnerability in your site.",
-    evidence: "One or more responses matched the target's signed-out page while credentials were in use.",
-    solution:
-      "Re-run the scan with a longer-lived session. A sign-in with a username and password can renew itself automatically; a pasted cookie or token cannot, so prefer form login for long scans, or supply a token with a longer expiry.",
-    confidence: 95,
-  });
 }
 
 async function runScanInner(
   targetUrl: string,
   tier: string,
+  allowActiveProbes: boolean,
   auth?: RunScanAuth,
   scanId: string | null = null,
+  onTest?: (record: TestRecord) => void,
+  extra?: RunScanExtras,
 ): Promise<ScanResult> {
   const startedAt = Date.now();
 
-  // The only request whose failure ends the scan, so it is the only one that
-  // throws rather than returning null — the underlying reason is what the user
-  // needs to see when a target is unreachable.
-  let initial;
-  try {
-    initial = await scanFetchOrThrow(targetUrl, {
-      timeoutMs: FETCH_TIMEOUT_MS,
-      headers: {
-        "Accept": "text/html,application/xhtml+xml,*/*",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`Failed to reach target URL: ${msg}`);
-  }
+  // The first request, and the headless render of it for a JavaScript app (scannerStartPage.ts).
+  const { initial, finalUrl, html, rawHeaders, renderedWithBrowser, observedRequests, renderRejected } = await loadStartPage(targetUrl);
 
-  let finalUrl = initial.finalUrl || targetUrl;
-  let html = initial.body;
-
-  // Keys arrive lowercased from the shared client. Every lookup already goes
-  // through the case-insensitive helper above, so this is a no-op for callers.
-  const rawHeaders: Record<string, string> = { ...initial.headers };
-
-  // ── SPA detection + headless rendering ────────────────────────────────────
-  // If the server returned a JS-shell SPA (empty <div id="root"> etc.), re-fetch
-  // via headless browser so content analysis operates on the fully-rendered DOM.
-  // HTTP security headers stay from the raw fetch above — they're identical.
-  let renderedWithBrowser = false;
-  if (isSpa(html)) {
-    const rendered = await renderPage(finalUrl).catch(() => null);
-    if (rendered) {
-      html = rendered.html;
-      finalUrl = rendered.finalUrl || finalUrl;
-      renderedWithBrowser = true;
+  // The ownership check was made on the host the requester typed. If the site sent us somewhere else,
+  // the probes below would hit that other host, so active testing stops unless it is theirs too.
+  let redirectedOffScope: string | undefined;
+  if (allowActiveProbes) {
+    const scope = await activeProbesStillAllowed(targetUrl, finalUrl, extra?.verifyHost);
+    if (!scope.allowed) {
+      allowActiveProbes = false;
+      redirectedOffScope = scope.redirectedTo;
     }
   }
 
   const isHttps = finalUrl.startsWith("https://");
-  const tlsGrade = isHttps ? "A" : null;
+  // No grade here: nothing in this scan measures TLS quality. worker.ts sets it
+  // only from a completed SSL Labs assessment; null means "not assessed".
+  const tlsGrade: string | null = null;
   const server = headerVal(rawHeaders, "server") ?? null;
 
-  // Detect technologies and enrich with version numbers where available
-  // e.g. "jQuery" → "jQuery 1.11.3", "Nginx" → "Nginx 1.18.0"
-  const baseTechs = detectTechnologies(rawHeaders, html);
-  const versionedTechs = extractVersionedTechnologies(html, rawHeaders);
-  // Match by techName (canonical name from detectTechnologies) to avoid duplicates
-  // e.g. "Apache HTTPD" techName="Apache" matches base tech "Apache" correctly
-  const versionMap = new Map(versionedTechs.map((v) => [v.techName.toLowerCase(), v.version]));
-  const technologies = baseTechs.map((tech) => {
-    const ver = versionMap.get(tech.toLowerCase());
-    return ver ? `${tech} ${ver}` : tech;
-  });
-  // Surface any additional versioned techs not already in the base list (by techName)
-  const techNamesInBase = new Set(technologies.map((t) => t.split(" ")[0]?.toLowerCase()));
-  for (const vt of versionedTechs) {
-    if (!techNamesInBase.has(vt.techName.toLowerCase())) {
-      technologies.push(`${vt.displayName} ${vt.version}`);
-    }
-  }
+  const technologies = technologiesWithVersions(rawHeaders, html);
 
   const requestDurationMs = Date.now() - startedAt;
   const vulnerabilities: ScanVulnerability[] = [];
 
-  // ── TLS / HTTPS ───────────────────────────────────────────────────────
-  if (!isHttps) {
-    vulnerabilities.push(vuln({
-      name: "No HTTPS / Plaintext HTTP",
-      severity: "critical",
-      category: "Transport Security",
-      description: "The application is served over HTTP without TLS encryption. All data transmitted between the browser and the server—including passwords and session tokens—can be intercepted by any network observer.",
-      evidence: `URL: ${finalUrl}\nProtocol: HTTP (no TLS)`,
-      solution: "Obtain a TLS certificate (free from Let's Encrypt) and redirect all HTTP traffic to HTTPS. Set up HSTS once HTTPS is working.",
-      cweId: "CWE-319",
-      cvssScore: 9.1,
-      wstgId: "WSTG-CRYP-01",
-    }));
-  }
-
-  // ── HTTP Strict-Transport-Security ────────────────────────────────────
-  const hsts = headerVal(rawHeaders, "strict-transport-security");
-  if (!hsts && isHttps) {
-    // Before flagging: check the HSTS preload list. Preloaded domains have HTTPS
-    // enforced in browsers before the first request, so the header is optional.
-    // This also prevents false positives when the scanner runs behind a
-    // TLS-terminating proxy that strips security headers from HTTPS responses.
-    const preloaded = await isHstsPreloaded(new URL(finalUrl).hostname).catch(() => false);
-    if (!preloaded) {
-      // Since we successfully fetched this site over HTTPS, it clearly HAS HTTPS.
-      // A missing STS header means browsers won't cache the HTTPS preference, but
-      // HTTPS itself is working. This is MEDIUM (not HIGH). HIGH is reserved for
-      // sites with no HTTPS at all (handled above). Some sites (e.g. google.com)
-      // intentionally omit the header, relying on the HSTS preload list instead.
-      vulnerabilities.push(vuln({
-        name: "Missing HTTP Strict-Transport-Security (HSTS)",
-        severity: "medium",
-        category: "Transport Security",
-        description: "HSTS is not configured via response header. Without it, browsers won't cache the HTTPS-only preference, leaving users vulnerable to downgrade attacks and SSL stripping on their first visit or after cache expiry. Note: some sites rely on HSTS preloading (browser built-in list) instead — verify at https://hstspreload.org.",
-        evidence: `GET ${finalUrl}\nStrict-Transport-Security: (header absent from response)`,
-        solution: "Add this header to all HTTPS responses: Strict-Transport-Security: max-age=31536000; includeSubDomains; preload\n\nFor the strongest protection, also submit your domain to the HSTS preload list at https://hstspreload.org",
-        cweId: "CWE-523",
-        cvssScore: 5.3,
-        wstgId: "WSTG-CONF-07",
-      }));
-    }
-  } else if (hsts) {
-    // Check for weak HSTS config
-    const maxAgeMatch = /max-age=(\d+)/i.exec(hsts);
-    const maxAge = maxAgeMatch ? parseInt(maxAgeMatch[1], 10) : 0;
-    if (maxAge < 15552000) { // less than 180 days
-      vulnerabilities.push(vuln({
-        name: "HSTS max-age Too Short",
-        severity: "low",
-        category: "Transport Security",
-        description: `The HSTS max-age is set to ${maxAge} seconds (${Math.round(maxAge / 86400)} days), which is below the recommended minimum of 180 days (15552000 seconds). Short max-age values mean users lose HTTPS protection shortly after their browser cache expires.`,
-        evidence: `GET ${finalUrl}\nStrict-Transport-Security: ${hsts}\n(max-age=${maxAge} — minimum recommended: 15552000)`,
-        solution: "Set max-age to at least 15552000 (180 days). For preloading eligibility, use max-age=31536000; includeSubDomains; preload.",
-        cweId: "CWE-523",
-        cvssScore: 3.1,
-        wstgId: "WSTG-CONF-07",
-      }));
-    }
-  }
-
-  // ── Content-Security-Policy ───────────────────────────────────────────
-  const csp = headerVal(rawHeaders, "content-security-policy");
-  if (!csp) {
-    vulnerabilities.push(vuln({
-      name: "Missing Content-Security-Policy (CSP)",
-      severity: "high",
-      category: "Injection Defense",
-      description: "No Content-Security-Policy header was found. CSP is the primary browser-enforced defense against Cross-Site Scripting (XSS) attacks. Without it, injected scripts can run with full page privileges and steal session cookies or credentials.",
-      evidence: `GET ${finalUrl}\nContent-Security-Policy: (header absent from response)`,
-      solution: "Implement a strict CSP. A starting point: Content-Security-Policy: default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'. Tighten over time using CSP violation reports.",
-      cweId: "CWE-79",
-      cvssScore: 7.2,
-      wstgId: "WSTG-CONF-12",
-    }));
-  } else {
-    // Parse directives into a map so we can check WHICH directives contain
-    // unsafe-inline / unsafe-eval.  This matters because:
-    //   • unsafe-inline / unsafe-eval in script-src → MEDIUM (XSS, scripts execute)
-    //   • unsafe-inline ONLY in style-src (script-src is clean) → LOW (CSS injection
-    //     only — can spoof UI / exfiltrate via attribute selectors, but cannot run JS)
-    const cspDirMap = new Map<string, string>();
-    for (const seg of csp.split(";").map((s) => s.trim()).filter(Boolean)) {
-      const spaceIdx = seg.indexOf(" ");
-      const dname = spaceIdx === -1 ? seg : seg.slice(0, spaceIdx);
-      const dval  = spaceIdx === -1 ? ""  : seg.slice(spaceIdx + 1);
-      cspDirMap.set(dname.toLowerCase(), dval);
-    }
-
-    const defaultSrc      = cspDirMap.get("default-src") ?? "";
-    const effectiveScript = cspDirMap.get("script-src") ?? defaultSrc;
-    const effectiveStyle  = cspDirMap.get("style-src")  ?? defaultSrc;
-
-    const scriptHasUnsafe = /unsafe-inline|unsafe-eval/i.test(effectiveScript);
-    const styleOnlyUnsafe = /unsafe-inline/i.test(effectiveStyle) && !scriptHasUnsafe;
-
-    if (scriptHasUnsafe) {
-      vulnerabilities.push(vuln({
-        name: "Weak Content-Security-Policy (unsafe-inline / unsafe-eval in script-src)",
-        severity: "medium",
-        category: "Injection Defense",
-        description: "The Content-Security-Policy allows 'unsafe-inline' or 'unsafe-eval' in script-src (or default-src). This significantly weakens XSS protection — attackers who achieve HTML injection can execute arbitrary JavaScript in the page's security context.",
-        evidence: `GET ${finalUrl}\nContent-Security-Policy: ${csp}\n(unsafe-inline or unsafe-eval present in script-src — inline script execution is permitted)`,
-        solution: "Replace 'unsafe-inline' with nonce-based or hash-based CSP directives. Avoid 'unsafe-eval' entirely. Use a CSP evaluator (csp-evaluator.withgoogle.com) to audit your policy.",
-        cweId: "CWE-79",
-        cvssScore: 5.4,
-        wstgId: "WSTG-CONF-12",
-      }));
-    } else if (styleOnlyUnsafe) {
-      vulnerabilities.push(vuln({
-        name: "Content-Security-Policy Allows Inline Styles (unsafe-inline in style-src)",
-        severity: "low",
-        category: "Injection Defense",
-        description: "The Content-Security-Policy permits 'unsafe-inline' in style-src. Script execution is properly restricted (script-src has no unsafe-inline). CSS injection cannot execute JavaScript but can enable visual spoofing, clickjacking, and CSS-based data exfiltration via attribute selectors.",
-        evidence: `GET ${finalUrl}\nContent-Security-Policy: ${csp}\n(unsafe-inline in style-src only — script-src is clean, no JS execution risk)`,
-        solution: "For the strongest defence, replace style-src 'unsafe-inline' with nonce-based or hash-based directives. For Tailwind CSS builds, all styles compile to an external stylesheet in production — unsafe-inline can usually be removed once any remaining inline style= attributes are eliminated.",
-        cweId: "CWE-79",
-        cvssScore: 3.1,
-        wstgId: "WSTG-CONF-12",
-      }));
-    }
-  }
-
-  // ── CSP deep analysis (when CSP exists) ──────────────────────────────
-  if (csp) {
-    // object-src 'none' prevents Flash/Java plugins and data: URI XSS escalation
-    if (!/object-src\s+'none'/i.test(csp) && !/object-src\s+['"]\s*['"]/i.test(csp)) {
-      const hasDefaultNone = /default-src\s+'none'/i.test(csp);
-      if (!hasDefaultNone) {
-        vulnerabilities.push(vuln({
-          name: "CSP Missing object-src 'none' Directive",
-          severity: "medium",
-          category: "Injection Defense",
-          description: "The Content-Security-Policy does not include 'object-src: none'. Without this, browsers may allow Flash, Java, or other plugin content to load, which can bypass script-src restrictions entirely. XSS via plugin content is a known CSP bypass technique.",
-          evidence: `GET ${finalUrl}\nContent-Security-Policy: ${csp}\n(object-src directive absent — plugin content unrestricted)`,
-          solution: "Add object-src 'none' to your CSP. If you use default-src 'none', object-src is implicitly restricted.",
-          cweId: "CWE-79",
-          cvssScore: 4.3,
-          wstgId: "WSTG-CONF-12",
-        }));
-      }
-    }
-
-    // base-uri restriction prevents base-tag injection attacks
-    if (!/base-uri/i.test(csp)) {
-      vulnerabilities.push(vuln({
-        name: "CSP Missing base-uri Directive",
-        severity: "low",
-        category: "Injection Defense",
-        description: "The Content-Security-Policy does not restrict base-uri. Without this directive, an attacker who can inject a <base href='https://attacker.com'> tag can redirect all relative URLs on the page to their own server, hijacking resource loads and form submissions.",
-        evidence: `GET ${finalUrl}\nContent-Security-Policy: ${csp}\n(base-uri directive absent)`,
-        solution: "Add base-uri 'self' to your CSP to prevent base-tag injection attacks.",
-        cweId: "CWE-79",
-        cvssScore: 3.5,
-        wstgId: "WSTG-CONF-12",
-      }));
-    }
-
-    // Wildcard script-src defeats the entire point of CSP
-    if (/script-src\s+[^;]*\*/.test(csp)) {
-      vulnerabilities.push(vuln({
-        name: "CSP script-src Contains Wildcard — XSS Protection Bypassed",
-        severity: "high",
-        category: "Injection Defense",
-        description: "The script-src directive in the Content-Security-Policy contains a wildcard (*), which allows scripts to be loaded from any origin. This completely defeats the purpose of CSP as an XSS mitigation.",
-        evidence: `GET ${finalUrl}\nContent-Security-Policy: ${csp}\n(wildcard in script-src allows scripts from any origin)`,
-        solution: "Remove wildcards from script-src. Use an explicit allowlist of trusted origins, or switch to nonce-based CSP: script-src 'nonce-{random}'.",
-        cweId: "CWE-79",
-        cvssScore: 7.2,
-        wstgId: "WSTG-CONF-12",
-      }));
-    }
-  }
-
-  // ── X-Frame-Options ───────────────────────────────────────────────────
-  const xfo = headerVal(rawHeaders, "x-frame-options");
-  const cspFrameAncestors = csp && /frame-ancestors/i.test(csp);
-  if (!xfo && !cspFrameAncestors) {
-    vulnerabilities.push(vuln({
-      name: "Missing Clickjacking Protection (X-Frame-Options)",
-      severity: "medium",
-      category: "UI Security",
-      description: "The application does not set X-Frame-Options or CSP frame-ancestors. Attackers can embed your pages in invisible iframes on malicious sites and trick users into clicking UI elements (clickjacking).",
-      evidence: `GET ${finalUrl}\nX-Frame-Options: (header absent)\nCSP frame-ancestors: (not present in Content-Security-Policy)`,
-      solution: "Add: X-Frame-Options: DENY (or SAMEORIGIN if you need to embed within your own domain). Alternatively use: Content-Security-Policy: frame-ancestors 'none'",
-      cweId: "CWE-1021",
-      cvssScore: 4.3,
-      wstgId: "WSTG-CLNT-09",
-    }));
-  }
-
-  // ── X-Content-Type-Options ────────────────────────────────────────────
-  const xcto = headerVal(rawHeaders, "x-content-type-options");
-  if (!xcto || xcto.toLowerCase() !== "nosniff") {
-    vulnerabilities.push(vuln({
-      name: "Missing X-Content-Type-Options: nosniff",
-      severity: "medium",
-      category: "Content Sniffing",
-      description: "The X-Content-Type-Options header is absent or not set to 'nosniff'. Browsers may MIME-sniff response content and execute it as a different content type, enabling content-injection attacks.",
-      evidence: xcto
-        ? `GET ${finalUrl}\nX-Content-Type-Options: ${xcto}\n(must be exactly "nosniff")`
-        : `GET ${finalUrl}\nX-Content-Type-Options: (header absent from response)`,
-      solution: "Add to all responses: X-Content-Type-Options: nosniff",
-      cweId: "CWE-16",
-      cvssScore: 4.3,
-      wstgId: "WSTG-CONF-07",
-    }));
-  }
-
-  // ── Referrer-Policy ───────────────────────────────────────────────────
-  const rp = headerVal(rawHeaders, "referrer-policy");
-  if (!rp) {
-    vulnerabilities.push(vuln({
-      name: "Missing Referrer-Policy Header",
-      severity: "low",
-      category: "Information Disclosure",
-      description: "No Referrer-Policy header is set. By default, browsers may include the full URL of the previous page in the Referer header, potentially leaking sensitive URL parameters (session tokens, search queries) to third-party sites.",
-      evidence: `GET ${finalUrl}\nReferrer-Policy: (header absent from response)`,
-      solution: "Add: Referrer-Policy: strict-origin-when-cross-origin (or 'no-referrer' for maximum privacy)",
-      cweId: "CWE-200",
-      cvssScore: 3.1,
-      wstgId: "WSTG-CONF-07",
-    }));
-  }
-
-  // ── Permissions-Policy ────────────────────────────────────────────────
-  const pp = headerVal(rawHeaders, "permissions-policy") ?? headerVal(rawHeaders, "feature-policy");
-  if (!pp) {
-    vulnerabilities.push(vuln({
-      name: "Missing Permissions-Policy Header",
-      severity: "low",
-      category: "Browser Feature Control",
-      description: "No Permissions-Policy (formerly Feature-Policy) header is present. This header restricts which browser APIs (camera, microphone, geolocation, etc.) can be accessed from your pages and embedded iframes.",
-      evidence: `GET ${finalUrl}\nPermissions-Policy: (header absent from response)`,
-      solution: "Add: Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=(). Adjust based on what your app actually needs.",
-      cweId: "CWE-16",
-      cvssScore: 2.4,
-      wstgId: "WSTG-CONF-07",
-    }));
-  }
-
-  // ── Cross-Origin isolation headers (COOP / COEP / CORP) ─────────────
-  // These headers enable cross-origin isolation, which is required to safely
-  // use SharedArrayBuffer and high-resolution timers. Most public-facing web
-  // apps don't use these APIs and don't need full isolation — absence is
-  // therefore informational, not a direct vulnerability. Flag as INFO so
-  // teams can make an informed choice rather than reflexively chasing headers.
-  const coop = headerVal(rawHeaders, "cross-origin-opener-policy");
-  if (!coop) {
-    vulnerabilities.push(vuln({
-      name: "Missing Cross-Origin-Opener-Policy (COOP)",
-      severity: "info",
-      category: "Browser Feature Control",
-      description: "The Cross-Origin-Opener-Policy header is not set. COOP isolates your browsing context from cross-origin popups, preventing other pages from accessing your window object. It is required to safely enable SharedArrayBuffer and high-resolution timers. Most public web apps do not need these APIs, so absence is typically informational — but enabling COOP is a free defence-in-depth measure.",
-      evidence: `GET ${finalUrl}\nCross-Origin-Opener-Policy: (header absent from response)`,
-      solution: "Add: Cross-Origin-Opener-Policy: same-origin (most secure) or same-origin-allow-popups if you need cross-origin popup interaction. Only required if you use SharedArrayBuffer or high-resolution timers.",
-      cweId: "CWE-346",
-      wstgId: "WSTG-CONF-07",
-    }));
-  }
-
-  const coep = headerVal(rawHeaders, "cross-origin-embedder-policy");
-  if (!coep) {
-    vulnerabilities.push(vuln({
-      name: "Missing Cross-Origin-Embedder-Policy (COEP)",
-      severity: "info",
-      category: "Browser Feature Control",
-      description: "The Cross-Origin-Embedder-Policy header is not set. COEP (require-corp) prevents the page from loading cross-origin resources unless they explicitly opt in. It is required alongside COOP to achieve cross-origin isolation. Absence is informational for most sites — only needed if your app uses SharedArrayBuffer or high-resolution performance timers.",
-      evidence: `GET ${finalUrl}\nCross-Origin-Embedder-Policy: (header absent from response)`,
-      solution: "Add: Cross-Origin-Embedder-Policy: require-corp. Note: this requires all subresources to serve a CORP or CORS header. Use credentialless if require-corp causes third-party resource breakage.",
-      cweId: "CWE-346",
-      wstgId: "WSTG-CONF-07",
-    }));
-  }
-
-  const corp = headerVal(rawHeaders, "cross-origin-resource-policy");
-  if (!corp) {
-    vulnerabilities.push(vuln({
-      name: "Missing Cross-Origin-Resource-Policy (CORP)",
-      severity: "info",
-      category: "Browser Feature Control",
-      description: "The Cross-Origin-Resource-Policy header is absent. Without CORP, other origins can include this resource in their pages (via <img>, <script>, etc.). In cross-origin isolated contexts this could expose content to Spectre-class timing attacks. For most public resources this is informational — but adding CORP: same-origin or same-site is a low-effort hardening step.",
-      evidence: `GET ${finalUrl}\nCross-Origin-Resource-Policy: (header absent from response)`,
-      solution: "Add: Cross-Origin-Resource-Policy: same-origin (for same-site-only resources) or same-site. Use cross-origin only for truly public resources.",
-      cweId: "CWE-346",
-      wstgId: "WSTG-CONF-07",
-    }));
-  }
-
-  // ── CORS ───────────────────────────────────────────────────────────────
-  const acao = headerVal(rawHeaders, "access-control-allow-origin");
-  if (acao === "*") {
-    vulnerabilities.push(vuln({
-      name: "Permissive CORS Policy (Wildcard Origin)",
-      severity: "medium",
-      category: "CORS Misconfiguration",
-      description: "The server responds with Access-Control-Allow-Origin: *, meaning any website can make cross-origin requests to this endpoint and read the response. If this endpoint returns sensitive data, that data is exposed to all origins.",
-      evidence: `GET ${finalUrl}\nAccess-Control-Allow-Origin: *`,
-      solution: "Replace the wildcard with a specific allowlist of trusted origins: Access-Control-Allow-Origin: https://your-frontend.com. Never use * on endpoints that return user-specific data.",
-      cweId: "CWE-942",
-      cvssScore: 6.5,
-      wstgId: "WSTG-CONF-07",
-    }));
-  }
-
-  // ── Server / Technology Disclosure ────────────────────────────────────
-  if (server && /\d/.test(server)) {
-    vulnerabilities.push(vuln({
-      name: "Server Version Disclosure",
-      severity: "info",
-      category: "Information Disclosure",
-      description: `The Server header reveals detailed software version information: "${server}". Attackers use this to look up CVEs for the exact version and craft targeted exploits.`,
-      evidence: `GET ${finalUrl}\nServer: ${server}`,
-      solution: "Configure your web server to omit version numbers from the Server header, or remove the header entirely. In Nginx: server_tokens off; In Apache: ServerTokens Prod; ServerSignature Off",
-      cweId: "CWE-200",
-      wstgId: "WSTG-INFO-02",
-    }));
-  }
-
-  const poweredBy = headerVal(rawHeaders, "x-powered-by");
-  if (poweredBy) {
-    vulnerabilities.push(vuln({
-      name: "X-Powered-By Header Discloses Technology Stack",
-      severity: "info",
-      category: "Information Disclosure",
-      description: `The X-Powered-By header advertises the underlying technology: "${poweredBy}". This helps attackers fingerprint your stack and search for known vulnerabilities.`,
-      evidence: `GET ${finalUrl}\nX-Powered-By: ${poweredBy}`,
-      solution: "Remove the X-Powered-By header. In Express.js: app.disable('x-powered-by'); In PHP: expose_php = Off in php.ini",
-      cweId: "CWE-200",
-      wstgId: "WSTG-INFO-09",
-    }));
-  }
-
-  // ── Cookie analysis ───────────────────────────────────────────────────
+  const page: PageContext = { finalUrl, html, rawHeaders, isHttps };
   const setCookie = headerVal(rawHeaders, "set-cookie");
-  vulnerabilities.push(...analyzeCookies(setCookie));
-
-  // ── Mixed content ─────────────────────────────────────────────────────
-  if (isHttps && /src=["']http:\/\//i.test(html.slice(0, 100_000))) {
-    vulnerabilities.push(vuln({
-      name: "Mixed Content (HTTP Resources on HTTPS Page)",
-      severity: "medium",
-      category: "Transport Security",
-      description: "The HTTPS page loads resources (scripts, stylesheets, images) over plain HTTP. Browsers block or warn about mixed content, and the HTTP resources can be intercepted and modified by attackers.",
-      evidence: `GET ${finalUrl}\nPage is served over HTTPS but contains src="http://..." resource references`,
-      solution: "Update all resource URLs to use HTTPS. Use protocol-relative URLs (//example.com/resource) or absolute HTTPS URLs. Enable Content-Security-Policy: upgrade-insecure-requests",
-      cweId: "CWE-311",
-      cvssScore: 5.9,
-      wstgId: "WSTG-CRYP-01",
-    }));
-  }
-
-  // X-XSS-Protection: 0 is intentionally NOT flagged.
-  // Disabling the browser's legacy XSS auditor is the current OWASP/Google/Mozilla
-  // recommendation — the auditor was deprecated, causes false positives, and has
-  // introduced its own XSS vulnerabilities in some browsers. Setting it to 0 is correct.
-
-  // ── Cache-Control on sensitive-looking pages ───────────────────────────
-  const cacheControl = headerVal(rawHeaders, "cache-control");
-  const pragma = headerVal(rawHeaders, "pragma");
-  if (isHttps && !cacheControl && !pragma) {
-    vulnerabilities.push(vuln({
-      name: "Missing Cache-Control Headers",
-      severity: "info",
-      category: "Information Disclosure",
-      description: "No Cache-Control or Pragma headers are set. Without explicit cache directives, proxies and shared caches may store sensitive page content, potentially serving it to other users or making it accessible after logout.",
-      evidence: `GET ${finalUrl}\nCache-Control: (header absent)\nPragma: (header absent)`,
-      solution: "Set Cache-Control: no-store, no-cache, must-revalidate on pages with sensitive or personalized content. Use Cache-Control: public, max-age=3600 only for truly static, non-sensitive resources.",
-      cweId: "CWE-524",
-      wstgId: "WSTG-CONF-07",
-    }));
-  }
+  // Everything the first response itself says: transport, CSP, headers, cookies, page content.
+  const readFromStartPage = [
+    ...(await transportFindings(page)),
+    ...cspFindings(page),
+    ...headerFindings(page),
+    ...analyzeCookies(initial.setCookies ?? [], setCookie),
+    ...pageFindings(page),
+  ];
+  // When that response was an error page (and not a refusal, which is withheld below as an
+  // interception) it describes the error page, not the app: shown as information, not graded.
+  vulnerabilities.push(...(initial.status >= 400 ? capFindingsReadFromErrorPage(readFromStartPage, initial.status) : readFromStartPage));
 
   // Pages the crawler will visit. Was 20 for deep scans and 0 (no crawl) for
   // basic ones; with one tier there is one budget.
   const CRAWL_PAGE_BUDGET = 20;
 
+  // Did the edge answer instead of the site? Decided once, up front, because
+  // several checks downstream are only meaningful if the document is the
+  // target's own.
+  const challengeVerdict = detectChallengePage(initial.status, html, rawHeaders);
+  // Or a hosting platform or identity provider answered instead of the app: a sign-in wall in front
+  // of the whole site, or the platform's "nothing running here" page. Same treatment as a challenge.
+  const gateVerdict = challengeVerdict.isChallenge
+    ? null
+    : detectPlatformGate(targetUrl, finalUrl, initial.status, html, rawHeaders);
+  const intercepted = challengeVerdict.isChallenge || gateVerdict?.isGate === true;
+
   // ── Run all parallel probes ───────────────────────────────────────────
   // All checks run concurrently — active HTTP probes, DNS checks, site crawl,
   // CVE lookup, JWT analysis, subdomain takeover, JS secret scanning and path
   // traversal.
-  // Run crawl separately to capture pagesVisited alongside findings
-  const crawlPromise = crawlAndCheck(
-    finalUrl, html, rawHeaders, CRAWL_PAGE_BUDGET,
-  ).catch(() => ({ vulnerabilities: [], pagesVisited: [], probedNotFound: [] }));
-
-  const probePromises: Promise<ScanVulnerability[]>[] = [
-    runAllProbes(finalUrl, html).catch(() => []),
-    checkDnsSecurity(finalUrl).catch(() => []),
-    checkForKnownVulnerabilities(html, rawHeaders).catch(() => []),
-    // Passive JWT analysis — no extra HTTP requests
-    analyzeJwts(rawHeaders, html).catch(() => []),
-    // Subdomain takeover — 1-2 DNS + HTTP checks
-    checkSubdomainTakeover(finalUrl).catch(() => []),
-    // Source map exposure — checks JS bundles for .map files
-    checkSourceMaps(html, finalUrl).catch(() => []),
-    // Vibe-stack database security — Supabase RLS + Firebase rules (both tiers)
-    checkVibeStackSecurity(html, finalUrl, tier).catch(() => []),
-    // BaaS open-data checks not covered above: PocketBase, Appwrite
-    runBaasProbes(finalUrl, html).catch(() => []),
-    // GraphQL introspection + field suggestions
-    runGraphqlProbe(finalUrl, html).catch(() => []),
-    // Exposed API docs: Swagger/OpenAPI/ReDoc
-    runApiDocsProbe(finalUrl).catch(() => []),
-    // Next.js __NEXT_DATA__ prop leaks
-    runNextjsProbe(finalUrl, html).catch(() => []),
-    // Public cloud storage listing: S3, GCS, Azure Blob
-    runStorageProbe(finalUrl, html).catch(() => []),
-  ];
-
-  probePromises.push(
-    scanJavaScriptForSecrets(html, finalUrl).catch(() => []),
-    // Active path traversal probing — multiple HTTP requests
-    checkPathTraversal(finalUrl, html).catch(() => []),
-    // A03 Injection — reflected XSS + error-based SQLi active probing
-    runInjectionProbes(finalUrl, html).catch(() => []),
+  // Every test's outcome — ran, skipped (and why) or failed — for the per-test
+  // log the worker writes and the coverage line in the report. See testLedger.ts.
+  const ledger = new TestLedger(onTest);
+  // The header, cookie and CSP checks above ran on the first response before the
+  // ledger existed. Record them now, so they are counted like every other test, and
+  // never as run when a bot-protection page answered instead of the site (their
+  // findings are withheld below, so nothing was actually checked).
+  ledger.records.push(
+    intercepted
+      ? {
+          group: "passive", name: "response headers and cookies", status: "skipped", findings: 0, durationMs: 0,
+          reason: challengeVerdict.isChallenge
+            ? "a bot-protection page answered instead of the site"
+            : gateVerdict?.kind === "sign-in wall"
+              ? "a sign-in page answered instead of the app"
+              : "the hosting platform answered instead of the app",
+        }
+      : (() => {
+          const found = vulnerabilities.filter((v) => v.category !== "Scan Coverage");
+          return {
+            group: "passive", name: "response headers and cookies", status: "ran" as const, findings: found.length, durationMs: 0,
+            ...(found.length > 0 ? { found: foundNames(found) } : {}),
+          };
+        })(),
   );
 
-  const [crawlResult, ...probeResults] = await Promise.all([
-    crawlPromise,
-    Promise.allSettled(probePromises),
-  ]);
+  const probes = await runProbeStage({
+    finalUrl, html, rawHeaders, tier, allowActiveProbes, ledger,
+    signedIn: Boolean(auth?.credentials),
+    setCookies: initial.setCookies ?? [],
+    status: initial.status,
+    requestedUrl: targetUrl,
+    // Not the rendered DOM: see ProbeStageInput.authoredHtml.
+    authoredHtml: initial.body,
+    crawlPageBudget: CRAWL_PAGE_BUDGET,
+    ...(extra?.githubRepoUrl ? { githubRepoUrl: extra.githubRepoUrl } : {}),
+    ...(extra?.githubAccessToken ? { githubAccessToken: extra.githubAccessToken } : {}),
+  });
+  const { crawlResult, unrunFamilies } = probes;
+  vulnerabilities.push(...probes.vulnerabilities);
 
-  vulnerabilities.push(...crawlResult.vulnerabilities);
-  const settledProbes = probeResults[0] as PromiseSettledResult<ScanVulnerability[]>[];
-  for (const result of settledProbes) {
-    if (result.status === "fulfilled") {
-      vulnerabilities.push(...result.value);
-    }
-  }
-
-  // ── API surface testing ────────────────────────────────────────────────────
-  // Discovery reads the JS bundles, and the probes spend a few requests per
-  // endpoint. On an API-first SPA this is the only path that finds anything at
-  // all — the HTML carries no forms, links or parameters to collect.
-  {
-    const origin = new URL(finalUrl).origin;
-    const endpoints = await collectApiSurface(origin, html).catch(() => [] as ApiEndpoint[]);
-
-    const apiFindings = await (async () => {
-      if (endpoints.length === 0) return [] as ScanVulnerability[];
-      return runApiProbes({
-        endpoints,
-        ...(auth?.credentials ? { credentials: auth.credentials } : {}),
-        ...(auth?.secondary ? { secondary: auth.secondary } : {}),
-      });
-    })().catch(() => [] as ScanVulnerability[]);
-    vulnerabilities.push(...apiFindings);
-
-    // ── A10: SSRF via the out-of-band collector ─────────────────────────────
-    // Runs only when a public callback host is configured, since the target's
-    // server is what has to reach it. Reuses the discovered endpoints.
-    const ssrfFindings = await runSsrfProbes({
-      scanId,
-      targetUrl: finalUrl,
-      endpoints,
-      ...(auth?.credentials ? { credentials: auth.credentials } : {}),
-    }).catch(() => [] as ScanVulnerability[]);
-    vulnerabilities.push(...ssrfFindings);
-  }
+  vulnerabilities.push(...(await runActiveApiStage({
+    finalUrl, html, observedRequests, allowActiveProbes, scanId, ledger, unrunFamilies,
+    ...(auth ? { auth } : {}),
+    ...(extra?.raceConditionTesting ? { raceConditionTesting: true } : {}),
+  })));
 
   // ── A01: broken access control ─────────────────────────────────────────────
   // Runs last because it needs the crawl's output: the URLs the signed-in
   // account actually reached are the ones worth asking a second account for.
   // Requires both accounts — one identity cannot demonstrate an authorisation
   // boundary between users.
-  if (auth?.secondary) {
-    const candidateUrls = [finalUrl, ...crawlResult.pagesVisited];
-    const accessFindings = await runAccessControlProbes({
-      urls: candidateUrls,
-      primary: auth.credentials,
-      secondary: auth.secondary,
-    }).catch(() => [] as ScanVulnerability[]);
-    vulnerabilities.push(...accessFindings);
-  }
-
-  // Two rate-limit checks can fire on one scan: a header heuristic in
-  // probes.ts, and the behavioural burst in apiProbe.ts. When both appear they
-  // describe the same problem, and the behavioural one has actually
-  // demonstrated it — the header check itself says infrastructure often
-  // throttles without advertising it. Keep the evidence, drop the inference.
-  const hasBehaviouralRateLimitFinding = vulnerabilities.some(
-    (v) => v.name === "API Endpoints Without Rate Limiting",
+  //
+  // When a primary account is signed in but no second one was supplied, the
+  // step tries once to create a disposable one through the target's own public
+  // signup form (autoSecondAccount.ts) — but only after checking that the probe
+  // would have a record to use it on, and it says in the report when it created
+  // one. The whole decision sequence lives in crossAccountStep.ts, where it is
+  // tested; a probe that compared nothing is recorded as skipped, not as run.
+  vulnerabilities.push(
+    ...(await runCrossAccountStep({
+      allowActiveProbes,
+      allowAutoAccount: extra?.autoSecondAccount === true,
+      primary: auth?.credentials,
+      secondary: auth?.secondary,
+      finalUrl,
+      pagesVisited: crawlResult.pagesVisited,
+      ledger,
+      unrunFamilies,
+    })),
   );
-  const deduped = hasBehaviouralRateLimitFinding
-    ? vulnerabilities.filter((v) => v.name !== "No Rate Limiting Detected")
-    : vulnerabilities;
+
+  vulnerabilities.push(...coverageNotes(renderRejected, unrunFamilies));
+
+  const { deduped, withheld } = settleFindings({ vulnerabilities, intercepted, challengeVerdict, gateVerdict, ledger });
+
+  // Not intercepted, but the reader still needs to know what the findings were read from.
+  const contextNotes: ScanVulnerability[] = [];
+  if (!intercepted) {
+    if (initial.status >= 400) contextNotes.push(rootErrorFinding(initial.status, finalUrl));
+    if (landedElsewhere(targetUrl, finalUrl)) contextNotes.push(landedElsewhereFinding(targetUrl, finalUrl));
+  }
 
   return {
     targetUrl,
@@ -967,7 +235,18 @@ async function runScanInner(
     tlsGrade,
     technologies,
     vulnerabilities: autoEnrichConfidence(
-      sessionWasLost() ? [...deduped, sessionLostFinding()] : deduped,
+      [
+        ...deduped,
+        ...(sessionWasLost() ? [sessionLostFinding()] : []),
+        ...(allowActiveProbes ? [] : [activeProbesSkippedFinding(redirectedOffScope)]),
+        ...(challengeVerdict.isChallenge
+          ? [interceptedFinding(challengeVerdict.vendor, challengeVerdict.signal ?? "")]
+          : []),
+        ...(gateVerdict?.isGate && gateVerdict.kind
+          ? [platformGateFinding(gateVerdict.kind, gateVerdict.vendor, gateVerdict.signal ?? "")]
+          : []),
+        ...contextNotes,
+      ],
       technologies,
     ),
     requestDurationMs,
@@ -975,27 +254,13 @@ async function runScanInner(
     pagesScanned: crawlResult.pagesVisited,
     probedNotFound: crawlResult.probedNotFound,
     renderedWithBrowser,
+    intercepted,
+    ...(challengeVerdict.isChallenge
+      ? { interception: { kind: "bot challenge" as const, vendor: challengeVerdict.vendor, signal: challengeVerdict.signal ?? "" } }
+      : gateVerdict?.isGate && gateVerdict.kind
+        ? { interception: { kind: gateVerdict.kind, vendor: gateVerdict.vendor, signal: gateVerdict.signal ?? "" } }
+        : {}),
+    withheld,
+    tests: ledger.records,
   };
-}
-
-export function computeRiskScore(vulns: ScanVulnerability[]): number {
-  let score = 0;
-  for (const v of vulns) {
-    switch (v.severity) {
-      case "critical": score += 30; break;
-      case "high":     score += 15; break;
-      case "medium":   score += 5;  break;
-      case "low":      score += 1;  break;
-      case "info":     score += 0;  break;
-    }
-  }
-  return Math.min(score, 100);
-}
-
-export function computeGrade(riskScore: number): string {
-  if (riskScore <= 10) return "A";
-  if (riskScore <= 25) return "B";
-  if (riskScore <= 45) return "C";
-  if (riskScore <= 65) return "D";
-  return "F";
 }

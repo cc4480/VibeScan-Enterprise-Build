@@ -1,22 +1,21 @@
 import { Router, type IRouter } from "express";
 import { db, reportsTable, reportSharesTable } from "@workspace/db";
 import { eq, and, isNull } from "drizzle-orm";
-import { randomBytes } from "node:crypto";
 import { z } from "zod";
+import { createReportShare, hashShareToken } from "../lib/reportShare";
+import { UUID_ANY } from "./accountShared";
+import { withNoteFreeTotals } from "../lib/reportTotals";
+import { rateLimitMiddleware } from "../lib/rateLimit";
 
 const router: IRouter = Router();
+
+// Public and unauthenticated: bound what one address can ask of the database. Tokens are 256 random bits,
+// so this is about load rather than guessing.
+const shareReadLimit = rateLimitMiddleware({ rules: [{ windowMs: 60_000, max: 120, label: "minute" }], name: "share-read" });
 
 const CreateShareBody = z.object({
   expiresIn: z.enum(["7d", "30d", "never"]).default("never"),
 });
-
-function computeExpiry(expiresIn: "7d" | "30d" | "never"): Date | null {
-  if (expiresIn === "never") return null;
-  const days = expiresIn === "7d" ? 7 : 30;
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d;
-}
 
 // ── POST /api/reports/:id/shares — create a share link ────────────────────────
 router.post("/reports/:id/shares", async (req, res): Promise<void> => {
@@ -26,6 +25,10 @@ router.post("/reports/:id/shares", async (req, res): Promise<void> => {
   }
 
   const reportId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (!reportId || !UUID_ANY.test(reportId)) {
+    res.status(404).json({ error: "Report not found" });
+    return;
+  }
   const parsed = CreateShareBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid request" });
@@ -43,18 +46,15 @@ router.post("/reports/:id/shares", async (req, res): Promise<void> => {
       return;
     }
     if (report.userId !== req.user!.id) {
-      res.status(403).json({ error: "Forbidden" });
+      res.status(404).json({ error: "Report not found" });
       return;
     }
 
-    const token = randomBytes(32).toString("hex");
-    const expiresAt = computeExpiry(parsed.data.expiresIn);
+    // Ownership is checked above; createReportShare does the minting so the
+    // worker's emailed link and this route cannot drift apart.
+    const share = await createReportShare(reportId, req.user!.id, parsed.data.expiresIn);
 
-    const [share] = await db
-      .insert(reportSharesTable)
-      .values({ reportId, userId: req.user!.id, token, expiresAt })
-      .returning();
-
+    // The only response that carries the token: the database keeps a hash, so the link cannot be shown again.
     res.status(201).json({
       id: share.id,
       token: share.token,
@@ -76,6 +76,10 @@ router.get("/reports/:id/shares", async (req, res): Promise<void> => {
   }
 
   const reportId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (!reportId || !UUID_ANY.test(reportId)) {
+    res.status(404).json({ error: "Report not found" });
+    return;
+  }
 
   try {
     const [report] = await db
@@ -88,7 +92,7 @@ router.get("/reports/:id/shares", async (req, res): Promise<void> => {
       return;
     }
     if (report.userId !== req.user!.id) {
-      res.status(403).json({ error: "Forbidden" });
+      res.status(404).json({ error: "Report not found" });
       return;
     }
 
@@ -105,7 +109,6 @@ router.get("/reports/:id/shares", async (req, res): Promise<void> => {
     res.json(
       shares.map((s) => ({
         id: s.id,
-        token: s.token,
         expiresAt: s.expiresAt?.toISOString() ?? null,
         createdAt: s.createdAt.toISOString(),
         revokedAt: s.revokedAt?.toISOString() ?? null,
@@ -117,15 +120,23 @@ router.get("/reports/:id/shares", async (req, res): Promise<void> => {
   }
 });
 
-// ── DELETE /api/reports/:id/shares/:token — revoke a share link ───────────────
-router.delete("/reports/:id/shares/:token", async (req, res): Promise<void> => {
+// ── DELETE /api/reports/:id/shares/:shareId — revoke a share link ─────────────
+router.delete("/reports/:id/shares/:shareId", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
   const reportId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const token = Array.isArray(req.params.token) ? req.params.token[0] : req.params.token;
+  if (!reportId || !UUID_ANY.test(reportId)) {
+    res.status(404).json({ error: "Report not found" });
+    return;
+  }
+  const shareId = Array.isArray(req.params.shareId) ? req.params.shareId[0] : req.params.shareId;
+  if (!shareId || !UUID_ANY.test(shareId)) {
+    res.status(404).json({ error: "Share link not found" });
+    return;
+  }
 
   try {
     const [report] = await db
@@ -138,7 +149,7 @@ router.delete("/reports/:id/shares/:token", async (req, res): Promise<void> => {
       return;
     }
     if (report.userId !== req.user!.id) {
-      res.status(403).json({ error: "Forbidden" });
+      res.status(404).json({ error: "Report not found" });
       return;
     }
 
@@ -148,7 +159,7 @@ router.delete("/reports/:id/shares/:token", async (req, res): Promise<void> => {
       .where(
         and(
           eq(reportSharesTable.reportId, reportId),
-          eq(reportSharesTable.token, token),
+          eq(reportSharesTable.id, shareId),
           isNull(reportSharesTable.revokedAt),
         ),
       )
@@ -167,7 +178,7 @@ router.delete("/reports/:id/shares/:token", async (req, res): Promise<void> => {
 });
 
 // ── GET /api/share/:token — public share endpoint (no auth required) ──────────
-router.get("/share/:token", async (req, res): Promise<void> => {
+router.get("/share/:token", shareReadLimit, async (req, res): Promise<void> => {
   const token = Array.isArray(req.params.token) ? req.params.token[0] : req.params.token;
 
   try {
@@ -176,7 +187,7 @@ router.get("/share/:token", async (req, res): Promise<void> => {
       .from(reportSharesTable)
       .where(
         and(
-          eq(reportSharesTable.token, token),
+          eq(reportSharesTable.tokenHash, hashShareToken(token)),
           isNull(reportSharesTable.revokedAt),
         ),
       );
@@ -209,7 +220,8 @@ router.get("/share/:token", async (req, res): Promise<void> => {
       scannedAt: report.scannedAt,
       duration: report.duration ?? null,
       createdAt: report.createdAt,
-      data: report.data,
+      // Totals saved before the notes left them are recounted here (lib/reportTotals.ts).
+      data: withNoteFreeTotals(report.data),
     });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch shared report");

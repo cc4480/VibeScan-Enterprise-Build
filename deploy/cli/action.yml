@@ -1,0 +1,61 @@
+name: "SecScan"
+description: "Scan a deployed URL from CI. Fails the build on findings or a low grade, and can send results to GitHub code scanning."
+branding:
+  icon: "shield"
+  color: "green"
+
+inputs:
+  url:
+    description: "The site to scan: a preview or staging URL you own or are authorised to test."
+    required: true
+  token:
+    description: "A SecScan API token (scope: API). Store it as a repository secret."
+    required: true
+  fail-on:
+    description: "Fail at this severity or worse: critical, high, medium, low, info, or none."
+    required: false
+    default: "high"
+  min-grade:
+    description: "Also fail if the grade is worse than this (A to F). Empty means no grade rule."
+    required: false
+    default: ""
+  timeout:
+    description: "Seconds to wait for the scan before giving up. The scan keeps running."
+    required: false
+    default: "300"
+  sarif-file:
+    description: "Where to write the SARIF results."
+    required: false
+    default: "secscan.sarif"
+  upload-sarif:
+    description: "Upload the SARIF to GitHub code scanning. Needs `security-events: write` on the job."
+    required: false
+    default: "false"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Scan
+      shell: bash
+      # Inputs reach the script as environment variables, never interpolated into it: a URL
+      # or option containing shell characters must not be able to run as a command.
+      env:
+        SECSCAN_TOKEN: ${{ inputs.token }}
+        SECSCAN_URL: ${{ inputs.url }}
+        SECSCAN_FAIL_ON: ${{ inputs.fail-on }}
+        SECSCAN_MIN_GRADE: ${{ inputs.min-grade }}
+        SECSCAN_TIMEOUT: ${{ inputs.timeout }}
+        SECSCAN_SARIF: ${{ inputs.sarif-file }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        args=(scan "$SECSCAN_URL" --fail-on "$SECSCAN_FAIL_ON" --timeout "$SECSCAN_TIMEOUT" --sarif "$SECSCAN_SARIF")
+        if [ -n "$SECSCAN_MIN_GRADE" ]; then args+=(--min-grade "$SECSCAN_MIN_GRADE"); fi
+        node "$ACTION_PATH/secscan.mjs" "${args[@]}"
+
+    # Runs even when the scan step failed the build on findings, so the alerts still reach the Security tab.
+    - name: Upload results to code scanning
+      if: ${{ always() && inputs.upload-sarif == 'true' && hashFiles(inputs.sarif-file) != '' }}
+      uses: github/codeql-action/upload-sarif@ce5e7eeac396d720fe2d802714996c8ce561e311 # v3
+      with:
+        sarif_file: ${{ inputs.sarif-file }}
+        category: secscan

@@ -24,8 +24,8 @@ export async function getBoss(): Promise<PgBoss> {
       connectionTimeoutMillis: 10_000,
       // Run maintenance every 20 seconds instead of the default 60.
       // This keeps the pg-boss Timekeeper connection active, preventing it
-      // from sitting idle long enough for Replit's production Postgres to
-      // drop it (~30–60 s idle timeout on hosted providers).
+      // from sitting idle long enough for a hosted Postgres to drop it
+      // (~30–60 s idle timeout on hosted providers).
       monitorIntervalSeconds: 20,
       maintenanceIntervalSeconds: 20,
     });
@@ -58,10 +58,21 @@ export interface ScanJobData {
   tier: string;
   /** Set when this scan was triggered by the monitor scheduler */
   monitorSubscriptionId?: string;
+  /** Set when this scan re-checks one finding (lib/verifyFix.ts): no AI analysis, no email, and a verdict at the end. */
+  verificationId?: string;
 }
+
+/**
+ * What every scan job carries. The heartbeat is the point: a scan whose worker dies mid-run (a deploy restarts the
+ * server, the process is killed) used to sit "scanning" until the 2-hour expiry let it be retried, and a scan that had
+ * already read its whole repository looked finished to its owner and never was. With a heartbeat, the worker proves it is
+ * alive every minute; when it stops, the job is failed and retried within about two minutes, and the retry runs the scan
+ * again from the start. Set on the job (not the queue) because a queue's heartbeat cannot be changed once it exists.
+ */
+export const SCAN_JOB_OPTIONS = { heartbeatSeconds: 120 } as const;
 
 export async function enqueueScan(data: ScanJobData): Promise<string | null> {
   const b = await getBoss();
   await b.createQueue(SCAN_QUEUE, { retryLimit: 2, retryDelay: 30, expireInSeconds: 7200 });
-  return b.send(SCAN_QUEUE, data);
+  return b.send(SCAN_QUEUE, data, { ...SCAN_JOB_OPTIONS });
 }

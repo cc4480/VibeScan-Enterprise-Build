@@ -21,6 +21,16 @@ import { isDestructiveUrl } from "./destructive";
 
 const TIMEOUT_MS = 7_000;
 
+// Up to 40 cases x (1 baseline + up to 10 payloads) is ~440 requests. Run
+// sequentially at 7s each, a target that's slow or rate-limiting (this
+// scanner's own production deployment does both) turns "deep scan" into a
+// many-minutes-to-never wall-clock hang -- indistinguishable from the scan
+// being stuck, since nothing else in the pipeline can finish without this
+// probe settling (Promise.allSettled waits for every entry, unconditionally).
+// Bounding concurrency is what the file's own comment already claimed
+// ("run all cases concurrently") but the implementation never did.
+const CASE_CONCURRENCY = 8;
+
 function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
   return { id: randomUUID(), ...partial };
 }
@@ -112,12 +122,12 @@ export async function checkPathTraversal(
   }
 
   // ── Test payloads ────────────────────────────────────────────────────────────
-  // Run all cases concurrently but resolve on the first confirmed hit.
+  // Bounded-concurrency across cases, resolve on the first confirmed hit.
 
-  for (const { path, param } of cases.slice(0, 40)) {
+  async function testCase(path: string, param: string): Promise<ScanVulnerability[] | null> {
     // Same guard as the injection probe: a traversal payload aimed at an action
     // endpoint still triggers the action on the way through.
-    if (isDestructiveUrl(`${origin}${path}`)) continue;
+    if (isDestructiveUrl(`${origin}${path}`)) return null;
 
     // Baseline the case once before trying payloads: the Windows signatures
     // ([fonts], [extensions], [files]) are short, plain-English bracketed
@@ -161,7 +171,24 @@ export async function checkPathTraversal(
         }),
       ];
     }
+    return null;
   }
 
-  return [];
+  const queue = cases.slice(0, 40);
+  let cursor = 0;
+  let hit: ScanVulnerability[] | null = null;
+
+  async function worker(): Promise<void> {
+    while (hit === null) {
+      const i = cursor++;
+      if (i >= queue.length) return;
+      const { path, param } = queue[i]!;
+      const found = await testCase(path, param);
+      if (found) hit = found;
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(CASE_CONCURRENCY, queue.length) }, worker));
+
+  return hit ?? [];
 }

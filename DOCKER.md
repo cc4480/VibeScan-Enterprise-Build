@@ -1,14 +1,14 @@
-# Running Seclayer with Docker
+# Running SecScan with Docker
 
 The stack is three containers:
 
 | Service | What it is | Port | Chromium |
 | --- | --- | --- | --- |
-| `seclayer` | Express API + the pre-built SPA | published | no |
+| `web` | Express API + the pre-built SPA | published | no |
 | `secscan` | the scanner worker | none | yes |
 | `db` | Postgres 16 | none | — |
 
-`seclayer` serves the frontend itself in production, so there is no separate web
+`web` serves the frontend itself in production, so there is no separate web
 container. It never runs a scan: it writes the job to the pg-boss `scan-job`
 queue in Postgres and `secscan` picks it up. That queue is the only runtime
 coupling between the two, so either can be restarted or redeployed alone, and
@@ -76,7 +76,7 @@ no safe default:
 | Variable | Why |
 | --- | --- |
 | `POSTGRES_PASSWORD` | Real credential, even though the db is not published. |
-| `ENCRYPTION_KEY` | 32 random bytes, base64. Encrypts user-supplied secrets. **Changing it makes every previously stored user secret undecryptable.** |
+| `ENCRYPTION_KEY` | 32 random bytes, base64. Seals stored scan credentials. **Changing it makes every previously stored scan login undecryptable.** |
 | `APP_ORIGIN` | Your public URL, no trailing slash. Used to build links in email. |
 
 `DEEPSEEK_API_KEY` is not strictly required to boot, but without it Deep scans
@@ -88,7 +88,7 @@ their plain-English write-up — the thing the tier is sold on.
 `docker-compose.yml` passes each service only the variables its own bundle
 reads, so a value set on the wrong one is silently ignored:
 
-| Variable | seclayer | secscan |
+| Variable | web | secscan |
 | --- | :---: | :---: |
 | `DATABASE_URL`, `ENCRYPTION_KEY`, `APP_ORIGIN`, `RESEND_API_KEY` | ✓ | ✓ |
 | `PORT`, `TRUST_PROXY`, `CORS_EXTRA_ORIGINS`, `STRIPE_*` | ✓ | |
@@ -100,7 +100,7 @@ Two consequences worth knowing before you debug either one:
   credentials when the scan is created; the scanner decrypts them when it runs.
   A mismatch does not fail at startup — it fails at scan time, on the
   authenticated scans that need it most.
-- **`OOB_BASE_URL` is set on `secscan` but must point at `seclayer`.** The
+- **`OOB_BASE_URL` is set on `secscan` but must point at `web`.** The
   scanner plants the callback URL; the web tier serves the `/api/oob` route the
   target calls back to.
 
@@ -147,9 +147,8 @@ Two consequences worth knowing before you debug either one:
   number to match; after any change, confirm the session cookie comes back
   marked `Secure`.
 
-- **CORS** — `app.ts` carries a hardcoded allowlist of the original
-  `*.replit.app` / `secscan.us` origins. Your domain only gets through via
-  `CORS_EXTRA_ORIGINS`.
+- **CORS** — `app.ts` allows only `APP_ORIGIN` (and its `www`) by default.
+  Any other browser origin has to be listed in `CORS_EXTRA_ORIGINS`.
 
 - **Email is not configured until you set `RESEND_API_KEY`.** Accounts work
   without it, but verification and password-reset links are minted and then
@@ -166,7 +165,7 @@ Two consequences worth knowing before you debug either one:
   scan costs conversions on a pay-per-scan product. If you would rather gate
   it, that is a change to `ProtectedRoute`.
 
-- **`/api/login` is the old Replit OIDC route and cannot work off Replit.** It
+- **`/api/login` is a legacy OIDC route and is not registered unless `REPL_ID` is set.** It
   is reachable only from an explicit "Sign in instead" link and answers 500.
   Removing it is tidy-up, not a blocker.
 
@@ -181,17 +180,18 @@ Two consequences worth knowing before you debug either one:
   own origin. Nothing warns you that the check was skipped, so if SSRF
   findings never appear, check this first.
 
-- **Payments are not implemented.** Every scan is queued free of charge, and
-  `DISABLE_PAYMENTS` does not change that — the Stripe webhook that credits an
-  account exists, but nothing creates a Checkout Session for a customer to pay
-  through. Setting it to `false` only logs a warning at startup. Build checkout
-  before advertising a paid tier.
+- **Payments are on exactly when `STRIPE_SECRET_KEY` is set** — the SecScan
+  Unlimited subscription becomes buyable. Set
+  `STRIPE_WEBHOOK_SECRET` with it, and register the webhook at
+  `/api/scan/webhook`; `deploy/PAYMENTS-GO-LIVE.md` lists the five events.
+  Without either, every surface shows prices as "not live yet" and nothing can
+  be bought.
 
 ## Operations
 
 ```bash
 # logs — one service at a time, or omit the name for all three
-docker compose --env-file .env.docker logs -f seclayer
+docker compose --env-file .env.docker logs -f web
 docker compose --env-file .env.docker logs -f secscan
 
 # redeploy after a code change
@@ -217,7 +217,7 @@ deletes the volume and every scan and report with it.
 - The base is Debian (`bookworm`), not Alpine. `pnpm-workspace.yaml` strips
   every `*-musl` native variant through `overrides`, so the frontend build
   cannot resolve its platform binaries on a musl base.
-- esbuild produces two bundles from one package: `dist/index.mjs` (seclayer)
+- esbuild produces two bundles from one package: `dist/index.mjs` (web)
   and `dist/secscan.mjs` (secscan), with `playwright` as the sole external.
   Both images are built from a shared `runtime-base` stage and diverge only
   after it.

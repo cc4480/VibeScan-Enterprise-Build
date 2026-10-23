@@ -7,7 +7,9 @@
 
 import { logger } from "./logger";
 import { checkHostname } from "./ssrfGuard";
+import { strictDispatcher } from "./pinnedDispatcher";
 import { APP_DOMAIN } from "./appOrigin";
+import { notificationPrefs, shouldNotify, type AlertKind } from "./notificationPrefs";
 
 // ── SSRF guard ────────────────────────────────────────────────────────────────
 // Host rules live in ssrfGuard.ts, shared with the scan-target path so the two
@@ -29,7 +31,12 @@ export type WebhookEventType =
   | "cve_alert"
   | "regression_detected"
   | "cert_expiry"
-  | "scan_complete";
+  | "scan_complete"
+  // Raised by the hourly pulse check, which sees things a scan every fortnight
+  // cannot: an outage, or a security header that quietly went away.
+  | "site_down"
+  | "site_recovered"
+  | "security_drift";
 
 export interface WebhookPayload {
   event: WebhookEventType;
@@ -37,6 +44,17 @@ export interface WebhookPayload {
   subscriptionId: string;
   timestamp: string;
   data: Record<string, unknown>;
+}
+
+/** Drift kinds are stored as slugs; nobody wants to read "hsts_weakened" in Slack. */
+export function describeDriftKind(kind: string): string {
+  switch (kind) {
+    case "header_removed":    return "Security header removed";
+    case "hsts_weakened":     return "HSTS weakened";
+    case "final_url_changed": return "Redirect target changed";
+    case "tls_downgrade":     return "HTTPS downgraded to HTTP";
+    default:                  return kind;
+  }
 }
 
 function buildSlackBody(payload: WebhookPayload): Record<string, unknown> {
@@ -47,6 +65,9 @@ function buildSlackBody(payload: WebhookPayload): Record<string, unknown> {
     regression_detected: "🔴 Security Regression Detected",
     cert_expiry: "🔒 TLS Certificate Expiring",
     scan_complete: "✅ Security Scan Complete",
+    site_down: "🛑 Site Unreachable",
+    site_recovered: "✅ Site Back Online",
+    security_drift: "🔍 Security Configuration Changed",
   };
 
   const label = eventLabels[event] ?? event;
@@ -96,8 +117,31 @@ function buildSlackBody(payload: WebhookPayload): Record<string, unknown> {
     if (data.reportUrl) attachmentFields.push({ title: "Report", value: String(data.reportUrl), short: false });
   }
 
-  const color = event === "cve_alert" || event === "regression_detected" ? "danger"
-    : event === "cert_expiry" ? "warning"
+  if (event === "site_down") {
+    if (data.failureReason) attachmentFields.push({ title: "Reason", value: String(data.failureReason), short: false });
+    if (data.consecutiveFailures != null) {
+      attachmentFields.push({ title: "Failed checks", value: String(data.consecutiveFailures), short: true });
+    }
+  }
+
+  if (event === "site_recovered" && data.httpStatus != null) {
+    attachmentFields.push({ title: "Status", value: `HTTP ${data.httpStatus}`, short: true });
+  }
+
+  if (event === "security_drift" && Array.isArray(data.changes)) {
+    const changes = data.changes as Array<{ kind: string; detail: string; severity: string }>;
+    attachmentFields.push({
+      title: `${changes.length} change${changes.length > 1 ? "s" : ""} detected`,
+      value: changes
+        .slice(0, 5)
+        .map((c) => `*${describeDriftKind(c.kind)}* — ${c.detail} (${c.severity})`)
+        .join("\n"),
+      short: false,
+    });
+  }
+
+  const color = event === "cve_alert" || event === "regression_detected" || event === "site_down" ? "danger"
+    : event === "cert_expiry" || event === "security_drift" ? "warning"
     : "good";
 
   return {
@@ -107,7 +151,7 @@ function buildSlackBody(payload: WebhookPayload): Record<string, unknown> {
         color,
         fallback: `${label} for ${domain}`,
         fields: attachmentFields,
-        footer: `Seclayer · ${APP_DOMAIN}`,
+        footer: `SecScan · ${APP_DOMAIN}`,
         ts: Math.floor(Date.now() / 1000),
       },
     ],
@@ -123,7 +167,10 @@ async function postWebhook(url: string, body: Record<string, unknown>): Promise<
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(10_000),
     redirect: "error",
-  });
+    // The SSRF check and this connection resolve the name separately; this opens the socket only
+    // to an address vetted at connect time, so a rebinding record cannot slip through.
+    dispatcher: strictDispatcher,
+  } as RequestInit);
   return res.ok;
 }
 
@@ -131,20 +178,58 @@ async function postWebhook(url: string, body: Record<string, unknown>): Promise<
  * Fire a Slack-compatible webhook. Retries once on failure.
  * Silently logs errors — never throws.
  */
+/**
+ * Webhook events map one-to-one onto notification kinds, so the kind is
+ * derived rather than passed — one less argument a caller can get wrong, and
+ * adding an event type will not compile until it is classified here.
+ */
+const EVENT_TO_KIND: Record<WebhookEventType, AlertKind> = {
+  cve_alert: "cve",
+  regression_detected: "regression",
+  cert_expiry: "cert_expiry",
+  scan_complete: "scan_complete",
+  site_down: "availability",
+  site_recovered: "availability",
+  security_drift: "drift",
+};
+
+/**
+ * What happened to a delivery. Callers may ignore it (delivery is best effort and never throws); it is returned so the
+ * outcome is observable without reading logs.
+ */
+export interface WebhookOutcome {
+  status: "delivered" | "skipped_preferences" | "blocked_url" | "failed";
+  /** Requests actually sent: 0 when skipped or blocked, 2 when the first was not accepted and was retried. */
+  attempts: number;
+}
+
 export async function fireWebhook(
   webhookUrl: string,
   event: WebhookEventType,
   targetUrl: string,
   subscriptionId: string,
   data: Record<string, unknown>,
-): Promise<void> {
+  // Required, deliberately. Webhooks honoured no preference at all before
+  // this, and an optional argument is one a future call site forgets — which
+  // would silently reintroduce exactly that.
+  notify: { userId: string; severity?: string | null },
+): Promise<WebhookOutcome> {
   // Do NOT log the webhook URL — it may contain secret tokens in the path/query.
   const log = logger.child({ event, subscriptionId });
+
+  // Checked before the SSRF guard: no point resolving DNS for a delivery the
+  // user has asked not to receive. Note the email master switch does NOT
+  // apply here — see notificationPrefs.ts.
+  const prefs = await notificationPrefs(notify.userId);
+  if (!shouldNotify(prefs, { kind: EVENT_TO_KIND[event], severity: notify.severity, channel: "webhook" })) {
+    log.info("Webhook skipped — user's notification preferences");
+    return { status: "skipped_preferences", attempts: 0 };
+  }
 
   const safe = await isWebhookUrlSafe(webhookUrl);
   if (!safe) {
     log.warn("Webhook URL blocked by SSRF guard — skipping delivery");
-    return;
+    return { status: "blocked_url", attempts: 0 };
   }
 
   const payload: WebhookPayload = {
@@ -157,18 +242,26 @@ export async function fireWebhook(
 
   const body = buildSlackBody(payload);
 
+  let attempts = 0;
   try {
+    attempts = 1;
     const ok = await postWebhook(webhookUrl, body);
     if (!ok) {
       log.warn("Webhook returned non-2xx — retrying once");
       await new Promise((r) => setTimeout(r, 1000));
+      attempts = 2;
       const ok2 = await postWebhook(webhookUrl, body);
-      if (!ok2) log.warn("Webhook retry also failed — giving up");
-      else log.info("Webhook retry succeeded");
-    } else {
-      log.info("Webhook delivered");
+      if (!ok2) {
+        log.warn("Webhook retry also failed — giving up");
+        return { status: "failed", attempts };
+      }
+      log.info("Webhook retry succeeded");
+      return { status: "delivered", attempts };
     }
+    log.info("Webhook delivered");
+    return { status: "delivered", attempts };
   } catch (err) {
     log.warn({ err }, "Webhook delivery error (non-fatal)");
+    return { status: "failed", attempts };
   }
 }

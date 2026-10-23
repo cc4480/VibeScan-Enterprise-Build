@@ -5,13 +5,13 @@ what to do; this says why some of it is phrased the way it is.
 
 ## The start command is not read from railway.json here
 
-`seclayer.json` and `secscan.json` exist and are correct, and setting
+`web.json` (then named `seclayer.json`) and `secscan.json` exist and are correct, and setting
 `RAILWAY_CONFIG_PATH` as a service variable **did not apply them**. The service
 kept the Dockerfile's default `CMD`, which is the *scanner* — so the web service
 came up as a second scanner, with no HTTP listener, and its public URL returned
 502 with "Application failed to respond".
 
-Nothing in the logs says "wrong entrypoint". The evidence was that the seclayer
+Nothing in the logs says "wrong entrypoint". The evidence was that the web
 service's own logs read `secscan ready — waiting for scan jobs`, and its stack
 traces pointed at `src/secscan.ts`.
 
@@ -53,6 +53,14 @@ produced another SUCCESS that was still running the old entrypoint.
 A *new* deployment is required: `railway up`, or `railway redeploy --from-source`
 where the source is reachable.
 
+## Give the scan worker time to finish running scans before a deploy stops it
+
+On SIGTERM the `secscan` worker stops taking jobs and waits up to 90 seconds for running scans to finish, then
+closes the browser and exits (`secscan.ts`). Railway sends SIGKILL after its own stop grace period, which is
+short by default, so set `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=120` on the **secscan** service (not web).
+Without it a redeploy can still cut scans off; they then sit in `scanning` until pg-boss expires the job
+(2 hours) and the stuck-scan reaper fails and refunds them (8 hours).
+
 ## Run migrations before the services first boot, not after
 
 Both services started against an empty database and logged
@@ -63,7 +71,22 @@ day's data is bundled rather than fresh.
 
 Restarting after migrating clears it. Better: migrate first.
 
-## Migrating needs a temporary route to the database
+## Migrations now apply themselves on boot
+
+**The procedure below is no longer needed for a normal deploy.** Both
+entrypoints call `migrateToLatest()` before they serve anything
+(`lib/db/src/bootMigrate.ts`), the Dockerfile ships the committed migrations to
+`/app/lib/db/migrations`, and an advisory lock serialises `web` and `secscan`
+when they start together — drizzle's own `migrate()` takes no lock, and without
+one the loser of that race dies on a duplicate `__drizzle_migrations`
+(reproduced: removing the lock crashes the web tier's boot every time).
+
+A schema change now ships by pushing it. Nothing to remember, nothing to expose.
+
+The `db:migrate` CLI still exists for migrating a database before anything is
+deployed against it, and for local work. It calls the same function.
+
+## Migrating by hand needs a temporary route to the database (historical)
 
 `DATABASE_URL` on a Railway Postgres resolves to `postgres.railway.internal`,
 which only exists inside Railway's network — `railway run` injects it locally
@@ -87,8 +110,12 @@ railway api 'mutation { tcpProxyDelete(id: "<proxy-id>") }'
 
 Leaving the proxy in place would leave Postgres reachable from the internet with
 nothing but its password in front of it. Delete it when the migration is done,
-and confirm: `railway variables --service Postgres --kv | grep PUBLIC` should
-find nothing.
+and confirm: `railway variables --service Postgres --kv | grep -i public` should
+find nothing. (Lower-case, and no `+` — `grep` without `-E` treats `+` as a
+literal character, so `grep -i PUBLIC+` silently matches nothing and reads as
+"no proxy exists".)
+
+Boot-time migration exists so this is a last resort rather than routine.
 
 ## The GitHub source is configured but not usable yet
 
@@ -126,7 +153,7 @@ and `CLOUDFLARE_ORIGIN_SECRET` were set this way during setup and should be
 rotated before the origin secret starts protecting anything:
 
 ```bash
-railway variables --service seclayer --set "CLOUDFLARE_ORIGIN_SECRET=$(openssl rand -hex 32)"
+railway variables --service web --set "CLOUDFLARE_ORIGIN_SECRET=$(openssl rand -hex 32)"
 ```
 
 Rotating `ENCRYPTION_KEY` is free only while no scan credentials are stored. It
@@ -134,9 +161,83 @@ becomes irreversible the moment one is: every stored secret is encrypted with it
 
 ## Verified working
 
-- Postgres, `seclayer` and `secscan` all Online; 16 tables, 1 migration recorded
-- `seclayer` serves `/api/healthz`, the SPA, `robots.txt` and `sitemap.xml`,
+- Postgres, `web` and `secscan` all Online; 16 tables, 1 migration recorded
+- `web` serves `/api/healthz`, the SPA, `robots.txt` and `sitemap.xml`,
   with `secscan.us` already in the generated URLs
 - Chromium launches on Railway — `Headless browser initialised`
-- A scan submitted to `seclayer` was picked up by `secscan` through the queue
+- A scan submitted to `web` was picked up by `secscan` through the queue
   and finished: status `complete`, progress 100, grade A
+
+## Static outbound IPs — ENABLED 2026-09-10
+
+`railway outbound-network static-ip enable --service secscan`, then a redeploy.
+Static egress is now on for the worker, high-availability, sfo region. The
+worker egresses from a fixed set — a scan may come from any of the three:
+
+- `162.220.232.252`
+- `152.55.177.181`
+- `152.55.177.193`
+
+Confirmed live: after the activating redeploy, an egress read returned
+`152.55.177.193` (one of the set). Type is **Shared** — these are Railway shared
+egress IPs, stable for this service while the feature stays enabled, but not
+exclusive to SecScan.
+
+These three are published on the public `/bot` page as the IP-allowlist option
+(artifacts/vibescan/src/pages/bot.tsx, SCANNER_IPS). **If the set ever changes,
+update it in both places together.** Note there is a brief window right after a
+redeploy where egress can read an out-of-set address (`162.220.232.103` was seen
+mid-propagation) before static routing attaches — not a cause for alarm.
+
+### Verified live 2026-09-10
+
+- **Egress uses the set.** After the activating redeploy, an egress read from
+  the worker returned `152.55.177.193` — one of the three assigned IPs. (Right
+  after redeploy, before static routing attached, one read showed the out-of-set
+  `162.220.232.103`; it settled into the set within ~a minute. Expected, not a
+  fault.)
+- **The public page serves them.** `https://secscan.us/bot` returns HTTP 200,
+  and the deployed JS bundle (`/assets/index-BfJUgzzF.js` at time of check)
+  contains all three: `162.220.232.252`, `152.55.177.181`, `152.55.177.193`.
+  Re-check after any frontend redeploy by fetching the bundle and grepping — the
+  bundle hash changes each build, so read it from the served `/bot` HTML first.
+
+To re-verify egress:
+```
+railway ssh --service secscan "node -e \"fetch('https://api.ipify.org').then(r=>r.text()).then(console.log)\""
+```
+
+The section below is the pre-static-IP investigation, kept for the record.
+
+## Observed egress IPs (not guaranteed static)
+
+Measured 2026-09-10 by SSHing into each service and fetching an IP echo
+(`railway ssh --service <svc> "node -e \"fetch('https://api.ipify.org').then(r=>r.text()).then(console.log)\""`):
+
+Worker `secscan` (the address a scanned site logs):
+- `152.55.178.17` — 4/4 reads within one deployment
+- `152.55.177.208` — after `railway redeploy --service secscan --yes`
+
+`web`: `162.220.232.85` (one read).
+
+**Egress is DYNAMIC — confirmed, not assumed.** The worker IP was rock-steady
+across four reads within a single deployment, then changed the moment the
+service was redeployed. Railway does not pin egress unless the static-outbound-IP
+feature is enabled (it is not). Each service also NATs from its own IP, so there
+is no single project-wide address either.
+
+**Never publish a SecScan egress IP as "the fixed IP to allowlist."** It is valid
+only until the next deploy. If a customer can only match by source IP and asks,
+give them the CURRENT address read live with the command above, and tell them it
+rotates on redeploy so a User-Agent rule is the durable option. The public
+`/bot` page steers owners to the `SecScan-Security-Bot` User-Agent for exactly
+this reason. See artifacts/vibescan/src/pages/bot.tsx.
+
+Both samples fell in `152.55.x`, which hints at a Railway egress block a customer
+could allowlist as a CIDR — but two points do not define it, so it is recorded as
+an observation only, not something to hand a customer.
+
+To ever make an IP publishable as fixed, enable static outbound IP for the
+service (dashboard → service → Settings → Networking) and record the assigned
+address here. A plain redeploy will not give a stable one — that has now been
+tested.

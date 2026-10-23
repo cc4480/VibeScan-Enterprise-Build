@@ -4,9 +4,10 @@ import { useSeo } from "@/lib/seo";
 import { AuthShell } from "@/components/auth-shell";
 import { verifyEmail, accountErrorMessage } from "@/lib/account-api";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { tokenInUrl, clearTokenFromUrl } from "@/lib/url-token";
 
 export default function VerifyEmailPage() {
-  useSeo({ title: "Confirming your email — Seclayer", noindex: true });
+  useSeo({ title: "Confirming your email — SecScan.us", noindex: true });
 
   const [state, setState] = useState<"working" | "done" | "failed">("working");
   const [error, setError] = useState<string | null>(null);
@@ -18,7 +19,8 @@ export default function VerifyEmailPage() {
     if (started.current) return;
     started.current = true;
 
-    const token = new URLSearchParams(window.location.search).get("token") ?? "";
+    const token = tokenInUrl(window);
+    clearTokenFromUrl(window);
     if (!token) {
       setError("That link is missing its token. Open the link from your email directly.");
       setState("failed");
@@ -50,7 +52,7 @@ export default function VerifyEmailPage() {
         title="Email confirmed"
         subtitle="You'll get scan results and security alerts at this address."
       >
-        <div className="flex items-center gap-2 text-sm text-emerald-400 mb-6">
+        <div className="flex items-center gap-2 text-sm text-green-400 mb-6">
           <CheckCircle2 className="w-4 h-4" />
           All set
         </div>

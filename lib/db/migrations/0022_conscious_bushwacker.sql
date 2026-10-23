@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "ai_analysis_opted_out" boolean DEFAULT false NOT NULL;

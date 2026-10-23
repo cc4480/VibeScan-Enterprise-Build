@@ -16,10 +16,12 @@
  * password itself never leaves this module.
  */
 
+import { guardBrowser } from "./browserGuard";
 import { encryptSecret, decryptSecret, isEncryptionConfigured } from "./crypto";
 import type { ScanCredentials as HttpCredentials } from "./http";
 import { logger } from "./logger";
-import { CHROMIUM_ARGS } from "./browserArgs";
+import { launchChromium } from "./launchChromium";
+import { browserProxy } from "./browserProxy";
 
 export type CredentialMode = "session" | "form";
 
@@ -84,6 +86,35 @@ export function validateCredentials(input: ScanCredentialInput): CredentialValid
   return { ok: true };
 }
 
+/** Cookie header as a sorted set of `name=value` pairs, so ordering and spacing cannot hide a match. */
+function cookieSet(cookie: string | null | undefined): string {
+  return (cookie ?? "")
+    .split(";")
+    .map((c) => c.trim())
+    .filter(Boolean)
+    .sort()
+    .join(";");
+}
+
+/**
+ * Do two credential inputs sign in as the SAME account? Access-control testing compares two
+ * accounts; given one account twice, both "users" see the same records because they are the same
+ * user, which reads exactly like broken authorisation. Compared on what identifies the account:
+ * the cookie set or bearer token for a session, the username (case-insensitive: sign-in names are
+ * treated that way almost everywhere) for a form login. Different modes cannot be compared here;
+ * the probe repeats the check on the resolved sessions.
+ */
+export function sameAccountInput(a: ScanCredentialInput, b: ScanCredentialInput): boolean {
+  if (a.mode !== b.mode) return false;
+  if (a.mode === "form") {
+    const ua = a.username?.trim().toLowerCase();
+    return !!ua && ua === b.username?.trim().toLowerCase();
+  }
+  const ca = cookieSet(a.cookie);
+  const ta = a.bearerToken?.trim();
+  return (!!ca && ca === cookieSet(b.cookie)) || (!!ta && ta === b.bearerToken?.trim());
+}
+
 export function encryptCredentials(input: ScanCredentialInput): string {
   return encryptSecret(JSON.stringify(input));
 }
@@ -138,14 +169,14 @@ async function formLogin(
   let browser;
   try {
     // Imported here rather than at module scope so that requiring this file does
-    // not pull Playwright in. seclayer (the web tier) imports validateCredentials
+    // not pull Playwright in. The web tier imports validateCredentials
     // and encryptCredentials from this module; a static import would put Chromium
     // in the web bundle for the sake of a function only secscan ever calls.
     const { chromium } = await import("playwright");
     // Same flags as the scanner's browser. Launching without them fails inside
     // the container, and the failure is swallowed below — leaving the scan to
     // continue unauthenticated against an app we were given credentials for.
-    browser = await chromium.launch({ headless: true, args: [...CHROMIUM_ARGS] });
+    browser = await launchChromium(chromium, await browserProxy());
   } catch (err) {
     log.warn({ err }, "[auth] Headless browser unavailable — cannot perform form login");
     return null;
@@ -153,6 +184,9 @@ async function formLogin(
 
   try {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
+    // The sign-in page is somewhere the requester named, and its script and redirects run in our network:
+    // hold it to the same public-addresses-only rule as everything else the scanner fetches.
+    await guardBrowser(context as never);
     const page = await context.newPage();
     await page.goto(input.loginUrl, { waitUntil: "domcontentloaded", timeout: 20_000 });
 

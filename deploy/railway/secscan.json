@@ -7,6 +7,6 @@
   "deploy": {
     "startCommand": "node --enable-source-maps artifacts/api-server/dist/secscan.mjs",
     "restartPolicyType": "ON_FAILURE",
-    "numReplicas": 1
+    "numReplicas": 3
   }
 }

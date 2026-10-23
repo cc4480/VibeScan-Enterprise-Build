@@ -1,4 +1,4 @@
-# Local/production stack for Seclayer.
+# Local/production stack for SecScan.
 #
 #   cp .env.docker.example .env.docker    # then fill it in
 #   docker compose --env-file .env.docker --profile setup run --rm db-migrate
@@ -9,7 +9,7 @@
 # meaningless inside a container).
 #
 # Two apps, one database:
-#   seclayer  — web + API. Holds no Chromium; enqueues scans.
+#   web       — web + API. Holds no Chromium; enqueues scans.
 #   secscan   — the scanner. Consumes the pg-boss `scan-job` queue.
 # They share nothing at runtime except Postgres, so either can be restarted,
 # scaled or redeployed without the other.
@@ -20,7 +20,7 @@ x-database-url: &database-url
 
 services:
   db:
-    image: postgres:16
+    image: postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-vibescan}
@@ -40,14 +40,16 @@ services:
       timeout: 5s
       retries: 20
 
-  # ── seclayer — web tier ────────────────────────────────────────────────────
+  # ── web — web tier ─────────────────────────────────────────────────────────
   # The only service with a published port. Every variable below is one that
   # dist/index.mjs actually reads; DEEPSEEK_API_KEY and OOB_BASE_URL are
   # deliberately absent because only the scanner reads them.
-  seclayer:
+  web:
     build:
       context: .
-      target: seclayer
+      target: web
+      args:
+        APP_ORIGIN: ${APP_ORIGIN:-https://secscan.us}
     restart: unless-stopped
     depends_on:
       db:
@@ -64,7 +66,7 @@ services:
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       APP_ORIGIN: ${APP_ORIGIN:?APP_ORIGIN must be set, e.g. https://your-domain}
-      # app.ts hardcodes an allowlist of the old Replit/vibescan origins; your
+      # app.ts allows only APP_ORIGIN (and www) by default; any other
       # own domain has to be added here or browser calls are rejected.
       CORS_EXTRA_ORIGINS: ${CORS_EXTRA_ORIGINS:-}
       # Identify callers by CF-Connecting-IP rather than a header the client
@@ -94,7 +96,7 @@ services:
       - "127.0.0.1:${APP_PORT:-8090}:8080"
     # Node's default heap plus request buffers; generous for a web tier that
     # holds no browser.
-    mem_limit: ${SECLAYER_MEM_LIMIT:-768m}
+    mem_limit: ${WEB_MEM_LIMIT:-768m}
 
   # ── secscan — scanner tier ─────────────────────────────────────────────────
   # No published port: work arrives only through the queue. Scale it with
@@ -105,13 +107,15 @@ services:
     build:
       context: .
       target: secscan
+      args:
+        APP_ORIGIN: ${APP_ORIGIN:-https://secscan.us}
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
     environment:
       <<: *database-url
-      # Must match seclayer's value: credentials are encrypted by the web tier
+      # Must match the web tier's value: credentials are encrypted by the web tier
       # when a scan is created and decrypted here when it runs. A mismatch fails
       # at scan time, not at startup.
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set}
@@ -120,7 +124,7 @@ services:
       # Used to build links in the report/regression emails this tier sends.
       APP_ORIGIN: ${APP_ORIGIN:?APP_ORIGIN must be set, e.g. https://your-domain}
       # Where a scanned target calls back to when the scanner plants a URL —
-      # this is how SSRF is detected. It must point at *seclayer*, which serves
+      # this is how SSRF is detected. It must point at the *web* tier, which serves
       # the /api/oob callback route, and must be publicly reachable by the
       # targets you scan. Unset falls back to APP_ORIGIN, and a localhost
       # APP_ORIGIN is rejected rather than planted as a callback that can only
@@ -132,7 +136,7 @@ services:
     shm_size: "1gb"
     # Chromium against a hostile page is the workload most likely to balloon.
     # Capping it means the scanner is killed and restarted rather than taking
-    # the host — and therefore seclayer and Postgres — down with it. Raise this
+    # the host — and therefore the web tier and Postgres — down with it. Raise this
     # if scans of heavy sites start dying; do not remove it.
     mem_limit: ${SECSCAN_MEM_LIMIT:-3g}
 
@@ -145,6 +149,8 @@ services:
     build:
       context: .
       target: builder
+      args:
+        APP_ORIGIN: ${APP_ORIGIN:-https://secscan.us}
     depends_on:
       db:
         condition: service_healthy
@@ -161,6 +167,8 @@ services:
     build:
       context: .
       target: builder
+      args:
+        APP_ORIGIN: ${APP_ORIGIN:-https://secscan.us}
     depends_on:
       db:
         condition: service_healthy
@@ -174,7 +182,7 @@ services:
   # a bad migration, a mistaken delete, a corrupted table. Copy the backups
   # volume somewhere else on a schedule you control.
   backup:
-    image: postgres:16
+    image: postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
     restart: unless-stopped
     depends_on:
       db:

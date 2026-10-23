@@ -1,82 +1,22 @@
 import express, { type Express } from "express";
-import cors, { type CorsOptions } from "cors";
+import cors from "cors";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import nodePath from "node:path";
 import { fileURLToPath } from "node:url";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import router from "./routes";
+import oauthMetadataRouter from "./routes/oauthMetadata";
 import { logger } from "./lib/logger";
+import { isSpaRoute, setLearnCheckIds } from "./lib/spaRoutes";
+import { metaForPath, applyPageMeta, withRenderedRoot, registerChecks, PRERENDERED, type CheckMeta } from "./lib/pageMeta";
+import { staticCacheControl } from "./lib/cachePolicy";
 import { authMiddleware } from "./middlewares/authMiddleware";
-import { APP_ORIGIN } from "./lib/appOrigin";
 import { configureTrustProxy } from "./lib/clientIp";
+import { FRONTEND_CSP, corsOptions } from "./appConfig";
 
 const __dirname = nodePath.dirname(fileURLToPath(import.meta.url));
-
-// CSP for the frontend SPA — no unsafe-inline in script-src because Vite's
-// production bundle uses only external JS files.
-//
-// style-src MUST keep 'unsafe-inline'. Verified against the production build:
-// the HTML shell has no inline styles, but bundled runtime libraries inject
-// <style> elements via document.createElement("style") at load time —
-// html2canvas + jsPDF (report PDF export) and chart/animation libs in the main
-// bundle. style-src governs those injections, so dropping 'unsafe-inline'
-// silently breaks PDF export and some UI styling. The only correct way to
-// remove it is nonce-based CSP, which requires injecting a per-response nonce
-// into server-rendered markup — not possible while the built index.html is
-// served as a static file. Left as an accepted LOW finding (CSS-injection only;
-// script-src is clean, so no JS execution risk).
-const FRONTEND_CSP = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
-  "font-src 'self' data:",
-  "img-src 'self' data: https: blob:",
-  "connect-src 'self' https: wss: ws:",
-  "worker-src 'self' blob:",
-  "frame-ancestors 'none'",
-  "object-src 'none'",
-  "base-uri 'self'",
-].join("; ");
-
-// Explicit CORS allowlist — never reflect the incoming Origin blindly.
-//
-// The production origin is derived from APP_ORIGIN rather than hardcoded, so
-// moving the site to a new domain is a configuration change rather than a code
-// change. The old Replit and vibescan.app origins are gone; anything else that
-// still needs access goes in CORS_EXTRA_ORIGINS.
-//
-// www is included alongside the bare domain because a redirect from www to
-// apex happens at the CDN, and a browser that resolves www first would
-// otherwise have its preflight rejected before the redirect is followed.
-function withWww(origin: string): string[] {
-  try {
-    const url = new URL(origin);
-    if (url.hostname.startsWith("www.")) return [origin];
-    return [origin, `${url.protocol}//www.${url.hostname}`];
-  } catch {
-    return [origin];
-  }
-}
-
-const CORS_ALLOWLIST: (string | RegExp)[] = [
-  ...withWww(APP_ORIGIN),
-  ...(process.env.CORS_EXTRA_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? []),
-  ...(process.env.NODE_ENV !== "production" ? [/\.replit\.dev$/, /^http:\/\/localhost(:\d+)?$/] : []),
-];
-
-const corsOptions: CorsOptions = {
-  credentials: true,
-  origin(origin, callback) {
-    // Same-origin browser requests have no Origin header — always allow.
-    if (!origin) return callback(null, true);
-    const allowed = CORS_ALLOWLIST.some((pattern) =>
-      typeof pattern === "string" ? pattern === origin : pattern.test(origin),
-    );
-    callback(null, allowed ? origin : false);
-  },
-};
 
 const app: Express = express();
 
@@ -87,23 +27,6 @@ configureTrustProxy(app);
 
 // Hide "X-Powered-By: Express" — no reason to advertise the server tech.
 app.disable("x-powered-by");
-
-// Behind a TLS-terminating reverse proxy — the standard container deployment —
-// Express sees a plain HTTP hop, so `req.protocol` is "http" and the session
-// cookie in routes/auth.ts is issued WITHOUT the Secure flag, leaving it
-// sendable over plaintext. Setting trust proxy makes req.protocol reflect
-// X-Forwarded-Proto.
-//
-// TRUST_PROXY is the number of proxy hops in front of the app (1 for a single
-// nginx/Caddy), or an express-recognised value like a subnet. It is
-// deliberately opt-in and deliberately NOT `true`: the /login rate limiter
-// keys on X-Forwarded-For, and trusting every hop would let a client spoof
-// that header and sidestep the limit.
-const trustProxy = process.env["TRUST_PROXY"];
-if (trustProxy) {
-  const hops = Number(trustProxy);
-  app.set("trust proxy", Number.isNaN(hops) ? trustProxy : hops);
-}
 
 // ── Security response headers — set before all routes ────────────────────────
 // In production Express owns everything (API + static frontend) so we set
@@ -164,6 +87,11 @@ app.use((req, res, next) => {
   next();
 });
 
+// A share link's token is a bearer credential for one report, so it must not sit in the request log.
+function maskSecretPath(path: string | undefined): string | undefined {
+  return path?.replace(/^(\/api\/(?:share|oob)\/)[^/]+/, "$1:token");
+}
+
 app.use(
   pinoHttp({
     logger,
@@ -172,7 +100,7 @@ app.use(
         return {
           id: req.id,
           method: req.method,
-          url: req.url?.split("?")[0],
+          url: maskSecretPath(req.url?.split("?")[0]),
         };
       },
       res(res) {
@@ -197,11 +125,34 @@ app.use(
   express.raw({ type: "application/json" }),
 );
 
-app.use(express.json());
+// Same for Resend's delivery events. Svix signs the bytes as sent, so
+// re-serialising parsed JSON changes key order and whitespace and never
+// matches — the raw buffer is what gets verified.
+app.use(
+  "/api/email/webhook",
+  express.raw({ type: "application/json" }),
+);
+
+// JSON bodies are capped explicitly at 100kb. This is the same value as express's
+// own default, written down so a future Express upgrade cannot widen it silently.
+// Bodies over the cap are refused with 413 before any route runs.
+app.use(express.json({ limit: "100kb" }));
 app.use(express.urlencoded({ extended: true }));
+// OAuth discovery documents live at the site root, as the standards require. Public, and
+// before authMiddleware: they need no identity and must not create one.
+app.use(oauthMetadataRouter);
 app.use(authMiddleware);
 
 app.use("/api", router);
+
+// Anything under /api that no route matched is a 404, and it has to be JSON.
+// Without this the SPA fallback below answers with the app shell and a 200, so
+// a client fetching a mistyped or removed endpoint receives HTML that parses as
+// success. A wrong URL should fail loudly at the call site, not surface later
+// as a confusing JSON parse error.
+app.use("/api", (_req, res) => {
+  res.status(404).json({ error: "Not found" });
+});
 
 // ── Google Search Console: file verification ─────────────────────────────────
 // Google offers three proofs. DNS TXT is the one to prefer — it survives a
@@ -259,10 +210,112 @@ if (process.env.NODE_ENV !== "production") {
 
   if (existsSync(staticDir)) {
     logger.info({ staticDir }, "Production: serving static frontend");
-    app.use(express.static(staticDir, { dotfiles: "allow" }));
-    // SPA fallback — client-side routes (e.g. /report/abc) must receive index.html
-    app.get(/.*/, (_req, res) => {
-      res.sendFile(nodePath.join(staticDir, "index.html"));
+    app.use("/prerender", (_req, res) => res.sendStatus(404));
+    app.use(
+      express.static(staticDir, {
+        dotfiles: "allow",
+        // Not index.html for "/": the static middleware would answer the home page with the
+        // bare shell before the handler below, which adds the prerendered page to it.
+        index: false,
+        // express.static defaulted to max-age=0, so Cloudflare revalidated
+        // every asset with Railway on every request (cf-cache-status:
+        // REVALIDATED) — a round trip to origin for files that never change.
+        setHeaders: (res, filePath) => res.setHeader("Cache-Control", staticCacheControl(filePath)),
+      }),
+    );
+
+    // The shell is served ONLY for paths the client router actually renders.
+    //
+    // This is a reputation fix, not tidiness. A catch-all that answers 200 plus
+    // the full app shell for every path means /wp-login.php, /admin/login and
+    // /secure/signin all return a page carrying a sign-in form. Unlimited
+    // distinct URLs, all 200, all showing a login UI is indistinguishable from
+    // a credential-harvesting kit — Google Safe Browsing flagged seclayer.app
+    // domain-wide as "Deceptive pages" for exactly this shape, with no sample
+    // URLs, because the pattern itself was the finding, and Chrome then blocked
+    // every visitor. It is also a soft-404 problem on its own: crawlers see
+    // infinite duplicate pages.
+    //
+    // Keep in sync with the <Route> list in artifacts/vibescan/src/App.tsx.
+    // A route added there and missed here 404s in production while working
+    // perfectly in dev, where Vite serves the shell for everything.
+    // Read once. The shell changes only on deploy, and re-reading it per
+    // request would put a disk hit in front of every page view.
+    const shellPath = nodePath.join(staticDir, "index.html");
+    let shellHtml: string | null = null;
+    const shell = (): string => {
+      if (shellHtml === null) shellHtml = readFileSync(shellPath, "utf-8");
+      return shellHtml;
+    };
+
+    // Page bodies written at build time for crawlers that run no scripts. They are
+    // fragments, not pages: served on their own they would be thin duplicates.
+    const prerendered = (name: string): string | undefined => {
+      try {
+        return readFileSync(nodePath.join(staticDir, "prerender", `${name}.html`), "utf-8");
+      } catch {
+        return undefined;
+      }
+    };
+    const learnBody = prerendered("learn");
+    // The rendered pages from scripts/prerender-public.mjs. Any that is missing is
+    // simply served as before, so a failed prerender never breaks a page.
+    const renderedRoot = new Map(
+      Object.entries(PRERENDERED).map(([route, name]) => [route, prerendered(`${name}.root`)] as const),
+    );
+    // The documented checks (one page each at /learn/<id>), written by the frontend build.
+    // Without the list those paths are let through and the client decides what to show.
+    try {
+      const checks = JSON.parse(readFileSync(nodePath.join(staticDir, "prerender", "checks.json"), "utf-8")) as CheckMeta[];
+      registerChecks(checks);
+      setLearnCheckIds(checks.map((c) => c.id));
+      for (const c of checks) renderedRoot.set(`/learn/${c.id}`, prerendered(`learn-${c.id}.root`));
+    } catch {
+      logger.warn("prerender/checks.json missing — /learn/<id> pages are not validated or prerendered");
+    }
+    const normalise = (p: string): string => p.replace(/\/+$/, "") || "/";
+
+    app.get(/.*/, (req, res) => {
+      if (isSpaRoute(req.path)) {
+        // Re-checked on every visit, like every other .html file (see cachePolicy.ts). The page names the
+        // fingerprinted bundle, so a copy kept past a deploy would keep loading the old app.
+        res.setHeader("Cache-Control", staticCacheControl(shellPath));
+        const meta = metaForPath(req.path);
+        const root = renderedRoot.get(normalise(req.path));
+        // The homepage's built metadata is already right, so with nothing to add
+        // it is sent as a file rather than rewritten with a copy of itself.
+        if (!meta) {
+          if (!root) {
+            res.sendFile(shellPath);
+            return;
+          }
+          res.type("html").send(withRenderedRoot(shell(), root));
+          return;
+        }
+        res
+          .type("html")
+          .send(withRenderedRoot(applyPageMeta(shell(), meta, meta.path === "/learn" ? learnBody : undefined), root));
+        return;
+      }
+      // Deliberately a minimal page with no sign-in affordance: a 404 that
+      // still rendered the app shell would keep the same fingerprint that
+      // caused the problem.
+      res
+        .status(404)
+        .type("html")
+        .send(
+          '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
+            '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+            '<meta name="robots" content="noindex">' +
+            "<title>404 - Page not found</title></head>" +
+            '<body style="font-family:system-ui,-apple-system,sans-serif;background:#0f1117;color:#e4e4e7;' +
+            'display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0">' +
+            '<main style="text-align:center;padding:2rem">' +
+            '<h1 style="font-size:1.25rem;margin:0 0 .5rem">404 - Page not found</h1>' +
+            '<p style="color:#a1a1aa;font-size:.875rem;margin:0 0 1.25rem">That page does not exist on SecScan.</p>' +
+            '<a href="/" style="color:#34d399;font-size:.875rem">Go to secscan.us</a>' +
+            "</main></body></html>",
+        );
     });
   } else {
     logger.warn({ staticDir }, "Frontend static dir not found — frontend will not be served");

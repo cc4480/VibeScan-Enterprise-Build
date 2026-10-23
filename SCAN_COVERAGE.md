@@ -1,4 +1,9 @@
-# VibeScan — Complete Check Coverage
+# SecScan — Check Coverage
+
+Checks grouped by module, with the tier each runs in and the methodology behind
+it. For the exhaustive list of every finding name the scanner can emit — read
+out of the source rather than maintained here — see
+[SCAN_CHECKS.md](SCAN_CHECKS.md), which is generated and verified in CI.
 
 ## Module 1 — HTTP Response Headers
 *Runs on every scan (Basic + Deep). Inspects the response from a single GET to the target URL.*
@@ -115,13 +120,13 @@ keyword presence.
 
 | # | Check | Severity |
 |---|---|---|
-| 36 | Active CORS — arbitrary origin reflection | High |
-| 37 | Active CORS — null origin accepted | Medium |
+| 36 | Active CORS — arbitrary origin reflection | Critical when `Access-Control-Allow-Credentials: true` is also sent (`probesHttp.ts`); Low when it is not |
+| 37 | Active CORS — null origin reflected | Critical with credentials; Low without. The same check as #36, run with `Origin: null` |
 | 38 | Open redirect via common parameters | Medium |
 | 39 | robots.txt exposes sensitive paths | Low |
 | 40 | Subresource Integrity (SRI) missing on CDN scripts | Medium |
 | 41 | Error/debug information disclosure | Medium |
-| 42 | HTTPS redirect not enforced (HTTP stays HTTP) | High |
+| 42 | HTTPS redirect not enforced (HTTP stays HTTP) | Medium (`probesPage.ts`; HSTS-preloaded domains are not reported) |
 | 43 | Rate limiting absent on root endpoint | Low |
 | 44 | X-Frame-Options misconfigured (non-DENY/SAMEORIGIN value) | Medium |
 | 45–59 | Directory listing on 15 common dirs (`/uploads/`, `/logs/`, `/backup/`, etc.) | Medium |
@@ -161,11 +166,13 @@ keyword presence.
 
 | # | Services Checked | Severity |
 |---|---|---|
-| 72 | AWS S3, Heroku, GitHub Pages, Netlify, Vercel, Azure, Fastly, Shopify, Ghost Pro, Surge.sh, Cargo, Readme.io, Pantheon, Squarespace, Tumblr, WP Engine, Fly.io, Render, Railway | Critical |
+| 72 | AWS S3, Heroku, GitHub Pages, Vercel, Azure App Service: Critical. Shopify, Ghost Pro, Surge.sh, Cargo, Readme.io, Pantheon, Render, Railway: High. Tumblr: Medium. Netlify, Fastly, Squarespace, WP Engine, Fly.io: Medium while unverified (see the note below) | Critical, High or Medium, per service |
+
+The five services marked *ambiguous* in `subdomain-service-data.ts` (Netlify, Fastly, Squarespace, WP Engine, Fly.io) are reported at Medium, with "— Unverified" in the finding name. Their unclaimed-resource page is the same as a claimed site's default 404, so the scanner cannot tell a takeover from a normal site (`subdomainTakeover.ts`).
 
 ---
 
-## Module 8 — Vibe-Stack Database Security *(NEW — both tiers)*
+## Module 8 — Vibe-Stack Database Security
 *Detects Supabase and Firebase backends from the JS bundle, then actively tests their live API.*
 
 ### 8a. Supabase
@@ -205,7 +212,7 @@ keyword presence.
 
 ---
 
-## Module 9 — JavaScript Secret Scanning ⚡ *Deep scans only*
+## Module 10 — JavaScript Secret Scanning ⚡ *Deep scans only*
 *Scans inline scripts + up to 8 external JS files (up to 512 KB each).*
 
 | # | Secret Pattern | Severity |
@@ -234,7 +241,7 @@ keyword presence.
 
 ---
 
-## Module 10 — Path Traversal ⚡ *Deep scans only*
+## Module 11 — Path Traversal ⚡ *Deep scans only*
 *Active probing of URL query parameters with `../` traversal payloads.*
 
 | # | Check | Severity |
@@ -262,17 +269,35 @@ flagged. Both are behaviourally confirmed — confidence 90.*
 
 ---
 
-## Module 11 — Site Crawler ⚡ *Deep scans only*
+## Module 13 — Site Crawler ⚡ *Deep scans only*
 *Crawls up to 20 internal pages and re-runs header + cookie checks on each.*
 
-| # | Check |
-|---|---|
-| 97+ | All header and cookie checks (#1–22) repeated per crawled page |
+| # | Check | Severity if failing |
+|---|---|---|
+| 97+ | All header and cookie checks (#1–22) repeated per crawled page | — |
+| 99a | Insecure deserialization exposure — a native serialized object (Java `rO0AB`, PHP `O:`/`a:`, Ruby Marshal, Python pickle) in a `Set-Cookie` value the server issues (CWE-502; JWTs excluded) | High |
 
 ---
 
-## Module 13 — TLS Assessment
-*Delegated to Qualys SSL Labs; cached results reused where available.*
+## Module 14 — TLS Configuration
+*The scanner's own check (`tlsCheck.ts`): a handful of TLS handshakes to the target's host:443 (or the port in its URL), each pinned to one protocol version, then a read of the certificate. It grades nothing and uses no third-party service. Targets that resolve to private addresses are refused.*
+
+| # | Check | Severity if failing |
+|---|---|---|
+| 100a | TLS 1.0 or 1.1 still accepted (a handshake restricted to that version completed; a version the scanner could not test is reported as untested, never as unsupported) | Medium |
+| 100b | Certificate expired, or not yet valid | High |
+| 100c | Certificate expires in under 14 days | Low |
+| 100d | Certificate does not cover the host | High |
+| 100e | Self-signed certificate, or a chain that does not lead to a root the scanner trusts | High |
+| 100f | Chain incomplete (only the leaf was sent; the intermediate is missing) | Medium |
+| 100g | RSA key under 2048 bits, or EC key under 224 | Medium |
+| 100h | Certificate signed with SHA-1 or MD5 | Medium |
+| 100i | Negotiated cipher suite uses RC4, DES/3DES, NULL, EXPORT, anonymous key exchange or MD5 | Medium |
+| 100j | Negotiated cipher suite has no forward secrecy (static RSA key exchange) | Low |
+
+SSL 2.0 and 3.0 are not tested (the scanner's TLS library cannot speak them).
+
+**Optional: Qualys SSL Labs grade** — only when the operator sets `SSLLABS_ENABLED=true` (Qualys's terms need their permission for commercial use, and the API version used is deprecated).
 
 | # | Check | Severity if failing |
 |---|---|---|
@@ -280,7 +305,7 @@ flagged. Both are behaviourally confirmed — confidence 90.*
 
 ---
 
-## Module 14 — Object Storage Exposure
+## Module 15 — Object Storage Exposure
 *Extracts bucket references from HTML/JS, then performs read-only list requests.*
 
 | # | Check | Severity |
@@ -291,7 +316,7 @@ flagged. Both are behaviourally confirmed — confidence 90.*
 
 ---
 
-## Module 15 — API Surface Discovery and Testing ⚡ *Deep scans only*
+## Module 16 — API Surface Discovery and Testing ⚡ *Deep scans only*
 
 Every other module discovers parameters the way a server-rendered site exposes
 them: query strings, `<form>` inputs, `<a href>` links. A single-page app ships
@@ -330,7 +355,7 @@ a `role` field to learn whether it sticks means granting somebody a role.*
 
 ---
 
-## Module 16 — Broken Access Control ⚡ *Deep scans only, two accounts required*
+## Module 17 — Broken Access Control ⚡ *Deep scans only, two accounts required*
 
 OWASP **A01**, the highest-ranked risk category, and untestable without
 credentials: the question is not whether a page is reachable but whether the
@@ -375,7 +400,7 @@ for.
 
 ---
 
-## Module 17 — Out-of-Band SSRF Detection ⚡ *Deep scans only, collector required*
+## Module 18 — Out-of-Band SSRF Detection ⚡ *Deep scans only, collector required*
 
 OWASP **A10**. Server-Side Request Forgery produces nothing in the target's own
 response — a server tricked into fetching an attacker URL simply does so — so a
@@ -404,14 +429,84 @@ target's network.*
 
 ---
 
+## Module 19 — Mail Transport Security
+*Runs on every scan. Probes port 25 on each MX host over a real SMTP conversation.*
+
+SPF and DMARC (Module 3) say who **may** send mail as the domain. They say
+nothing about whether mail is encrypted in transit, so a site can score
+perfectly on HTTPS while its password-reset mail is relayed in cleartext.
+
+| # | Check | Severity |
+|---|---|---|
+| 115 | MX does not advertise STARTTLS | Medium |
+| 116 | MX TLS certificate expired | High |
+| 117 | MX TLS certificate expires within 21 days | Low |
+
+Only port 25 is probed, and only a host that actually answered `EHLO` counts as
+evidence. Both restrictions are deliberate: 25 is where the world's mail
+arrives, and a host that completes the TCP handshake then goes silent has told
+us nothing — reading that silence as "no STARTTLS" produced a false positive on
+cloudflare.com that fired only on some runs.
+
+---
+
+## Module 20 — Structured Data and Social Metadata
+*Runs on every scan. Reads the document already fetched — no extra requests.*
+
+Split by severity on purpose. Structured data is generated by a CMS or a build
+step and routinely carries more than its author intended into a public
+document; that is real exposure. Missing social-preview tags are presentation
+quality, and are all INFO with weight 0 in the risk score — a site with no
+`og:image` must never grade as less secure than one with it.
+
+| # | Check | Severity |
+|---|---|---|
+| 118 | Internal hostname exposed in structured data | Low |
+| 119 | Social preview asset referenced over `http://` from an HTTPS page | Low |
+| 120 | Canonical URL points to a domain the operator does not own | Low |
+| 121 | Malformed JSON-LD | Info |
+| 122 | JSON-LD missing `@context` or `@type` | Info |
+| 123 | No structured data found | Info |
+| 124 | Incomplete Open Graph metadata | Info |
+| 125 | Twitter Card metadata absent | Info |
+| 126 | Page excluded from search indexes | Info |
+
+---
+
+## Module 21 — Scan Coverage
+*Runs on every scan. Reports on the scan itself rather than on the target.*
+
+These findings exist so a report never overstates what it looked at.
+
+| # | Check | Severity |
+|---|---|---|
+| 127 | Scan was intercepted by a bot-protection challenge | Info |
+| 128 | Active security testing was skipped (domain not verified) | Info |
+| 129 | Scan session expired before the scan finished | Info |
+
+#127 is the important one. When an edge answers instead of the origin, every
+content-derived check — CSP, cookies, headers, SRI, technology fingerprint,
+structured data — describes the interstitial, and the report reads as a scan of
+the customer's site. Detection matches vendor fingerprints on header *values*,
+not header presence, and is deliberately strict: calling a real page a
+challenge page would suppress genuine findings, which is worse than the problem
+it solves.
+
+---
+
 ## Summary
 
 | Tier | Unique check types | Approximate HTTP requests |
 |---|---|---|
-| **Basic** | ~76 | ~100–150 |
-| **Deep** | ~114+ | ~350–650+ (crawl + JS fetches + path probes + API surface + OOB) |
-| **Deep, with credentials** | ~113+ across the authenticated surface | ~400–700+ |
+| **Basic** | ~91 | ~100–150 |
+| **Deep** | ~129+ | ~350–650+ (crawl + JS fetches + path probes + API surface + OOB) |
+| **Deep, with credentials** | ~129+ across the authenticated surface | ~400–700+ |
 | **Deep, with two accounts** | + access-control comparison (#111–113) | ~450–800+ |
+
+A *check type* is one piece of detection logic, which is not the same as a
+finding name: one path probe covers 78 paths, one secret scanner covers 32
+patterns. [SCAN_CHECKS.md](SCAN_CHECKS.md) counts the other way and lists all
+279 finding names the scanner can emit.
 
 ## Grading Formula
 

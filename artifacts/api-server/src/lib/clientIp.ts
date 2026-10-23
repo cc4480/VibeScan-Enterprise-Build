@@ -134,9 +134,16 @@ export function clientIp(req: Request): string {
   if (behindCloudflare() && cameThroughCloudflare(req)) {
     const cf = req.headers["cf-connecting-ip"];
     if (typeof cf === "string" && cf.trim()) return cf.trim();
-    // Falling through is deliberate: a request reaching a Cloudflare-fronted
-    // origin without this header did not come through Cloudflare, and req.ip is
-    // the honest answer for it.
+  }
+
+  if (behindCloudflare()) {
+    // Not through Cloudflare: a request sent straight to the platform's own address. The
+    // platform's router appended the address it saw as the last X-Forwarded-For entry, but
+    // TRUST_PROXY counts the Cloudflare hop too, so req.ip would be an entry the client wrote.
+    // The last entry is the only one the client cannot choose.
+    const xff = req.headers["x-forwarded-for"];
+    const last = (Array.isArray(xff) ? xff.join(",") : xff ?? "").split(",").map((e) => e.trim()).filter(Boolean).pop();
+    if (last) return last;
   }
 
   return req.ip ?? req.socket.remoteAddress ?? "unknown";

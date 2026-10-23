@@ -1,6 +1,6 @@
+import { safeReturnTo as toSafeReturnTo } from "../lib/safeRedirect";
 import { Router, type IRouter, type Request, type Response } from "express";
 import * as client from "openid-client";
-import crypto from "crypto";
 import { GetCurrentAuthUserResponse } from "@workspace/api-zod";
 import { clientIp } from "../lib/clientIp";
 import {
@@ -47,6 +47,9 @@ function isLoginRateLimited(ip: string): boolean {
 const PKCE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 function getCallbackUrl(req: Request): string {
+  // A configured origin wins: X-Forwarded-Host is client-writable unless every hop overwrites it.
+  const configured = process.env["APP_ORIGIN"]?.replace(/\/+$/, "");
+  if (configured) return `${configured}/api/callback`;
   const proto = req.headers["x-forwarded-proto"] ?? req.protocol;
   const host = req.headers["x-forwarded-host"] ?? req.headers["host"];
   return `${proto}://${host}/api/callback`;
@@ -202,6 +205,9 @@ if (oidcConfigured) {
           return;
         }
 
+        // Only the user is kept in the session. The upstream access and refresh
+        // tokens are not stored: nothing reads them, and a database dump must
+        // not contain live credentials for the identity provider.
         const sid = await createSession({
           user: {
             id: dbUser.id,
@@ -210,15 +216,6 @@ if (oidcConfigured) {
             lastName: dbUser.lastName,
             profileImageUrl: dbUser.profileImageUrl,
           },
-          access_token:
-            tokens.access_token ?? crypto.randomBytes(16).toString("hex"),
-          refresh_token:
-            typeof tokens.refresh_token === "string"
-              ? tokens.refresh_token
-              : undefined,
-          expires_at: tokens.expires_in
-            ? Date.now() + tokens.expires_in * 1000
-            : undefined,
         });
 
         res.cookie(SESSION_COOKIE, sid, {
@@ -228,7 +225,7 @@ if (oidcConfigured) {
           secure: req.protocol === "https",
         });
 
-        const safeReturnTo = returnTo.startsWith("/") ? returnTo : "/";
+        const safeReturnTo = toSafeReturnTo(returnTo);
         res.redirect(safeReturnTo);
       } catch (err) {
         req.log.error({ err }, "OIDC callback failed");
@@ -240,6 +237,13 @@ if (oidcConfigured) {
 
 // Always available: clears the session cookie, which password accounts use too.
 router.get("/logout", async (req: Request, res: Response): Promise<void> => {
+  // A link on another site must not be able to sign someone out. Browsers say where a navigation
+  // came from; cross-site gets the home page and keeps the session. (The app itself signs out
+  // with POST /api/account/logout.)
+  if (req.headers["sec-fetch-site"] === "cross-site") {
+    res.redirect("/");
+    return;
+  }
   const sid = getSessionId(req);
   await clearSession(res, sid);
   res.redirect("/");

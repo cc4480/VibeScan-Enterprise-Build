@@ -2,6 +2,9 @@ import { Router, type IRouter } from "express";
 import { db, reportsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { GetReportResponse } from "@workspace/api-zod";
+import { UUID_ANY } from "./accountShared";
+import { changesForReport } from "../lib/scanDiffLoader";
+import { withNoteFreeTotals } from "../lib/reportTotals";
 
 const router: IRouter = Router();
 
@@ -12,6 +15,11 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
   }
 
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+  if (!id || !UUID_ANY.test(id)) {
+    res.status(404).json({ error: "Report not found" });
+    return;
+  }
 
   try {
     const [report] = await db
@@ -24,19 +32,43 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
       return;
     }
 
-    res.json(
-      GetReportResponse.parse({
-        id: report.id,
-        scanId: report.scanId,
-        userId: report.userId,
-        targetUrl: report.targetUrl,
-        tier: report.tier,
-        scannedAt: report.scannedAt,
-        duration: report.duration ?? null,
-        createdAt: report.createdAt,
-        data: report.data,
-      }),
-    );
+    const parsed = GetReportResponse.parse({
+      id: report.id,
+      scanId: report.scanId,
+      userId: report.userId,
+      targetUrl: report.targetUrl,
+      tier: report.tier,
+      scannedAt: report.scannedAt,
+      duration: report.duration ?? null,
+      createdAt: report.createdAt,
+      // Totals saved before the notes left them are recounted here (lib/reportTotals.ts).
+      data: withNoteFreeTotals(report.data),
+    });
+
+    // The schema is strict and does not list these two, so parse() drops them:
+    // the owner's own report then said "not recorded, run before test records
+    // were kept" and the OWASP card said "no record" for every row, on scans that
+    // had recorded a full ledger. The share page and the MCP read the stored data
+    // directly and were never affected. Carried through from the stored row.
+    const stored = report.data as { tests?: unknown; compliance?: unknown; withheld?: unknown; interception?: unknown };
+    // What changed since the last scan of this site (lib/scanDiff.ts). A failure here must never
+    // cost someone their report, so it degrades to "no comparison".
+    const changes = await changesForReport(req.user.id, { scanId: report.scanId, targetUrl: report.targetUrl, scannedAt: report.scannedAt, data: report.data }).catch((err) => {
+      req.log.warn({ err }, "Could not compare with the previous scan");
+      return null;
+    });
+    res.json({
+      ...parsed,
+      data: {
+        ...parsed.data,
+        ...(stored.tests !== undefined ? { tests: stored.tests } : {}),
+        ...(stored.compliance !== undefined ? { compliance: stored.compliance } : {}),
+        // Same reason: what the scan withheld and why, and what answered instead of the app.
+        ...(stored.withheld !== undefined ? { withheld: stored.withheld } : {}),
+        ...(stored.interception !== undefined ? { interception: stored.interception } : {}),
+        ...(changes ? { changes } : {}),
+      },
+    });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch report");
     res.status(500).json({ error: "Failed to fetch report" });

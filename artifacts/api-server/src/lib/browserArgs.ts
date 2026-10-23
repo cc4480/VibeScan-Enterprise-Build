@@ -43,3 +43,17 @@ export const CHROMIUM_ARGS: readonly string[] = [
   "--disable-popup-blocking",
   "--no-zygote",
 ];
+
+/** The flags that switch Chromium's sandbox off. Chromium's own sandbox is the layer meant to contain a renderer exploit. */
+export const NO_SANDBOX_FLAGS: readonly string[] = ["--no-sandbox", "--disable-setuid-sandbox", "--no-zygote"];
+
+/** The launch flags with the sandbox left on (--no-zygote only works without it). */
+export const SANDBOXED_ARGS: readonly string[] = CHROMIUM_ARGS.filter((a) => !NO_SANDBOX_FLAGS.includes(a));
+
+/**
+ * CHROMIUM_SANDBOX=true asks for the sandbox. It needs the container to allow user namespaces (or a
+ * seccomp profile that does) and an unprivileged user, which not every platform grants; see launchChromium.
+ */
+export function sandboxRequested(): boolean {
+  return process.env["CHROMIUM_SANDBOX"] === "true";
+}

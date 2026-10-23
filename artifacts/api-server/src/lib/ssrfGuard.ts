@@ -32,11 +32,17 @@ export const PRIVATE_IP_PATTERNS = [
   /^100\.6[4-9]\.|^100\.[7-9]\d\.|^100\.1[01]\d\.|^100\.12[0-7]\./,  // CGNAT
   /^192\.0\.0\./,     // IETF protocol assignments
   /^198\.1[89]\./,    // benchmarking
+  /^2(2[4-9]|3\d)\./,  // multicast 224.0.0.0/4
+  /^2(4\d|5[0-5])\./,  // reserved 240.0.0.0/4, which includes 255.255.255.255
   /^::1$/,            // IPv6 loopback
   /^::$/,             // IPv6 unspecified
   /^fc[0-9a-f]{2}:/i, // IPv6 unique-local
   /^fd[0-9a-f]{2}:/i,
   /^fe[89ab][0-9a-f]:/i, // IPv6 link-local
+  /^ff[0-9a-f]{2}:/i, // IPv6 multicast ff00::/8
+  /^2002:/i,          // 6to4: embeds an IPv4 address of the sender's choosing
+  /^2001:0{0,3}:/i,   // Teredo 2001::/32
+  /^64:ff9b:1:/i,     // local-use NAT64 64:ff9b:1::/48
   /^::ffff:/i,        // IPv4-mapped IPv6 — unwrapped below before testing
 ];
 
@@ -60,9 +66,63 @@ const BLOCKED_SUFFIXES = [".local", ".internal", ".localhost", ".home.arpa"];
  */
 export function isPrivateAddress(addr: string): boolean {
   const normalized = addr.toLowerCase().replace(/^\[|\]$/g, "");
+  // An address that embeds an IPv4 one is judged on the IPv4 it carries,
+  // whatever notation it arrives in. The `^::ffff:` entry in the pattern list
+  // already catches the common mapped forms outright, but two others reach
+  // here intact, and Node's URL parser is what produces them:
+  //   [::127.0.0.1]      -> ::7f00:1        (deprecated IPv4-compatible)
+  //   [64:ff9b::7f00:1]  -> unchanged       (NAT64 well-known prefix)
+  // Neither is routable in most networks — the compatible form is deprecated
+  // and NAT64 needs a translating gateway — so this is defence in depth rather
+  // than a live hole. The sibling scanner had the fully exploitable version of
+  // this, where hex mapped forms walked straight past the guard.
+  const embedded = embeddedIpv4(normalized);
+  if (embedded) return isPrivateAddress(embedded);
   const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(normalized);
   const candidate = mapped?.[1] ?? normalized;
   return PRIVATE_IP_PATTERNS.some((r) => r.test(candidate));
+}
+
+/**
+ * The IPv4 address embedded in an IPv6 address, dotted, or null.
+ *
+ * Handles IPv4-mapped (::ffff:0:0/96), the deprecated IPv4-compatible form
+ * (::/96) and NAT64's well-known prefix (64:ff9b::/96), from the fully expanded
+ * address so notation does not matter.
+ */
+function embeddedIpv4(addr: string): string | null {
+  if (!net.isIPv6(addr)) return null;
+  let text = addr.replace(/%.*$/, "");
+  let tail: number[] = [];
+  const dotted = /(\d+\.\d+\.\d+\.\d+)$/.exec(text);
+  if (dotted) {
+    const o = dotted[1].split(".").map(Number);
+    if (o.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+    tail = [(o[0] << 8) | o[1], (o[2] << 8) | o[3]];
+    text = text.slice(0, -dotted[1].length).replace(/:$/, "") + ":";
+    if (text === ":") text = "::";
+  }
+  const [head, rest, extra] = text.split("::");
+  if (extra !== undefined) return null;
+  const parse = (part: string) => part.split(":").filter(Boolean).map((h) => parseInt(h, 16));
+  const left = parse(head ?? "");
+  const right = rest === undefined ? [] : parse(rest);
+  const groups =
+    rest === undefined
+      ? [...left, ...tail]
+      : [
+          ...left,
+          ...new Array(Math.max(0, 8 - left.length - right.length - tail.length)).fill(0),
+          ...right,
+          ...tail,
+        ];
+  if (groups.length !== 8 || groups.some((g) => !Number.isInteger(g) || g < 0 || g > 0xffff)) return null;
+  const [g0, g1, g2, g3, g4, g5, g6, g7] = groups;
+  const dot = () => `${(g6 >> 8) & 0xff}.${g6 & 0xff}.${(g7 >> 8) & 0xff}.${g7 & 0xff}`;
+  if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0xffff) return dot();
+  if (g0 === 0x64 && g1 === 0xff9b && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0) return dot();
+  if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0 && (g6 !== 0 || g7 > 1)) return dot();
+  return null;
 }
 
 /**
@@ -90,9 +150,11 @@ export function isHostnameSafeSync(hostname: string): boolean {
 
 // Resolution is cached because the scanner asks about the same host on every
 // request of a scan, and a DNS round-trip per request would dominate the time
-// budget. The TTL is short enough that a rebinding attack has to win a race
-// rather than simply wait us out.
+// budget. This cache only spares the lookup in the pre-check; it is not what stops rebinding.
+// scanFetch connects through pinnedDispatcher, which vets the address the socket opens to.
 const RESOLVE_TTL_MS = 30_000;
+/** Longest a name may take to resolve before it is refused (fails closed). */
+export const DNS_LOOKUP_TIMEOUT_MS = 5_000;
 const RESOLVE_CACHE_MAX = 512;
 const resolveCache = new Map<string, { safe: boolean; at: number }>();
 
@@ -115,11 +177,18 @@ export async function resolvesPublicly(hostname: string): Promise<boolean> {
   if (hit && Date.now() - hit.at < RESOLVE_TTL_MS) return hit.safe;
 
   let safe: boolean;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const results = await dns.lookup(host, { all: true, verbatim: true });
+    // A resolver that never answers must not stall the scan: past the deadline the name is treated as unsafe.
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("dns lookup timed out")), DNS_LOOKUP_TIMEOUT_MS);
+    });
+    const results = await Promise.race([dns.lookup(host, { all: true, verbatim: true }), timeout]);
     safe = results.length > 0 && !results.some((r) => isPrivateAddress(r.address));
   } catch {
     safe = false;
+  } finally {
+    clearTimeout(timer);
   }
 
   if (resolveCache.size >= RESOLVE_CACHE_MAX) {

@@ -81,7 +81,10 @@ const NEXT_DATA_SECRET_PATTERNS: NextDataSecretPattern[] = [
   },
   {
     name: "Private Key in __NEXT_DATA__",
-    pattern: /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/,
+    // Same reasoning as secret-pattern-data.ts: a bare PEM header is a
+    // formatting template in crypto libraries, not a leaked key. Require the
+    // base64 key body to follow.
+    pattern: /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----[\s\\rn"']{0,12}[A-Za-z0-9+/]{40,}/,
     severity: "critical", cvssScore: 10.0, cweId: "CWE-321",
     description:
       "A cryptographic private key was found in the __NEXT_DATA__ JSON blob. This key is now " +
@@ -183,10 +186,9 @@ function extractNextData(html: string): string | null {
 }
 
 function isNextJsPage(html: string): boolean {
-  return (
-    /__NEXT_DATA__|__next|_next\/static/i.test(html) ||
-    /next\.js|"buildId"/i.test(html)
-  );
+  // Structural markers only, as in techFingerprint.ts. The words "Next.js" or "buildId" in prose (a
+  // page about Next.js, a Vite app's own copy) made a non-Next.js site read as "this Next.js page".
+  return /<script\b[^>]*\bid=["']__NEXT_DATA__["']|__NEXT_DATA__\s*=|\/_next\/static\/|\sid=["']__next["']/i.test(html);
 }
 
 function redactSecret(text: string): string {
@@ -201,11 +203,19 @@ function redactSecret(text: string): string {
 export async function runNextjsProbe(
   _targetUrl: string,
   html: string,
+  /** Told why, when there was nothing here to test (recorded as "not tested", not "ran"). */
+  notTested?: (reason: string) => void,
 ): Promise<ScanVulnerability[]> {
-  if (!isNextJsPage(html)) return [];
+  if (!isNextJsPage(html)) {
+    notTested?.("the page is not a Next.js page, so there is no __NEXT_DATA__ block to read");
+    return [];
+  }
 
   const nextDataRaw = extractNextData(html);
-  if (!nextDataRaw) return [];
+  if (!nextDataRaw) {
+    notTested?.("this Next.js page has no __NEXT_DATA__ block (App Router pages do not ship one)");
+    return [];
+  }
 
   // Parse to confirm it's valid JSON (fail-soft if it's not)
   let nextDataStr: string;

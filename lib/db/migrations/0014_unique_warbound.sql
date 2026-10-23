@@ -1,0 +1,1 @@
+ALTER TABLE "purchase_intents" ADD COLUMN "notified_at" timestamp with time zone;

@@ -1,0 +1,284 @@
+# Every app that ran on Railway, on one machine with Docker (Docker Desktop on
+# Windows), reachable from the internet only through a Cloudflare Tunnel.
+# Read README.md in this folder first; setup.ps1 does most of it.
+#
+#   docker compose up -d --build          start or update everything
+#   docker compose ps                     what is running
+#   docker compose logs -f secscan-web    follow one app's logs
+#
+# Layout it expects (setup.ps1 creates it): this repository and the four other
+# app repositories side by side in one folder, e.g.
+#   C:\apps\VibeScan-Enterprise-Build   (this file is in deploy\home-server)
+#   C:\apps\secscan-info
+#   C:\apps\seclayer.io2026
+#   C:\apps\complyscan
+#   C:\apps\SEO-scan-Pro
+#
+# Nothing here is published to your network. Each app is bound to 127.0.0.1 on
+# its own port so you can open it in a browser on this machine to check it,
+# and the internet reaches it only through the `cloudflared` service.
+
+name: homeserver
+
+# Settings every app container shares.
+x-app: &app
+  restart: unless-stopped
+  depends_on:
+    db:
+      condition: service_healthy
+  logging:
+    # Without a cap, container logs grow until the disk is full.
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  # ── One Postgres for every app, one database and one user per app ──────────
+  db:
+    image: postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (setup.ps1 generates it)}
+      # Read once, by postgres-init/10-create-app-databases.sh, the first time
+      # the database starts with an empty data volume.
+      SECSCAN_DB_PASSWORD: ${SECSCAN_DB_PASSWORD:?set SECSCAN_DB_PASSWORD in .env}
+      SECLAYER_DB_PASSWORD: ${SECLAYER_DB_PASSWORD:?set SECLAYER_DB_PASSWORD in .env}
+      COMPLYSCAN_DB_PASSWORD: ${COMPLYSCAN_DB_PASSWORD:?set COMPLYSCAN_DB_PASSWORD in .env}
+      SEOSCAN_DB_PASSWORD: ${SEOSCAN_DB_PASSWORD:?set SEOSCAN_DB_PASSWORD in .env}
+    # SSL on, with the certificate the image ships. seclayer insists on an
+    # encrypted connection to any database host that is not "localhost"
+    # (server/db.ts); without this it refuses to start. The other apps ask for
+    # SSL only if the server offers it, so this changes nothing for them.
+    command:
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem
+      - -c
+      - ssl_key_file=/etc/ssl/private/ssl-cert-snakeoil.key
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    mem_limit: 1g
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── SecScan (this repository) ──────────────────────────────────────────────
+  secscan-web:
+    <<: *app
+    build:
+      context: ${APPS_DIR:-../../..}/VibeScan-Enterprise-Build
+      target: web
+      args:
+        APP_ORIGIN: ${APP_ORIGIN:-https://secscan.us}
+    env_file: env/secscan.env
+    environment:
+      DATABASE_URL: postgresql://secscan:${SECSCAN_DB_PASSWORD}@db:5432/secscan
+      NODE_ENV: production
+      PORT: "8080"
+      # One proxy in front: cloudflared. Cloudflare appends the visitor's
+      # address as the last X-Forwarded-For entry, so one trusted hop is the
+      # visitor. The origin has no public address, so nothing can reach it
+      # without going through Cloudflare.
+      TRUST_PROXY: "1"
+      BEHIND_CLOUDFLARE: "false"
+    ports:
+      - "127.0.0.1:8090:8080"
+    mem_limit: 768m
+
+  secscan-worker:
+    <<: *app
+    build:
+      context: ${APPS_DIR:-../../..}/VibeScan-Enterprise-Build
+      target: secscan
+      args:
+        APP_ORIGIN: ${APP_ORIGIN:-https://secscan.us}
+    env_file: env/secscan.env
+    environment:
+      DATABASE_URL: postgresql://secscan:${SECSCAN_DB_PASSWORD}@db:5432/secscan
+      NODE_ENV: production
+      # Railway ran 8 scans at once. On one home machine shared with four other
+      # apps, fewer at a time keeps memory and your connection in check.
+      SCAN_WORKER_CONCURRENCY: ${SECSCAN_SCAN_CONCURRENCY:-3}
+    # Chromium needs more shared memory than Docker's 64 MB default.
+    shm_size: "1gb"
+    mem_limit: 3g
+
+  # ── secscan.info (static marketing site, Caddy) ────────────────────────────
+  secscan-info:
+    restart: unless-stopped
+    build:
+      context: ${APPS_DIR:-../../..}/secscan-info
+    environment:
+      PORT: "8080"
+    ports:
+      - "127.0.0.1:8091:8080"
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── seclayer ───────────────────────────────────────────────────────────────
+  seclayer:
+    <<: *app
+    build:
+      context: ${APPS_DIR:-../../..}/seclayer.io2026
+    env_file: env/seclayer.env
+    environment:
+      DATABASE_URL: postgres://seclayer:${SECLAYER_DB_PASSWORD}@db:5432/seclayer
+      NODE_ENV: production
+      PORT: "3000"
+    # nmap needs raw sockets (its own docker-compose.yml grants the same).
+    cap_add:
+      - NET_RAW
+    volumes:
+      - seclayer-data:/data
+    shm_size: "512mb"
+    ports:
+      - "127.0.0.1:8092:3000"
+    mem_limit: 1536m
+
+  # ── complyscan (Flask API + built frontend in one image) ───────────────────
+  complyscan:
+    <<: *app
+    build:
+      context: ${APPS_DIR:-../../..}/complyscan
+    env_file: env/complyscan.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://complyscan:${COMPLYSCAN_DB_PASSWORD}@db:5432/complyscan
+      PORT: "5000"
+    ports:
+      - "127.0.0.1:8093:5000"
+    mem_limit: 512m
+
+  # complyscan's nightly re-scan of every connected GitHub/Okta/AWS account:
+  # Railway's `rescan-cron` service, same image, same schedule (00:00 UTC),
+  # same command. Days since 1970 start at 00:00 UTC, so rounding the clock up
+  # to the next multiple of 86400 seconds is the next 00:00 UTC.
+  complyscan-rescan:
+    <<: *app
+    build:
+      context: ${APPS_DIR:-../../..}/complyscan
+    env_file: env/complyscan.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://complyscan:${COMPLYSCAN_DB_PASSWORD}@db:5432/complyscan
+    # The image's healthcheck asks the web server, which this container does
+    # not run.
+    healthcheck:
+      disable: true
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        while true; do
+          now=$$(date -u +%s)
+          wait=$$(( (now / 86400 + 1) * 86400 - now ))
+          echo "[rescan] next run at 00:00 UTC, in $$wait seconds"
+          sleep "$$wait"
+          echo "[rescan] starting at $$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          python manage.py rescan || echo "[rescan] FAILED with exit code $$?" >&2
+        done
+    mem_limit: 384m
+
+  # ── SEO-scan-Pro ───────────────────────────────────────────────────────────
+  seoscan:
+    <<: *app
+    build:
+      context: ${APPS_DIR:-../../..}/SEO-scan-Pro
+    env_file: env/seoscan.env
+    environment:
+      DATABASE_URL: postgresql://seoscan:${SEOSCAN_DB_PASSWORD}@db:5432/seoscan
+      NODE_ENV: production
+      PORT: "3000"
+      TRUST_PROXY_HOPS: "1"
+      SCAN_CONCURRENCY: ${SEOSCAN_SCAN_CONCURRENCY:-2}
+    shm_size: "512mb"
+    ports:
+      - "127.0.0.1:8094:3000"
+    mem_limit: 1536m
+
+  # ── Cloudflare Tunnel: the only way in from the internet ───────────────────
+  # Outbound-only: no router port forwarding, and your home IP is never in DNS.
+  # Which hostname goes to which app is set in the Cloudflare dashboard (see
+  # README.md, step 7).
+  #
+  # Off until you turn it on: it belongs to the "tunnel" profile, so the apps
+  # can be started and checked locally before anything faces the internet.
+  # Add COMPOSE_PROFILES=tunnel to .env once CLOUDFLARE_TUNNEL_TOKEN is set.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      - secscan-web
+      - secscan-info
+      - seclayer
+      - complyscan
+      - seoscan
+    profiles: ["tunnel"]
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Nightly backups of every app database ──────────────────────────────────
+  # Written to the backups folder next to this file, so they are ordinary files
+  # on your Windows disk. Copy that folder somewhere else (a USB drive, cloud
+  # storage): a backup on the same disk does not survive the disk.
+  backup:
+    image: postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ./backups:/backups
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -u
+        while true; do
+          stamp=$$(date +%Y%m%d-%H%M%S)
+          for db in secscan seclayer complyscan seoscan; do
+            out="/backups/$${db}-$${stamp}.dump"
+            if pg_dump -h db -U postgres -d "$${db}" -Fc -f "$${out}.partial"; then
+              mv "$${out}.partial" "$${out}"
+              echo "[backup] wrote $${out}"
+            else
+              echo "[backup] FAILED for $${db} at $$(date -Is)" >&2
+            fi
+          done
+          find /backups -name '*.dump' -type f -mtime +$${BACKUP_KEEP_DAYS} -delete || true
+          sleep "$${BACKUP_INTERVAL_SECONDS}"
+        done
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  pgdata:
+  seclayer-data:

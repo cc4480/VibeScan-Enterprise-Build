@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Creates the Railway project: Postgres, seclayer, secscan.
+# Creates the Railway project: Postgres, web, secscan.
 #
 #   railway login          # once, in your own terminal — it opens a browser
 #   ./deploy/railway/setup.sh
@@ -17,7 +17,7 @@
 set -euo pipefail
 
 REPO="cc4480/VibeScan-Enterprise-Build"
-BRANCH="${BRANCH:-fix/dashboard-scan-flicker}"
+BRANCH="${BRANCH:-master}"
 PROJECT="${PROJECT:-secscan}"
 APP_ORIGIN="${APP_ORIGIN:-https://secscan.us}"
 SECRETS_FILE="${SECRETS_FILE:-$HOME/.secscan-railway-secrets}"
@@ -33,14 +33,22 @@ echo "Authenticated as: $(railway whoami 2>&1)"
 # ── Secrets ─────────────────────────────────────────────────────────────────
 # Reuse them if this has been run before, so a re-run does not orphan the
 # credentials already encrypted with the previous key.
+#
+# On the first run, ENCRYPTION_KEY and CLOUDFLARE_ORIGIN_SECRET may be supplied in the
+# environment (for example exported from a password manager). Otherwise they are generated.
+# Either way they are never printed by this script.
 if [[ -f "$SECRETS_FILE" ]]; then
   echo "Reusing secrets from $SECRETS_FILE"
   # shellcheck disable=SC1090
   source "$SECRETS_FILE"
 else
-  echo "Generating secrets → $SECRETS_FILE"
-  ENCRYPTION_KEY="$(openssl rand -base64 32)"
-  CLOUDFLARE_ORIGIN_SECRET="$(openssl rand -hex 32)"
+  if [[ -n "${ENCRYPTION_KEY:-}" && -n "${CLOUDFLARE_ORIGIN_SECRET:-}" ]]; then
+    echo "Using ENCRYPTION_KEY and CLOUDFLARE_ORIGIN_SECRET from the environment → $SECRETS_FILE"
+  else
+    echo "Generating secrets → $SECRETS_FILE"
+    ENCRYPTION_KEY="${ENCRYPTION_KEY:-$(openssl rand -base64 32)}"
+    CLOUDFLARE_ORIGIN_SECRET="${CLOUDFLARE_ORIGIN_SECRET:-$(openssl rand -hex 32)}"
+  fi
   umask 077
   cat > "$SECRETS_FILE" <<EOF
 # secscan.us — Railway. Generated $(date -Is).
@@ -81,12 +89,19 @@ fi
 echo "Adding Postgres…"
 railway add --database postgres
 
-# ── seclayer: the web tier ──────────────────────────────────────────────────
+# ── Secret values and the Railway CLI ───────────────────────────────────────
+# The CLI only accepts variables as KEY=VALUE arguments (railway add --variables),
+# and it echoes each pair to stderr as it goes. So while the two calls below run,
+# the secret values are visible to other users in the process list and appear in
+# terminal scrollback or CI logs. Set them in the Railway dashboard instead if that
+# matters on this machine; this script cannot avoid it with this CLI.
+
+# ── web: the web tier ───────────────────────────────────────────────────────
 # DATABASE_URL uses Railway's reference syntax so it keeps working when the
 # database credentials rotate. PORT is deliberately unset: Railway injects it.
-echo "Creating seclayer…"
+echo "Creating web…"
 railway add \
-  --service seclayer \
+  --service web \
   --repo "${REPO}" \
   --branch "${BRANCH}" \
   --variables 'DATABASE_URL=${{Postgres.DATABASE_URL}}' \
@@ -95,10 +110,10 @@ railway add \
   --variables "TRUST_PROXY=2" \
   --variables "BEHIND_CLOUDFLARE=true" \
   --variables "CLOUDFLARE_ORIGIN_SECRET=${CLOUDFLARE_ORIGIN_SECRET}" \
-  --variables "RAILWAY_CONFIG_PATH=deploy/railway/seclayer.json"
+  --variables "RAILWAY_CONFIG_PATH=deploy/railway/web.json"
 
 # ── secscan: the scanner ────────────────────────────────────────────────────
-# Same ENCRYPTION_KEY as seclayer, or credentialed scans fail at scan time
+# Same ENCRYPTION_KEY as the web tier, or credentialed scans fail at scan time
 # rather than at startup. No domain, no PORT: work arrives only via the queue.
 echo "Creating secscan…"
 railway add \
@@ -116,11 +131,11 @@ echo
 echo "  1. Give secscan at least 2 GB of memory (dashboard → secscan → Settings)."
 echo "     Chromium is the one service where the default may not be enough."
 echo
-echo "  2. Generate the public domain for seclayer only:"
-echo "       railway domain --service seclayer"
+echo "  2. Generate the public domain for web only:"
+echo "       railway domain --service web"
 echo
 echo "  3. Apply the schema once the database is up:"
-echo "       railway run --service seclayer pnpm --filter @workspace/db run db:migrate"
+echo "       railway run --service web pnpm --filter @workspace/db run db:migrate"
 echo
 echo "  4. Confirm it is alive, then follow deploy/railway/README.md from step 5"
 echo "     for Cloudflare, the origin-secret Transform Rule, email and Search Console."

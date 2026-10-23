@@ -22,9 +22,10 @@ import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 import { detectCatchAll, matchesCatchAll } from "./spaCatchAll";
 import { scanFetch } from "./http";
+import { API_DOC_PATHS } from "./apiDocsProbePaths";
+export { isOpenApiSpec } from "./apiDocsProbePaths";
 
 const TIMEOUT_MS = 7_000;
-const MIN_BODY_BYTES = 200; // Skip thin redirect/error pages
 
 function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
   return { id: randomUUID(), ...partial };
@@ -35,177 +36,6 @@ async function safeGet(url: string): Promise<{ status: number; body: string; ct:
   if (!res) return null;
   return { status: res.status, body: res.body, ct: res.headers["content-type"] ?? "" };
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// VALIDATION HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Confirms an OpenAPI/Swagger JSON spec — requires multiple structural markers */
-function isOpenApiJson(body: string, ct: string): boolean {
-  if (!ct.includes("application/json") && !ct.includes("text/plain") && !ct.includes("text/html")) return false;
-  if (body.length < MIN_BODY_BYTES) return false;
-  // Must have the openapi/swagger version field AND a paths object
-  const hasVersion = /"openapi"\s*:\s*"[23]/.test(body) || /"swagger"\s*:\s*"2/.test(body);
-  const hasPaths = /"paths"\s*:\s*\{/.test(body);
-  const hasInfo = /"info"\s*:\s*\{/.test(body);
-  return hasVersion && hasPaths && hasInfo;
-}
-
-/** Confirms an OpenAPI/Swagger YAML spec */
-function isOpenApiYaml(body: string): boolean {
-  if (body.length < MIN_BODY_BYTES) return false;
-  const hasVersion = /^openapi:\s*['"']?[23]/m.test(body) || /^swagger:\s*['"']?2/m.test(body);
-  const hasPaths = /^paths:/m.test(body);
-  const hasInfo = /^info:/m.test(body);
-  return hasVersion && hasPaths && hasInfo;
-}
-
-/**
- * Confirms a Swagger UI page — requires the swagger-ui-bundle.js or swagger-ui-dist
- * script to be loaded. Avoids matching pages that merely mention "swagger" in text.
- */
-function isSwaggerUiPage(body: string): boolean {
-  if (body.length < MIN_BODY_BYTES) return false;
-  return (
-    /swagger-ui-bundle\.js|swagger-ui-standalone|SwaggerUIBundle\s*\(/i.test(body) ||
-    /swagger-ui-dist|swagger\.min\.js/i.test(body) ||
-    // FastAPI/Spring Boot inject a specific swagger-ui initialiser inline
-    /SwaggerUIBundle\s*\(\s*\{[^}]{20,}url/i.test(body)
-  );
-}
-
-/**
- * Confirms a ReDoc page — requires the ReDoc script bundle, not just the word "redoc".
- */
-function isRedocPage(body: string): boolean {
-  if (body.length < MIN_BODY_BYTES) return false;
-  return (
-    /redoc\.standalone\.js|redoc-vendor\.chunk\.js|<redoc\s+spec-url/i.test(body) ||
-    /Redoc\.init\s*\(/i.test(body)
-  );
-}
-
-/** Confirms a GraphQL SDL schema */
-function isGraphqlSdl(body: string, ct: string): boolean {
-  if (body.length < 50) return false;
-  const isTextLike = ct.includes("graphql") || ct.includes("text/plain") || ct.includes("text/html");
-  if (!isTextLike) return false;
-  return /type\s+Query\s*\{|type\s+Mutation\s*\{|schema\s*\{/.test(body);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CANDIDATE PATHS
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface ApiDocPath {
-  path: string;
-  label: string;
-  validate: (body: string, ct: string) => boolean;
-}
-
-const API_DOC_PATHS: ApiDocPath[] = [
-  // ── OpenAPI JSON / YAML spec files ────────────────────────────────────────
-  {
-    path: "/openapi.json",
-    label: "OpenAPI JSON spec",
-    validate: (b, ct) => isOpenApiJson(b, ct),
-  },
-  {
-    path: "/openapi.yaml",
-    label: "OpenAPI YAML spec",
-    validate: (b) => isOpenApiYaml(b),
-  },
-  {
-    path: "/swagger.json",
-    label: "Swagger 2.0 JSON spec",
-    validate: (b, ct) => isOpenApiJson(b, ct),
-  },
-  {
-    path: "/swagger.yaml",
-    label: "Swagger YAML spec",
-    validate: (b) => isOpenApiYaml(b),
-  },
-  {
-    path: "/v1/openapi.json",
-    label: "Versioned OpenAPI JSON spec",
-    validate: (b, ct) => isOpenApiJson(b, ct),
-  },
-  {
-    path: "/api-docs/swagger.json",
-    label: "OpenAPI JSON spec",
-    validate: (b, ct) => isOpenApiJson(b, ct),
-  },
-
-  // ── Swagger UI pages ───────────────────────────────────────────────────────
-  // NOTE: /docs and /docs/ intentionally excluded — they commonly serve Docusaurus,
-  // GitBook, and product documentation that would cause false positives.
-  {
-    path: "/swagger-ui.html",
-    label: "Swagger UI",
-    validate: (b) => isSwaggerUiPage(b),
-  },
-  {
-    path: "/swagger-ui/",
-    label: "Swagger UI",
-    validate: (b) => isSwaggerUiPage(b),
-  },
-  {
-    path: "/swagger/",
-    label: "Swagger UI",
-    validate: (b) => isSwaggerUiPage(b),
-  },
-  {
-    path: "/api-docs",
-    label: "Swagger/OpenAPI UI",
-    validate: (b) => isSwaggerUiPage(b),
-  },
-  {
-    path: "/api-docs/",
-    label: "Swagger/OpenAPI UI",
-    validate: (b) => isSwaggerUiPage(b),
-  },
-  {
-    path: "/api/docs",
-    label: "API documentation UI",
-    validate: (b, ct) => isSwaggerUiPage(b) || isRedocPage(b) || isOpenApiJson(b, ct),
-  },
-  {
-    path: "/api/swagger",
-    label: "Swagger UI",
-    validate: (b, ct) => isSwaggerUiPage(b) || isOpenApiJson(b, ct),
-  },
-
-  // ── Versioned docs paths ───────────────────────────────────────────────────
-  {
-    path: "/api/v1/docs",
-    label: "Versioned API docs",
-    validate: (b, ct) => isSwaggerUiPage(b) || isRedocPage(b) || isOpenApiJson(b, ct),
-  },
-  {
-    path: "/api/v2/docs",
-    label: "Versioned API docs",
-    validate: (b, ct) => isSwaggerUiPage(b) || isRedocPage(b) || isOpenApiJson(b, ct),
-  },
-
-  // ── ReDoc ──────────────────────────────────────────────────────────────────
-  {
-    path: "/redoc",
-    label: "ReDoc API documentation",
-    validate: (b) => isRedocPage(b),
-  },
-  {
-    path: "/redoc/",
-    label: "ReDoc API documentation",
-    validate: (b) => isRedocPage(b),
-  },
-
-  // ── GraphQL schema SDL ─────────────────────────────────────────────────────
-  {
-    path: "/graphql/schema",
-    label: "GraphQL SDL schema",
-    validate: (b, ct) => isGraphqlSdl(b, ct),
-  },
-];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN EXPORT
@@ -231,7 +61,7 @@ export async function runApiDocsProbe(targetUrl: string): Promise<ScanVulnerabil
       if (!r || r.status !== 200) return null;
 
       // Suppress if response is the SPA catch-all shell — not a real doc endpoint
-      if (matchesCatchAll(r.body, catchAll)) return null;
+      if (matchesCatchAll(r.body, catchAll, url)) return null;
 
       if (!validate(r.body, r.ct)) return null;
 
@@ -241,27 +71,43 @@ export async function runApiDocsProbe(targetUrl: string): Promise<ScanVulnerabil
 
       return vuln({
         name: `Exposed API Documentation — ${label} at ${path}`,
-        severity: "medium",
+        // Severity is deliberately low, and this is why: publishing an OpenAPI
+        // spec is mainstream, intentional practice — Stripe, Vercel, Cloudflare,
+        // GitHub and Twilio all serve one at their apex domain on purpose. A
+        // reachable spec is not itself a weakness: the endpoints it documents
+        // still enforce their own auth, so the spec describes the surface rather
+        // than opening it. Reporting it as a MEDIUM "exploit your backend"
+        // vulnerability fired confidently against Vercel, Cloudflare and Netlify,
+        // whose specs are a documented developer resource — a false positive
+        // whose own evidence ("spec structure validated") only confirmed the spec
+        // was real, never that exposing it was a mistake.
+        //
+        // A spec file is therefore INFO — a surface-disclosure note to confirm is
+        // intended. An interactive UI with "Try It Out" is LOW: marginally more,
+        // because it invites unauthenticated probing from the browser, though it
+        // too only exercises endpoints that enforce their own auth.
+        severity: isSpec ? "info" : "low",
         category: "Information Disclosure",
         description: isSpec
-          ? `An ${label} is publicly accessible at ${path}. This exposes your complete ` +
-            `API contract — every endpoint, request/response schema, parameter, and ` +
-            `authentication scheme — dramatically lowering the effort needed to enumerate ` +
-            `and exploit your backend.`
+          ? `An ${label} is publicly reachable at ${path}, exposing your API contract — ` +
+            `endpoints, schemas, parameters and auth schemes — in machine-readable form. ` +
+            `This is frequently intentional; many public APIs publish their spec on purpose. ` +
+            `Confirm the exposure is meant to be public. If the spec describes an internal or ` +
+            `admin API, it lowers the effort to enumerate that surface and should be removed.`
           : `An interactive API documentation UI (${label}) is publicly accessible at ${path}. ` +
-            `This lets anyone explore and test your API endpoints without authentication, ` +
-            `exposing your full backend surface. The bundled "Try It Out" feature may also ` +
-            `allow unauthenticated API calls directly from the browser.`,
+            `Anyone can explore your API endpoints, and a bundled "Try It Out" feature can issue ` +
+            `calls from the browser. Confirm this is intentional; the endpoints behind it still ` +
+            `enforce their own authentication, but the UI invites probing.`,
         evidence: `GET ${url}\nHTTP 200 — ${label} confirmed (${isSpec ? "spec structure validated" : "UI bundle script detected"})`,
         solution:
-          "Disable API documentation in production or restrict access to authenticated users or internal IPs. " +
+          "If this exposure is not intentional, disable API documentation in production or restrict it to authenticated users or internal IPs. " +
           (isSpec
             ? "Remove the spec file from your production deployment or serve it behind an auth middleware. "
             : "FastAPI: set `docs_url=None, redoc_url=None` when `os.getenv('ENV') != 'development'`. ") +
           "Express/Swagger: gate the route with an IP allowlist or require an `Authorization` header. " +
-          "If public docs are intentional, disable the 'Try It Out' feature and remove auth scheme details.",
+          "If public docs are intentional, consider disabling the 'Try It Out' feature and trimming auth-scheme detail.",
         cweId: "CWE-200",
-        cvssScore: 5.3,
+        cvssScore: isSpec ? 0 : 3.1,
         wstgId: "WSTG-CONF-02",
         confidence: 92,
       });

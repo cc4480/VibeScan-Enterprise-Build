@@ -1,0 +1,98 @@
+{
+ "scannedAt": "2026-09-19T21:26:28.650Z",
+ "mode": "active",
+ "results": [
+  {
+   "url": "https://secscan.us",
+   "finalUrl": "https://secscan.us/",
+   "statusCode": 200,
+   "server": "cloudflare",
+   "tlsGrade": "A",
+   "technologies": [
+    "Cloudflare",
+    "Railway"
+   ],
+   "pagesScanned": 4,
+   "renderedWithBrowser": false,
+   "elapsedMs": 21099,
+   "findings": [
+    {
+     "name": "Content-Security-Policy Allows Inline Styles (unsafe-inline in style-src)",
+     "severity": "low",
+     "category": "Injection Defense",
+     "cweId": "CWE-79",
+     "cvssScore": 3.1,
+     "wstgId": "WSTG-CONF-12",
+     "confidence": 74,
+     "evidence": "GET https://secscan.us/\nContent-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https: blob:; connect-src 'self' https: wss: ws:; worker-src 'self' blob:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'\n(unsafe-inline in style-src only — script-src is clean, no JS execution risk)"
+    },
+    {
+     "name": "DMARC Policy Set to None (Monitoring Only — No Enforcement)",
+     "severity": "medium",
+     "category": "Email Security",
+     "cweId": "CWE-290",
+     "cvssScore": 5.3,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "TXT record: v=DMARC1; p=none; rua=mailto:dmarc@secscan.info; fo=1"
+    },
+    {
+     "name": "DNSSEC Not Enabled",
+     "severity": "info",
+     "category": "DNS Security",
+     "cweId": "CWE-350",
+     "cvssScore": null,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "No DNSKEY records found for secscan.us (NOERROR (name exists))."
+    },
+    {
+     "name": "API Endpoints Without Rate Limiting",
+     "severity": "medium",
+     "category": "Security Misconfiguration",
+     "cweId": "CWE-770",
+     "cvssScore": 5.3,
+     "wstgId": "WSTG-ATHN-04",
+     "confidence": 70,
+     "evidence": "12 requests in immediate succession, none answered with 429:\n\n  GET /api/auth/user"
+    }
+   ]
+  },
+  {
+   "url": "https://seclayer.app",
+   "finalUrl": "https://seclayer.app/",
+   "statusCode": 200,
+   "server": "cloudflare",
+   "tlsGrade": "A",
+   "technologies": [
+    "Cloudflare",
+    "Railway"
+   ],
+   "pagesScanned": 3,
+   "renderedWithBrowser": false,
+   "elapsedMs": 22238,
+   "findings": [
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://seclayer.app/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "DMARC Policy Set to None (Monitoring Only — No Enforcement)",
+     "severity": "medium",
+     "category": "Email Security",
+     "cweId": "CWE-290",
+     "cvssScore": 5.3,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "TXT record: v=DMARC1; p=none; rua=mailto:c.c4480131515@gmail.com"
+    }
+   ]
+  }
+ ]
+}

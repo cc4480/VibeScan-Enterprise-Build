@@ -15,7 +15,7 @@ Three, in one Railway project:
 | Service    | Source                | Start command                                    | Public domain |
 | ---------- | --------------------- | ------------------------------------------------ | ------------- |
 | `postgres` | Railway Postgres      | —                                                | no            |
-| `seclayer` | this repo, `Dockerfile` | `node --enable-source-maps artifacts/api-server/dist/index.mjs` | **yes** — secscan.us |
+| `web` | this repo, `Dockerfile` | `node --enable-source-maps artifacts/api-server/dist/index.mjs` | **yes** — secscan.us |
 | `secscan`  | this repo, `Dockerfile` | (leave default)                                  | no            |
 
 Both application services build the same Dockerfile and differ only in what they
@@ -38,17 +38,17 @@ see [Deploying prebuilt images](#deploying-prebuilt-images-instead) at the end.
 
 ## Config as code
 
-`seclayer.json` and `secscan.json` in this directory carry each service's build
+`web.json` and `secscan.json` in this directory carry each service's build
 and deploy settings, so the start commands and health check are versioned rather
 than typed into the dashboard and forgotten. Point each service at its file:
 
-    Service → Settings → Config-as-code → Path:  deploy/railway/seclayer.json
+    Service → Settings → Config-as-code → Path:  deploy/railway/web.json
 
 Two things Railway does differently from the compose deployment, both harmless
 once known:
 
 - **Railway ignores the Dockerfile `HEALTHCHECK`.** It runs its own HTTP probe
-  against `healthcheckPath` instead. So `seclayer` is health-checked on
+  against `healthcheckPath` instead. So `web` is health-checked on
   `/api/healthz`, and the heartbeat probe built for `secscan` does not apply
   there — Railway watches the process rather than the file. The heartbeat still
   works, and still matters, under compose.
@@ -59,13 +59,26 @@ once known:
 
 Railway → New Project → **Deploy PostgreSQL**. Rename it `postgres`.
 
+Or let the script create the project and the services in one go, after
+`railway login` in your own terminal:
+
+```
+./deploy/railway/setup.sh                    # BRANCH defaults to master
+BRANCH=some-branch ./deploy/railway/setup.sh # deploy another branch
+```
+
+On the first run it generates the secrets into `~/.secscan-railway-secrets`. To
+supply your own instead, `export ENCRYPTION_KEY=...` and `CLOUDFLARE_ORIGIN_SECRET=...`
+in the shell first (not inline on the command line, where they land in shell history).
+The Railway CLI still receives them as arguments while it runs; see the note in
+`setup.sh`.
+
 Railway exposes `DATABASE_URL` on that service. You will reference it from the
 other two rather than copying the value.
 
-## 2. Create the `seclayer` service
+## 2. Create the `web` service
 
-New service → **GitHub Repo** → this repository, branch `fix/dashboard-scan-flicker`
-(or `master` once merged).
+New service → **GitHub Repo** → this repository, branch `master`.
 
 **Settings → Deploy → Custom Start Command:**
 
@@ -107,14 +120,14 @@ only through the job queue in Postgres.
 
 ```ini
 DATABASE_URL=${{postgres.DATABASE_URL}}
-ENCRYPTION_KEY=<the same value as seclayer>
+ENCRYPTION_KEY=<the same value as web>
 APP_ORIGIN=https://secscan.us
 DEEPSEEK_API_KEY=<optional>
 RESEND_API_KEY=<optional>
 OOB_BASE_URL=
 ```
 
-`ENCRYPTION_KEY` **must match** seclayer's. The web tier encrypts scan
+`ENCRYPTION_KEY` **must match** the web tier's. The web tier encrypts scan
 credentials when a scan is created and the scanner decrypts them when it runs; a
 mismatch fails at scan time rather than at startup, on exactly the authenticated
 scans that need it.
@@ -131,7 +144,10 @@ has more than one replica. Run them once, from your machine:
 ```bash
 npm i -g @railway/cli
 railway link                 # pick the project
-railway run --service seclayer pnpm --filter @workspace/db run db:migrate
+# Migrations apply themselves on boot now (lib/db/src/bootMigrate.ts).
+# This remains only for migrating a database BEFORE any service is deployed
+# against it, and needs a route to the database — see NOTES.md.
+railway run --service web pnpm --filter @workspace/db run db:migrate
 ```
 
 Re-run this after any schema change. Applying nothing is the normal outcome.
@@ -158,7 +174,7 @@ use your own → enter Cloudflare's two, replacing the `ui-dns.*` set. Confirm:
 dig NS secscan.us +short      # expect the cloudflare.com nameservers
 ```
 
-**Add the domain in Railway first.** seclayer → Settings → Networking → Custom
+**Add the domain in Railway first.** web → Settings → Networking → Custom
 Domain → `secscan.us`. Railway shows the CNAME target to use.
 
 **Then add the DNS record in Cloudflare**, initially **unproxied** (grey cloud):
@@ -190,7 +206,7 @@ defeat every per-IP limit in the app, including the one on `/login`.
 The app settles it without help from Cloudflare. The chain is:
 
 ```
-client → Cloudflare → Railway's router → seclayer
+client → Cloudflare → Railway's router → web
 ```
 
 Each hop appends the address it saw to `X-Forwarded-For`, so the **last** entry
@@ -266,6 +282,52 @@ Inspection** → request indexing for `/` and `/learn`.
 `robots.txt` deliberately disallows `/dashboard`, `/scan`, `/report/` and
 `/monitor`. Search Console will list them as excluded; that is intended.
 
+## Retiring the legacy anonymous bearer
+
+Before sign-up existed, an anonymous account was a row whose user id was its only
+credential (`Authorization: Bearer <user id>`). A user id is not a secret, so
+this is weak authentication. The `web` service still honours it for **existing
+anonymous rows only** (an unknown id never creates an account) so people who
+used the product before registration are not cut off: registering promotes
+their row in place and their scans, credits and monitors follow. Closing it is
+therefore your call, controlled by two variables on the `web` service:
+
+| Variable | Effect |
+| --- | --- |
+| `LEGACY_BEARER_SUNSET` | An ISO 8601 date or timestamp (`2026-12-01`, `2026-12-01T09:00:00Z`). From that moment the legacy bearer is rejected. Without an offset the value is read as UTC, so a bare date means the start of that day. Unset = never sunset (the default, and today's behaviour). A value that is not a real ISO date is ignored, **not** treated as already passed, and logged as an error once at startup. |
+| `ALLOW_LEGACY_ANONYMOUS_BEARER` | `false` closes it immediately. It **always wins**: it closes the path whatever `LEGACY_BEARER_SUNSET` says, and no sunset date can reopen it. |
+
+**See who still uses it.** Every request authenticated this way is logged at
+`warn`, as one line per user id per process per 24 hours (so a busy user does
+not flood the log, and each replica logs once a day):
+
+```json
+{"level":40,"event":"legacy_anonymous_bearer","userId":"3f2504e0-…","route":"GET /api/scans","msg":"Request authenticated by legacy anonymous bearer (user id is the only credential). …"}
+```
+
+Search the `web` service logs for `legacy_anonymous_bearer`. The line carries
+the user id and the route only; the token is the user id, and share-link tokens
+in the path are masked. The `web` service also logs its current state at boot
+("Legacy anonymous bearer authentication status": `open` or `closed`, and the
+sunset time if one is set). There is no counter: the log line is the signal.
+
+**Recommended order:**
+
+1. Deploy and **watch the logs** for a while. If lines keep appearing, those
+   users are still working anonymously; that is the group a sign-up prompt
+   needs to reach.
+2. **Set `LEGACY_BEARER_SUNSET`** to a date far enough ahead to warn them, and
+   keep watching. A sunset can be moved later (or unset) while it has not yet
+   passed; once it has passed, unsetting it reopens the path.
+3. When the lines have stopped, or the date has passed and you are satisfied,
+   **set `ALLOW_LEGACY_ANONYMOUS_BEARER=false`** to close the path
+   permanently, independent of any date.
+
+Closing the bearer does not by itself strand anyone's history: sign-up promotes
+an anonymous row whenever its id arrives in the `Authorization` header, and that
+step is not controlled by either variable. The user's browser still holds the id,
+so they can register after the cutoff and keep their scans.
+
 ## Backups
 
 The compose stack includes a backup service. **Railway deployments do not** —
@@ -281,12 +343,12 @@ railway run --service postgres pg_dump > backup-$(date +%F).sql
 
 The web image only avoids carrying Chromium when the two images are built
 separately, which the CI workflow already does — it publishes
-`seclayer` and `secscan` to ghcr.io on every push to master.
+`web` and `secscan` to ghcr.io on every push to master.
 
 Once that workflow is on GitHub, you can point each Railway service at its image
 instead of at the repo (Railway → New → Docker Image), which restores the 354 MB
 web image and skips building on Railway entirely. The packages must be public,
 or Railway needs a registry token.
 
-That workflow is not in the branch yet: pushing it needs `workflow` scope on the
-GitHub token. Until then, build from the repo as described above.
+That workflow is in the repo (`.github/workflows/ci.yml`): on every push to master it builds the web and
+secscan images and pushes them to ghcr with `latest` and the commit SHA as tags.

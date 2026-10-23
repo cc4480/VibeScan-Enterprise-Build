@@ -18,6 +18,9 @@
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 import { scanFetch } from "./http";
+import { probeBatching, probeIde } from "./graphqlExtra";
+import { GRAPHQL_SPECIFIC_PATHS, extractGraphqlUrlsFromJs } from "./graphqlProbeUrls";
+export { isOwnHost } from "./graphqlProbeUrls";
 
 const TIMEOUT_MS = 8_000;
 
@@ -40,51 +43,6 @@ async function safePost(
   });
   if (!res) return null;
   return { status: res.status, body: res.body, ct: res.headers["content-type"] ?? "" };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ENDPOINT DISCOVERY
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Only paths that are specifically GraphQL — no /api or /query (too generic).
-// /api/query is included because it requires both segments.
-const GRAPHQL_SPECIFIC_PATHS = [
-  "/graphql",
-  "/api/graphql",
-  "/v1/graphql",       // Hasura
-  "/graphql/v1",
-  "/graphql/v2",
-];
-
-function extractGraphqlUrlsFromJs(html: string, origin: string): string[] {
-  const inlineRx = /<script(?:[^>]*)>([\s\S]*?)<\/script>/gi;
-  const js: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = inlineRx.exec(html)) !== null) {
-    if (!/\bsrc\s*=/i.test(m[0])) js.push(m[1] ?? "");
-  }
-  const content = js.join("\n");
-
-  const candidates: string[] = [];
-  const patterns = [
-    /(?:graphqlUrl|graphql_url|GRAPHQL_URL|GRAPHQL_ENDPOINT|graphqlEndpoint|hasuraUrl|HASURA_URL|NEXT_PUBLIC_GRAPHQL)\s*[:=,]\s*["'`]([^"'`\s]{5,})["'`]/gi,
-    /uri\s*:\s*["'`](https?:\/\/[^"'`\s]+graphql[^"'`\s]*)["'`]/gi,
-  ];
-  for (const rx of patterns) {
-    let pm: RegExpExecArray | null;
-    while ((pm = rx.exec(content)) !== null) {
-      try {
-        const parsed = new URL(pm[1], origin);
-        // Only same-origin or explicit graphql mentions — skip if it's a CDN or analytics URL
-        if (parsed.pathname.toLowerCase().includes("graphql") ||
-            parsed.hostname === new URL(origin).hostname) {
-          candidates.push(parsed.href);
-        }
-      } catch { /* skip invalid */ }
-    }
-  }
-
-  return [...new Set(candidates)].slice(0, 5);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -183,7 +141,7 @@ const INTROSPECTION_QUERY = {
   }`,
 };
 
-const BOGUS_FIELD_QUERY = { query: "{ nonExistentFieldSeclayerProbe }" };
+const BOGUS_FIELD_QUERY = { query: "{ nonExistentFieldSecScanProbe }" };
 
 async function checkEndpoint(url: string): Promise<ScanVulnerability[]> {
   // Step 1: confirm it's actually GraphQL (strict validation)
@@ -205,14 +163,15 @@ async function checkEndpoint(url: string): Promise<ScanVulnerability[]> {
 
     findings.push(vuln({
       name: "GraphQL Introspection Enabled in Production",
-      severity: "high",
+      severity: "medium",
       category: "API Security",
       description:
         `GraphQL introspection is enabled at ${path}. This lets any external party retrieve ` +
-        `the full API schema — every type, query, mutation, and field name — in a single request. ` +
-        `Introspection is a reconnaissance tool: it hands attackers the complete attack surface ` +
-        `of your API${typeCount > 0 ? ` (${typeCount} types exposed)` : ""}. ` +
-        `Tools like GraphQL Voyager can visualise the entire schema from one introspection call.`,
+        `the API schema — type, query, mutation and field names — in a single request` +
+        `${typeCount > 0 ? ` (${typeCount} types returned)` : ""}. ` +
+        `It exposes structure, not data, and many public or developer-facing APIs leave it on ` +
+        `deliberately; it becomes a real weakness when the API is private or relies on ` +
+        `obscurity of its fields for access control. Verify whether this schema is meant to be public.`,
       evidence: `POST ${url}\n{"query":"{ __schema { types { name } } }"}\nHTTP ${introRes.status} — full schema returned (${typeCount} types)\nConfirmed via __typename endpoint verification`,
       solution:
         "Disable introspection in production. Apollo Server: pass `introspection: false` (default when NODE_ENV=production). " +
@@ -220,9 +179,10 @@ async function checkEndpoint(url: string): Promise<ScanVulnerability[]> {
         "GraphQL Yoga: pass `disableIntrospection: true`. " +
         "If you need introspection for internal tooling, restrict it by IP or API key.",
       cweId: "CWE-200",
-      cvssScore: 7.5,
+      cvssScore: 5.3,
       wstgId: "WSTG-INFO-01",
-      confidence: 97,
+      // The schema response is directly observed; whether it is intended is not.
+      confidence: 90,
     }));
   }
 
@@ -239,7 +199,7 @@ async function checkEndpoint(url: string): Promise<ScanVulnerability[]> {
         `that doesn't exist (e.g. "Cannot query field 'usr' on type 'Query'. Did you mean 'user'?"). ` +
         `This leaks valid field names even when introspection is disabled, letting attackers ` +
         `enumerate the API schema incrementally using a dictionary of common names.`,
-      evidence: `POST ${url}\n{"query":"{ nonExistentFieldSeclayerProbe }"}\nResponse: errors[].message contains field suggestion\nError has GraphQL "locations" array (confirmed GQL endpoint)`,
+      evidence: `POST ${url}\n{"query":"{ nonExistentFieldSecScanProbe }"}\nResponse: errors[].message contains field suggestion\nError has GraphQL "locations" array (confirmed GQL endpoint)`,
       solution:
         "Disable field suggestions in your GraphQL server. graphql-js: add a custom validation rule that removes suggestions. " +
         "Apollo Server v4+: this is configurable via `formatError`. " +
@@ -249,6 +209,9 @@ async function checkEndpoint(url: string): Promise<ScanVulnerability[]> {
       confidence: 90,
     }));
   }
+
+  const batching = await probeBatching(url).catch(() => null);
+  if (batching) findings.push(batching);
 
   return findings;
 }
@@ -270,9 +233,10 @@ export async function runGraphqlProbe(
   const pathUrls = GRAPHQL_SPECIFIC_PATHS.map((p) => origin + p);
   const candidates = [...new Set([...jsUrls, ...pathUrls])];
 
-  const settled = await Promise.allSettled(
-    candidates.map((url) => checkEndpoint(url).catch(() => [])),
-  );
+  const [settled, ide] = await Promise.all([
+    Promise.allSettled(candidates.map((url) => checkEndpoint(url).catch(() => []))),
+    probeIde(origin).catch(() => null),
+  ]);
 
   // Deduplicate — report each finding name only once even if on multiple paths
   const seen = new Set<string>();
@@ -287,5 +251,6 @@ export async function runGraphqlProbe(
     }
   }
 
+  if (ide) all.push(ide);
   return all;
 }

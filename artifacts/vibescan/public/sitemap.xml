@@ -3,16 +3,50 @@
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
         http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
+  <!--
+    Only the routes that are indexable per lib/pageMeta.ts belong here. Listing
+    a noindex URL asks a crawler to fetch a page that then tells it to go away,
+    which is how a small site spends its crawl budget on nothing.
+  -->
   <url>
     <loc>https://secscan.us/</loc>
-    <lastmod>2026-09-04</lastmod>
+    <lastmod>2026-09-20</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://secscan.us/learn</loc>
-    <lastmod>2026-09-04</lastmod>
+    <lastmod>2026-09-20</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
+  </url>
+  <!--
+    Was missing entirely while being marked indexable. It is the page a site
+    owner lands on after finding the scanner's User-Agent in their logs, so it
+    is the one URL here that gets found by people who have never heard of us.
+  -->
+  <url>
+    <loc>https://secscan.us/about</loc>
+    <lastmod>2026-09-24</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://secscan.us/bot</loc>
+    <lastmod>2026-09-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://secscan.us/privacy</loc>
+    <lastmod>2026-09-20</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://secscan.us/terms</loc>
+    <lastmod>2026-09-20</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
   </url>
 </urlset>

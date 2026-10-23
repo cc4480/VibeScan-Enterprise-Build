@@ -88,6 +88,10 @@ export async function runSsrfProbes(input: SsrfProbeInput): Promise<ScanVulnerab
     return url;
   };
 
+// Planting fetches must not follow redirects. A target that merely 302s to the
+  // parameter (an open redirect) would otherwise send the scanner's own client to
+  // the collector, and that hit is indistinguishable from the target's server
+  // fetching the URL. Only a request the target's server makes may count.
   // ── 1. URL parameters on the page's own query string ──────────────────────
   try {
     const target = new URL(input.targetUrl);
@@ -101,6 +105,7 @@ export async function runSsrfProbes(input: SsrfProbeInput): Promise<ScanVulnerab
         await scanFetch(probe.toString(), {
           ...(input.credentials ? { as: input.credentials } : {}),
           timeoutMs: TIMEOUT_MS,
+          redirect: "manual",
         });
       }
     }
@@ -133,12 +138,14 @@ export async function runSsrfProbes(input: SsrfProbeInput): Promise<ScanVulnerab
         await scanFetch(probe.toString(), {
           ...(input.credentials ? { as: input.credentials } : {}),
           timeoutMs: TIMEOUT_MS,
+          redirect: "manual",
         });
       } else if (param.location === "path") {
         const probe = concrete.replace(/\/1(?=\/|$)/, `/${encodeURIComponent(url)}`);
         await scanFetch(probe, {
           ...(input.credentials ? { as: input.credentials } : {}),
           timeoutMs: TIMEOUT_MS,
+          redirect: "manual",
         });
       } else {
         await scanFetch(concrete, {
@@ -147,6 +154,7 @@ export async function runSsrfProbes(input: SsrfProbeInput): Promise<ScanVulnerab
           body: JSON.stringify({ [param.name]: url }),
           ...(input.credentials ? { as: input.credentials } : {}),
           timeoutMs: TIMEOUT_MS,
+          redirect: "manual",
         });
       }
     }

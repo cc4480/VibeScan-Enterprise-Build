@@ -22,8 +22,10 @@
 
 import { randomUUID, randomBytes } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
-import { SCANNER_USER_AGENT } from "./appOrigin";
+import { scanFetch } from "./http";
 import { isDestructiveUrl } from "./destructive";
+import { runExtraInjectionProbes } from "./injectionExtra";
+import { reflectionStates, breakoutFor } from "./xssContext";
 
 const TIMEOUT_MS = 7_000;
 const MAX_CASES = 20;
@@ -65,24 +67,47 @@ export const SQL_ERROR_SIGNATURES: RegExp[] = [
 interface Probed {
   status: number;
   body: string;
+  contentType: string;
 }
 
 async function safeGet(url: string): Promise<Probed | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      redirect: "follow",
-      headers: { "User-Agent": SCANNER_USER_AGENT },
-    });
-    const body = await res.text().catch(() => "");
-    return { status: res.status, body };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  const res = await scanFetch(url, { timeoutMs: TIMEOUT_MS });
+  return res ? { status: res.status, body: res.body, contentType: res.headers["content-type"] ?? "" } : null;
+}
+
+/**
+ * A reflected "<token>" is only cross-site scripting if a browser will parse the response as
+ * HTML. The same bytes in application/json, text/plain or an image are inert, and an API that
+ * echoes a query back as JSON is not vulnerable. A response with no Content-Type is treated as
+ * HTML, which is what a browser would sniff it as.
+ */
+export function rendersAsHtml(contentType: string): boolean {
+  const ct = contentType.toLowerCase();
+  return ct === "" || ct.includes("text/html") || ct.includes("application/xhtml");
+}
+
+/**
+ * Does this reflected marker land where a browser would create an element?
+ *
+ * The literal "<token>" is inert inside <script>, <style>, <textarea>, <title>,
+ * a comment or a quoted attribute, so only body-text reflection counts outright.
+ * For the raw-text and comment contexts the closing sequence (`</script>`, `-->`)
+ * is reflected in a second probe: XSS is confirmed only if that break-out also
+ * comes back unencoded. Returns a description of how it was confirmed, or null.
+ */
+async function confirmXss(url: URL, param: string, body: string, token: string): Promise<string | null> {
+  const states = reflectionStates(body, `<${token}>`);
+  if (states.some((s) => s.kind === "data")) return "reflected into HTML body context with angle brackets intact";
+
+  const breakout = states.map(breakoutFor).find((b) => b !== null);
+  if (!breakout) return null;
+  const token2 = "sq" + randomBytes(5).toString("hex");
+  const probe = `${breakout}<${token2}>`;
+  url.searchParams.set(param, probe);
+  const res = await safeGet(url.toString());
+  if (!res || !rendersAsHtml(res.contentType)) return null;
+  if (!res.body.includes(probe) || !reflectionStates(res.body, `<${token2}>`).some((s) => s.kind === "data")) return null;
+  return `reflected inside an inert context, and the closing sequence ${breakout} also came back unencoded (break-out confirmed)`;
 }
 
 interface Case { path: string; param: string }
@@ -151,6 +176,9 @@ export async function runInjectionProbes(
   if (cases.length === 0) return [];
 
   const xssParams: string[] = [];
+  const xssHow: string[] = [];
+  // The path each parameter reflected on: the scan's start path is only where the form was found.
+  const xssPaths: string[] = [];
   const sqliFindings: Array<{ param: string; path: string; signature: string }> = [];
 
   for (const { path, param } of cases) {
@@ -161,15 +189,20 @@ export async function runInjectionProbes(
 
     // ── Reflected XSS: unique canary wrapped in HTML metacharacters ───────────
     // A random token means an accidental match is astronomically unlikely, and
-    // requiring the literal "<token>" (angle brackets intact) confirms the input
-    // is reflected into the HTML body WITHOUT output encoding.
+    // requiring the literal "<token>" (angle brackets intact) in a context where
+    // the parser creates elements (see confirmXss) confirms an HTML-injection sink.
     const token = "sq" + randomBytes(5).toString("hex");
     const xssPayload = `"'><${token}>`;
     const xssUrl = new URL(`${origin}${path}`);
     xssUrl.searchParams.set(param, xssPayload);
     const xssRes = await safeGet(xssUrl.toString());
-    if (xssRes && xssRes.body.includes(`<${token}>`)) {
-      if (!xssParams.includes(param)) xssParams.push(param);
+    if (xssRes && xssRes.body.includes(`<${token}>`) && rendersAsHtml(xssRes.contentType)) {
+      const how = await confirmXss(new URL(`${origin}${path}`), param, xssRes.body, token);
+      if (how && !xssParams.includes(param)) {
+        xssParams.push(param);
+        xssHow.push(how);
+        xssPaths.push(path);
+      }
     }
 
     // ── Error-based SQLi: baseline vs. quote-injected, signature diff ─────────
@@ -193,7 +226,7 @@ export async function runInjectionProbes(
     }
   }
 
-  const findings: ScanVulnerability[] = [];
+  const findings: ScanVulnerability[] = await runExtraInjectionProbes(origin, cases);
 
   if (xssParams.length > 0) {
     const list = xssParams.join(", ");
@@ -203,7 +236,7 @@ export async function runInjectionProbes(
       severity: "high",
       category: "Injection",
       description: `${xssParams.length} parameter${plural ? "s" : ""} (${list}) reflect${plural ? "" : "s"} input into the HTML response without output encoding — the injected '<...>' markers came back with their angle brackets intact. An attacker can craft a link that runs arbitrary JavaScript in a victim's browser, stealing session tokens or performing actions as the victim.`,
-      evidence: `Endpoint: ${targetPath}?${xssParams[0]}=<payload>\nInjected: "'><random-token>\nResponse reflected the token unencoded (angle brackets preserved), confirming an HTML-injection sink.`,
+      evidence: `Endpoint: ${xssPaths[0]}?${xssParams[0]}=<payload>\nInjected: "'><random-token>\nResponse ${xssHow[0]}.`,
       solution:
         "Context-aware output encoding is the fix: HTML-encode user input before rendering it into the page (<, >, \", ', & → entities). Use your framework's auto-escaping (React/Vue/Angular escape by default — avoid dangerouslySetInnerHTML / v-html / bypassSecurityTrust). Add a strict Content-Security-Policy (script-src 'self') as defence in depth.",
       cweId: "CWE-79",

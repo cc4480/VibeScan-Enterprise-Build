@@ -12,11 +12,54 @@ export interface MonitorSubscription {
   lastReportId: string | null;
   nextScanAt: string | null;
   webhookUrl: string | null;
+  /** When the owner paused this monitor; null while it is running. */
+  pausedAt: string | null;
   createdAt: string;
   lastReport: { id: string; grade: string | null; riskScore: number | null } | null;
   alertCount: number;
   regressionCount: number;
   certExpiryDays: number | null;
+  /** False once monitoring runs on a paid plan: then the plan ends it, not expiresAt. */
+  expiryApplies?: boolean;
+  /** A scan for this target is queued or running right now. */
+  scanInProgress: boolean;
+  /** Which stage it is at, when one is running: queued | scanning | analyzing. */
+  scanStatus: string | null;
+
+  // ── The hourly pulse check ──
+  // A full rescan happens every 3–14 days depending on grade, so everything
+  // above can legitimately be a fortnight old. These are never more than an
+  // hour old, and they are what tells a user the product is still watching.
+  /** When the site was last checked. Null until the first hourly pulse runs. */
+  lastPulseAt: string | null;
+  /** Whether it answered. Null if no pulse has run yet. */
+  pulseReachable: boolean | null;
+  pulseStatus: number | null;
+  pulseFailureReason: string | null;
+  responseTimeMs: number | null;
+  /** Percentage of the last 24 hours' checks that reached the site. */
+  uptime24h: number | null;
+  medianResponseMs: number | null;
+  pulseChecks24h: number;
+  /** The last 24 hours of checks, oldest first, for the uptime strip. */
+  pulseTimeline: Array<{ checkedAt: string; reachable: boolean; responseTimeMs: number | null }>;
+}
+
+export interface PulseCheck {
+  id: string;
+  checkedAt: string;
+  reachable: boolean;
+  httpStatus: number | null;
+  responseTimeMs: number | null;
+  certDaysRemaining: number | null;
+  failureReason: string | null;
+  presentHeaders: string[] | null;
+}
+
+export interface PulseWindow {
+  pulses: PulseCheck[];
+  summary: { uptimePct: number | null; medianResponseMs: number | null; checks: number };
+  windowHours: number;
 }
 
 export interface CveAlert {
@@ -61,7 +104,12 @@ export async function listMonitorSubscriptions(): Promise<MonitorSubscription[]>
 export async function createMonitorSubscription(
   targetUrl: string,
   webhookUrl?: string,
-): Promise<{ subscription: MonitorSubscription; initialScanId: string | null }> {
+): Promise<{
+  subscription: MonitorSubscription;
+  initialScanId: string | null;
+  /** An earlier scan of this site that was found and is shown on the card while the baseline scan runs. */
+  seededFrom?: { reportId: string; scannedAt: string; grade: string | null } | null;
+}> {
   return customFetch("/api/monitor/subscriptions", {
     method: "POST",
     body: JSON.stringify({ targetUrl, webhookUrl: webhookUrl || undefined }),
@@ -71,6 +119,14 @@ export async function createMonitorSubscription(
 
 export async function cancelMonitorSubscription(id: string): Promise<void> {
   await customFetch(`/api/monitor/subscriptions/${id}`, { method: "DELETE" });
+}
+
+export async function setMonitorPaused(id: string, paused: boolean): Promise<void> {
+  await customFetch(`/api/monitor/subscriptions/${id}/pause`, {
+    method: "PATCH",
+    body: JSON.stringify({ paused }),
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 export async function listCveAlerts(subscriptionId: string): Promise<CveAlert[]> {
@@ -97,6 +153,12 @@ export async function getScoreHistory(subscriptionId: string): Promise<ScoreHist
 
 export async function getRecentRegressions(subscriptionId: string): Promise<MonitorRegression[]> {
   return customFetch<MonitorRegression[]>(`/api/monitor/subscriptions/${subscriptionId}/regressions`);
+}
+
+export async function getPulseHistory(subscriptionId: string, hours = 48): Promise<PulseWindow> {
+  return customFetch<PulseWindow>(
+    `/api/monitor/subscriptions/${subscriptionId}/pulses?hours=${hours}`,
+  );
 }
 
 export async function triggerManualScan(subscriptionId: string): Promise<{ scanId: string }> {

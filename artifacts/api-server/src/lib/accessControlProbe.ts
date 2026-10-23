@@ -26,184 +26,44 @@
  *
  * The anonymous leg is what keeps public pages out of the report. A product
  * page returns the same bytes to everyone, and without checking ∅ that is
- * indistinguishable from a leak.
+ * indistinguishable from a leak. Two more things keep layouts and public
+ * content out: an identifier nothing can exist at is requested too, and a page
+ * that answers it as it answers the record is a shell or a catch-all rather
+ * than a record; and a public collection (/products/12, /blog/...) is never
+ * reported as a private record readable without signing in.
+ *
+ * Layout. This file is the orchestration: it picks the candidate URLs, makes
+ * the three requests and applies the comparison. The parts with no network in
+ * them live beside it and are re-exported from here, so every import of this
+ * module keeps working:
+ *
+ *   accessControlIdentifiers.ts  which URLs name a record; the neighbours to try; a made-up id
+ *   accessControlCompare.ts      content similarity and the denial test
+ *   accessControlFindings.ts     the three findings and their wording
  */
 
-import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 import { scanFetch, type ScanCredentials } from "./http";
 import { isDestructiveUrl } from "./destructive";
+import { namesARecord, mutateIdentifiers, nonexistentVariant, mayBePrivateRecord } from "./accessControlIdentifiers";
+import {
+  contentSimilarity,
+  isDenied,
+  normalise,
+  looksLikeShell,
+  sameIdentity,
+  SAME_CONTENT_THRESHOLD,
+  DIFFERENT_CONTENT_THRESHOLD,
+} from "./accessControlCompare";
+import { buildAccessControlFindings } from "./accessControlFindings";
+
+export { namesARecord, mutateIdentifiers, contentSimilarity, isDenied };
 
 // Each candidate costs three requests, so the budget is deliberately small.
 const MAX_CANDIDATES = 12;
 // Mutation is budgeted separately so it cannot crowd out the direct checks.
 const MAX_MUTATIONS = 10;
 const TIMEOUT_MS = 8_000;
-
-// Two responses count as "the same content" above this token overlap. Not exact
-// equality: real pages carry CSRF tokens, timestamps and nonces that differ on
-// every render, and demanding byte equality would miss every genuine finding.
-const SAME_CONTENT_THRESHOLD = 0.9;
-
-// Below this, two responses are different enough that B plainly saw something
-// else — their own record, or a refusal.
-const DIFFERENT_CONTENT_THRESHOLD = 0.6;
-
-function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
-  return { id: randomUUID(), ...partial };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Identifier detection
-// ─────────────────────────────────────────────────────────────────────────────
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const NUMERIC_ID_RE = /^\d{1,19}$/;
-// Long opaque strings — Stripe-style ids, nanoids, Mongo ObjectIds.
-const OPAQUE_ID_RE = /^[A-Za-z0-9_-]{8,}$/;
-const ID_PARAM_RE = /(^|_)(id|uid|user|account|order|invoice|doc|record|item|ref)(_|$)/i;
-
-/**
- * Does this URL name a particular record?
- *
- * Access control only means something for a specific object. /settings is a
- * page; /orders/1042 is someone's order, and asking for it as another user is
- * a question with a meaningful answer.
- */
-export function namesARecord(url: string): boolean {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return false;
-  }
-
-  const segments = parsed.pathname.split("/").filter(Boolean);
-  for (const segment of segments) {
-    if (NUMERIC_ID_RE.test(segment)) return true;
-    if (UUID_RE.test(segment)) return true;
-    // An opaque segment only counts when it sits under a plural collection —
-    // /orders/ab12cd34 reads as a record, /about/team-page does not.
-    if (OPAQUE_ID_RE.test(segment) && /\d/.test(segment) && segments.length >= 2) return true;
-  }
-
-  for (const [key, value] of parsed.searchParams) {
-    if (!ID_PARAM_RE.test(key)) continue;
-    if (NUMERIC_ID_RE.test(value) || UUID_RE.test(value) || OPAQUE_ID_RE.test(value)) return true;
-  }
-
-  return false;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Identifier mutation
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Neighbours tried for a numeric id. Small, and deliberately not a sweep. */
-const NUMERIC_OFFSETS = [1, -1, 2];
-
-/**
- * Records an attacker would find by editing the address bar.
- *
- * Testing only the URLs the crawl reached answers "can another user read what
- * this user was shown". It misses the other half, which is where real breaches
- * come from: records nobody linked to, found by changing 1042 to 1043.
- *
- * UUIDs are deliberately not mutated. Guessing one is infeasible, and that is
- * precisely why they are the recommended fix — enumerating them would burn the
- * request budget to prove nothing.
- */
-export function mutateIdentifiers(url: string): string[] {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return [];
-  }
-
-  const out = new Set<string>();
-
-  const segments = parsed.pathname.split("/");
-  segments.forEach((segment, index) => {
-    if (!NUMERIC_ID_RE.test(segment)) return;
-    const value = Number(segment);
-    // Below 1 stops being an id and starts being a different route.
-    for (const offset of NUMERIC_OFFSETS) {
-      const next = value + offset;
-      if (next < 1 || next === value) continue;
-      const copy = [...segments];
-      copy[index] = String(next);
-      const mutated = new URL(parsed.toString());
-      mutated.pathname = copy.join("/");
-      out.add(mutated.toString());
-    }
-  });
-
-  for (const [key, value] of parsed.searchParams) {
-    if (!ID_PARAM_RE.test(key) || !NUMERIC_ID_RE.test(value)) continue;
-    for (const offset of NUMERIC_OFFSETS) {
-      const next = Number(value) + offset;
-      if (next < 1) continue;
-      const mutated = new URL(parsed.toString());
-      mutated.searchParams.set(key, String(next));
-      out.add(mutated.toString());
-    }
-  }
-
-  out.delete(url);
-  return [...out];
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Content comparison
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Strip the parts of a page that legitimately change between two renders, so
- * a CSRF token or a rendered timestamp cannot masquerade as "different data".
- */
-function normalise(body: string): string {
-  return body
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/\b[0-9a-f]{16,}\b/gi, " ")           // tokens, nonces, hashes
-    .replace(/\b\d{4}-\d{2}-\d{2}[T ][\d:.]+/g, " ") // timestamps
-    .replace(/<[^>]+>/g, " ")                       // tags
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-}
-
-/**
- * Token-overlap similarity, 0 to 1.
- *
- * Jaccard over the word set: robust to reordering and to small dynamic
- * fragments, and cheap enough to run on every comparison.
- */
-export function contentSimilarity(a: string, b: string): number {
-  const setA = new Set(normalise(a).split(" ").filter(Boolean));
-  const setB = new Set(normalise(b).split(" ").filter(Boolean));
-  if (setA.size === 0 && setB.size === 0) return 1;
-  if (setA.size === 0 || setB.size === 0) return 0;
-
-  let shared = 0;
-  for (const token of setA) if (setB.has(token)) shared++;
-  return shared / (setA.size + setB.size - shared);
-}
-
-/** A response that plainly denies access, whatever its status code. */
-function isDenied(status: number, body: string): boolean {
-  if (status === 401 || status === 403 || status === 404) return true;
-  if (status >= 500) return true;
-  // Some apps answer 200 with a sign-in page rather than a proper status.
-  return (
-    /<input[^>]+type=["']password["']/i.test(body.slice(0, 4_000)) ||
-    /\b(sign in|log in|login required|unauthorized|access denied|permission denied)\b/i.test(
-      body.slice(0, 2_000),
-    )
-  );
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Probe
@@ -214,19 +74,63 @@ export interface AccessControlInput {
   urls: string[];
   primary: ScanCredentials;
   secondary: ScanCredentials;
+  /**
+   * True when the scan made the second account itself (autoSecondAccount.ts) rather than being
+   * handed one. A signup that drops every new user into one shared workspace makes identical
+   * content expected, and an account the user chose as "owns different data" is a statement of
+   * fact where an auto-created one is not: the finding says so and is a shade less certain.
+   */
+  secondaryAutoCreated?: boolean;
 }
 
-export async function runAccessControlProbes(
-  input: AccessControlInput,
-): Promise<ScanVulnerability[]> {
-  const candidates = [...new Set(input.urls)]
+/**
+ * The URLs worth asking two accounts for: the ones that name a record, minus any that would act
+ * rather than show. Exported so the scanner can decide, BEFORE creating an account on the
+ * customer's system, whether this probe would have anything to use it on.
+ */
+export function accessControlCandidates(urls: string[]): string[] {
+  return [...new Set(urls)]
     .filter((u) => namesARecord(u))
     // Requesting a record as two users is safe; requesting /orders/5/delete as
     // two users deletes it twice.
     .filter((u) => !isDestructiveUrl(u))
     .slice(0, MAX_CANDIDATES);
+}
 
-  if (candidates.length === 0) return [];
+export interface AccessControlOutcome {
+  findings: ScanVulnerability[];
+  /**
+   * How many URLs were actually compared: the first account read real content AND the second
+   * account and the anonymous request both got an answer. Zero means the test never compared
+   * anything, which is not the same as comparing and finding nothing.
+   */
+  compared: number;
+  /** Why nothing could be tested at all, when that is a fact about the input rather than the target. */
+  notTested?: string;
+}
+
+export async function runAccessControlProbes(
+  input: AccessControlInput,
+): Promise<ScanVulnerability[]> {
+  return (await runAccessControlProbesDetailed(input)).findings;
+}
+
+export async function runAccessControlProbesDetailed(
+  input: AccessControlInput,
+): Promise<AccessControlOutcome> {
+  // One account given twice: both "users" see the same records because they are the same user.
+  if (sameIdentity(input.primary, input.secondary)) {
+    return {
+      findings: [],
+      compared: 0,
+      notTested: "both logins are the same account, so there is no second user to compare with the first",
+    };
+  }
+
+  const candidates = accessControlCandidates(input.urls);
+
+  if (candidates.length === 0) return { findings: [], compared: 0 };
+  let compared = 0;
 
   const idorHits: string[] = [];
   const anonHits: string[] = [];
@@ -238,6 +142,14 @@ export async function runAccessControlProbes(
     .filter((u) => !candidates.includes(u))
     .filter((u) => !isDestructiveUrl(u))
     .slice(0, MAX_MUTATIONS);
+
+  /** Does an identifier nothing can exist at get (nearly) the same page as `body`, as this caller? */
+  async function answersLikeIt(url: string, body: string, as: ScanCredentials | null): Promise<boolean> {
+    const variant = nonexistentVariant(url);
+    if (!variant) return false;
+    const res = await scanFetch(variant, { as, timeoutMs: TIMEOUT_MS });
+    return !!res && !isDenied(res.status, res.body) && contentSimilarity(body, res.body) >= SAME_CONTENT_THRESHOLD;
+  }
 
   for (const url of [...candidates, ...mutated]) {
     const isMutation = mutated.includes(url);
@@ -252,6 +164,7 @@ export async function runAccessControlProbes(
       scanFetch(url, { as: null, timeoutMs: TIMEOUT_MS }),
     ]);
     if (!asOther || !asNobody) continue;
+    compared++;
 
     const anonSame =
       !isDenied(asNobody.status, asNobody.body) &&
@@ -261,7 +174,10 @@ export async function runAccessControlProbes(
       // Readable without any session at all. Also means the IDOR comparison
       // below would be meaningless — everyone can read it, so "B can read it"
       // says nothing about authorisation between users.
-      anonHits.push(url);
+      // Only a record that could be private is worth reporting, and only when the app tells this
+      // record from one that does not exist: a page that answers a made-up id the same way is a
+      // public page or a catch-all, not a record.
+      if (mayBePrivateRecord(url) && !(await answersLikeIt(url, asNobody.body, null))) anonHits.push(url);
       continue;
     }
 
@@ -275,7 +191,14 @@ export async function runAccessControlProbes(
     const otherDiffersFromAnon =
       contentSimilarity(asOther.body, asNobody.body) < DIFFERENT_CONTENT_THRESHOLD;
 
-    if (otherSame && otherDiffersFromAnon) {
+    // The same page for a record and for an id that cannot exist is the app's layout, not the
+    // record; an app shell that loads its data by script says so in its own words.
+    if (
+      otherSame &&
+      otherDiffersFromAnon &&
+      !looksLikeShell(asOther.body) &&
+      !(await answersLikeIt(url, asOther.body, input.secondary))
+    ) {
       // Two separate accounts cannot both own one record, so identical content
       // for both means at least one of them is reading data that is not theirs.
       // For a mutated identifier it also proves the records are enumerable —
@@ -284,93 +207,10 @@ export async function runAccessControlProbes(
     }
   }
 
-  const findings: ScanVulnerability[] = [];
+  const findings = buildAccessControlFindings(
+    { idorHits, anonHits, enumeratedHits },
+    input.secondaryAutoCreated,
+  );
 
-  if (idorHits.length > 0) {
-    findings.push(
-      vuln({
-        name: "Broken Object-Level Authorisation (IDOR)",
-        severity: "critical",
-        category: "Broken Access Control",
-        description:
-          `A second, unrelated account was served the same records as the first at ${idorHits.length} ` +
-          `URL${idorHits.length > 1 ? "s" : ""}. The application checks that someone is signed in, but not ` +
-          `that they own the record they asked for — so any user can read another user's data by changing ` +
-          `the identifier in the URL. This is the most commonly exploited web vulnerability class, and it ` +
-          `requires no tooling: a customer can trip over it by editing their address bar.`,
-        evidence:
-          `Requested as two separate accounts and as an anonymous visitor.\n` +
-          `Both accounts received matching content; the anonymous request was refused.\n\n` +
-          idorHits.map((u) => `  ${u}`).join("\n"),
-        solution:
-          "Authorise the object, not just the session. On every request that loads a record by id, confirm " +
-          "the record belongs to the caller — a WHERE clause scoped to the current user id, or an explicit " +
-          "ownership check before returning it. Do not rely on identifiers being hard to guess; sequential " +
-          "ids simply make it faster. Apply the same check to every verb, including update and delete.",
-        cweId: "CWE-639",
-        cvssScore: 8.1,
-        wstgId: "WSTG-ATHZ-04",
-        confidence: 90,
-      }),
-    );
-  }
-
-  if (enumeratedHits.length > 0) {
-    findings.push(
-      vuln({
-        name: "Records Enumerable by Editing the Identifier",
-        severity: "critical",
-        category: "Broken Access Control",
-        description:
-          `Changing the identifier in the URL reached ${enumeratedHits.length} record` +
-          `${enumeratedHits.length > 1 ? "s" : ""} that neither account was ever linked to, and both ` +
-          `accounts were served the same content. Two separate accounts cannot both own one record, so ` +
-          `at least one of them is reading data that is not theirs — and because the identifiers are ` +
-          `sequential, an attacker does not need to guess: they can walk the whole table by counting. ` +
-          `This is how bulk data breaches usually happen, rather than through any single clever exploit.`,
-        evidence:
-          `Reached by altering the identifier of a record the scan was legitimately shown.\n` +
-          `Both accounts received matching content; the anonymous request was refused.\n\n` +
-          enumeratedHits.map((u) => `  ${u}`).join("\n"),
-        solution:
-          "Two fixes, and you want both. First, authorise the object: confirm the record belongs to the " +
-          "caller before returning it — a WHERE clause scoped to the current user id. Second, stop using " +
-          "sequential integers as public identifiers; a UUID does not prevent an authorisation bug but it " +
-          "does stop an attacker enumerating every record once they find one.",
-        cweId: "CWE-639",
-        cvssScore: 8.6,
-        wstgId: "WSTG-ATHZ-04",
-        // A shade below the direct case: two accounts in one organisation may
-        // legitimately share a record, which looks identical from outside.
-        confidence: 80,
-      }),
-    );
-  }
-
-  if (anonHits.length > 0) {
-    findings.push(
-      vuln({
-        name: "Records Readable Without Signing In",
-        severity: "high",
-        category: "Broken Access Control",
-        description:
-          `${anonHits.length} URL${anonHits.length > 1 ? "s that name specific records were" : " that names a specific record was"} ` +
-          `served in full to a request carrying no session at all, matching what the signed-in account saw. ` +
-          `If these records are meant to be private, they are currently public to anyone who knows or guesses the address.`,
-        evidence:
-          `Identical content returned with and without a session:\n\n` +
-          anonHits.map((u) => `  ${u}`).join("\n"),
-        solution:
-          "Require an authenticated session on any route that returns a specific record, and authorise the " +
-          "record against that session. If these particular pages are meant to be public, no change is needed — " +
-          "but confirm that deliberately rather than by default.",
-        cweId: "CWE-306",
-        cvssScore: 7.5,
-        wstgId: "WSTG-ATHZ-02",
-        confidence: 75,
-      }),
-    );
-  }
-
-  return findings;
+  return { findings, compared };
 }

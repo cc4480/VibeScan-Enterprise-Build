@@ -2,11 +2,10 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
-import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
-import type { Plugin } from "vite";
+import { createServer, type Plugin } from "vite";
 
 // index.html carries an inline <script> that repairs a half-initialised React
-// DevTools hook (added in 71fca36 — without it the Replit dev environment fails
+// DevTools hook (added in 71fca36 — without it the dev environment fails
 // to render at all). Production CSP is `script-src 'self'` with no nonce, so the
 // browser blocks it and logs a violation on every page load; the shim is a dev
 // concern and does nothing in production anyway. Strip it from the build rather
@@ -73,6 +72,55 @@ function applyOriginToPublicFiles(): Plugin {
   };
 }
 
+/**
+ * Writes the /learn documentation as plain HTML (and as /llms-full.txt) next to the bundle, for the API
+ * server to add to that page's <noscript> block (lib/pageMeta.ts). Crawlers that
+ * do not run JavaScript otherwise get one line of a page that is mostly content.
+ * The text comes from the same check data the page renders (src/pages/learn-static.ts).
+ * A failure here must not fail the build: the page then just serves as before.
+ */
+function prerenderStaticContent(): Plugin {
+  return {
+    name: "prerender-static-content",
+    apply: "build",
+    async closeBundle() {
+      const { mkdir, writeFile, readFile } = await import("node:fs/promises");
+      const server = await createServer({
+        configFile: false,
+        root: import.meta.dirname,
+        logLevel: "silent",
+        appType: "custom",
+        server: { middlewareMode: true, hmr: false, ws: false },
+        resolve: { alias: { "@": path.resolve(import.meta.dirname, "src") } },
+      });
+      try {
+        const mod = await server.ssrLoadModule("/src/pages/learn-static-entry.ts");
+        const dir = path.resolve(import.meta.dirname, "dist/public/prerender");
+        await mkdir(dir, { recursive: true });
+        await writeFile(path.join(dir, "learn.html"), applyOrigin(String(mod.learnStaticHtml)));
+        await writeFile(
+          path.resolve(import.meta.dirname, "dist/public/llms-full.txt"),
+          applyOrigin(String(mod.learnStaticMarkdown)),
+        );
+        // The server's list of /learn/<id> pages (it answers 404 for any other id) and their metadata.
+        await writeFile(path.join(dir, "checks.json"), JSON.stringify(mod.learnCheckManifest));
+        // Each check page in the sitemap, with the date the documentation was last reviewed.
+        const sitemapFile = path.resolve(import.meta.dirname, "dist/public/sitemap.xml");
+        const sitemap = await readFile(sitemapFile, "utf8");
+        const lastmod = new Date(`${mod.LEARN_LAST_REVIEWED} 00:00:00 UTC`).toISOString().slice(0, 10);
+        const urls = (mod.learnCheckManifest as { id: string }[])
+          .map((c) => `  <url>\n    <loc>${APP_ORIGIN}/learn/${c.id}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.6</priority>\n  </url>\n`)
+          .join("");
+        if (!sitemap.includes("/learn/")) await writeFile(sitemapFile, sitemap.replace("</urlset>", urls + "</urlset>"));
+      } catch (err) {
+        console.warn("prerender-static-content: skipped —", err instanceof Error ? err.message : err);
+      } finally {
+        await server.close();
+      }
+    },
+  };
+}
+
 function stripDevtoolsShim(): Plugin {
   return {
     name: "strip-devtools-hook-shim",
@@ -134,22 +182,9 @@ export default defineConfig({
     stripDevtoolsShim(),
     applyOriginToHtml(),
     applyOriginToPublicFiles(),
+    prerenderStaticContent(),
     react(),
     tailwindcss(),
-    runtimeErrorOverlay(),
-    ...(process.env.NODE_ENV !== "production" &&
-    process.env.REPL_ID !== undefined
-      ? [
-          await import("@replit/vite-plugin-cartographer").then((m) =>
-            m.cartographer({
-              root: path.resolve(import.meta.dirname, ".."),
-            }),
-          ),
-          await import("@replit/vite-plugin-dev-banner").then((m) =>
-            m.devBanner(),
-          ),
-        ]
-      : []),
   ],
   resolve: {
     alias: {

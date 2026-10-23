@@ -40,17 +40,20 @@ afterEach(() => {
 });
 
 describe("google sign-in when not configured", () => {
-  it("reports unavailable rather than 404 on the start route", async () => {
-    // A 404 would look like the feature does not exist; 503 says it exists and
-    // is not switched on, which is the difference between "wrong build" and
-    // "missing environment variable" when someone is debugging a deploy.
+  // Every one of these is reached by a top-level browser navigation, so the
+  // answer has to be a page the person can act on. Returning a bare status and
+  // a sentence leaves them on an unstyled dead end; the redirect carries a code
+  // the sign-in page turns into an explanation, with the form right there.
+  it("sends the visitor back to sign-in rather than a bare page", async () => {
     const res = await request(makeApp()).get("/api/auth/google");
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(302);
+    expect(res.headers["location"]).toBe("/sign-in?error=not_configured");
   });
 
-  it("reports unavailable on the callback too", async () => {
+  it("does the same on the callback", async () => {
     const res = await request(makeApp()).get("/api/auth/google/callback?code=x");
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(302);
+    expect(res.headers["location"]).toBe("/sign-in?error=not_configured");
   });
 });
 
@@ -64,16 +67,16 @@ describe("google sign-in callback guards", () => {
     // Without the cookie there is no code verifier and no expected state, so
     // there is nothing to validate the response against.
     const res = await request(makeApp()).get("/api/auth/google/callback?code=x&state=y");
-    expect(res.status).toBe(400);
-    expect(res.text).toMatch(/expired/i);
+    expect(res.status).toBe(302);
+    expect(res.headers["location"]).toBe("/sign-in?error=session_expired");
   });
 
   it("refuses a malformed PKCE cookie rather than throwing", async () => {
     const res = await request(makeApp())
       .get("/api/auth/google/callback?code=x&state=y")
       .set("Cookie", "g_pkce=not-base64-json");
-    expect(res.status).toBe(400);
-    expect(res.text).toMatch(/malformed/i);
+    expect(res.status).toBe(302);
+    expect(res.headers["location"]).toBe("/sign-in?error=session_malformed");
   });
 });
 

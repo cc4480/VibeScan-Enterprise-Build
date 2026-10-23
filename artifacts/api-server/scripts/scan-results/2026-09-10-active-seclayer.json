@@ -1,0 +1,41 @@
+{
+ "scannedAt": "2026-09-10T11:53:33.920Z",
+ "results": [
+  {
+   "url": "https://seclayer.app",
+   "finalUrl": "https://seclayer.app/",
+   "statusCode": 200,
+   "server": "cloudflare",
+   "tlsGrade": "A",
+   "technologies": [
+    "Cloudflare",
+    "Railway"
+   ],
+   "pagesScanned": 3,
+   "renderedWithBrowser": false,
+   "elapsedMs": 97968,
+   "findings": [
+    {
+     "name": "Missing Cross-Origin-Embedder-Policy (COEP)",
+     "severity": "info",
+     "category": "Browser Feature Control",
+     "cweId": "CWE-346",
+     "cvssScore": null,
+     "wstgId": "WSTG-CONF-07",
+     "confidence": 77,
+     "evidence": "GET https://seclayer.app/\nCross-Origin-Embedder-Policy: (header absent from response)"
+    },
+    {
+     "name": "DMARC Policy Set to None (Monitoring Only — No Enforcement)",
+     "severity": "medium",
+     "category": "Email Security",
+     "cweId": "CWE-290",
+     "cvssScore": 5.3,
+     "wstgId": null,
+     "confidence": 83,
+     "evidence": "TXT record: v=DMARC1; p=none; rua=mailto:c.c4480131515@gmail.com"
+    }
+   ]
+  }
+ ]
+}

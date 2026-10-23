@@ -1,0 +1,268 @@
+# Runs the checks that were previously only ever run by hand.
+#
+# Node 24 matches the Dockerfile base, so a
+# version difference cannot be the reason CI and production disagree.
+#
+# pnpm is not pinned in package.json, so the version lives here and in the
+# Dockerfile. If they drift, the lockfile check below is what will notice.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# A new push to the same branch makes the previous run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  REGISTRY: ghcr.io
+
+jobs:
+  verify:
+    name: Typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Read-only: nothing in this job writes to the repository or to packages.
+    permissions:
+      contents: read
+
+    # The tests that need a real database (billing, signup, OAuth, health, the GitHub wiring)
+    # skipped on every CI run because nothing provided one. Each suite migrates and truncates its
+    # own database, so they get throwaway databases on this one service.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # No version pin here on purpose: action-setup reads packageManager
+      # from package.json. Pinning it separately is what broke this workflow
+      # -- it said 11 while the repo declares pnpm@10.33.0, and action-setup
+      # errors out when the two disagree, so CI failed on its first step.
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+          # Restores the pnpm store between runs. Without it every run
+          # re-downloads 593 packages, which is most of the wall time.
+          cache: pnpm
+
+      # The Dockerfile installs Playwright's Chromium with a version written into it, outside the
+      # lockfile. If that version drifts from the one pnpm-lock.yaml resolves, the image's browser
+      # no longer matches the library the scanner drives, so fail here instead.
+      - name: Check Dockerfile Playwright version matches the lockfile
+        run: |
+          df_version="$(sed -nE 's/.*npm install --no-save --omit=dev playwright@([0-9][0-9.]*).*/\1/p' Dockerfile)"
+          lock_version="$(sed -nE 's/^  playwright@([0-9][0-9.]*):$/\1/p' pnpm-lock.yaml)"
+          echo "Dockerfile: ${df_version:-<none>}  pnpm-lock.yaml: ${lock_version:-<none>}"
+          if [ -z "$df_version" ] || [ "$df_version" != "$lock_version" ]; then
+            echo "Playwright version in Dockerfile does not match pnpm-lock.yaml" >&2
+            exit 1
+          fi
+
+      # --frozen-lockfile fails rather than silently updating the lockfile, so a
+      # dependency added without committing pnpm-lock.yaml is caught here rather
+      # than by a Docker build weeks later.
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Builds the lib packages first, then typechecks the apps. Running the
+      # app typecheck alone reports hundreds of phantom errors because the
+      # workspace type output does not exist yet — see the note in DOCKER.md.
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      # browserGuard.test.ts drives a real Chromium; the runner image does not
+      # have the Playwright build this repo pins, so install it.
+      - name: Install Playwright Chromium
+        run: pnpm --filter @workspace/api-server exec playwright install --with-deps chromium
+
+      # -r so a package that gains a test script is picked up automatically
+      # rather than needing this file edited to notice.
+      - name: Test
+        run: pnpm -r --if-present run test
+
+      # One file at a time: the billing suites share a database, and run side by side they
+      # reset each other's rows mid-test.
+      - name: Test against real Postgres
+        env:
+          PGPASSWORD: test
+          BILLING_TEST_DATABASE_URL: postgresql://postgres:test@127.0.0.1:5432/billing
+          GHWIRE_TEST_DATABASE_URL: postgresql://postgres:test@127.0.0.1:5432/ghwire
+          HEALTH_TEST_DATABASE_URL: postgresql://postgres:test@127.0.0.1:5432/health
+          SIGNUP_TEST_DATABASE_URL: postgresql://postgres:test@127.0.0.1:5432/signup
+        run: |
+          for db in billing ghwire health signup; do
+            psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE $db"
+          done
+          pnpm --filter @workspace/api-server exec vitest run --no-file-parallelism integration billing
+
+      # SCAN_CHECKS.md is generated from the finding literals, and the whole
+      # point of generating it is that it cannot quietly fall behind the code.
+      # It went stale by hand in four days; this fails the build instead.
+      - name: Check the check index is current
+        run: node artifacts/api-server/scripts/check-index.mjs --check
+
+      # The real scanner, active tests and two accounts included, against artifacts/vuln-fixture, whose
+      # planted faults are known exactly. Exits non-zero when a planted finding is missed, so a change
+      # that quietly stops a check firing fails here instead of in a customer's report. The fixture is
+      # test infrastructure and is only ever served on this runner's loopback address.
+      - name: Fixture gate (scanner against the vulnerable fixture)
+        env:
+          DATABASE_URL: postgres://localhost/verify-vuln-fixture
+        run: |
+          pnpm --filter @workspace/vuln-fixture run start > fixture.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:4100/ > /dev/null && break; sleep 1; done
+          artifacts/vuln-fixture/node_modules/.bin/tsx artifacts/api-server/scripts/verify-vuln-fixture.ts
+
+      # The frontend build is the step most likely to break on a change that
+      # typechecks: bundling resolves imports the compiler is happy to leave
+      # unresolved.
+      - name: Build
+        run: pnpm -r --if-present run build
+
+      # Railway deploys from this same push independently of this workflow, so
+      # this doesn't wait on it — IndexNow's own crawl isn't instant either.
+      # Never fails the build: a missed ping just falls back to organic crawl.
+      - name: Ping IndexNow
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        continue-on-error: true
+        run: node artifacts/api-server/scripts/indexnow-ping.mjs https://secscan.us artifacts/vibescan/public/sitemap.xml
+
+  # Runs in parallel with verify and is not a dependency of docker: an advisory is not a reason to
+  # withhold a build that passed its tests.
+  dependency-audit:
+    name: Dependency audit (production, high+)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    # Blocking: a new high or critical advisory in a production dependency fails the build.
+    # It used to be advisory-only because of GHSA-vfj7-8cjw-p6xm (braces <=3.0.3, no patched
+    # release), reached through http-proxy-middleware. That package is only mounted by the dev
+    # server (artifacts/api-server/src/app.ts), so it now lives in devDependencies and `--prod`
+    # no longer sees it.
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # Same version handling as verify: action-setup reads packageManager from package.json.
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+
+      # No install: pnpm audit reads pnpm-lock.yaml, so there is nothing to restore or build, and no
+      # package install scripts run in a job that exists to look at the dependency tree.
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level=high
+
+  # A tripwire for credentials committed by mistake, using only grep and a checked-in script (no
+  # third-party action, no secrets, no network). Also runs in parallel with verify.
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # Proves the scanner still detects a planted key before trusting a clean result from it.
+      - name: Scanner self-test
+        run: bash scripts/scan-secrets.sh --self-test
+
+      - name: Scan for secrets
+        run: bash scripts/scan-secrets.sh
+
+  docker:
+    name: Docker image (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    # Railway deploys every master push by itself, and this job pushes the images, so neither
+    # should happen for a commit whose tests fail. Railway's own "Wait for CI" setting is what
+    # holds back its deploy, and has to be switched on in Railway for both services.
+    # secret-scan gates the push too: an image must not be published from a tree that contains a
+    # credential. dependency-audit is deliberately left out (see its job comment).
+    needs: [verify, secret-scan]
+    timeout-minutes: 30
+
+    # web and secscan deploy as separate images, so both are built here.
+    # They diverge only after the shared runtime-base stage — secscan adds
+    # Chromium — which is exactly the part most likely to break on its own.
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [web, secscan]
+    # Only on the default branch and pull requests into it: building the image
+    # on every push to every branch costs more than it catches.
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master'
+
+    # Pushing to GitHub Container Registry needs this; the default token is
+    # read-only for packages.
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      # Only master publishes. A pull request still builds the image — the point
+      # of that job is to catch a broken Dockerfile before merge — but it has no
+      # business writing to the registry.
+      - name: Log in to the registry
+        if: github.ref == 'refs/heads/master'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tags every image with the commit SHA as well as a moving tag, so a
+      # deployment can name the exact build it is running and roll back to a
+      # specific one rather than to "whatever latest was yesterday".
+      - name: Derive tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.target }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=long
+
+      # Builds the deployment artifact itself. The image build has broken twice
+      # for reasons the test suite could not see — a musl base that cannot
+      # resolve platform binaries, and a Chromium download failing mid-build.
+      - name: Build image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          push: ${{ github.ref == 'refs/heads/master' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Scoped per target so the two builds do not evict each other's cache.
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}

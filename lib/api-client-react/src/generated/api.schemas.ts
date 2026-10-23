@@ -171,6 +171,10 @@ export interface CreateScanRequest {
   credentials?: ScanCredentials;
   /** A second, separate account. Supplying one enables broken access control testing: the scan asks for the same records as both accounts and as an anonymous visitor, and reports when the second account is served the first account's data. Use two ordinary accounts that own different data, not an admin and a user. */
   secondaryCredentials?: ScanCredentials;
+  /** Opt in to letting the scan create a disposable second account through the target's public signup form, so the broken access control test can run with only one login supplied. It submits that form once with a made-up address at example.com, and works only when signup gives a signed-in session immediately (no email confirmation). The report names the account so it can be deleted. Requires `credentials`, and is ignored when `secondaryCredentials` is supplied. */
+  autoSecondAccount?: boolean;
+  /** A public GitHub repository to read for committed secrets, as `https://github.com/owner/repo` (or `owner/repo`). Only public repositories are read, with no token, and only GitHub is contacted for it, never the scan target. Leave it out to skip the source scan. */
+  githubRepoUrl?: string;
 }
 
 export interface CreateScanResponse {
@@ -246,6 +250,17 @@ export const AiAnalysisDetectedAgent = {
   generic: "generic",
 } as const;
 
+/**
+ * ai when the AI writer produced this analysis; template when it was assembled from the findings because the AI writer gave none.
+ */
+export type AiAnalysisSource =
+  (typeof AiAnalysisSource)[keyof typeof AiAnalysisSource];
+
+export const AiAnalysisSource = {
+  ai: "ai",
+  template: "template",
+} as const;
+
 export interface AiAnalysis {
   overallRisk: string;
   topPriorities: string[];
@@ -255,6 +270,8 @@ export interface AiAnalysis {
   agentFixPrompt?: string;
   /** The AI coding tool/platform detected from the scanned app's tech stack, used to format agentFixPrompt. */
   detectedAgent?: AiAnalysisDetectedAgent;
+  /** ai when the AI writer produced this analysis; template when it was assembled from the findings because the AI writer gave none. */
+  source?: AiAnalysisSource;
 }
 
 export type ReconResultSubdomainsItem = {
@@ -359,7 +376,8 @@ export interface SharedReport {
 
 export interface ReportShare {
   id: string;
-  token: string;
+  /** The link's token. Present only in the response that creates the share; the server stores a hash and cannot return it again. */
+  token?: string;
   /** @nullable */
   expiresAt?: string | null;
   createdAt: string;
@@ -382,20 +400,6 @@ export interface CreateShareRequest {
 
 export interface Credits {
   balance: number;
-}
-
-export interface DeepseekKeyStatus {
-  configured: boolean;
-  /**
-   * Last 4 characters of the configured key, for display only. Null if unconfigured.
-   * @nullable
-   */
-  last4: string | null;
-}
-
-export interface SetDeepseekKeyRequest {
-  /** @minLength 10 */
-  apiKey: string;
 }
 
 export type MonitorSubscriptionStatus =

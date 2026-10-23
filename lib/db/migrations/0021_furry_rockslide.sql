@@ -1,0 +1,1 @@
+ALTER TABLE "monitor_subscriptions" ADD COLUMN "paused_at" timestamp with time zone;

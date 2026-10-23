@@ -3,7 +3,7 @@
  *
  * Runs the pg-boss worker and the monitor scheduler, and nothing else. There is
  * no HTTP listener here: the only way work reaches this process is the
- * `scan-job` queue in Postgres, which seclayer (the web tier) writes to.
+ * `scan-job` queue in Postgres, which the web tier writes to.
  *
  * Splitting this out of the web process is what lets the two scale
  * independently — scans are long, CPU-heavy and hold a Chromium instance, while
@@ -12,16 +12,31 @@
  * both of which live on this side of the split.
  */
 
+import { checkProductionConfig } from "./bootChecks";
+import { closeBrowser } from "./lib/browser";
 import { logger } from "./lib/logger";
 import { getBoss } from "./lib/queue";
 import { startHeartbeat, stopHeartbeat } from "./lib/heartbeat";
 import { installCrashHandlers } from "./lib/crashHandlers";
+import { migrateToLatest } from "@workspace/db";
 
 // Stop advertising health before the process goes down, so an orchestrator
 // replaces this worker rather than leaving jobs with a dead one.
 installCrashHandlers("secscan", stopHeartbeat);
 
 async function main(): Promise<void> {
+  // Same as the web tier: bring the schema up to date before doing anything
+  // that touches it. Both processes run this and share one database, which is
+  // why migrateToLatest holds an advisory lock across the apply — drizzle's own
+  // migrate() takes none, so without it the two boots race and the loser dies
+  // on "relation already exists". Whoever waits finds nothing left to apply.
+  //
+  // Before pg-boss, so the queue is not creating its schema at the same time.
+  checkProductionConfig(logger);
+  const databaseUrl = process.env["DATABASE_URL"];
+  if (!databaseUrl) throw new Error("DATABASE_URL environment variable is required but was not provided.");
+  await migrateToLatest(databaseUrl, (msg) => logger.info(msg));
+
   await getBoss();
   logger.info("Job queue ready");
 
@@ -49,8 +64,11 @@ main().catch((err: unknown) => {
 // Drain in-flight scan jobs before exiting. A scan killed mid-run leaves its row
 // stuck in "scanning" forever, so the 90 s grace period matters more here than
 // it does for the web tier.
-process.on("SIGTERM", () => {
-  logger.info("SIGTERM received — draining in-flight scan jobs before exit");
+let draining = false;
+function drainAndExit(signal: string): void {
+  if (draining) return;
+  draining = true;
+  logger.info(`${signal} received — draining in-flight scan jobs before exit`);
   // Stop claiming to be healthy the moment we begin shutting down, so an
   // orchestrator stops routing work here while the drain finishes.
   stopHeartbeat();
@@ -62,7 +80,11 @@ process.on("SIGTERM", () => {
     .catch((err: unknown) => {
       logger.error({ err }, "Error draining pg-boss on shutdown");
     })
-    .finally(() => {
+    .finally(async () => {
+      // Only after the drain: closing the browser first would fail every scan still rendering a page.
+      await closeBrowser().catch(() => undefined);
       process.exit(0);
     });
-});
+}
+process.on("SIGTERM", () => drainAndExit("SIGTERM"));
+process.on("SIGINT", () => drainAndExit("SIGINT"));

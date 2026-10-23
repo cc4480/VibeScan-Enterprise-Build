@@ -29,6 +29,7 @@
  * needs to be its own authenticated step.
  */
 
+import { safeReturnTo } from "../lib/safeRedirect";
 import { Router, type IRouter, type Request, type Response } from "express";
 import * as client from "openid-client";
 import { eq } from "drizzle-orm";
@@ -36,74 +37,20 @@ import { db, usersTable } from "@workspace/db";
 import { createSession, SESSION_COOKIE, SESSION_TTL } from "../lib/auth";
 import { clientIp } from "../lib/clientIp";
 import { addToMarketingAudience, sendWelcomeEmail } from "../lib/mailer";
+import { networkKey, networkMaySignUp } from "../lib/signupNetwork";
+import { PKCE_COOKIE, PKCE_TTL_MS, googleConfigured, callbackUrl, getGoogleConfig, rateLimited, failToSignIn } from "./googleAuthConfig";
 
 const router: IRouter = Router();
-
-const GOOGLE_ISSUER = "https://accounts.google.com";
-const PKCE_COOKIE = "g_pkce";
-const PKCE_TTL_MS = 10 * 60_000;
-
-function googleConfigured(): boolean {
-  return Boolean(
-    process.env["GOOGLE_CLIENT_ID"] && process.env["GOOGLE_CLIENT_SECRET"],
-  );
-}
-
-/**
- * Built from APP_ORIGIN rather than the request. A redirect URI derived from
- * Host or X-Forwarded-Host is attacker-influenceable, and it must in any case
- * match the value registered in Google Cloud Console exactly — so it should
- * come from configuration, not from whoever is calling.
- */
-function callbackUrl(): string {
-  const origin = (process.env["APP_ORIGIN"] ?? "").replace(/\/$/, "");
-  return `${origin}/api/auth/google/callback`;
-}
-
-let cachedConfig: client.Configuration | null = null;
-
-async function getGoogleConfig(): Promise<client.Configuration> {
-  if (!cachedConfig) {
-    cachedConfig = await client.discovery(
-      new URL(GOOGLE_ISSUER),
-      process.env["GOOGLE_CLIENT_ID"]!,
-      process.env["GOOGLE_CLIENT_SECRET"]!,
-    );
-  }
-  return cachedConfig;
-}
-
-// Same shape as the limiter on /login and the account routes: in-memory,
-// per-instance, enough to stop a loop rather than a determined attacker.
-const attempts = new Map<string, number[]>();
-const WINDOW_MS = 15 * 60_000;
-const MAX_ATTEMPTS = 20;
-
-function rateLimited(key: string): boolean {
-  const now = Date.now();
-  const recent = (attempts.get(key) ?? []).filter((t) => now - t < WINDOW_MS);
-  recent.push(now);
-  attempts.set(key, recent);
-  return recent.length > MAX_ATTEMPTS;
-}
-
-/** Only ever redirect within our own site. */
-function safeReturnTo(raw: unknown): string {
-  if (typeof raw !== "string" || !raw.startsWith("/")) return "/";
-  // Reject protocol-relative targets ("//evil.example"), which are same-origin
-  // to a naive startsWith check but leave the site.
-  if (raw.startsWith("//")) return "/";
-  return raw;
-}
 
 // ── GET /api/auth/google ─────────────────────────────────────────────────────
 router.get("/auth/google", async (req: Request, res: Response): Promise<void> => {
   if (!googleConfigured()) {
-    res.status(503).send("Google sign-in is not configured.");
+    req.log.error("Google sign-in attempted but GOOGLE_CLIENT_ID/SECRET are not set");
+    failToSignIn(res, "not_configured");
     return;
   }
   if (rateLimited(`google:${clientIp(req)}`)) {
-    res.status(429).send("Too many sign-in attempts. Please try again shortly.");
+    failToSignIn(res, "rate_limited");
     return;
   }
 
@@ -138,7 +85,7 @@ router.get("/auth/google", async (req: Request, res: Response): Promise<void> =>
     res.redirect(authUrl.href);
   } catch (err) {
     req.log.error({ err }, "Could not start Google sign-in");
-    res.status(500).send("Sign-in unavailable. Please try again.");
+    failToSignIn(res, "unavailable");
   }
 });
 
@@ -147,7 +94,8 @@ router.get(
   "/auth/google/callback",
   async (req: Request, res: Response): Promise<void> => {
     if (!googleConfigured()) {
-      res.status(503).send("Google sign-in is not configured.");
+      req.log.error("Google callback hit but GOOGLE_CLIENT_ID/SECRET are not set");
+      failToSignIn(res, "not_configured");
       return;
     }
 
@@ -155,7 +103,7 @@ router.get(
     res.clearCookie(PKCE_COOKIE, { path: "/api/auth/google" });
 
     if (!raw) {
-      res.status(400).send("Sign-in session expired. Please start again.");
+      failToSignIn(res, "session_expired");
       return;
     }
 
@@ -172,7 +120,7 @@ router.get(
       expectedState = parsed.state;
       returnTo = safeReturnTo(parsed.returnTo);
     } catch {
-      res.status(400).send("Sign-in session was malformed. Please start again.");
+      failToSignIn(res, "session_malformed");
       return;
     }
 
@@ -198,7 +146,7 @@ router.get(
 
       if (typeof sub !== "string" || typeof email !== "string") {
         req.log.warn("Google returned no sub or email");
-        res.status(400).send("Google did not return an email address.");
+        failToSignIn(res, "no_email");
         return;
       }
 
@@ -240,7 +188,7 @@ router.get(
             // Two Google identities claiming one address should not silently
             // swap ownership of the account.
             req.log.warn({ email: normalizedEmail }, "Google sub conflict on existing account");
-            res.status(409).send("This email is already linked to a different Google account.");
+            failToSignIn(res, "account_conflict");
             return;
           }
           [row] = await db
@@ -259,14 +207,23 @@ router.get(
         }
       }
 
-      // 3. Otherwise a new account.
+      // 3. Otherwise a new account — subject to the same per-network cap as
+      // email sign-up (lib/signupNetwork.ts). Signing in to an account that
+      // already exists, above, is never capped.
       if (!row) {
+        const network = networkKey(clientIp(req));
+        if (!(await networkMaySignUp(network))) {
+          req.log.warn("Google sign-up refused: network account limit reached");
+          failToSignIn(res, "network_limit");
+          return;
+        }
         [row] = await db
           .insert(usersTable)
           .values({
             email: normalizedEmail,
             googleSub: sub,
             emailVerifiedAt: new Date(),
+            signupNetwork: network,
             firstName,
             lastName,
             profileImageUrl: picture,
@@ -282,7 +239,7 @@ router.get(
       }
 
       if (!row) {
-        res.status(500).send("Could not create your account. Please try again.");
+        failToSignIn(res, "create_failed");
         return;
       }
 
@@ -310,7 +267,7 @@ router.get(
       res.redirect(returnTo);
     } catch (err) {
       req.log.error({ err }, "Google sign-in callback failed");
-      res.status(400).send("Sign-in failed. Please try again.");
+      failToSignIn(res, "failed");
     }
   },
 );

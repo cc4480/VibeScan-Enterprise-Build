@@ -74,6 +74,19 @@ describe("SENSITIVE_PATHS: /wp-config.php", () => {
     expect(validate("<?php echo 'Hello World'; ?>", "text/html")).toBe(false));
 });
 
+// ─── server-info ──────────────────────────────────────────────────────────────
+
+describe("SENSITIVE_PATHS: /server-info", () => {
+  const validate = probeByPath("/server-info");
+
+  it("matches Apache mod_info's page", () =>
+    expect(validate('<html><head><title>Server Information</title></head><body><h1 style="text-align: center">Apache Server Information</h1><dl><dt><a name="server"><strong>Server Settings</strong></a></dt></dl></body></html>', "text/html")).toBe(true));
+  it("matches the module listing even without the heading", () =>
+    expect(validate("<h2>Server Settings</h2><dt><strong>Module Name:</strong> mod_rewrite.c</dt>", "text/html")).toBe(true));
+  it("rejects a bot or game-server dashboard that uses the same route", () =>
+    expect(validate("<!doctype html><html><head><title>My Bot — Server Info</title></head><body><h2>Server Settings</h2><p>Prefix: !</p></body></html>", "text/html")).toBe(false));
+});
+
 // ─── phpinfo.php ──────────────────────────────────────────────────────────────
 
 describe("SENSITIVE_PATHS: /phpinfo.php", () => {
@@ -125,10 +138,77 @@ describe("SENSITIVE_PATHS: /crossdomain.xml", () => {
 
   it("matches a wildcard domain policy", () =>
     expect(validate('<cross-domain-policy><allow-access-from domain="*"/></cross-domain-policy>', "text/xml")).toBe(true));
-  it("matches an explicit permitted-cross-domain-policies=\"all\"", () =>
-    expect(validate('<cross-domain-policy><site-control permitted-cross-domain-policies="all"/></cross-domain-policy>', "text/xml")).toBe(true));
+  // permitted-cross-domain-policies="all" is a meta-policy, not wildcard data
+  // access — a well-scoped master (nytimes: site-control "all" with every
+  // allow-access-from bounded to *.nytimes.com) grants nothing universal, and
+  // firing here reported "access from all domains" against a site that allows
+  // none. It no longer fires without a genuine domain="*".
+  it("does NOT fire on site-control \"all\" alone, without a wildcard domain", () =>
+    expect(validate('<cross-domain-policy><site-control permitted-cross-domain-policies="all"/><allow-access-from domain="*.nytimes.com"/></cross-domain-policy>', "text/xml")).toBe(false));
   it("rejects a restrictive master-only policy (e.g. GitHub's)", () =>
     expect(validate('<cross-domain-policy><site-control permitted-cross-domain-policies="master-only"/></cross-domain-policy>', "text/xml")).toBe(false));
   it("rejects a non-wildcard allow-access-from", () =>
     expect(validate('<cross-domain-policy><allow-access-from domain="trusted.example.com"/></cross-domain-policy>', "text/xml")).toBe(false));
+});
+
+// ─── Archives: the file's own signature decides, not the content type ─────
+
+describe("SENSITIVE_PATHS: /backup.zip and /backup.tar.gz", () => {
+  it("accepts a real zip (PK\x03\x04) and an empty zip (PK\x05\x06), whatever the content type says", () => {
+    const zip = probeByPath("/backup.zip");
+    expect(zip("PK\x03\x04\x14\x00 source", "application/octet-stream")).toBe(true);
+    expect(zip("PK\x05\x06\x00\x00", "text/plain")).toBe(true);
+  });
+
+  it("clean twin: a zip-named path answered with octet-stream but no zip signature is rejected", () => {
+    const zip = probeByPath("/backup.zip");
+    expect(zip("<html>Not found</html>", "application/octet-stream")).toBe(false);
+    expect(zip("Access denied", "application/zip")).toBe(false);
+  });
+
+  it("accepts a real gzip stream (1f 8b, as the UTF-8 decoder delivers it) and rejects octet-stream alone", () => {
+    const tgz = probeByPath("/backup.tar.gz");
+    expect(tgz("\x1f�\b\x00", "application/octet-stream")).toBe(true);
+    expect(tgz("\x1f\x8b\b\x00", "application/gzip")).toBe(true);
+    expect(tgz("<html>Not found</html>", "application/octet-stream")).toBe(false);
+    expect(tgz("tar listing text", "application/x-tar")).toBe(false);
+  });
+});
+
+// ─── Heap dump and tool configuration files ───────────────────────────────
+
+describe("SENSITIVE_PATHS: /actuator/heapdump", () => {
+  it("is confirmed by the HPROF header, not by the content type", () => {
+    const heap = probeByPath("/actuator/heapdump");
+    expect(heap("JAVA PROFILE 1.0.2\x00\x00\x00\x04", "application/octet-stream")).toBe(true);
+  });
+
+  it("clean twin: an octet-stream answer without the HPROF header is rejected", () => {
+    const heap = probeByPath("/actuator/heapdump");
+    expect(heap("<html>Not found</html>", "application/octet-stream")).toBe(false);
+    expect(heap("\x7fELF binary", "application/octet-stream")).toBe(false);
+  });
+});
+
+describe("SENSITIVE_PATHS: .npmrc, .mcp.json and .claude/settings.json", () => {
+  it("/.npmrc is confirmed by a registry or auth line", () => {
+    const npmrc = probeByPath("/.npmrc");
+    expect(npmrc("registry=https://npm.example.com/\n//npm.example.com/:_authToken=abc123\n", "text/plain")).toBe(true);
+    expect(npmrc("_authToken=abc123\n", "text/plain")).toBe(true);
+  });
+
+  it("clean twin: an .npmrc-named page with prose is rejected", () => {
+    const npmrc = probeByPath("/.npmrc");
+    expect(npmrc("Welcome to our site. Read the registry docs.", "text/html")).toBe(false);
+  });
+
+  it("/.mcp.json and /.claude/settings.json are confirmed by their JSON keys", () => {
+    expect(probeByPath("/.mcp.json")(`{"mcpServers": {"db": {"env": {}}}}`, "application/json")).toBe(true);
+    expect(probeByPath("/.claude/settings.json")(`{"permissions": {"allow": []}}`, "application/json")).toBe(true);
+  });
+
+  it("clean twin: a JSON file without those keys is rejected for both", () => {
+    expect(probeByPath("/.mcp.json")(`{"name": "app", "version": "1.0.0"}`, "application/json")).toBe(false);
+    expect(probeByPath("/.claude/settings.json")(`{"name": "app"}`, "application/json")).toBe(false);
+  });
 });

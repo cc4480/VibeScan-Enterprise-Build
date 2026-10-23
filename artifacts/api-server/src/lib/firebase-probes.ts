@@ -5,7 +5,11 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { probeFirebaseStorage } from "./baasDepth";
 import type { ScanVulnerability } from "./scanner";
+import { classifyExposure } from "./baasExposure";
+import { readBodyBounded } from "./httpBody";
+import { firestoreApi, firebaseDatabaseOrigin } from "./baasEndpoints";
 
 const TIMEOUT_MS = 10_000;
 const MAX_TABLES_TO_TEST = 12;
@@ -29,7 +33,7 @@ async function safeFetch(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, { ...options, signal: controller.signal });
-    const body = await res.text().catch(() => "");
+    const body = await readBodyBounded(res);
     const headers: Record<string, string> = {};
     res.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });
     return { status: res.status, body, headers };
@@ -50,7 +54,7 @@ interface FirebaseConfig {
   databaseURL?: string;
 }
 
-function extractFirebaseConfig(content: string): FirebaseConfig | null {
+export function extractFirebaseConfig(content: string): FirebaseConfig | null {
   const apiKeyPatterns = [
     /apiKey\s*:\s*["'](AIza[0-9A-Za-z\-_]{35})["']/,
     /(?:VITE_FIREBASE_API_KEY|REACT_APP_FIREBASE_API_KEY|NEXT_PUBLIC_FIREBASE_API_KEY)\s*[:=]\s*["'](AIza[0-9A-Za-z\-_]{35})["']/i,
@@ -95,42 +99,54 @@ async function probeFirestoreCollection(
   projectId: string,
   apiKey: string,
   collection: string,
-): Promise<boolean> {
+): Promise<unknown[] | null> {
   const url =
-    `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}` +
+    `${firestoreApi()}/v1/projects/${encodeURIComponent(projectId)}` +
     `/databases/(default)/documents/${encodeURIComponent(collection)}` +
     `?key=${encodeURIComponent(apiKey)}&pageSize=1`;
 
   const result = await safeFetch(url, { headers: { Accept: "application/json" } }, 8_000);
-  if (!result || result.status !== 200) return false;
+  if (!result || result.status !== 200) return null;
 
   try {
     const body = JSON.parse(result.body) as { documents?: unknown[] };
     // Empty collection returns {} or { documents: [] } — not a finding
-    return Array.isArray(body.documents) && body.documents.length > 0;
+    return Array.isArray(body.documents) && body.documents.length > 0 ? body.documents : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
+interface OpenCollection {
+  name: string;
+  /** sensitive/unclassified rows are a finding; public catalogue rows are not. */
+  isPublic: boolean;
+}
+
+/**
+ * Sensitive or unclassified collections win over public-catalogue ones, so a
+ * readable `posts` never hides a readable `users`.
+ */
 async function findOpenFirestoreCollection(
   projectId: string,
   apiKey: string,
-): Promise<string | null> {
+): Promise<OpenCollection | null> {
   const results = await Promise.allSettled(
-    COMMON_COLLECTIONS.map(async (c) => ({ c, open: await probeFirestoreCollection(projectId, apiKey, c) })),
+    COMMON_COLLECTIONS.map(async (c) => ({ c, docs: await probeFirestoreCollection(projectId, apiKey, c) })),
   );
+  const open: OpenCollection[] = [];
   for (const r of results) {
-    if (r.status === "fulfilled" && r.value.open) return r.value.c;
+    if (r.status !== "fulfilled" || !r.value.docs) continue;
+    open.push({ name: r.value.c, isPublic: classifyExposure(r.value.c, r.value.docs) === "public" });
   }
-  return null;
+  return open.find((o) => !o.isPublic) ?? open[0] ?? null;
 }
 
 async function testRealtimeDatabaseOpen(databaseURL: string): Promise<boolean> {
   // Unauthenticated fetch of root .json
   // Denied rules → 401, or { "error": "Permission denied." }
   const result = await safeFetch(
-    `${databaseURL}/.json`,
+    `${firebaseDatabaseOrigin(databaseURL)}/.json`,
     { headers: { Accept: "application/json" } },
     8_000,
   );
@@ -171,28 +187,53 @@ export async function runFirebaseProbes(
 
   const { apiKey, projectId, databaseURL } = config;
 
+  await probeFirebaseStorage(content, findings);
+
   // Run Firestore and Realtime DB checks in parallel
   const [firestoreOpen, rtdbOpen] = await Promise.all([
     findOpenFirestoreCollection(projectId, apiKey),
     databaseURL ? testRealtimeDatabaseOpen(databaseURL) : Promise.resolve(false),
   ]);
 
-  if (firestoreOpen) {
+  if (firestoreOpen?.isPublic) {
+    // Readable, but public-catalogue content with no personal fields: observed,
+    // not a vulnerability by itself.
+    findings.push(vuln({
+      name: "Firestore Public Content Collection Readable Without Authentication",
+      severity: "info",
+      category: "Information Disclosure",
+      description:
+        `The '${firestoreOpen.name}' Firestore collection returned documents without authentication. ` +
+        "Its name and fields look like public catalogue content (posts, products, events, " +
+        "site config) with no personal or secret-looking values in the sampled document, " +
+        "which is normal for content the site shows every visitor. Confirm the collection " +
+        "is meant to be public and holds no draft or per-user documents.",
+      evidence:
+        `Firebase project: ${projectId}\nCollection: ${firestoreOpen.name}\n` +
+        `GET https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${firestoreOpen.name}?key=<apiKey> → HTTP 200 with documents`,
+      solution:
+        "If this collection should not be public, restrict it in Firestore rules " +
+        "(allow read: if request.auth != null). For public content, keep write rules authenticated-only.",
+      cweId: null,
+      cvssScore: 0,
+      confidence: 60,
+    }));
+  } else if (firestoreOpen) {
     findings.push(vuln({
       name: "Firestore Security Rules Allow Unauthenticated Read Access",
       severity: "critical",
       category: "Broken Access Control",
       description:
         "Firestore is configured to allow unauthenticated read access. " +
-        `Documents were returned from the '${firestoreOpen}' collection without ` +
+        `Documents were returned from the '${firestoreOpen.name}' collection without ` +
         "any authentication. The Firebase config (apiKey, projectId) is always " +
         "present in client-side JavaScript by design — security rules are the " +
         "only access control layer. With open rules, anyone who finds your app " +
         "can read your database.",
       evidence:
         `Firebase project: ${projectId}\n` +
-        `Open collection: ${firestoreOpen}\n` +
-        `GET https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${firestoreOpen}?key=<apiKey> → HTTP 200 with documents`,
+        `Open collection: ${firestoreOpen.name}\n` +
+        `GET https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${firestoreOpen.name}?key=<apiKey> → HTTP 200 with documents`,
       solution:
         "Update your Firestore security rules to require authentication:\n\n" +
         "rules_version = '2';\n" +
@@ -209,6 +250,7 @@ export async function runFirebaseProbes(
       cweId: "CWE-284",
       cvssScore: 9.3,
       wstgId: "WSTG-ATHZ-01",
+      confidence: 90,
     }));
   } else {
     findings.push(vuln({

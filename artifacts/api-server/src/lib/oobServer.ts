@@ -103,14 +103,22 @@ export async function recordOobInteraction(
   return true;
 }
 
-/** Which of these tokens received at least one callback. */
+/**
+ * User agents of services that fetch a link because someone pasted it into a chat, a log
+ * or a preview, not because the target's own server made the request. A target that forwards
+ * a request body to Slack or Teams, or a log tool that previews URLs, would otherwise "confirm"
+ * an SSRF the target never performed.
+ */
+export const LINK_PREVIEW_AGENT = /slackbot|slack-imgproxy|skypeuripreview|microsoftpreview|teams|discordbot|twitterbot|facebookexternalhit|facebot|whatsapp|telegrambot|linkedinbot|googlebot|google-read-aloud|bingbot|bingpreview|applebot|embedly|pinterest|redditbot|iframely|quora link preview|vkshare|mattermost|zulip|skype/i;
+
+/** Which of these tokens received at least one callback from something other than a link previewer. */
 export async function tokensWithInteractions(tokens: string[]): Promise<Set<string>> {
   if (tokens.length === 0) return new Set();
   const rows = await db
-    .select({ token: oobInteractionsTable.token })
+    .select({ token: oobInteractionsTable.token, userAgent: oobInteractionsTable.userAgent })
     .from(oobInteractionsTable)
     .where(inArray(oobInteractionsTable.token, tokens));
-  return new Set(rows.map((r) => r.token));
+  return new Set(rows.filter((r) => !(r.userAgent && LINK_PREVIEW_AGENT.test(r.userAgent))).map((r) => r.token));
 }
 
 /** Housekeeping: drop tokens past their expiry and the interactions that cite them. */

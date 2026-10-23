@@ -12,6 +12,13 @@ describe("detectTechnologies — server headers", () => {
     expect(detectTechnologies({ server: "cloudflare" }, "")).toContain("Cloudflare"));
   it("detects Vercel from Server header", () =>
     expect(detectTechnologies({ server: "Vercel" }, "")).toContain("Vercel"));
+  it("detects Ghost from its own Server header", () =>
+    expect(detectTechnologies({ server: "Ghost" }, "")).toContain("Ghost"));
+  it("does not read Akamai's AkamaiGHost edge server as the Ghost CMS", () => {
+    // Found on amazon.co.uk: every Akamai-fronted site was listed as running Ghost,
+    // and the CVE monitor matches technology names against advisories.
+    expect(detectTechnologies({ server: "AkamaiGHost" }, "")).not.toContain("Ghost");
+  });
 });
 
 describe("detectTechnologies — CDN / infra headers", () => {
@@ -29,8 +36,10 @@ describe("detectTechnologies — CDN / infra headers", () => {
     expect(detectTechnologies({ "x-render-origin-server": "Render" }, "")).toContain("Render"));
   it("detects AWS CloudFront from x-amz-cf-id", () =>
     expect(detectTechnologies({ "x-amz-cf-id": "abc" }, "")).toContain("AWS CloudFront"));
-  it("detects GitHub Pages from x-github-request-id", () =>
-    expect(detectTechnologies({ "x-github-request-id": "abc" }, "")).toContain("GitHub Pages"));
+  it("detects GitHub Pages from x-github-request-id with x-proxy-cache", () =>
+    expect(detectTechnologies({ "x-github-request-id": "abc", "x-proxy-cache": "HIT" }, "")).toContain("GitHub Pages"));
+  it("does not tag github.com itself as GitHub Pages (x-github-request-id alone)", () =>
+    expect(detectTechnologies({ "x-github-request-id": "abc" }, "")).not.toContain("GitHub Pages"));
 });
 
 describe("detectTechnologies — X-Powered-By header", () => {
@@ -76,11 +85,11 @@ describe("detectTechnologies — HTML: AI-builder / BaaS platforms", () => {
   it("detects Lovable from lovable.dev script", () =>
     expect(detectTechnologies({}, `<script src="https://lovable.dev/client.js"></script>`)).toContain("Lovable"));
   it("detects Bolt.new from stackblitz.io reference", () =>
-    expect(detectTechnologies({}, `<meta content="https://stackblitz.io/embed"/>`)).toContain("Bolt.new"));
+    expect(detectTechnologies({}, `<script src="https://stackblitz.io/embed.js"></script>`)).toContain("Bolt.new"));
   it("detects Supabase from supabase.co URL", () =>
-    expect(detectTechnologies({}, `const url = 'https://abc.supabase.co'`)).toContain("Supabase"));
+    expect(detectTechnologies({}, `<script>const url = 'https://abc.supabase.co'</script>`)).toContain("Supabase"));
   it("detects Firebase from firebaseConfig", () =>
-    expect(detectTechnologies({}, `const firebaseConfig = { apiKey: "abc" }`)).toContain("Firebase"));
+    expect(detectTechnologies({}, `<script>const firebaseConfig = { apiKey: "abc" }</script>`)).toContain("Firebase"));
 });
 
 describe("detectTechnologies — HTML: JS frameworks", () => {
@@ -93,7 +102,7 @@ describe("detectTechnologies — HTML: JS frameworks", () => {
   it("detects Angular from ng-version", () =>
     expect(detectTechnologies({}, `<app-root ng-version="17.0.0"></app-root>`)).toContain("Angular"));
   it("detects Svelte from SvelteKit marker", () =>
-    expect(detectTechnologies({}, `<!-- SvelteKit -->`)).toContain("Svelte"));
+    expect(detectTechnologies({}, `<body data-sveltekit-preload-data="hover">`)).toContain("Svelte"));
   it("detects Remix from __remixContext", () =>
     expect(detectTechnologies({}, `window.__remixContext = {}`)).toContain("Remix"));
   it("detects Astro from astro-island", () =>
@@ -104,13 +113,17 @@ describe("detectTechnologies — HTML: JS frameworks", () => {
 
 describe("detectTechnologies — HTML: analytics", () => {
   it("detects Google Analytics from gtag(", () =>
-    expect(detectTechnologies({}, `gtag('config', 'G-ABC')`)).toContain("Google Analytics"));
+    expect(detectTechnologies({}, `<script>gtag('config', 'G-ABC')</script>`)).toContain("Google Analytics"));
+  it("detects Google Analytics from the gtag.js loader", () =>
+    expect(detectTechnologies({}, `<script async src="https://www.googletagmanager.com/gtag/js?id=G-ABC"></script>`)).toContain("Google Analytics"));
+  it("does not tag Google Analytics from prose about gtag()", () =>
+    expect(detectTechnologies({}, `<p>Call gtag('config', id) to set it up, or read google-analytics.com docs.</p>`)).not.toContain("Google Analytics"));
   it("detects Sentry from Sentry.init", () =>
-    expect(detectTechnologies({}, `Sentry.init({ dsn: "https://abc@sentry.io" })`)).toContain("Sentry"));
+    expect(detectTechnologies({}, `<script>Sentry.init({ dsn: "https://abc@sentry.io" })</script>`)).toContain("Sentry"));
   it("detects Stripe from js.stripe.com", () =>
     expect(detectTechnologies({}, `<script src="https://js.stripe.com/v3/"></script>`)).toContain("Stripe"));
   it("detects Intercom from intercomSettings", () =>
-    expect(detectTechnologies({}, `window.intercomSettings = { app_id: "abc" }`)).toContain("Intercom"));
+    expect(detectTechnologies({}, `<script>window.intercomSettings = { app_id: "abc" }</script>`)).toContain("Intercom"));
 });
 
 describe("detectTechnologies — HTML: Ruby on Rails", () => {
@@ -120,8 +133,10 @@ describe("detectTechnologies — HTML: Ruby on Rails", () => {
     expect(detectTechnologies({}, `<meta name="csrf-param" content="authenticity_token">`)).toContain("Ruby on Rails"));
   it("detects Rails from Rack:: middleware namespace in error output", () =>
     expect(detectTechnologies({}, `Rack::Timeout::Error`)).toContain("Ruby on Rails"));
-  it("detects Rails from literal 'Ruby on Rails'", () =>
-    expect(detectTechnologies({}, `<address>Ruby on Rails 7.1</address>`)).toContain("Ruby on Rails"));
+  it("detects Rails from a generator meta tag", () =>
+    expect(detectTechnologies({}, `<meta name="generator" content="Ruby on Rails 7.1">`)).toContain("Ruby on Rails"));
+  it("does NOT flag Rails on a page that merely mentions Ruby on Rails", () =>
+    expect(detectTechnologies({}, `<p>We wrote this tutorial about Ruby on Rails 7.1.</p>`)).not.toContain("Ruby on Rails"));
   it("does NOT flag Rails on Tailwind tracking-* utility classes", () =>
     expect(detectTechnologies({}, `<h1 class="text-2xl font-bold tracking-tight tracking-wider">Dashboard</h1>`)).not.toContain("Ruby on Rails"));
   it("does NOT flag Rails on incidental words containing 'rack'", () =>

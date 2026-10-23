@@ -1,29 +1,89 @@
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgTable, timestamp, varchar } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, text, timestamp, varchar, boolean} from "drizzle-orm/pg-core";
 
-// (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
+// (IMPORTANT) Sign-in sessions live here; don't drop it.
 export const sessionsTable = pgTable(
   "sessions",
   {
+    // SHA-256 (hex) of the session id. The raw id is only in the browser's
+    // cookie; lookups hash it first (hashSessionId in lib/auth.ts). Migration
+    // 0031 hashed the rows that existed before this.
     sid: varchar("sid").primaryKey(),
+    // Holds only { user }. Upstream OIDC tokens are never stored here (see 0032).
     sess: jsonb("sess").notNull(),
     expire: timestamp("expire").notNull(),
   },
-  (table) => [index("IDX_session_expire").on(table.expire)],
+  (table) => [
+    index("IDX_session_expire").on(table.expire),
+    // The user id lives inside the `sess` JSON, not in a column of its own, so
+    // revoking a user's sessions (deleteSessionsForUser, after a password reset
+    // or account deletion) was a scan of the whole table. This expression index
+    // makes that lookup an index scan. Postgres only uses an expression index
+    // when the query repeats the expression exactly, so deleteSessionsForUser
+    // builds its WHERE clause from `sessionUserIdExpr` (exported below), and
+    // the two must not be reworded independently of each other.
+    index("IDX_session_user_id").on(sql`(${table.sess}->'user'->>'id')`),
+  ],
 );
 
-// (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
+/**
+ * The expression `IDX_session_user_id` is built on, as SQL for a WHERE clause.
+ * Keep it identical to the indexed expression above.
+ */
+export const sessionUserIdExpr = sql`(${sessionsTable.sess}->'user'->>'id')`;
+
+// (IMPORTANT) Accounts live here; don't drop it.
 export const usersTable = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: varchar("email").unique(),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
-  // User-supplied DeepSeek API key, AES-256-GCM encrypted at rest (see
-  // artifacts/api-server/src/lib/crypto.ts). Never decrypted for API responses —
-  // only deepseekApiKeyLast4 is ever sent to the client, for display purposes.
-  deepseekApiKeyEncrypted: varchar("deepseek_api_key_encrypted"),
-  deepseekApiKeyLast4: varchar("deepseek_api_key_last4", { length: 4 }),
+
+  // Email preferences. Two flags rather than one, because the two kinds of mail
+  // are opted out of for different reasons and by different routes: product
+  // updates are marketing and are turned off in Settings, while monitor alerts
+  // are mail the user asked for per target and are turned off from the
+  // List-Unsubscribe header on the alert itself.
+  //
+  // Neither covers account mail — password resets, email verification and
+  // purchase receipts still send, because switching those off would lock
+  // people out of their own account.
+  // Privacy choice, separate from the email flags: when true, this user's findings are never
+  // sent to the language-model provider that writes the plain-English analysis. The scan and
+  // every finding are unchanged; only the written commentary is left out.
+  aiAnalysisOptedOut: boolean("ai_analysis_opted_out").notNull().default(false),
+  marketingOptedOut: boolean("marketing_opted_out").notNull().default(false),
+  alertEmailsOptedOut: boolean("alert_emails_opted_out").notNull().default(false),
+
+  // Per-alert-type control, added because the single flag above is all or
+  // nothing: the only way to stop one noisy alert was to stop every alert,
+  // including the ones that matter. alertEmailsOptedOut stays the master
+  // switch — it is what the one-click List-Unsubscribe header toggles, and
+  // RFC 8058 requires that to work without a preferences screen.
+  //
+  // These apply to webhooks too. The master switch does not: it is named for
+  // email, and someone who silenced their inbox has not asked us to stop
+  // posting to their team's Slack.
+  notifyCveOptedOut: boolean("notify_cve_opted_out").notNull().default(false),
+  notifyRegressionOptedOut: boolean("notify_regression_opted_out").notNull().default(false),
+  notifyCertExpiryOptedOut: boolean("notify_cert_expiry_opted_out").notNull().default(false),
+  notifyScanCompleteOptedOut: boolean("notify_scan_complete_opted_out").notNull().default(false),
+
+  // The hourly pulse check's two alerts. They are separate kinds on purpose:
+  // downtime is the one alert that can flap, and someone silencing a site that
+  // drops a request every other hour must not thereby silence "your HSTS
+  // header disappeared" — which is exactly the all-or-nothing failure the
+  // per-kind columns above exist to avoid.
+  notifyAvailabilityOptedOut: boolean("notify_availability_opted_out").notNull().default(false),
+  notifyDriftOptedOut: boolean("notify_drift_opted_out").notNull().default(false),
+
+  // Floor for alerts that carry a severity (CVE matches and regressions).
+  // "info" means everything, which is today's behaviour and so the default —
+  // nobody's notifications change until they choose to change them.
+  notifyMinSeverity: text("notify_min_severity", {
+    enum: ["info", "low", "medium", "high", "critical"],
+  }).notNull().default("info"),
 
   // ── Account credentials ────────────────────────────────────────────────────
   // Null for anonymous identities: a row whose id is the UUID the browser
@@ -48,9 +108,16 @@ export const usersTable = pgTable("users", {
   // with an email as a real account for that purpose.
   googleSub: varchar("google_sub").unique(),
 
+  // Keyed hash of the network the account was created from (lib/signupNetwork.ts):
+  // the IPv4 address, or the /64 of an IPv6 one. Only ever compared for
+  // equality, to cap new accounts per network — never the raw address, so the
+  // column cannot be read back into anyone's IP. Null on accounts created
+  // before the cap existed, which is why they do not count against it.
+  signupNetwork: varchar("signup_network"),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (table) => [index("IDX_users_signup_network").on(table.signupNetwork, table.createdAt)]);
 
 /**
  * Single-use tokens for email verification and password reset.
@@ -74,6 +141,127 @@ export const authTokensTable = pgTable(
   },
   (table) => [index("IDX_auth_tokens_user").on(table.userId)],
 );
+
+/**
+ * A password login that has passed step one and is waiting for its emailed code.
+ *
+ * This is what makes the code a genuine SECOND factor rather than a second
+ * delivery of the first. A row here is created ONLY after a password has been
+ * verified, and a session is issued ONLY by redeeming one. Neither half signs
+ * anyone in on its own: knowing the password gets you a row and an email you
+ * cannot read, and holding the code is useless without a row to spend it on.
+ *
+ * A six-digit code is a far weaker secret than the 32-byte values in
+ * auth_tokens — a million possibilities, walkable in seconds — so three things
+ * carry it, and all three live in this table's shape:
+ *
+ *  - challengeHash scopes the lookup. A code is never matched on its own value;
+ *    it is matched inside one challenge, which only someone who already passed
+ *    the password step holds. Without this, a guess would be tested against
+ *    every pending login at once instead of one.
+ *  - attempts caps guessing. Five wrong tries and the row is spent, correct
+ *    code or not.
+ *  - expiresAt keeps the window small, and issuing a new challenge retires the
+ *    user's earlier ones so several codes are never live at once.
+ *
+ * Only hashes are stored, as with auth_tokens: a dumped table yields neither a
+ * usable code nor a usable challenge.
+ */
+export const pendingLoginsTable = pgTable(
+  "pending_logins",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull(),
+    // SHA-256 of the opaque challenge handed to the client in step one.
+    challengeHash: varchar("challenge_hash").notNull().unique(),
+    // SHA-256 of the six-digit code emailed to the account's address.
+    codeHash: varchar("code_hash").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    // Set when redeemed or abandoned, rather than deleting, so a replay can be
+    // told apart from a challenge that never existed.
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("IDX_pending_logins_user").on(table.userId)],
+);
+
+export type PendingLogin = typeof pendingLoginsTable.$inferSelect;
+
+/**
+ * A sign-up waiting for its emailed code.
+ *
+ * The account does not exist until the code is entered: an address nobody can
+ * read never becomes an account, never gets free scans and never counts as
+ * "taken" for its real owner. Same shape and rules as pending_logins — the
+ * challenge and code are stored only as SHA-256, five wrong guesses spend it,
+ * and a new sign-up for the same address retires the earlier one.
+ */
+export const pendingRegistrationsTable = pgTable(
+  "pending_registrations",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    email: varchar("email").notNull(),
+    // Already hashed with the same scrypt as a real account; the raw password
+    // is never stored, even for the ten minutes this row lives.
+    passwordHash: varchar("password_hash").notNull(),
+    // Where the sign-up started (see users.signup_network), so the cap is
+    // checked against the network that asked, not the one that typed the code.
+    signupNetwork: varchar("signup_network"),
+    // A legacy anonymous identity to promote in place, captured at step one.
+    anonUserId: varchar("anon_user_id"),
+    challengeHash: varchar("challenge_hash").notNull().unique(),
+    codeHash: varchar("code_hash").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("IDX_pending_registrations_email").on(table.email)],
+);
+
+export type PendingRegistration = typeof pendingRegistrationsTable.$inferSelect;
+
+/**
+ * Addresses we must stop mailing, fed by Resend's bounce and complaint webhooks.
+ *
+ * Repeatedly mailing a dead address, or someone who pressed "spam", is how
+ * sender reputation erodes — and reputation is what decides whether the mail
+ * people DO want lands in the inbox. Nothing was recording either signal, so
+ * every bounce was invisible and every complaint was repeated.
+ *
+ * `scope` is the part that matters and is easy to get wrong:
+ *
+ *  - "all" — the address does not exist (a hard bounce). Sending anything to
+ *    it is pointless and counts against us, so everything stops.
+ *  - "bulk" — the person marked mail as spam. Marketing and alerts stop, but
+ *    ACCOUNT mail does not: a sign-in code, a password reset or a receipt is
+ *    something they just asked for by their own action, and suppressing those
+ *    would lock someone out of their account as a side effect of a complaint
+ *    about a newsletter. That is a worse outcome than the reputation cost.
+ *
+ * Soft bounces (mailbox full, temporary failure) deliberately do NOT land here.
+ * They resolve on their own, and suppressing on one would quietly cut off a
+ * real user whose inbox was briefly over quota.
+ */
+export const emailSuppressionsTable = pgTable(
+  "email_suppressions",
+  {
+    // Lower-cased address. The natural key, so a repeat webhook for the same
+    // address updates rather than accumulating rows.
+    email: varchar("email").primaryKey(),
+    scope: varchar("scope", { enum: ["all", "bulk"] }).notNull(),
+    reason: varchar("reason", { enum: ["hard_bounce", "complaint", "manual"] }).notNull(),
+    // The provider's own description, kept for when someone asks why they
+    // stopped receiving mail.
+    detail: varchar("detail"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  },
+  (table) => [index("IDX_email_suppressions_scope").on(table.scope)],
+);
+
+export type EmailSuppression = typeof emailSuppressionsTable.$inferSelect;
 
 export type AuthToken = typeof authTokensTable.$inferSelect;
 

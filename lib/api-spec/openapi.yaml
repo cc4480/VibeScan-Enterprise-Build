@@ -450,7 +450,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
-  /reports/{id}/shares/{token}:
+  /reports/{id}/shares/{shareId}:
     delete:
       tags: [reports]
       operationId: revokeReportShare
@@ -463,7 +463,7 @@ paths:
           required: true
           schema:
             type: string
-        - name: token
+        - name: shareId
           in: path
           required: true
           schema:
@@ -530,80 +530,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Credits'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-
-  /settings/deepseek-key:
-    get:
-      tags: [settings]
-      operationId: getDeepseekKeyStatus
-      summary: Get whether the current user has a personal DeepSeek API key configured
-      parameters:
-        - $ref: '#/components/parameters/AuthorizationSessionHeader'
-        - $ref: '#/components/parameters/SessionCookie'
-      responses:
-        '200':
-          description: DeepSeek key status
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeepseekKeyStatus'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-    put:
-      tags: [settings]
-      operationId: setDeepseekKey
-      summary: Set (or replace) the current user's personal DeepSeek API key
-      parameters:
-        - $ref: '#/components/parameters/AuthorizationSessionHeader'
-        - $ref: '#/components/parameters/SessionCookie'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SetDeepseekKeyRequest'
-      responses:
-        '200':
-          description: Key saved
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeepseekKeyStatus'
-        '400':
-          description: Invalid key format
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-    delete:
-      tags: [settings]
-      operationId: deleteDeepseekKey
-      summary: Remove the current user's personal DeepSeek API key
-      parameters:
-        - $ref: '#/components/parameters/AuthorizationSessionHeader'
-        - $ref: '#/components/parameters/SessionCookie'
-      responses:
-        '200':
-          description: Key removed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeepseekKeyStatus'
         '401':
           description: Unauthorized
           content:
@@ -1043,6 +969,24 @@ components:
             and as an anonymous visitor, and reports when the second account is
             served the first account's data. Use two ordinary accounts that own
             different data, not an admin and a user.
+        autoSecondAccount:
+          type: boolean
+          default: false
+          description: >-
+            Opt in to letting the scan create a disposable second account through
+            the target's public signup form, so the broken access control test
+            can run with only one login supplied. It submits that form once with
+            a made-up address at example.com, and works only when signup gives a
+            signed-in session immediately (no email confirmation). The report
+            names the account so it can be deleted. Requires `credentials`, and
+            is ignored when `secondaryCredentials` is supplied.
+        githubRepoUrl:
+          type: string
+          description: >-
+            A public GitHub repository to read for committed secrets, as
+            `https://github.com/owner/repo` (or `owner/repo`). Only public
+            repositories are read, with no token, and only GitHub is contacted
+            for it, never the scan target. Leave it out to skip the source scan.
 
     ScanCredentials:
       type: object
@@ -1065,17 +1009,21 @@ components:
           description: Attestation that the requester may test this target with these credentials.
         cookie:
           type: [string, 'null']
+          maxLength: 8192
           description: Cookie header value, for mode `session`.
         bearerToken:
           type: [string, 'null']
+          maxLength: 4096
           description: Bearer token, for mode `session`.
         loginUrl:
           type: [string, 'null']
           description: URL of the sign-in page, for mode `form`.
         username:
           type: [string, 'null']
+          maxLength: 500
         password:
           type: [string, 'null']
+          maxLength: 500
 
     CreateScanResponse:
       type: object
@@ -1168,6 +1116,10 @@ components:
           type: string
           enum: [lovable, bolt, nextjs, wordpress, supabase, generic]
           description: The AI coding tool/platform detected from the scanned app's tech stack, used to format agentFixPrompt.
+        source:
+          type: string
+          enum: [ai, template]
+          description: ai when the AI writer produced this analysis; template when it was assembled from the findings because the AI writer gave none.
 
     ReportData:
       type: object
@@ -1345,12 +1297,13 @@ components:
 
     ReportShare:
       type: object
-      required: [id, token, createdAt]
+      required: [id, createdAt]
       properties:
         id:
           type: string
         token:
           type: string
+          description: The link's token. Present only in the response that creates the share; the server stores a hash and cannot return it again.
         expiresAt:
           type: [string, 'null']
           format: date-time
@@ -1375,24 +1328,6 @@ components:
       properties:
         balance:
           type: integer
-
-    DeepseekKeyStatus:
-      type: object
-      required: [configured, last4]
-      properties:
-        configured:
-          type: boolean
-        last4:
-          type: [string, 'null']
-          description: Last 4 characters of the configured key, for display only. Null if unconfigured.
-
-    SetDeepseekKeyRequest:
-      type: object
-      required: [apiKey]
-      properties:
-        apiKey:
-          type: string
-          minLength: 10
 
     MonitorSubscription:
       type: object

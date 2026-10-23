@@ -14,9 +14,16 @@
  * Pages are closed immediately after rendering.
  */
 
+import { guardBrowser } from "./browserGuard";
 import { logger } from "./logger";
-import { CHROMIUM_ARGS } from "./browserArgs";
+import { SCANNER_USER_AGENT } from "./appOrigin";
+import { launchChromium } from "./launchChromium";
+import { browserProxy, closeBrowserProxy } from "./browserProxy";
 import { getScanHttpContext } from "./http";
+import { jsonBodyKeys, type ObservedRequest } from "./apiRuntime";
+import { type RenderedPage, type BrowserCookie, toSetCookieStrings } from "./browserPage";
+export { isSpa, toSetCookieStrings } from "./browserPage";
+export type { RenderedPage, BrowserCookie } from "./browserPage";
 
 // ── Chromium executable resolution ──────────────────────────────────────────
 //
@@ -47,11 +54,6 @@ async function getChromium() {
   }
 }
 
-function proxyConfig(): { server: string } | undefined {
-  const url = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
-  return url ? { server: url } : undefined;
-}
-
 export async function initBrowser(): Promise<void> {
   const chromium = await getChromium();
   if (!chromium) {
@@ -59,14 +61,10 @@ export async function initBrowser(): Promise<void> {
     return;
   }
 
-  const proxy = proxyConfig();
+  const proxy = await browserProxy();
 
   try {
-    _browser = await chromium.launch({
-      headless: true,
-      proxy,
-      args: [...CHROMIUM_ARGS],
-    });
+    _browser = await launchChromium(chromium, proxy);
     logger.info(
       { proxy: proxy?.server ?? "none" },
       "Headless browser initialised — SPA rendering enabled",
@@ -83,77 +81,12 @@ export async function closeBrowser(): Promise<void> {
     _browser = null;
     logger.info("Headless browser closed");
   }
-}
-
-// ── SPA detection ────────────────────────────────────────────────────────────
-
-/**
- * Returns true when the raw server HTML is a JavaScript-rendered SPA shell
- * that will have little visible content until JS executes.
- *
- * Heuristics (any one match → SPA):
- *  1. Empty root mount point  <div id="root"></div>  (React, Vue, etc.)
- *  2. Body text < 200 chars with ≥2 bundled script tags (Create React App, Vite)
- *  3. Explicit CRA / Vite / webpack chunk URL pattern alongside empty root
- */
-export function isSpa(rawHtml: string): boolean {
-  const s = rawHtml.slice(0, 30_000);
-
-  // 1. Empty SPA root mount point
-  if (
-    /<div[^>]+id=["'](?:root|app|__next|vue-app|ng-app|main|application)["'][^>]*>\s*<\/div>/i.test(s)
-  ) {
-    return true;
-  }
-
-  // 2. Tiny body with script bundles
-  const bodyMatch = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(s);
-  if (bodyMatch) {
-    const bodyContent = bodyMatch[1];
-    const bodyText = bodyContent.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
-    const scriptCount = (bodyContent.match(/<script/gi) ?? []).length;
-    if (bodyText.length < 300 && scriptCount >= 2) return true;
-  }
-
-  // 3. CRA / Vite fingerprints combined with root div (even non-empty)
-  if (
-    /id=["']root["']/.test(s) &&
-    /\/static\/js\/main\.|\/assets\/index-[a-z0-9]+\.js/i.test(s)
-  ) {
-    return true;
-  }
-
-  return false;
-}
-
-// ── Page rendering ────────────────────────────────────────────────────────────
-
-export interface RenderedPage {
-  /** Fully rendered DOM HTML (post JS execution) */
-  html: string;
-  /** HTTP response headers from the main document request */
-  headers: Record<string, string>;
-  /** Cookies as Set-Cookie strings (reconstructed from the page context) */
-  setCookies: string[];
-  /** HTTP status code of the main document response */
-  status: number;
-  /** Final URL after all redirects */
-  finalUrl: string;
+  await closeBrowserProxy();
 }
 
 const NAVIGATION_TIMEOUT_MS = 25_000;
 const SETTLE_MS = 1_500; // extra wait after networkidle for deferred renders
 
-/**
- * Render a URL using the headless browser and return the post-JS-execution
- * HTML along with response metadata.
- *
- * Returns null when:
- *  - Browser was not launched (no Playwright / no Chromium)
- *  - Navigation fails for any reason (network error, timeout, bad URL)
- *
- * Callers should fall back to raw `fetch()` on null.
- */
 export async function renderPage(url: string): Promise<RenderedPage | null> {
   if (!_browser) return null;
 
@@ -171,10 +104,12 @@ export async function renderPage(url: string): Promise<RenderedPage | null> {
     const credentials = ctx?.credentials;
     const inScope = ctx?.scope.includes(url) ?? false;
 
-    const extraHTTPHeaders: Record<string, string> = {};
+    // Sent only to requests in scope, by the guard below. As context-wide extraHTTPHeaders they went to
+    // every host the page loaded from, including third parties and redirect targets.
+    const credentialHeaders: Record<string, string> = {};
     if (credentials && inScope) {
-      if (credentials.cookie) extraHTTPHeaders["Cookie"] = credentials.cookie;
-      Object.assign(extraHTTPHeaders, credentials.headers ?? {});
+      if (credentials.cookie) credentialHeaders["Cookie"] = credentials.cookie;
+      Object.assign(credentialHeaders, credentials.headers ?? {});
     }
 
     context = await (_browser as {
@@ -182,14 +117,20 @@ export async function renderPage(url: string): Promise<RenderedPage | null> {
         userAgent: string;
         ignoreHTTPSErrors: boolean;
         javaScriptEnabled: boolean;
-        extraHTTPHeaders?: Record<string, string>;
       }): Promise<unknown>;
     }).newContext({
-      userAgent:
-        "Mozilla/5.0 (compatible; VibeScan-Security-Bot/1.0; +https://secscan.us/bot)",
+      // The same User-Agent as every other scan request. This was a separate, older string
+      // ("VibeScan-Security-Bot"), so a site that allowed the scanner by the name /bot documents
+      // ("SecScan-Security-Bot") let the plain requests through and challenged the browser.
+      userAgent: SCANNER_USER_AGENT,
       ignoreHTTPSErrors: false,
       javaScriptEnabled: true,
-      ...(Object.keys(extraHTTPHeaders).length > 0 ? { extraHTTPHeaders } : {}),
+    });
+    // Every request the page makes, redirect hops included, must be to a public address, and the
+    // credentials go only where the scan is in scope.
+    await guardBrowser(context as never, {
+      credentialHeaders,
+      inScope: (u) => ctx?.scope.includes(u) ?? false,
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -200,6 +141,17 @@ export async function renderPage(url: string): Promise<RenderedPage | null> {
     const responseHeaders: Record<string, string> = {};
     let responseStatus = 200;
     let responseUrl = url;
+
+    // The page's own API calls, as the browser makes them. Method, URL and body key names
+    // only; capped so a chatty page cannot grow this without bound.
+    const observed: ObservedRequest[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    page.on("request", (req: any) => {
+      const type = req.resourceType();
+      if ((type === "fetch" || type === "xhr") && observed.length < 200) {
+        observed.push({ method: req.method(), url: req.url(), bodyKeys: jsonBodyKeys(req.postData()) });
+      }
+    });
 
     // Capture HTTP response headers from the main document only
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -232,17 +184,21 @@ export async function renderPage(url: string): Promise<RenderedPage | null> {
     const finalUrl: string = page.url();
     const html: string = await page.content();
 
-    // Reconstruct Set-Cookie strings from the page's cookies
+    // Reconstruct Set-Cookie strings from the page's cookies.
+    //
+    // Scoped to the page's own URL deliberately. `context.cookies()` with no
+    // argument returns EVERY cookie in the browser context — including ones set
+    // by Google, ad networks, embedded widgets and any other third party the
+    // page loaded. Attributing those to the scanned site produces findings its
+    // server never sent: bestbuy.com was reported as having a session cookie
+    // "SID" missing the Secure flag, a Google cookie name, when bestbuy.com
+    // returns no Set-Cookie header at all.
+    //
+    // Passing the URL filters to cookies that would actually be sent to this
+    // origin, which is the only set the site is responsible for.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cookieObjects: any[] = await (context as any).cookies();
-    const setCookies: string[] = cookieObjects.map((c) => {
-      let s = `${c.name}=${c.value}`;
-      if (c.secure)   s += "; Secure";
-      if (c.httpOnly) s += "; HttpOnly";
-      if (c.sameSite && c.sameSite !== "None") s += `; SameSite=${c.sameSite}`;
-      if (c.path)     s += `; Path=${c.path}`;
-      return s;
-    });
+    const cookieObjects: BrowserCookie[] = await (context as any).cookies(finalUrl);
+    const setCookies: string[] = toSetCookieStrings(cookieObjects, finalUrl);
 
     // Use the captured URL as final if navigation settled at a different path
     const effectiveFinalUrl = finalUrl || responseUrl || url;
@@ -253,6 +209,7 @@ export async function renderPage(url: string): Promise<RenderedPage | null> {
       setCookies,
       status: responseStatus,
       finalUrl: effectiveFinalUrl,
+      observed,
     };
   } catch (err) {
     logger.warn({ err, url }, "Browser render failed — caller will fall back to fetch");

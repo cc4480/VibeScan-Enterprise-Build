@@ -1,0 +1,309 @@
+{
+  "serverInfo": {
+    "name": "secscan",
+    "title": "SecScan",
+    "version": "1.1.0"
+  },
+  "description": "Scan, monitor and fix a live web app from your editor: graded security reports with fix prompts.",
+  "homepage": "https://secscan.info/ai-editors",
+  "endpoint": "https://secscan.us/api/mcp",
+  "transport": "streamable-http",
+  "authentication": {
+    "required": true,
+    "schemes": [
+      "bearer"
+    ],
+    "header": "Authorization",
+    "format": "Bearer <token>",
+    "obtain": "https://secscan.us/settings#ai-editors"
+  },
+  "instructions": "SecScan scans a live web application from the outside and reports its security problems. Only scan applications the user owns or is authorised to test. Typical flow: scan_url -> get_scan_status with wait_seconds 60 (most scans finish in under a minute, and the call returns the report as soon as it does) -> for a large report, get_report with offset for more pages, or min_severity \"high\" to focus. Work through critical and high findings first, and use the fix prompt in the report — it is written for the user's editor. Active tests (injection, XSS, SSRF, access control) run only on domains listed by list_verified_domains; say so if a scan was passive-only. Each scan spends one of the user's free scans, plan scans or credits, so do not start a scan the user did not ask for. The same applies to add_monitor and monitor_scan_now; get_account says how many scans are left. To unlock active tests, use start_domain_verification, publish the file or DNS record it returns, then check_domain_verification. Only call dismiss_finding when the user has confirmed a finding is a false positive — never to improve a grade.",
+  "tools": [
+    {
+      "name": "scan_url",
+      "title": "Scan a website",
+      "description": "Start a SecScan security scan of a web application the user owns or is authorised to test. Returns a scan_id; most scans finish in under a minute — then call get_scan_status with wait_seconds, or get_report. Active tests (injection, XSS, SSRF…) run only on domains the user has verified; others get passive checks. Optionally also reads a GitHub repository's source (github_repo): any public one, or a private one the user connected at secscan.us. That only contacts GitHub, never the site. Each scan uses one of the user's free scans, plan scans or credits.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "description": "The URL to scan, e.g. https://example.com"
+          },
+          "github_repo": {
+            "type": "string",
+            "maxLength": 300,
+            "description": "Optional GitHub repository to read, e.g. https://github.com/owner/repo. Public, or private if the user connected it under Connect GitHub on secscan.us."
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "get_scan_status",
+      "title": "Check a scan",
+      "description": "Status of a scan (queued, scanning, analyzing, complete, failed). With wait_seconds (max 60) it waits for the scan to finish and returns the full report as soon as it does.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "scan_id": {
+            "type": "string",
+            "description": "The scan_id returned by scan_url"
+          },
+          "wait_seconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 60,
+            "description": "Wait up to this long for the scan to finish"
+          }
+        },
+        "required": [
+          "scan_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get_report",
+      "title": "Read a scan report",
+      "description": "The finished report for a scan: grade, what the scan tested and what it skipped (a clean grade says nothing about skipped areas, so say so), prioritised findings with fixes and evidence, and a fix prompt written for the user's AI editor. Findings come 25 per page, most severe first — pass offset for the next page, or min_severity (e.g. \"high\") to focus on what matters most.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "scan_id": {
+            "type": "string",
+            "description": "The scan_id returned by scan_url or list_recent_scans"
+          },
+          "min_severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low",
+              "info"
+            ],
+            "description": "Only findings at this severity or worse, e.g. \"high\""
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Skip this many findings, for the next page"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "Findings per page (default 25, max 50)"
+          }
+        },
+        "required": [
+          "scan_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list_recent_scans",
+      "title": "List recent scans",
+      "description": "The user's most recent scans with their status, newest first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 25
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list_verified_domains",
+      "title": "List verified domains",
+      "description": "Domains the user has proved they own. Only these receive active testing (injection, XSS, SSRF, access control); others get passive checks. Verify more at https://secscan.us/domains.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get_account",
+      "title": "Scans left and plan",
+      "description": "How many scans the user can still run — free scans, plan scans and credits — and their plan. Check this before starting several scans.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "start_domain_verification",
+      "title": "Start verifying a domain",
+      "description": "Begin proving the user owns a domain, which unlocks active tests (injection, XSS, SSRF, access control) on its scans. Returns a file to publish on the site, or a DNS TXT record — an editor can usually add the file to the codebase and deploy it. Then call check_domain_verification. Calling it again returns the same token, so a record already published stays valid.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253,
+            "description": "The domain, e.g. example.com or https://example.com"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "idempotentHint": false
+      }
+    },
+    {
+      "name": "check_domain_verification",
+      "title": "Check a domain verification",
+      "description": "Check whether the file or DNS record from start_domain_verification is live. On success the domain is verified and its next scan includes active tests. DNS changes can take a few minutes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253,
+            "description": "The domain passed to start_domain_verification"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "idempotentHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "list_monitors",
+      "title": "List monitored sites",
+      "description": "Sites under continuous monitoring: latest grade, last and next scan, uptime check, CVE alerts, new problems in the last scan and certificate expiry. Use the monitor id with monitor_scan_now.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "add_monitor",
+      "title": "Monitor a site",
+      "description": "Put a site the user owns under continuous monitoring: hourly uptime checks, CVE matching, certificate alerts and regular rescans. Runs a full baseline scan straight away, which uses one of the user's scans exactly as in the app (free for plan holders). Returns the baseline scan_id for get_scan_status.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "description": "The site to monitor, e.g. https://example.com"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "monitor_scan_now",
+      "title": "Rescan a monitored site now",
+      "description": "Run a full scan of a monitored site now instead of waiting for its schedule — e.g. to confirm a fix. Free for plan holders; otherwise uses one of the user's scans, as in the app. Takes the monitor id from list_monitors.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "monitor_id": {
+            "type": "string",
+            "description": "The monitor id from list_monitors or add_monitor"
+          }
+        },
+        "required": [
+          "monitor_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "dismiss_finding",
+      "title": "Dismiss a false positive",
+      "description": "Mark a finding as a false positive for this site, so future scans of it stop reporting it — the same as Dismiss in the app, and undoable there. ONLY use this after the user has confirmed the finding is wrong; never dismiss a real problem to improve a grade.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "scan_id": {
+            "type": "string",
+            "description": "The scan whose report contains the finding"
+          },
+          "finding_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "The finding's name exactly as get_report shows it"
+          }
+        },
+        "required": [
+          "scan_id",
+          "finding_name"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "destructiveHint": true
+      }
+    }
+  ],
+  "resources": [],
+  "prompts": []
+}

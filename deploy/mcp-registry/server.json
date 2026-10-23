@@ -1,0 +1,34 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "us.secscan/secscan",
+  "title": "SecScan",
+  "description": "Scan, monitor and fix a live web app from your editor: graded security reports with fix prompts.",
+  "version": "1.1.0",
+  "websiteUrl": "https://secscan.info/ai-editors",
+  "icons": [
+    { "src": "https://secscan.us/icon-192.png", "mimeType": "image/png", "sizes": ["192x192"] }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://secscan.us/api/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "A SecScan token (starts with ssk_). Create one at https://secscan.us/settings#ai-editors",
+          "isRequired": true,
+          "isSecret": true,
+          "value": "Bearer {token}",
+          "variables": {
+            "token": {
+              "description": "Your SecScan token, starting ssk_",
+              "isRequired": true,
+              "isSecret": true,
+              "placeholder": "ssk_..."
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

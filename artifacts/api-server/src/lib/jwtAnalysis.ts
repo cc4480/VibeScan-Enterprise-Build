@@ -19,7 +19,10 @@ function vuln(partial: Omit<ScanVulnerability, "id">): ScanVulnerability {
 
 // ─── JWT Extraction ───────────────────────────────────────────────────────────
 
-const JWT_PATTERN = /eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]*/g;
+// `(?<![a-zA-Z0-9_-]eyJ)` keeps a start from sitting inside a longer run of token characters. Without it a page
+// that is only `eyJeyJeyJ…` makes every `eyJ` rescan to the end of the run, and the time grows with the square of the
+// length (30 KB took 0.9 s, 60 KB 3.7 s), on a page of up to 5 MB.
+const JWT_PATTERN = /eyJ(?<![a-zA-Z0-9_-]eyJ)[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]*/g;
 
 function extractJwts(sources: string[]): string[] {
   const seen = new Set<string>();
@@ -45,6 +48,39 @@ interface JwtPayload {
   sub?: string;
   iss?: string;
   [k: string]: unknown;
+}
+
+/**
+ * Whether a decoded JWT actually authenticates or authorizes somebody.
+ *
+ * The expiry findings below — no `exp`, excessive lifetime, HS256 without
+ * expiry — all assume the token is a session credential, where "valid forever"
+ * means "a stolen token works forever". That assumption does not hold for the
+ * many JWT-shaped values that are simply public infrastructure identifiers.
+ *
+ * Netlify injects one into every site it hosts:
+ *
+ *   {"site_id":"…","account_id":"…","deploy_id":"…","issuer":"nfserver"}
+ *
+ * It names a build, not a person; it grants nothing; an `exp` on it would be
+ * meaningless. Flagging it produced two Highs on mistral.ai — and would have on
+ * every Netlify-hosted site scanned.
+ *
+ * A token that carries no subject and no authorization claim cannot be used to
+ * act as anyone, so its lifetime is not a finding. Requiring one of these
+ * claims is what separates a credential from a label.
+ */
+const AUTH_CLAIMS = [
+  "sub", "aud", "scope", "scp", "role", "roles", "permissions", "perms",
+  "groups", "email", "user_id", "userId", "uid", "username", "user",
+];
+
+function looksLikeAuthToken(payload: JwtPayload): boolean {
+  // Supabase's anon key says `role: "anon"` and names no one. It is published on purpose and issued
+  // for ten years, so how long it lives says nothing about the app: reporting that was a MEDIUM on the
+  // clean twin of a test app. A token that also names a subject is a real session and still counts.
+  if (payload["role"] === "anon" && payload.sub === undefined) return false;
+  return AUTH_CLAIMS.some((c) => payload[c] !== undefined);
 }
 
 function b64Decode(input: string): string {
@@ -92,10 +128,15 @@ const SENSITIVE_KEYS = new Set([
 export async function analyzeJwts(
   headers: Record<string, string>,
   html: string,
+  /** Told why, when there was nothing here to test (recorded as "not tested", not "ran"). */
+  notTested?: (reason: string) => void,
 ): Promise<ScanVulnerability[]> {
   const sources: string[] = [html, ...Object.values(headers)];
   const tokens = extractJwts(sources);
-  if (tokens.length === 0) return [];
+  if (tokens.length === 0) {
+    notTested?.("no JSON Web Token appeared in the page or its response headers");
+    return [];
+  }
 
   const vulns: ScanVulnerability[] = [];
   const reported = new Set<string>();
@@ -148,8 +189,12 @@ export async function analyzeJwts(
       }));
     }
 
+    // Expiry only matters for a token that can act as somebody. See
+    // looksLikeAuthToken — a public build/deploy identifier is not a credential.
+    const isAuthToken = looksLikeAuthToken(payload);
+
     // 3. Missing expiry
-    if (payload.exp === undefined) {
+    if (isAuthToken && payload.exp === undefined) {
       report("no-exp", vuln({
         name: "JWT Token Has No Expiry (exp Claim Missing)",
         severity: "high",
@@ -167,6 +212,7 @@ export async function analyzeJwts(
 
     // 4. Extremely long-lived token
     if (
+      isAuthToken &&
       payload.exp !== undefined &&
       payload.iat !== undefined &&
       payload.exp - payload.iat > 365 * 24 * 3600
@@ -187,7 +233,7 @@ export async function analyzeJwts(
     }
 
     // 5. HS256 without expiry (offline brute-force + infinite lifetime)
-    if (alg === "hs256" && payload.exp === undefined) {
+    if (isAuthToken && alg === "hs256" && payload.exp === undefined) {
       report("hs256-no-exp", vuln({
         name: "JWT Uses HS256 Without Expiry — Offline Brute-Force Risk",
         severity: "high",

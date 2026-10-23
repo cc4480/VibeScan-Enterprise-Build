@@ -2,61 +2,36 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { useSeo } from "@/lib/seo";
 import { useCreateScan } from "@workspace/api-client-react";
-import {
-  ScanCredentialsFields,
-  emptyCredentials,
-  credentialsReady,
-  emptySecondAccount,
-  secondAccountReady,
-  type ScanCredentialsValue,
-  type SecondAccountValue,
-} from "@/components/scan-credentials-fields";
-import { Shield, Zap, Globe, Lock, CheckCircle2, Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
-
-function getFriendlyError(err: unknown): string {
-  const msg = err instanceof Error ? err.message : String(err ?? "");
-  if (!msg) return "Something went wrong. Please try again.";
-  if (/<!DOCTYPE|<html|<head|<body/i.test(msg)) return "Server is unavailable right now. Please wait a moment and try again.";
-  if (/failed to fetch|networkerror|load failed/i.test(msg)) return "Could not reach the server. Check your connection and try again.";
-  if (/invalid url/i.test(msg)) return msg;
-  if (/unauthorized|401/i.test(msg)) return "Session token missing. Please refresh the page and try again.";
-  const clean = msg.replace(/^HTTP \d{3} [^:]+:\s*/, "");
-  return clean.length > 120 ? clean.slice(0, 120) + "…" : clean;
-}
-
-// Every scan is a full scan. This is what one covers — shown rather than
-// chosen, so nobody has to guess which depth they need.
-const COVERAGE: { title: string; items: string[] }[] = [
-  {
-    title: "Configuration",
-    items: ["Security headers and CSP", "TLS and certificate grading", "DNS and exposed files"],
-  },
-  {
-    title: "Active testing",
-    items: ["Injection and XSS probing", "Path traversal", "API surface discovery"],
-  },
-  {
-    title: "Access control",
-    items: ["Broken access control and IDOR", "Out-of-band SSRF", "Backend storage rules"],
-  },
-  {
-    title: "Reporting",
-    items: ["AI security analysis", "Remediation guide", "Re-scan comparison"],
-  },
-];
+import { ScanCredentialsFields, emptyCredentials, credentialsReady, emptySecondAccount, secondAccountReady, autoAccountRequested, type ScanCredentialsValue, type SecondAccountValue } from "@/components/scan-credentials-fields";
+import { secondCredentialsPayload } from "@/components/second-account";
+import { GithubRepoField, looksLikeGithubRepo } from "@/components/github-repo-field";
+import { Shield, Zap, Globe, Lock, CheckCircle2, Loader2, GitBranch } from "lucide-react";
+import { isTrialExhausted } from "@/lib/purchase-intent-api";
+import { ActiveTestingStatus, TrialExhaustedPanel, getFriendlyError, COVERAGE } from "./scan-form-panels";
+import { repoScanAddress } from "./scan-form-repo";
 
 export default function ScanFormPage() {
-  useSeo({ title: "New Scan — Seclayer", noindex: true });
+  useSeo({ title: "New Scan — SecScan.us", noindex: true });
   const [url, setUrl] = useState("");
   const [credentials, setCredentials] = useState<ScanCredentialsValue>(emptyCredentials);
   const [secondAccount, setSecondAccount] = useState<SecondAccountValue>(emptySecondAccount);
+  const [githubRepo, setGithubRepo] = useState("");
+  /** "site": scan a website (a repository can be added). "repo": scan a GitHub repository alone, no website. */
+  const [mode, setMode] = useState<"site" | "repo">("site");
   const [, setLocation] = useLocation();
+  const repoAddress = repoScanAddress(githubRepo);
 
   const createScan = useCreateScan();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (mode === "repo") {
+      // The repository is the whole target: the server reads it as a scan of that repository alone.
+      if (!repoAddress) return;
+      createScan.mutate({ data: { targetUrl: repoAddress } }, { onSuccess: (data) => setLocation(`/scan/${data.scanId}`) });
+      return;
+    }
 
     let targetUrl = url;
     if (!url.trim()) return;
@@ -87,14 +62,7 @@ export default function ScanFormPage() {
     // A second account only travels with a first one — the server rejects it
     // alone, and access control is a comparison between two identities.
     const secondCreds =
-      creds && secondAccountReady(secondAccount)
-        ? {
-            mode: "session" as const,
-            authorized: true,
-            cookie: secondAccount.cookie.trim() || null,
-            bearerToken: secondAccount.bearerToken.trim() || null,
-          }
-        : undefined;
+      creds && secondAccountReady(secondAccount, credentials) ? secondCredentialsPayload(secondAccount, credentials) : undefined;
 
     createScan.mutate(
       {
@@ -102,6 +70,8 @@ export default function ScanFormPage() {
           targetUrl,
           ...(creds ? { credentials: creds } : {}),
           ...(secondCreds ? { secondaryCredentials: secondCreds } : {}),
+          ...(creds && !secondCreds && autoAccountRequested(secondAccount) ? { autoSecondAccount: true } : {}),
+          ...(githubRepo.trim() ? { githubRepoUrl: githubRepo.trim() } : {}),
         },
       },
       {
@@ -122,13 +92,28 @@ export default function ScanFormPage() {
           Launch Security Scan
         </h1>
         <p className="text-muted-foreground text-lg">
-          Paste any publicly accessible URL — your app, a client's site, or any live website.
+          {mode === "repo" ? "Choose a GitHub repository to read, with no website needed." : "Paste the URL of an app you own or are authorised to test."}
         </p>
+        <div role="tablist" aria-label="What to scan" className="inline-flex mt-6 p-1 rounded-xl bg-secondary/60 border border-white/10">
+          {([["site", "Website", Globe], ["repo", "GitHub repository only", GitBranch]] as const).map(([id, label, Icon]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={mode === id}
+              onClick={() => setMode(id)}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors ${mode === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <Icon className="w-4 h-4" /> {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="glass-panel p-6 sm:p-10 rounded-3xl">
         <form onSubmit={handleSubmit} className="flex flex-col gap-10">
           {/* URL Input */}
+          {mode === "site" && (
           <div className="flex flex-col gap-3">
             <label htmlFor="url" className="text-sm font-semibold flex items-center gap-2">
               <Globe className="w-4 h-4 text-primary" /> Target URL
@@ -150,9 +135,19 @@ export default function ScanFormPage() {
             <p className="text-xs text-muted-foreground ml-1">
               Any publicly accessible website works. Only scan sites you have permission to test.
             </p>
+            <ActiveTestingStatus url={url} />
           </div>
+          )}
+
+          {mode === "repo" && (
+            <p className="text-sm text-muted-foreground -mb-4">
+              Reads every text file in the repository for committed secrets, database rules, CI settings, risky code patterns and vulnerable
+              dependencies. It does not test a running site. It spends one scan, like any other.
+            </p>
+          )}
 
           {/* What a scan covers — informational, not a choice */}
+          {mode === "site" && (
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <label className="text-sm font-semibold flex items-center gap-2">
@@ -183,23 +178,30 @@ export default function ScanFormPage() {
             </div>
 
             <p className="text-xs text-muted-foreground">
-              This scan sends real probe traffic to the target, including injection payloads and
-              a port scan. Only scan applications you own or are authorised to test.
+              On a domain you have verified, this scan sends real probe traffic to the target,
+              including injection payloads and a port scan. Without verification the active
+              checks are withheld and only the passive ones run. Either way, only scan
+              applications you own or are authorised to test.
             </p>
           </div>
+          )}
 
-          <ScanCredentialsFields
-            value={credentials}
-            onChange={setCredentials}
-            second={secondAccount}
-            onSecondChange={setSecondAccount}
-          />
+          <GithubRepoField value={githubRepo} onChange={setGithubRepo} only={mode === "repo"} />
+
+          {mode === "site" && (
+            <ScanCredentialsFields
+              value={credentials}
+              onChange={setCredentials}
+              second={secondAccount}
+              onSecondChange={setSecondAccount}
+            />
+          )}
 
           {/* Submit */}
           <div className="pt-6 border-t border-white/5 flex flex-col items-center gap-4">
             <button
               type="submit"
-              disabled={createScan.isPending || !url.trim()}
+              disabled={createScan.isPending || !looksLikeGithubRepo(githubRepo) || (mode === "repo" ? !repoAddress : !url.trim())}
               className="w-full sm:w-auto min-w-[260px] px-8 py-4 bg-primary text-primary-foreground text-lg font-bold rounded-xl shadow-[0_0_30px_rgba(20,184,120,0.25)] hover:shadow-[0_0_40px_rgba(20,184,120,0.4)] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 flex items-center justify-center gap-2"
             >
               {createScan.isPending ? (
@@ -213,11 +215,14 @@ export default function ScanFormPage() {
               )}
             </button>
 
-            {createScan.isError && (
-              <p className="text-red-400 text-sm text-center">
-                {getFriendlyError(createScan.error)}
-              </p>
-            )}
+            {createScan.isError &&
+              (isTrialExhausted(createScan.error) ? (
+                <TrialExhaustedPanel />
+              ) : (
+                <p className="text-red-400 text-sm text-center">
+                  {getFriendlyError(createScan.error)}
+                </p>
+              ))}
 
             <p className="text-xs text-muted-foreground text-center">
               Only scan sites you own or have explicit permission to test.

@@ -1,0 +1,15 @@
+{
+ "note": "One model per vendor, so no two judges share weights. OpenRouter model ids, checked against https://openrouter.ai/api/v1/models on 2026-10-21; run-panel.ts --dry-run checks them again. Anthropic's model is on the panel, and Claude also helped build the fixture and ground truth: score-panel.ts reports every judge separately, so its verdicts can be read against the rest or left out.",
+ "models": [
+  { "vendor": "Anthropic", "id": "anthropic/claude-sonnet-5.5" },
+  { "vendor": "OpenAI", "id": "openai/gpt-6.1-sol" },
+  { "vendor": "Google", "id": "google/gemini-4-argon" },
+  { "vendor": "xAI", "id": "x-ai/grok-4.7" },
+  { "vendor": "DeepSeek", "id": "deepseek/deepseek-v4.1-flash-1017" },
+  { "vendor": "Mistral", "id": "mistralai/mistral-large-4-0" },
+  { "vendor": "Alibaba Qwen", "id": "qwen/qwen3.8-max-0902" },
+  { "vendor": "Moonshot", "id": "moonshotai/kimi-k3" },
+  { "vendor": "Zhipu", "id": "z-ai/glm-5.3-prime" },
+  { "vendor": "MiniMax", "id": "minimax/minimax-m3" }
+ ]
+}

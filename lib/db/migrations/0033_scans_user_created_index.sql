@@ -1,0 +1,11 @@
+-- Audit finding (LOW-MEDIUM): the daily quota count (scansToday in routes/scansCreate.ts) filters
+-- scans by user_id and a created_at range, and only idx_scans_user_id existed, so each count read
+-- every scan the user has ever started. This composite index serves that query directly.
+-- Declared in lib/db/src/schema/vibescan.ts as idx_scans_user_created.
+--
+-- Plain CREATE INDEX, not CONCURRENTLY. CONCURRENTLY cannot run inside a transaction, and drizzle
+-- runs all pending migrations in one transaction (drizzle-orm/pg-core/dialect.js), so it cannot be
+-- used here. The cost is a write lock on scans for the length of the build. Run it in a quiet window
+-- on a large table, or pre-build the index by hand with CONCURRENTLY first; IF NOT EXISTS then
+-- makes this statement a no-op.
+CREATE INDEX IF NOT EXISTS "idx_scans_user_created" ON "scans" USING btree ("user_id", "created_at");

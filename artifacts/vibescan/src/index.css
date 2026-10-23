@@ -42,36 +42,44 @@
 }
 
 :root {
-  /* Dark Security Theme */
-  --background: 222 47% 7%;
-  --foreground: 210 40% 98%;
-  
-  --card: 222 47% 9%;
-  --card-foreground: 210 40% 98%;
-  --card-border: 222 30% 15%;
-  
-  --popover: 222 47% 9%;
-  --popover-foreground: 210 40% 98%;
-  
-  /* Bright Hacker Green/Teal */
-  --primary: 158 64% 52%;
-  --primary-foreground: 222 47% 7%;
-  
-  --secondary: 222 30% 15%;
-  --secondary-foreground: 210 40% 98%;
-  
-  --muted: 222 30% 12%;
-  --muted-foreground: 215 20% 65%;
-  
-  --accent: 222 30% 20%;
-  --accent-foreground: 210 40% 98%;
-  
+  /* The SecScan video's palette: deep navy-blue (#0d364a at its darkest), teal (#107174), emerald-green (the shield and
+     its glow) and a lime highlight (the S). Backgrounds and surfaces are teal-tinted navy instead of neutral zinc, so
+     the page sits behind the hero video without a colour break; the accent is the video's green. */
+  --background: 204 62% 5.5%;
+  --foreground: 170 20% 97%;
+
+  --card: 202 46% 9%;
+  --card-foreground: 170 20% 97%;
+  --card-border: 199 34% 17%;
+
+  --popover: 202 46% 9%;
+  --popover-foreground: 170 20% 97%;
+
+  /* Emerald between Tailwind green-500 and the video's bright S: hue 156 */
+  --primary: 156 72% 42%;
+  --primary-foreground: 204 62% 5.5%;
+
+  --secondary: 200 36% 14%;
+  --secondary-foreground: 170 20% 97%;
+
+  --muted: 200 36% 14%;
+  --muted-foreground: 195 16% 68%;
+
+  --accent: 200 36% 14%;
+  --accent-foreground: 170 20% 97%;
+
   --destructive: 0 84% 60%;
-  --destructive-foreground: 210 40% 98%;
-  
-  --border: 222 30% 15%;
-  --input: 222 30% 15%;
-  --ring: 158 64% 52%;
+  --destructive-foreground: 0 0% 98%;
+
+  --border: 199 34% 17%;
+  --input: 199 34% 17%;
+  --ring: 156 72% 42%;
+
+  /* Palette stops used by the page background and the headline gradient */
+  --video-navy: 212 66% 7%;
+  --video-blue: 200 70% 17%;
+  --video-teal: 183 76% 25%;
+  --video-lime: 84 81% 56%;
 }
 
 @layer base {
@@ -91,11 +99,21 @@
 
 @layer utilities {
   .glass-panel {
-    @apply bg-card/60 backdrop-blur-xl border border-white/5 shadow-2xl shadow-black/50;
+    @apply bg-card/80 border border-white/5 shadow-2xl shadow-black/50;
   }
   
   .glass-card {
-    @apply bg-card/40 backdrop-blur-md border border-white/5 shadow-lg hover:bg-card/60 transition-colors duration-300;
+    @apply bg-card/60 border border-white/5 shadow-lg hover:bg-card/70 transition-colors duration-300;
+  }
+
+  /* No card or panel blurs what is behind it. A background blur makes the browser re-blur everything under the layer on
+     every scroll, and a page of several of them (a long report) can flicker or stop painting parts of itself on some
+     graphics setups. The page behind is a dark gradient, so a little more opacity gives the same look. glass-flat is the
+     lighter card for long lists, which also lets the browser skip painting cards that are off screen. */
+  .glass-flat {
+    @apply bg-card/60 border border-white/5 shadow-lg hover:bg-card/70;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 84px;
   }
 
   .text-gradient {
@@ -103,7 +121,7 @@
   }
   
   .text-gradient-primary {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-emerald-300;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary via-emerald-300 to-lime-300;
   }
 
   .hide-scrollbar::-webkit-scrollbar {

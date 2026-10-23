@@ -1,0 +1,39 @@
+# Update PRs for the two things CI trusts without reading: the GitHub Actions in
+# .github/workflows and the npm dependency tree.
+#
+# Actions are referenced by tag (actions/checkout@v4) rather than by commit SHA.
+# Pinning to SHAs is a follow-up: it needs each SHA resolved from the action's own
+# repository. Once the first pins exist (`uses: owner/action@<sha> # v4.1.2`),
+# Dependabot keeps them current and rewrites the trailing version comment, so no
+# one has to maintain SHAs by hand.
+
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  # pnpm workspace: the root manifest, pnpm-lock.yaml and pnpm-workspace.yaml (the
+  # shared catalog and overrides) live at /. Dependabot's "npm" ecosystem is the one
+  # that reads pnpm lockfiles.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # Minor and patch bumps arrive as one PR a week; majors stay separate so a
+      # breaking change is reviewed on its own.
+      npm-minor-and-patch:
+        update-types: ["minor", "patch"]
+    # Major version bumps are skipped: each one needs its own tested upgrade, not an
+    # automatic PR. Security updates are separate and still open for any version.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
