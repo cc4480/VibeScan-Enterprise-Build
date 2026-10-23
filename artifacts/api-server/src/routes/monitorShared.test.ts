@@ -1,7 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
-
-// monitorShared pulls in the db and the limiter at import time; the schema under test needs neither.
-vi.mock("@workspace/db", () => ({ db: {}, reportsTable: {} }));
+import { describe, it, expect } from "vitest";
 
 import { CreateMonitorBody, MONITOR_URL_MAX_LENGTH } from "./monitorShared";
 

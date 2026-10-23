@@ -1,8 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
-
-// accountShared imports the session helpers, which need a database at import time; the schemas do not.
-vi.mock("../lib/auth", () => ({ createSession: vi.fn(), SESSION_COOKIE: "sid", SESSION_TTL: 1000 }));
-vi.mock("@workspace/db", () => ({ usersTable: {} }));
+import { describe, it, expect } from "vitest";
 
 import { LoginBody, MAX_PASSWORD_LENGTH } from "./accountShared";
 

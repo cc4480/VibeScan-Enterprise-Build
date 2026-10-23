@@ -1,6 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
-
-vi.mock("@workspace/db", () => ({ db: {}, oobInteractionsTable: {}, oobTokensTable: {} }));
+import { describe, it, expect } from "vitest";
 
 describe("LINK_PREVIEW_AGENT", () => {
   it("matches the chat and link-preview fetchers", async () => {
