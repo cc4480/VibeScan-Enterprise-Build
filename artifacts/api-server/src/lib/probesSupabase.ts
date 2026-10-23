@@ -3,6 +3,7 @@ import type { ScanVulnerability } from "./scanner";
 import { classifyExposure } from "./baasExposure";
 import { extractSupabaseConfig } from "./supabase-probes-config";
 import { vuln, safeGet } from "./probesCore";
+import { supabaseProjectOrigin } from "./baasEndpoints";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 13. SUPABASE ROW LEVEL SECURITY CHECK
@@ -40,7 +41,7 @@ export async function checkSupabaseRLS(
     return [];
   }
 
-  const supabaseOrigin = `https://${projectRef}.supabase.co`;
+  const supabaseOrigin = supabaseProjectOrigin(projectRef);
   const restBase = `${supabaseOrigin}/rest/v1/`;
 
   // 2. The anon/publishable key (a sb_publishable_ key or the legacy JWT). A bare token that merely

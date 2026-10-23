@@ -9,6 +9,7 @@ import { probeFirebaseStorage } from "./baasDepth";
 import type { ScanVulnerability } from "./scanner";
 import { classifyExposure } from "./baasExposure";
 import { readBodyBounded } from "./httpBody";
+import { firestoreApi, firebaseDatabaseOrigin } from "./baasEndpoints";
 
 const TIMEOUT_MS = 10_000;
 const MAX_TABLES_TO_TEST = 12;
@@ -100,7 +101,7 @@ async function probeFirestoreCollection(
   collection: string,
 ): Promise<unknown[] | null> {
   const url =
-    `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}` +
+    `${firestoreApi()}/v1/projects/${encodeURIComponent(projectId)}` +
     `/databases/(default)/documents/${encodeURIComponent(collection)}` +
     `?key=${encodeURIComponent(apiKey)}&pageSize=1`;
 
@@ -145,7 +146,7 @@ async function testRealtimeDatabaseOpen(databaseURL: string): Promise<boolean> {
   // Unauthenticated fetch of root .json
   // Denied rules → 401, or { "error": "Permission denied." }
   const result = await safeFetch(
-    `${databaseURL}/.json`,
+    `${firebaseDatabaseOrigin(databaseURL)}/.json`,
     { headers: { Accept: "application/json" } },
     8_000,
   );

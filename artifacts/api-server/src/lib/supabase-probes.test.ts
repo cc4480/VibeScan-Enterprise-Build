@@ -1,12 +1,13 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { runSupabaseProbes } from "./supabase-probes.js";
+import { startBaasStub, useRealBaas, type BaasStub, type Reply } from "./baasStub.testkit";
 
 /**
  * VibeStack Supabase probe tests.
  * These are VibeScan's most important differentiating feature —
  * detecting exposed Supabase RLS misconfigurations in AI-built apps.
  *
- * All external HTTP calls are stubbed via vi.stubGlobal("fetch", vi.fn()).
+ * The probes make their real requests to a local server that answers like a Supabase project (lib/baasStub.testkit.ts).
  */
 
 // ─── JWT fixtures ─────────────────────────────────────────────────────────────
@@ -53,29 +54,21 @@ function htmlWithNoSupabase(): string {
   return `<html><body>Hello world — no Supabase here</body></html>`;
 }
 
-// ─── Fetch mock helpers ───────────────────────────────────────────────────────
+// ─── The local Supabase-like server ────────────────────────────────────────────
 
-function jsonResponse(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
+let stub: BaasStub;
+beforeAll(async () => { stub = await startBaasStub(); });
+afterAll(async () => { await stub.stop(); useRealBaas(); });
+beforeEach(() => stub.clear());
+
+function jsonResponse(data: unknown, status = 200): Reply {
+  return { json: data, status };
 }
 
-function mockFetch(impl: (url: string) => Response) {
-  vi.mocked(fetch).mockImplementation((input) =>
-    Promise.resolve(impl(String(input))),
-  );
+/** Answers every request to the project from `impl(url)`, where url is the path and query as received. */
+function answerWith(impl: (url: string) => Reply) {
+  stub.onAny(/^\/supabase\//, (r) => impl(r.url));
 }
-
-// ─── Setup / teardown ─────────────────────────────────────────────────────────
-
-beforeEach(() => {
-  vi.stubGlobal("fetch", vi.fn());
-});
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 // ─── service_role key detection (no HTTP needed for the finding itself) ───────
 
@@ -83,7 +76,7 @@ describe("runSupabaseProbes — service_role key in client code", () => {
   it("reports CRITICAL finding when service_role key is in client-side HTML", async () => {
     // After detecting the service_role key the probe still tries to probe tables;
     // mock subsequent HTTP calls so they return nothing meaningful.
-    mockFetch(() => jsonResponse({ message: "Not found" }, 404));
+    answerWith(() => jsonResponse({ message: "Not found" }, 404));
 
     const findings: any[] = [];
     await runSupabaseProbes(htmlWithServiceRoleKey(), "deep", findings);
@@ -97,7 +90,7 @@ describe("runSupabaseProbes — service_role key in client code", () => {
   });
 
   it("does NOT report service_role vuln when only the anon key is present", async () => {
-    mockFetch(() => jsonResponse([], 200));
+    answerWith(() => jsonResponse([], 200));
 
     const findings: any[] = [];
     await runSupabaseProbes(htmlWithAnonKey(), "deep", findings);
@@ -117,7 +110,7 @@ describe("runSupabaseProbes — no Supabase in content", () => {
     await runSupabaseProbes(htmlWithNoSupabase(), "deep", findings);
 
     expect(findings).toHaveLength(0);
-    expect(fetch).not.toHaveBeenCalled();
+    expect(stub.requests).toHaveLength(0);
   });
 });
 
@@ -126,7 +119,7 @@ describe("runSupabaseProbes — no Supabase in content", () => {
 describe("runSupabaseProbes — RLS checks via REST API", () => {
   it("reports informational finding when Supabase detected but tables not enumerable", async () => {
     // OpenAPI spec returns valid JSON but with no paths/definitions → no tables
-    mockFetch(() => jsonResponse({}, 200));
+    answerWith(() => jsonResponse({}, 200));
 
     const findings: any[] = [];
     await runSupabaseProbes(htmlWithAnonKey(), "deep", findings);
@@ -143,7 +136,7 @@ describe("runSupabaseProbes — RLS checks via REST API", () => {
       },
     };
 
-    mockFetch((url) => {
+    answerWith((url) => {
       // Table read: returns array of rows → "open" read result
       if (url.includes("?select=")) {
         return jsonResponse([{ id: 1, email: "user@example.com" }], 200);
@@ -181,7 +174,7 @@ describe("runSupabaseProbes — RLS checks via REST API", () => {
    * bundle's own `.from()` calls.
    */
   it("finds the open table from .from() calls when REST enumeration is locked to service_role", async () => {
-    mockFetch((url) => {
+    answerWith((url) => {
       if (url.includes("?select=")) {
         // A per-user row (it carries an owner column). Rows with nothing personal or per-user in them are
         // reported as information, not critical: see supabase-exposure.test.ts.
@@ -221,7 +214,7 @@ describe("runSupabaseProbes — RLS checks via REST API", () => {
   });
 
   it("still reports the informational finding when neither REST enumeration nor .from() calls find a table name", async () => {
-    mockFetch(() => jsonResponse({ message: "Invalid API key" }, 401));
+    answerWith(() => jsonResponse({ message: "Invalid API key" }, 401));
 
     // No .from(...) call anywhere in this bundle — genuinely nothing to test.
     const html = `<script>

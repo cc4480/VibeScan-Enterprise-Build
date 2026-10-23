@@ -1,4 +1,5 @@
 /** Finding the project URL, anon key and any service-role key in client code. */
+import { supabaseProjectOrigin } from "./baasEndpoints";
 // ─────────────────────────────────────────────────────────────────────────────
 // SUPABASE DETECTION
 // ─────────────────────────────────────────────────────────────────────────────
@@ -130,7 +131,7 @@ export function extractSupabaseConfig(content: string): SupabaseConfig | null {
   const nearby = [...jwts, ...publishable];
 
   for (const { ref, indexes } of sites) {
-    const found = (anonKey: string): SupabaseConfig => ({ projectRef: ref, anonKey, baseUrl: `https://${ref}.supabase.co` });
+    const found = (anonKey: string): SupabaseConfig => ({ projectRef: ref, anonKey, baseUrl: supabaseProjectOrigin(ref) });
 
     // 1. A key the code names as the public key.
     for (const pattern of NAMED_KEY_PATTERNS) {

@@ -1,13 +1,9 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-
-// checkSupabaseRLS reaches the network through scanFetch; the other Supabase probes use global fetch.
-const scanFetchMock = vi.fn();
-vi.mock("./http.js", () => ({ scanFetch: (...a: unknown[]) => scanFetchMock(...a) }));
-
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { runSupabaseProbes } from "./supabase-probes.js";
 import { checkSupabaseRLS } from "./probes.js";
 import { extractTableNamesFromContent, extractStorageBucketNames } from "./supabase-probes-tables.js";
 import { probeSupabaseStorageContents } from "./baasDepth.js";
+import { startBaasStub, useRealBaas, type BaasStub, type Reply } from "./baasStub.testkit";
 import type { ScanVulnerability } from "./scanner";
 
 /**
@@ -15,11 +11,13 @@ import type { ScanVulnerability } from "./scanner";
  *
  * The bundle below has the layout of a built Vite app: library code first, then the app's own code with
  * the project URL and key as renamed constants, `.from("table")` calls on a renamed client, and a
- * `.storage.from("bucket")` call.
+ * `.storage.from("bucket")` call. The probes talk to a real local server that answers like a Supabase project
+ * (lib/baasStub.testkit.ts).
  */
 
 const REF = "abcdefghijklmnopqrst";
-const BASE = `https://${REF}.supabase.co`;
+const BASE = `https://${REF}.supabase.co`; // what the code declares
+const PREFIX = `/supabase/${REF}`;
 const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
 const jwt = (claims: Record<string, unknown>) => `${b64({ alg: "HS256", typ: "JWT" })}.${b64(claims)}.${"s".repeat(43)}`;
 const ANON = jwt({ iss: "supabase", ref: REF, role: "anon", iat: 1700000000, exp: 2000000000 });
@@ -36,14 +34,15 @@ const bundle = (opts: { service?: boolean } = {}) =>
   `async function load(){const {data:a}=await Tn.from("tasks").select("*");const {data:b}=await Tn.from("orders").select("*");` +
   `const {data:c}=await Tn.storage.from("avatars").list();return[a,b,c]}${VENDOR}`;
 
-const json = (data: unknown, status = 200) =>
-  new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
+const json = (data: unknown, status = 200): Reply => ({ json: data, status });
 
-beforeEach(() => {
-  vi.stubGlobal("fetch", vi.fn());
-  scanFetchMock.mockReset();
-});
-afterEach(() => vi.unstubAllGlobals());
+let stub: BaasStub;
+beforeAll(async () => { stub = await startBaasStub(); });
+afterAll(async () => { await stub.stop(); useRealBaas(); });
+beforeEach(() => stub.clear());
+
+/** Whatever is asked, the service_role key must never be the one sent. */
+const serviceKeyNeverSent = () => stub.requests.every((r) => !JSON.stringify(r.headers).includes(SERVICE));
 
 describe("table and bucket names read from a bundle", () => {
   it("takes table names from .from() calls and leaves out storage buckets and built-ins", () => {
@@ -64,33 +63,31 @@ describe("table and bucket names read from a bundle", () => {
 
 describe("runSupabaseProbes given a bundle", () => {
   /** Anon reads of `tasks` come back empty (RLS on); `orders` returns rows (RLS off); storage lists nothing. */
-  function stub() {
-    vi.mocked(fetch).mockImplementation((input, init) => {
-      const url = String(input);
-      const h = (init as RequestInit | undefined)?.headers as Record<string, string> | undefined;
-      // Whatever is asked, the service_role key must never be the one sent.
-      expect(JSON.stringify(h ?? {})).not.toContain(SERVICE);
-      if (url.includes("/rest/v1/orders?select=")) return Promise.resolve(json([{ id: 1, user_id: "u1", total: 12 }]));
-      if (url.includes("/rest/v1/tasks?select=")) return Promise.resolve(json([]));
-      if (url.includes("/storage/v1/bucket")) return Promise.resolve(json([]));
-      if (url.includes("/storage/v1/object/list/avatars")) return Promise.resolve(json([{ name: "passport-scan.png" }]));
-      if (url.includes("/auth/v1/settings")) return Promise.resolve(json({ mailer_autoconfirm: false }));
-      return Promise.resolve(json({ message: "Invalid API key" }, 401));
+  function serve() {
+    stub.onAny(new RegExp(`^${PREFIX}/`), (r): Reply => {
+      const rel = r.path.slice(PREFIX.length);
+      if (rel === "/rest/v1/orders" && r.query.has("select")) return json([{ id: 1, user_id: "u1", total: 12 }]);
+      if (rel === "/rest/v1/tasks" && r.query.has("select")) return json([]);
+      if (rel === "/storage/v1/bucket") return json([]);
+      if (rel === "/storage/v1/object/list/avatars") return json([{ name: "passport-scan.png" }]);
+      if (rel === "/auth/v1/settings") return json({ mailer_autoconfirm: false });
+      return json({ message: "Invalid API key" }, 401);
     });
   }
 
   it("finds the open table the bundle names, with the key the bundle holds", async () => {
-    stub();
+    serve();
     const findings: ScanVulnerability[] = [];
     await runSupabaseProbes(bundle(), "deep", findings);
     const open = findings.find((f) => /Tables Readable Without Authentication/.test(f.name));
     expect(open?.severity).toBe("critical");
     expect(open?.evidence).toContain("orders");
     expect(open?.evidence).not.toContain("tasks");
+    expect(serviceKeyNeverSent()).toBe(true);
   });
 
   it("lists a bucket the code names even though the bucket list itself is empty", async () => {
-    stub();
+    serve();
     const findings: ScanVulnerability[] = [];
     await runSupabaseProbes(bundle(), "deep", findings);
     const files = findings.find((f) => /Storage Files Listable/.test(f.name));
@@ -99,38 +96,40 @@ describe("runSupabaseProbes given a bundle", () => {
   });
 
   it("does not send the service_role key when the bundle holds both keys", async () => {
-    stub();
+    serve();
     const findings: ScanVulnerability[] = [];
     await runSupabaseProbes(bundle({ service: true }), "deep", findings);
-    // The stub throws if the service key is ever sent; the exposed key is reported, not used.
+    // The exposed key is reported, not used.
     const exposed = findings.find((f) => /Service Role Key Exposed/.test(f.name));
     expect(exposed?.severity).toBe("critical");
     expect(findings.find((f) => /Tables Readable Without Authentication/.test(f.name))).toBeDefined();
+    expect(stub.requests.length).toBeGreaterThan(0);
+    expect(serviceKeyNeverSent()).toBe(true);
   });
 
   it("finds nothing to test in a page whose bundle was not supplied", async () => {
-    stub();
+    serve();
     const findings: ScanVulnerability[] = [];
     await runSupabaseProbes(`<html><body><div id="root"></div><script type="module" src="/assets/app.js"></script></body></html>`, "deep", findings);
     expect(findings).toEqual([]);
-    expect(fetch).not.toHaveBeenCalled();
+    expect(stub.requests).toHaveLength(0);
   });
 });
 
 describe("probeSupabaseStorageContents with bucket names from the code", () => {
-  const list = (b: string) => `${BASE}/storage/v1/object/list/${b}`;
+  const LOCAL_BASE = () => `${stub.origin}${PREFIX}`;
+  const list = (b: string) => `${PREFIX}/storage/v1/object/list/${b}`;
 
   function respond(routes: Record<string, unknown[]>, bucketListStatus = 200) {
-    vi.mocked(fetch).mockImplementation((input) => {
-      const url = String(input);
-      if (url === `${BASE}/storage/v1/bucket`) return Promise.resolve(json(bucketListStatus === 200 ? [] : { message: "nope" }, bucketListStatus));
-      const hit = routes[url];
-      return Promise.resolve(hit ? json(hit) : json({ message: "Bucket not found" }, 404));
+    stub.onAny(new RegExp(`^${PREFIX}/storage/`), (r): Reply => {
+      if (r.path === `${PREFIX}/storage/v1/bucket`) return json(bucketListStatus === 200 ? [] : { message: "nope" }, bucketListStatus);
+      const hit = routes[r.path];
+      return hit ? json(hit) : json({ message: "Bucket not found" }, 404);
     });
   }
   const run = async (hints: string[]) => {
     const out: ScanVulnerability[] = [];
-    await probeSupabaseStorageContents(BASE, ANON, out, hints);
+    await probeSupabaseStorageContents(LOCAL_BASE(), ANON, out, hints);
     return out;
   };
 
@@ -155,7 +154,7 @@ describe("probeSupabaseStorageContents with bucket names from the code", () => {
   it("asks about a bucket once however often it is named, and at most five", async () => {
     respond({});
     await run(["a", "a", "b", "c", "d", "e", "f", "g"]);
-    const asked = vi.mocked(fetch).mock.calls.map((c) => String(c[0])).filter((u) => u.includes("/object/list/"));
+    const asked = stub.requests.map((r) => r.path).filter((p) => p.includes("/object/list/"));
     expect(asked).toHaveLength(5);
     expect(new Set(asked).size).toBe(5);
   });
@@ -163,12 +162,10 @@ describe("probeSupabaseStorageContents with bucket names from the code", () => {
 
 describe("checkSupabaseRLS given a page plus a bundle", () => {
   function serve(rowsByTable: Record<string, unknown[]>) {
-    scanFetchMock.mockImplementation(async (url: string, init?: { headers?: Record<string, string> }) => {
-      // The service_role key is never a credential this check sends.
-      expect(JSON.stringify(init?.headers ?? {})).not.toContain(SERVICE);
-      const m = /\/rest\/v1\/([^?]+)\?select/.exec(url);
-      if (m) return { status: 200, body: JSON.stringify(rowsByTable[m[1]!] ?? []), headers: {} };
-      return { status: 200, body: JSON.stringify({ definitions: { orders: {}, tasks: {} } }), headers: {} };
+    stub.onAny(new RegExp(`^${PREFIX}/`), (r): Reply => {
+      const table = /\/rest\/v1\/([^/?]+)$/.exec(r.path)?.[1];
+      if (table && r.query.has("select")) return json(rowsByTable[table] ?? []);
+      return json({ definitions: { orders: {}, tasks: {} } });
     });
   }
   const page = `<html><body><div id="root"></div></body></html>`;
@@ -178,6 +175,7 @@ describe("checkSupabaseRLS given a page plus a bundle", () => {
     const out = await checkSupabaseRLS(`${page}\n${bundle()}`);
     expect(out[0]!.severity).toBe("critical");
     expect(out[0]!.evidence).toContain("orders");
+    expect(serviceKeyNeverSent()).toBe(true);
   });
 
   it("uses the anon key, not the service_role key, when the bundle holds both and the service key comes first", async () => {
@@ -185,15 +183,14 @@ describe("checkSupabaseRLS given a page plus a bundle", () => {
     const code = `const adm=cO("${BASE}","${SERVICE}");const sM="${BASE}",aM="${ANON}";`;
     const out = await checkSupabaseRLS(`${page}\n${code}`);
     expect(out[0]!.severity).toBe("critical");
-    const sent = scanFetchMock.mock.calls.map((c) => JSON.stringify((c[1] as { headers?: unknown })?.headers ?? {}));
-    expect(sent.length).toBeGreaterThan(0);
-    expect(sent.every((h) => h.includes(ANON))).toBe(true);
+    expect(stub.requests.length).toBeGreaterThan(0);
+    expect(stub.requests.every((r) => JSON.stringify(r.headers).includes(ANON))).toBe(true);
   });
 
   it("makes no request when the bundle holds only a service_role key: it is reported elsewhere, never used", async () => {
     serve({ orders: [{ id: 1 }] });
     const out = await checkSupabaseRLS(`${page}\nconst adm=cO("${BASE}","${SERVICE}");`);
-    expect(scanFetchMock).not.toHaveBeenCalled();
+    expect(stub.requests).toHaveLength(0);
     expect(out).toHaveLength(1);
     expect(out[0]!.severity).toBe("info");
   });
@@ -202,7 +199,7 @@ describe("checkSupabaseRLS given a page plus a bundle", () => {
     serve({ orders: [{ id: 1 }] });
     const sample = jwt({ sub: "1234567890", name: "John Doe", iat: 1516239022 });
     const out = await checkSupabaseRLS(`const u="${BASE}";${VENDOR}${VENDOR}const docs="${sample}";`);
-    expect(scanFetchMock).not.toHaveBeenCalled();
+    expect(stub.requests).toHaveLength(0);
     expect(out[0]!.severity).toBe("info");
   });
 });

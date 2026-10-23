@@ -1,6 +1,14 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { runFirebaseProbes } from "./firebase-probes.js";
+import { startBaasStub, useRealBaas, type BaasStub, type Reply } from "./baasStub.testkit";
 import type { ScanVulnerability } from "./scanner";
+
+// The probes make their real requests to a local server that answers like Firebase (lib/baasStub.testkit.ts):
+// /rtdb/<name>/... is the Realtime Database, /firestore/... is Cloud Firestore.
+let stub: BaasStub;
+beforeAll(async () => { stub = await startBaasStub(); });
+afterAll(async () => { await stub.stop(); useRealBaas(); });
+beforeEach(() => stub.clear());
 
 const CONFIG_HTML = `
 <script>
@@ -11,101 +19,63 @@ const CONFIG_HTML = `
   };
 </script>`;
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status });
+const json = (body: unknown, status = 200): Reply => ({ json: body, status });
+
+/** Answers the Realtime Database from `rtdb` and Firestore (by request URL) from `firestore`. */
+function serve(rtdb: Reply, firestore: Reply | ((url: string) => Reply)) {
+  stub.onAny(/^\/rtdb\//, rtdb);
+  stub.onAny(/^\/firestore\//, (r) => (typeof firestore === "function" ? firestore(r.url) : firestore));
 }
 
-beforeEach(() => {
-  vi.stubGlobal("fetch", vi.fn());
-});
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
-
-function mockFetch(byUrl: (url: string) => Response) {
-  vi.mocked(fetch).mockImplementation(async (input) => byUrl(String(input)));
-}
-
-describe("runFirebaseProbes — Realtime Database, regression: empty object", () => {
+describe("runFirebaseProbes: Realtime Database, regression: empty object", () => {
   it("does not flag a root that returns an empty object", async () => {
-    // Real Firebase RTDB semantics essentially never produce a bare {} — a
-    // path with no data returns null — but the check must not rely on that
-    // assumption. Before the fix, `typeof body === "object"` was true for
-    // {} exactly as it is for real data, so this case reported "open,
-    // critical" for a database that returned nothing.
-    mockFetch((url) => {
-      if (url.includes("firebaseio.com")) return jsonResponse({});
-      return jsonResponse({}); // no open Firestore collections
-    });
-
+    // Real Firebase RTDB semantics essentially never produce a bare {}: a path with no data returns null. But the
+    // check must not rely on that assumption. Before the fix, `typeof body === "object"` was true for {} exactly as it
+    // is for real data, so this case reported "open, critical" for a database that returned nothing.
+    serve(json({}), json({})); // no open Firestore collections
     const findings: ScanVulnerability[] = [];
     await runFirebaseProbes(CONFIG_HTML, findings);
-
+    expect(stub.requests.some((r) => r.path === "/rtdb/demo-project-1/.json")).toBe(true); // it really asked
     expect(findings.some((f) => /Realtime Database Open/i.test(f.name))).toBe(false);
   });
 
   it("still flags a root that returns real data", async () => {
-    mockFetch((url) => {
-      if (url.includes("firebaseio.com")) {
-        return jsonResponse({ users: { u1: { email: "a@example.com" } } });
-      }
-      return jsonResponse({});
-    });
-
+    serve(json({ users: { u1: { email: "a@example.com" } } }), json({}));
     const findings: ScanVulnerability[] = [];
     await runFirebaseProbes(CONFIG_HTML, findings);
-
     expect(findings.some((f) => /Realtime Database Open/i.test(f.name))).toBe(true);
   });
 
   it("does not flag a root that returns null (restrictive rules)", async () => {
-    mockFetch((url) => {
-      if (url.includes("firebaseio.com")) return jsonResponse(null);
-      return jsonResponse({});
-    });
-
+    serve(json(null), json({}));
     const findings: ScanVulnerability[] = [];
     await runFirebaseProbes(CONFIG_HTML, findings);
-
     expect(findings.some((f) => /Realtime Database Open/i.test(f.name))).toBe(false);
   });
 });
 
-describe("runFirebaseProbes — Firestore (sanity: already correct before this pass)", () => {
+describe("runFirebaseProbes: Firestore (sanity: already correct before this pass)", () => {
   it("does not flag an accessible-but-empty collection", async () => {
-    mockFetch((url) => {
-      if (url.includes("firestore.googleapis.com")) return jsonResponse({ documents: [] });
-      return jsonResponse(null); // RTDB restrictive
-    });
-
+    serve(json(null), json({ documents: [] })); // RTDB restrictive
     const findings: ScanVulnerability[] = [];
     await runFirebaseProbes(CONFIG_HTML, findings);
-
+    expect(stub.requests.some((r) => r.path.startsWith("/firestore/v1/projects/demo-project-1/"))).toBe(true);
     expect(findings.some((f) => /Firestore.*Unauthenticated Read/i.test(f.name))).toBe(false);
   });
 
   it("flags a collection that returns real documents", async () => {
-    mockFetch((url) => {
-      if (url.includes("firestore.googleapis.com") && url.includes("/users?")) {
-        return jsonResponse({ documents: [{ name: "projects/demo/documents/users/u1" }] });
-      }
-      if (url.includes("firestore.googleapis.com")) return jsonResponse({ documents: [] });
-      return jsonResponse(null);
-    });
-
+    serve(json(null), (url) => (url.includes("/users?") ? json({ documents: [{ name: "projects/demo/documents/users/u1" }] }) : json({ documents: [] })));
     const findings: ScanVulnerability[] = [];
     await runFirebaseProbes(CONFIG_HTML, findings);
-
     expect(findings.some((f) => /Firestore.*Unauthenticated Read/i.test(f.name))).toBe(true);
   });
 });
 
-describe("runFirebaseProbes — public-by-design Firestore collections", () => {
+describe("runFirebaseProbes: public-by-design Firestore collections", () => {
   const serveDocs = (byCollection: Record<string, unknown[]>) =>
-    mockFetch((url) => {
+    serve(json(null), (url) => {
       const m = /documents\/([a-z]+)\?/.exec(url);
-      if (m) return jsonResponse({ documents: byCollection[m[1]!] ?? [] });
-      return jsonResponse(null);
+      return m ? json({ documents: byCollection[m[1]!] ?? [] }) : json(null);
     });
   const flagged = (fs: ScanVulnerability[]) => fs.find((f) => /Rules Allow Unauthenticated Read/i.test(f.name));
 

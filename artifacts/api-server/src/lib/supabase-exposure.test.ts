@@ -1,13 +1,9 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-
-// checkSupabaseRLS reaches the network through scanFetch; the other Supabase probes use global fetch.
-const scanFetchMock = vi.fn();
-vi.mock("./http.js", () => ({ scanFetch: (...a: unknown[]) => scanFetchMock(...a) }));
-
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { runSupabaseProbes } from "./supabase-probes.js";
 import { checkSupabaseRLS } from "./probes.js";
 import { classifyExposure, rowsAreOwned } from "./baasExposure.js";
 import { analyzeJwts } from "./jwtAnalysis.js";
+import { startBaasStub, useRealBaas, type BaasStub, type Recorded, type Reply } from "./baasStub.testkit";
 import type { ScanVulnerability } from "./scanner";
 
 /**
@@ -18,10 +14,13 @@ import type { ScanVulnerability } from "./scanner";
  * CRITICAL "Tables Readable Without Authentication", because a table whose name is not on the list of
  * catalogue words (products, posts, faq…) was treated like a sensitive one. The clean twin must come back
  * clean, and the tables that are the problem (profiles, orders, per-user notes) must stay critical.
+ *
+ * The probes talk to a real local server that answers like a Supabase project (lib/baasStub.testkit.ts).
  */
 
 const REF = "abcdefghijklmnopqrst";
-const BASE = `https://${REF}.supabase.co`;
+const BASE = `https://${REF}.supabase.co`; // what the page declares; the probes reach the project through the stub
+const PREFIX = `/supabase/${REF}`;
 const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
 const jwt = (claims: Record<string, unknown>) => `${b64({ alg: "HS256", typ: "JWT" })}.${b64(claims)}.${"s".repeat(43)}`;
 const ANON = jwt({ iss: "supabase", ref: REF, role: "anon", iat: 1700000000, exp: 2000000000 });
@@ -29,19 +28,25 @@ const ANON = jwt({ iss: "supabase", ref: REF, role: "anon", iat: 1700000000, exp
 const page = (tables: string[]) =>
   `<script>const sM="${BASE}",aM="${ANON}",Tn=cO(sM,aM);${tables.map((t) => `Tn.from("${t}").select("*");`).join("")}</script>`;
 
-const json = (data: unknown, status = 200) =>
-  new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
+let stub: BaasStub;
+beforeAll(async () => { stub = await startBaasStub(); });
+afterAll(async () => { await stub.stop(); useRealBaas(); });
+beforeEach(() => stub.clear());
 
 /** What the anon key can read, by table. Anything else answers like a table with RLS on. */
 function server(rowsByTable: Record<string, unknown[]>, opts: { writes?: boolean } = {}) {
-  vi.mocked(fetch).mockImplementation((input, init) => {
-    const url = String(input);
-    const m = /\/rest\/v1\/([^?/]+)\?select=/.exec(url);
-    if (m) return Promise.resolve(json(rowsByTable[m[1]!] ?? []));
-    if ((init as RequestInit | undefined)?.method === "POST" && url.includes("/rest/v1/")) {
-      return Promise.resolve(opts.writes ? json([{ id: 9 }], 201) : json({ code: "42501", message: "new row violates row-level security policy" }, 401));
+  stub.onAny(new RegExp(`^${PREFIX}/`), (r: Recorded): Reply => {
+    const rel = r.path.slice(PREFIX.length);
+    const table = /^\/rest\/v1\/([^/]+)$/.exec(rel)?.[1];
+    if (r.method === "GET" && table && r.query.has("select")) return { json: rowsByTable[table] ?? [] };
+    if (r.method === "GET" && rel === "/rest/v1/") {
+      // The project's OpenAPI listing, which names every table.
+      return { json: { definitions: Object.fromEntries(Object.keys(rowsByTable).map((t) => [t, {}])) } };
     }
-    return Promise.resolve(json({ message: "Invalid API key" }, 401));
+    if (r.method === "POST" && rel.startsWith("/rest/v1/")) {
+      return opts.writes ? { status: 201, json: [{ id: 9 }] } : { status: 401, json: { code: "42501", message: "new row violates row-level security policy" } };
+    }
+    return { status: 401, json: { message: "Invalid API key" } };
   });
 }
 
@@ -51,12 +56,6 @@ const probe = async (tables: string[]) => {
   return findings;
 };
 const bySeverity = (f: ScanVulnerability[], sev: string) => f.filter((x) => x.severity === sev);
-
-beforeEach(() => {
-  vi.stubGlobal("fetch", vi.fn());
-  scanFetchMock.mockReset();
-});
-afterEach(() => vi.unstubAllGlobals());
 
 const ANNOUNCEMENTS = [{ id: 1, title: "We moved", body: "Our new address is on the About page.", created_at: "2026-10-01T00:00:00Z" }];
 
@@ -102,6 +101,7 @@ describe("runSupabaseProbes: public-by-design tables", () => {
   it("clean twin: a readable announcements table is information, never critical", async () => {
     server({ announcements: ANNOUNCEMENTS });
     const findings = await probe(["announcements", "tasks"]);
+    expect(stub.requests.length).toBeGreaterThan(0); // the probe really reached the (local) project
     expect(bySeverity(findings, "critical")).toEqual([]);
     expect(bySeverity(findings, "high")).toEqual([]);
     expect(bySeverity(findings, "medium")).toEqual([]);
@@ -163,16 +163,8 @@ describe("runSupabaseProbes: the tables that are the problem stay critical", () 
 });
 
 describe("checkSupabaseRLS agrees", () => {
-  function serveRls(rowsByTable: Record<string, unknown[]>) {
-    scanFetchMock.mockImplementation(async (url: string) => {
-      const m = /\/rest\/v1\/([^?]+)\?select/.exec(url);
-      if (m) return { status: 200, body: JSON.stringify(rowsByTable[m[1]!] ?? []), headers: {} };
-      return { status: 200, body: JSON.stringify({ definitions: Object.fromEntries(Object.keys(rowsByTable).map((t) => [t, {}])) }), headers: {} };
-    });
-  }
-
   it("clean twin: announcements and an unfamiliar harmless table are information only", async () => {
-    serveRls({ announcements: ANNOUNCEMENTS, bulletin: [{ id: 1, title: "x" }], tasks: [] });
+    server({ announcements: ANNOUNCEMENTS, bulletin: [{ id: 1, title: "x" }], tasks: [] });
     const out = await checkSupabaseRLS(page([]));
     expect(out.map((f) => f.severity)).toEqual(["info", "info"]);
     expect(out.map((f) => f.name).sort()).toEqual([
@@ -182,7 +174,7 @@ describe("checkSupabaseRLS agrees", () => {
   });
 
   it("a per-user table is critical", async () => {
-    serveRls({ notes: [{ id: 1, body: "x", user_id: "u-1" }], announcements: ANNOUNCEMENTS });
+    server({ notes: [{ id: 1, body: "x", user_id: "u-1" }], announcements: ANNOUNCEMENTS });
     const out = await checkSupabaseRLS(page([]));
     expect(out).toHaveLength(1);
     expect(out[0]!.severity).toBe("critical");

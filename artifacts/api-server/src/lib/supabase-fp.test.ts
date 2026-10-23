@@ -1,14 +1,16 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-
-// probes.ts reaches the network through scanFetch; the Supabase probes use global fetch.
-const scanFetchMock = vi.fn();
-vi.mock("./http.js", () => ({ scanFetch: (...a: unknown[]) => scanFetchMock(...a) }));
-
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { runSupabaseProbes } from "./supabase-probes.js";
 import { checkSupabaseRLS } from "./probes.js";
 import { classifyExposure } from "./baasExposure.js";
+import { startBaasStub, useRealBaas, type BaasStub, type Reply } from "./baasStub.testkit";
 
-/** role: "anon" — public by design. */
+// The probes talk to a real local server that answers like a Supabase project (lib/baasStub.testkit.ts).
+let stub: BaasStub;
+beforeAll(async () => { stub = await startBaasStub(); });
+afterAll(async () => { await stub.stop(); useRealBaas(); });
+beforeEach(() => stub.clear());
+
+/** role: "anon", public by design. */
 const ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" +
   ".eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNjAwMDAwMDAwLCJleHAiOjE5NjAwMDAwMDB9" +
@@ -19,26 +21,16 @@ const page = (table: string) => `<script>
   supabase.from("${table}").select("*");
 </script>`;
 
-const json = (data: unknown, status = 200) =>
-  new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
+const json = (data: unknown, status = 200): Reply => ({ json: data, status });
 
 /** Routes: read (?select=) and write (POST) answers; everything else is the locked spec endpoint. */
-function stubServer(read: () => Response, write: () => Response) {
-  vi.mocked(fetch).mockImplementation((input, init) => {
-    const url = String(input);
-    if (url.includes("?select=")) return Promise.resolve(read());
-    if ((init as RequestInit | undefined)?.method === "POST" && url.includes("/rest/v1/")) {
-      return Promise.resolve(write());
-    }
-    return Promise.resolve(json({ message: "Invalid API key" }, 401));
+function stubServer(read: Reply, write: Reply) {
+  stub.onAny(/^\/supabase\/[^/]+\//, (r) => {
+    if (r.query.has("select")) return read;
+    if (r.method === "POST" && r.path.includes("/rest/v1/")) return write;
+    return json({ message: "Invalid API key" }, 401);
   });
 }
-
-beforeEach(() => {
-  vi.stubGlobal("fetch", vi.fn());
-  scanFetchMock.mockReset();
-});
-afterEach(() => vi.unstubAllGlobals());
 
 const run = async (table: string) => {
   const findings: any[] = [];
@@ -46,10 +38,11 @@ const run = async (table: string) => {
   return findings;
 };
 
-describe("Supabase probes — RLS-protected table answering 200 []", () => {
+describe("Supabase probes: RLS-protected table answering 200 []", () => {
   it("is not a vulnerability (clean twin)", async () => {
-    stubServer(() => json([]), () => json({ code: "42501", message: "new row violates row-level security policy" }, 401));
+    stubServer(json([]), json({ code: "42501", message: "new row violates row-level security policy" }, 401));
     const findings = await run("notes");
+    expect(stub.requests.length).toBeGreaterThan(0); // the probe really reached the (local) project
     expect(findings.filter((f) => ["critical", "high", "medium"].includes(f.severity))).toEqual([]);
     const empty = findings.find((f) => /Empty Results/.test(f.name));
     expect(empty?.severity).toBe("info");
@@ -57,9 +50,9 @@ describe("Supabase probes — RLS-protected table answering 200 []", () => {
   });
 });
 
-describe("Supabase probes — public catalogue tables", () => {
+describe("Supabase probes: public catalogue tables", () => {
   it("a products table with catalogue columns is INFO, not CRITICAL", async () => {
-    stubServer(() => json([{ id: 1, name: "Mug", price: 12, image_url: "/m.png" }]), () => json({}, 401));
+    stubServer(json([{ id: 1, name: "Mug", price: 12, image_url: "/m.png" }]), json({}, 401));
     const findings = await run("products");
     expect(findings.find((f) => f.severity === "critical")).toBeUndefined();
     const f = findings.find((x) => /Public Content Tables/.test(x.name));
@@ -68,13 +61,13 @@ describe("Supabase probes — public catalogue tables", () => {
   });
 
   it("still CRITICAL for a sensitive table name", async () => {
-    stubServer(() => json([{ id: 1, total: 12 }]), () => json({}, 401));
+    stubServer(json([{ id: 1, total: 12 }]), json({}, 401));
     const findings = await run("orders");
     expect(findings.find((f) => f.severity === "critical" && /CVE-2025-48757/.test(f.name))).toBeDefined();
   });
 
   it("still CRITICAL for a public-sounding table that carries personal columns", async () => {
-    stubServer(() => json([{ id: 1, title: "x", author_email: "a@b.co" }]), () => json({}, 401));
+    stubServer(json([{ id: 1, title: "x", author_email: "a@b.co" }]), json({}, 401));
     const findings = await run("posts");
     expect(findings.find((f) => f.severity === "critical")).toBeDefined();
   });
@@ -88,9 +81,9 @@ describe("Supabase probes — public catalogue tables", () => {
   });
 });
 
-describe("Supabase probes — write probe", () => {
+describe("Supabase probes: write probe", () => {
   it("a 400 unknown-column answer is not 'writes accepted' (clean twin)", async () => {
-    stubServer(() => json([]), () => json({ code: "PGRST204", message: "Could not find the '__vibescan_probe__' column" }, 400));
+    stubServer(json([]), json({ code: "PGRST204", message: "Could not find the '__vibescan_probe__' column" }, 400));
     const findings = await run("notes");
     expect(findings.find((f) => /Accept Unauthenticated Writes/.test(f.name))).toBeUndefined();
     const f = findings.find((x) => /Write Access Not Confirmed/.test(x.name));
@@ -99,10 +92,7 @@ describe("Supabase probes — write probe", () => {
   });
 
   it("a 201 (row really inserted, then deleted) is still CRITICAL", async () => {
-    stubServer(
-      () => json([]),
-      () => json([{ id: 7 }], 201),
-    );
+    stubServer(json([]), json([{ id: 7 }], 201));
     const findings = await run("notes");
     const f = findings.find((x) => /Accept Unauthenticated Writes/.test(x.name));
     expect(f?.severity).toBe("critical");
@@ -116,10 +106,10 @@ describe("checkSupabaseRLS (probes.ts)", () => {
   const spec = { definitions: { products: {}, orders: {} } };
 
   function serve(rowsByTable: Record<string, unknown[]>) {
-    scanFetchMock.mockImplementation(async (url: string) => {
-      const m = /\/rest\/v1\/([^?]+)\?select/.exec(url);
-      if (m) return { status: 200, body: JSON.stringify(rowsByTable[m[1]!] ?? []), headers: {} };
-      return { status: 200, body: JSON.stringify(spec), headers: {} };
+    stub.onAny(/^\/supabase\/[^/]+\//, (r) => {
+      const table = /\/rest\/v1\/([^/?]+)$/.exec(r.path)?.[1];
+      if (table && r.query.has("select")) return json(rowsByTable[table] ?? []);
+      return json(spec);
     });
   }
 
@@ -129,7 +119,7 @@ describe("checkSupabaseRLS (probes.ts)", () => {
     expect(out[0]!.severity).toBe("info");
     expect(out[0]!.cvssScore).toBe(0);
     expect(out[0]!.confidence).toBeLessThan(50);
-    expect(scanFetchMock).not.toHaveBeenCalled();
+    expect(stub.requests).toHaveLength(0); // no key, so no request was made to the project
   });
 
   it("public catalogue rows are INFO (clean twin)", async () => {

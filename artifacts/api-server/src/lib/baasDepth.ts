@@ -15,6 +15,7 @@
 import { randomUUID } from "node:crypto";
 import type { ScanVulnerability } from "./scanner";
 import { readBodyBounded } from "./httpBody";
+import { firebaseStorageApi } from "./baasEndpoints";
 
 const TIMEOUT_MS = 8_000;
 const MAX_BUCKETS = 5;
@@ -132,7 +133,7 @@ export function extractStorageBucket(content: string): string | null {
 export async function probeFirebaseStorage(content: string, findings: ScanVulnerability[]): Promise<void> {
   const bucket = extractStorageBucket(content);
   if (!bucket) return;
-  const url = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket)}/o?maxResults=5`;
+  const url = `${firebaseStorageApi()}/v0/b/${encodeURIComponent(bucket)}/o?maxResults=5`;
   const res = await getJson(url, { headers: { Accept: "application/json" } });
   if (!res || res.status !== 200 || !isRecord(res.json)) return;
   const items = Array.isArray(res.json["items"]) ? res.json["items"].filter(isRecord) : [];
