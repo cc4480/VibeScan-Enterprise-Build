@@ -1,10 +1,7 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 
-// The real grade functions; the rest of the scanner is not needed to build a report.
-vi.mock("./scanner", () => import("./scannerGrade"));
-vi.mock("./monitorPulseCert", () => ({ probeCertDates: () => Promise.resolve(null) }));
-vi.mock("./aiAnalysis", () => ({ analyseFindings: () => Promise.resolve({ analysis: null }) }));
-vi.mock("./compliance", () => ({ summariseCompliance: () => [], COMPLIANCE_DISCLAIMER: "" }));
+// Everything real: grading, the compliance mapping, the analysis stage (no AI key is configured, so it spends nothing)
+// and the certificate probe. The final URL is plain http, so no certificate is read and nothing leaves the machine.
 
 import { buildReport } from "./workerReport";
 
@@ -17,7 +14,7 @@ function build(vulnerabilities: unknown[], extra: Record<string, unknown> = {}) 
   return buildReport({
     scanResult: {
       vulnerabilities, technologies: [], server: null, tlsGrade: null, pagesScanned: [], probedNotFound: [],
-      finalUrl: "https://example.com/", requestDurationMs: 1, intercepted: false, ...extra,
+      finalUrl: "http://127.0.0.1:9/", requestDurationMs: 1, intercepted: false, ...extra,
     } as never,
     targetUrl: "https://example.com",
     tests: [],

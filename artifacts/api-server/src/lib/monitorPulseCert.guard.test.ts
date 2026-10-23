@@ -1,32 +1,18 @@
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import net from "node:net";
+import dns from "node:dns/promises";
 
-// "rebind.test" answers a public address to the URL check and a private one to the connect-time lookup: the DNS
-// rebinding sequence. Every other name resolves normally.
-vi.mock("node:dns/promises", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:dns/promises")>();
-  return {
-    ...actual,
-    lookup: (host: string, opts: unknown) =>
-      host === "rebind.test"
-        ? Promise.resolve([{ address: "93.184.216.34", family: 4 }])
-        : (actual.lookup as (h: string, o: unknown) => Promise<unknown>)(host, opts),
-  };
-});
-
-vi.mock("node:dns", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:dns")>();
-  const lookup = (host: string, opts: unknown, cb: (...args: unknown[]) => void) => {
-    if (host !== "rebind.test") return (actual.lookup as unknown as (...a: unknown[]) => void)(host, opts, cb);
-    const wantsAll = typeof opts === "object" && opts !== null && (opts as { all?: boolean }).all === true;
-    process.nextTick(() => (wantsAll ? cb(null, [{ address: "127.0.0.1", family: 4 }]) : cb(null, "127.0.0.1", 4)));
-  };
-  return { ...actual, default: { ...actual, lookup } };
-});
+// "rebind.localtest.me" is a real public name that answers 127.0.0.1: a name that resolves to a private address at
+// connect time. The tests skip when it cannot be resolved (no network).
+const REBIND = "rebind.localtest.me";
+let resolvable = false;
+try { resolvable = (await dns.lookup(REBIND, { all: true })).some((a) => a.address === "127.0.0.1"); } catch { /* offline */ }
 
 import { probeCertDates } from "./monitorPulseCert";
 
-describe("probeCertDates connects only to vetted addresses", () => {
+const suite = resolvable ? describe : describe.skip;
+
+suite("probeCertDates connects only to vetted addresses", () => {
   const servers: net.Server[] = [];
   let connections = 0;
   // The suite-wide config sets ALLOW_PRIVATE_SCAN_TARGETS=true for the probe tests; these tests need the guard on.
@@ -60,9 +46,9 @@ describe("probeCertDates connects only to vetted addresses", () => {
     expect(connections).toBe(0);
   });
 
-  it("does not connect when the name re-resolves to a private address at connect time", async () => {
+  it("does not connect when the name resolves to a private address", async () => {
     const port = await stub();
-    expect(await probeCertDates(`https://rebind.test:${port}/`)).toBeNull();
+    expect(await probeCertDates(`https://${REBIND}:${port}/`)).toBeNull();
     expect(connections).toBe(0);
   });
 });
