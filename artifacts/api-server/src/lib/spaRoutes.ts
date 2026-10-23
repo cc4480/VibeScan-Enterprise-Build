@@ -36,6 +36,12 @@ export const SPA_ROUTES: RegExp[] = [
   /^\/verify-email\/?$/,
   // Where an AI editor sends the person to approve a connection (lib/oauthConsent.ts).
   /^\/oauth\/authorize\/?$/,
+  // A trust page. The domain is the address, so it has dots, which is why this is not the generic id pattern used above;
+  // only a well-formed domain name gets the shell.
+  /^\/trust\/[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+\/?$/,
+  // The page an invitation email links to, and the reports a teammate was invited to read.
+  /^\/team\/accept\/?$/,
+  /^\/team\/shared\/[A-Za-z0-9_-]+\/?$/,
 ];
 
 /** /learn/<id>: one page per documented check. The ids come from the frontend build. */

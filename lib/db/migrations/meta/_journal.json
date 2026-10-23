@@ -239,6 +239,27 @@
       "when": 1792555735473,
       "tag": "0033_scans_user_created_index",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792763963668,
+      "tag": "0034_github_issues",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792764687029,
+      "tag": "0035_trust_pages",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792765278998,
+      "tag": "0036_team_members",
+      "breakpoints": true
     }
   ]
 }

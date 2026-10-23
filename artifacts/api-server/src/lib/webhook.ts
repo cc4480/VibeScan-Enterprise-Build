@@ -1,14 +1,13 @@
 /**
  * Outbound webhook delivery utility.
- * Sends Slack-compatible JSON payloads to user-configured webhook URLs.
- * Compatible with Slack, Discord (/slack endpoint), and Teams incoming webhooks.
- * Retries once on non-2xx response.
+ * Sends an alert to a user-configured webhook URL, written for the destination the URL points at (Slack, Discord, Teams,
+ * or plain JSON; see webhookFormats.ts). Retries once on non-2xx response.
  */
 
 import { logger } from "./logger";
 import { checkHostname } from "./ssrfGuard";
 import { strictDispatcher } from "./pinnedDispatcher";
-import { APP_DOMAIN } from "./appOrigin";
+import { renderWebhookBody, webhookDestination } from "./webhookFormats";
 import { notificationPrefs, shouldNotify, type AlertKind } from "./notificationPrefs";
 
 // ── SSRF guard ────────────────────────────────────────────────────────────────
@@ -27,6 +26,8 @@ async function isWebhookUrlSafe(rawUrl: string): Promise<boolean> {
   }
 }
 
+export { describeDriftKind } from "./webhookFormats";
+
 export type WebhookEventType =
   | "cve_alert"
   | "regression_detected"
@@ -44,118 +45,6 @@ export interface WebhookPayload {
   subscriptionId: string;
   timestamp: string;
   data: Record<string, unknown>;
-}
-
-/** Drift kinds are stored as slugs; nobody wants to read "hsts_weakened" in Slack. */
-export function describeDriftKind(kind: string): string {
-  switch (kind) {
-    case "header_removed":    return "Security header removed";
-    case "hsts_weakened":     return "HSTS weakened";
-    case "final_url_changed": return "Redirect target changed";
-    case "tls_downgrade":     return "HTTPS downgraded to HTTP";
-    default:                  return kind;
-  }
-}
-
-function buildSlackBody(payload: WebhookPayload): Record<string, unknown> {
-  const { event, targetUrl, data } = payload;
-
-  const eventLabels: Record<WebhookEventType, string> = {
-    cve_alert: "⚠️ CVE Alert",
-    regression_detected: "🔴 Security Regression Detected",
-    cert_expiry: "🔒 TLS Certificate Expiring",
-    scan_complete: "✅ Security Scan Complete",
-    site_down: "🛑 Site Unreachable",
-    site_recovered: "✅ Site Back Online",
-    security_drift: "🔍 Security Configuration Changed",
-  };
-
-  const label = eventLabels[event] ?? event;
-  const domain = (() => { try { return new URL(targetUrl).hostname; } catch { return targetUrl; } })();
-
-  const attachmentFields: Array<{ title: string; value: string; short: boolean }> = [];
-
-  if (event === "cve_alert" && Array.isArray(data.cves)) {
-    const cves = data.cves as Array<{ cveId: string; severity: string; affectedTech: string; epssPercentile?: number }>;
-    attachmentFields.push({
-      title: `${cves.length} CVE${cves.length > 1 ? "s" : ""} matched`,
-      value: cves.slice(0, 3).map((c) => {
-        const epss = c.epssPercentile != null ? ` (EPSS ${Math.round(c.epssPercentile * 100)}th %ile)` : "";
-        return `*${c.cveId}* — ${c.severity}${epss} — ${c.affectedTech}`;
-      }).join("\n") + (cves.length > 3 ? `\n_+${cves.length - 3} more_` : ""),
-      short: false,
-    });
-  }
-
-  if (event === "regression_detected" && Array.isArray(data.regressions)) {
-    const regs = data.regressions as Array<{ checkTitle: string; severity: string }>;
-    attachmentFields.push({
-      title: `${regs.length} regression${regs.length > 1 ? "s" : ""}`,
-      value: regs.slice(0, 5).map((r) => `*${r.checkTitle}* (${r.severity})`).join("\n"),
-      short: false,
-    });
-  }
-
-  if (event === "cert_expiry") {
-    attachmentFields.push({
-      title: "Days remaining",
-      value: String(data.daysRemaining ?? "?"),
-      short: true,
-    });
-    if (data.expiryDate) {
-      attachmentFields.push({
-        title: "Expiry date",
-        value: new Date(data.expiryDate as string).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-        short: true,
-      });
-    }
-  }
-
-  if (event === "scan_complete") {
-    if (data.grade) attachmentFields.push({ title: "Grade", value: String(data.grade), short: true });
-    if (data.riskScore != null) attachmentFields.push({ title: "Risk Score", value: `${data.riskScore}/100`, short: true });
-    if (data.reportUrl) attachmentFields.push({ title: "Report", value: String(data.reportUrl), short: false });
-  }
-
-  if (event === "site_down") {
-    if (data.failureReason) attachmentFields.push({ title: "Reason", value: String(data.failureReason), short: false });
-    if (data.consecutiveFailures != null) {
-      attachmentFields.push({ title: "Failed checks", value: String(data.consecutiveFailures), short: true });
-    }
-  }
-
-  if (event === "site_recovered" && data.httpStatus != null) {
-    attachmentFields.push({ title: "Status", value: `HTTP ${data.httpStatus}`, short: true });
-  }
-
-  if (event === "security_drift" && Array.isArray(data.changes)) {
-    const changes = data.changes as Array<{ kind: string; detail: string; severity: string }>;
-    attachmentFields.push({
-      title: `${changes.length} change${changes.length > 1 ? "s" : ""} detected`,
-      value: changes
-        .slice(0, 5)
-        .map((c) => `*${describeDriftKind(c.kind)}* — ${c.detail} (${c.severity})`)
-        .join("\n"),
-      short: false,
-    });
-  }
-
-  const color = event === "cve_alert" || event === "regression_detected" || event === "site_down" ? "danger"
-    : event === "cert_expiry" || event === "security_drift" ? "warning"
-    : "good";
-
-  return {
-    text: `*${label}* for \`${domain}\``,
-    attachments: [
-      {
-        color,
-        fallback: `${label} for ${domain}`,
-        fields: attachmentFields,
-        footer: `SecScan · ${APP_DOMAIN}`,
-        ts: Math.floor(Date.now() / 1000),
-      },
-    ],
-  };
 }
 
 async function postWebhook(url: string, body: Record<string, unknown>): Promise<boolean> {
@@ -240,7 +129,7 @@ export async function fireWebhook(
     data,
   };
 
-  const body = buildSlackBody(payload);
+  const body = renderWebhookBody(webhookDestination(webhookUrl), payload);
 
   let attempts = 0;
   try {

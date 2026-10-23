@@ -38,6 +38,30 @@ describe("isSpaRoute", () => {
     expect(isSpaRoute("/share/Xy_9-Zq")).toBe(true);
   });
 
+  it("serves the shell for trust pages, whose address is a domain with dots, and for the team pages", () => {
+    for (const path of [
+      "/trust/shop.example.com",
+      "/trust/shop.example.com/",
+      "/trust/a-b.example.co.uk",
+      "/trust/Shop.Example.COM",
+      "/team/accept",
+      "/team/accept/",
+      "/team/shared/3f1c0d52-8a41-4c1e-9d3b-0a5e2c7e9f10",
+    ]) {
+      expect(isSpaRoute(path), path).toBe(true);
+    }
+  });
+
+  it("refuses trust paths that are not a well-formed domain, and team paths that are not pages", () => {
+    for (const path of [
+      "/trust", "/trust/", "/trust/localhost", "/trust/a..b", "/trust/-a.example.com", "/trust/a-.example.com", "/trust/.example.com",
+      "/trust/example.com/extra", "/trust/exa mple.com", `/trust/${"a".repeat(64)}.com`, "/trust/shop.example.com%2F..", "/trust/shop.example.com.",
+      "/team", "/team/", "/team/accept/extra", "/team/shared", "/team/shared/", "/team/shared/a/b", "/team/members",
+    ]) {
+      expect(isSpaRoute(path), path).toBe(false);
+    }
+  });
+
   it("tolerates a trailing slash", () => {
     expect(isSpaRoute("/dashboard/")).toBe(true);
     expect(isSpaRoute("/privacy/")).toBe(true);

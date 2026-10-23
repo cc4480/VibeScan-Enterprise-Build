@@ -13,6 +13,8 @@ import { SummaryNewFindings } from "./report-viewer-categories";
 import { DownloadPDFButton } from "./report-viewer-print";
 import { CopyReportButton } from "./report-viewer-copy";
 import { ShareButton } from "./report-viewer-share";
+import { EvidencePackButton } from "./report-viewer-evidence";
+import { useViewOnly } from "@/lib/use-view-only";
 
 /** The cover: grade ring, target, executive summary and the severity legend. */
 export function ReportCover({ report, summary, pagesScanned, severityCounts, categoryCounts, allUnverifiedVulns, fixedNotice, repoOnly = false }: {
@@ -77,13 +79,16 @@ export function ReportCover({ report, summary, pagesScanned, severityCounts, cat
   );
 }
 
-/** Copy, PDF and share for a report. */
+/** Copy, PDF, evidence pack and share for a report. */
 export function ReportActionButtons({ copyData, pdfData, reportId }: { copyData: ReportCopyData; pdfData: PrintableReportData; reportId: string }) {
+  // A teammate reads the report; sharing it is the owner's to do.
+  const { viewOnly } = useViewOnly(reportId);
   return (
     <>
       <CopyReportButton data={copyData} />
       <DownloadPDFButton data={pdfData} />
-      <ShareButton reportId={reportId} />
+      <EvidencePackButton reportId={reportId} />
+      {!viewOnly && <ShareButton reportId={reportId} />}
     </>
   );
 }

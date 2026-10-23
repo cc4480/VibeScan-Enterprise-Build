@@ -2,6 +2,7 @@
 import { CheckCircle2, Globe, Package, HelpCircle, Flag, RotateCcw } from "lucide-react";
 import { cn, getSeverityColors } from "@/lib/utils";
 import { VerifyFixButton } from "@/components/verify-fix-button";
+import { GithubIssueButton } from "@/components/github-issue-button";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useContext } from "react";
 import type { Vulnerability } from "@workspace/api-client-react";
@@ -154,6 +155,7 @@ export function VulnCard({
                     <div className="whitespace-pre-wrap">{vuln.solution}</div>
                   </div>
                   {hasFindingActions(vuln) && <VerifyFixButton findingId={vuln.id} />}
+                  {hasFindingActions(vuln) && <GithubIssueButton findingId={vuln.id} />}
 
                   {(vuln.cweId || vuln.cvssScore != null || vuln.wstgId || vuln.confidence != null) && (
                     <div className="mt-4 flex gap-3 flex-wrap">
