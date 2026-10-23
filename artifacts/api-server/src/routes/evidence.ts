@@ -1,17 +1,18 @@
 /**
  * The evidence pack for a report, and the check that SecScan issued one.
  *
- * Downloading is for the report's owner only. Verifying is public on purpose: the person who is handed a pack is usually
+ * Downloading is for the report's owner and the teammates they invited. Verifying is public on purpose: the person who is handed a pack is usually
  * not a SecScan user, and the answer reveals nothing but whether a manifest hash was signed by SecScan.
  * What a pack holds and what its signature means are in lib/evidencePack.ts and lib/evidenceSign.ts.
  */
 import { Router, type IRouter } from "express";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db, reportsTable } from "@workspace/db";
 import { buildEvidencePack } from "../lib/evidencePack";
 import { verifyManifestSignature } from "../lib/evidenceSign";
 import { rateLimitMiddleware } from "../lib/rateLimit";
+import { isTeamViewer } from "../lib/team";
 import { APP_ORIGIN } from "../lib/appOrigin";
 import { UUID } from "./appRouteRunner";
 
@@ -31,10 +32,14 @@ router.get("/reports/:id/evidence-pack", packLimit, async (req, res): Promise<vo
   const reportId = String(req.params["id"]);
   if (!UUID.test(reportId)) { res.status(404).json({ error: "Report not found" }); return; }
   const [report] = await db
-    .select({ id: reportsTable.id, targetUrl: reportsTable.targetUrl, scannedAt: reportsTable.scannedAt, tier: reportsTable.tier, data: reportsTable.data })
+    .select({ id: reportsTable.id, userId: reportsTable.userId, targetUrl: reportsTable.targetUrl, scannedAt: reportsTable.scannedAt, tier: reportsTable.tier, data: reportsTable.data })
     .from(reportsTable)
-    .where(and(eq(reportsTable.id, reportId), eq(reportsTable.userId, req.user.id)));
-  if (!report) { res.status(404).json({ error: "Report not found" }); return; }
+    .where(eq(reportsTable.id, reportId));
+  // The owner, or a teammate the owner invited (lib/team.ts); anyone else is told the report does not exist.
+  if (!report || (report.userId !== req.user.id && !(await isTeamViewer(req.user.id, report.userId)))) {
+    res.status(404).json({ error: "Report not found" });
+    return;
+  }
 
   const pack = buildEvidencePack({
     reportId: report.id, targetUrl: report.targetUrl, scannedAt: report.scannedAt, tier: report.tier, data: report.data,

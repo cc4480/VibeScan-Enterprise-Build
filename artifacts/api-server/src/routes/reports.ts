@@ -1,10 +1,11 @@
 import { Router, type IRouter } from "express";
 import { db, reportsTable } from "@workspace/db";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { GetReportResponse } from "@workspace/api-zod";
 import { UUID_ANY } from "./accountShared";
 import { changesForReport } from "../lib/scanDiffLoader";
 import { withNoteFreeTotals } from "../lib/reportTotals";
+import { isTeamViewer } from "../lib/team";
 
 const router: IRouter = Router();
 
@@ -25,9 +26,13 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     const [report] = await db
       .select()
       .from(reportsTable)
-      .where(and(eq(reportsTable.id, id), eq(reportsTable.userId, req.user.id)));
+      .where(eq(reportsTable.id, id));
 
-    if (!report) {
+    // The owner reads it; so does a teammate the owner invited (lib/team.ts). Anyone else gets the same answer as for a
+    // report that does not exist.
+    const isOwner = report?.userId === req.user.id;
+    const asTeammate = report !== undefined && !isOwner && (await isTeamViewer(req.user.id, report.userId));
+    if (!report || (!isOwner && !asTeammate)) {
       res.status(404).json({ error: "Report not found" });
       return;
     }
@@ -35,7 +40,8 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     const parsed = GetReportResponse.parse({
       id: report.id,
       scanId: report.scanId,
-      userId: report.userId,
+      // A teammate is not told the owner's account id: for some legacy accounts that id has been a credential.
+      userId: isOwner ? report.userId : req.user.id,
       targetUrl: report.targetUrl,
       tier: report.tier,
       scannedAt: report.scannedAt,
@@ -53,12 +59,14 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     const stored = report.data as { tests?: unknown; compliance?: unknown; withheld?: unknown; interception?: unknown };
     // What changed since the last scan of this site (lib/scanDiff.ts). A failure here must never
     // cost someone their report, so it degrades to "no comparison".
-    const changes = await changesForReport(req.user.id, { scanId: report.scanId, targetUrl: report.targetUrl, scannedAt: report.scannedAt, data: report.data }).catch((err) => {
+    const changes = await changesForReport(report.userId, { scanId: report.scanId, targetUrl: report.targetUrl, scannedAt: report.scannedAt, data: report.data }).catch((err) => {
       req.log.warn({ err }, "Could not compare with the previous scan");
       return null;
     });
     res.json({
       ...parsed,
+      // Which of the two the caller is, so the page can show a teammate the read-only view.
+      access: isOwner ? "owner" : "team",
       data: {
         ...parsed.data,
         ...(stored.tests !== undefined ? { tests: stored.tests } : {}),

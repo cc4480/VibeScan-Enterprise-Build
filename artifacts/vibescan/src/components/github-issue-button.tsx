@@ -4,6 +4,7 @@ import { useParams } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { ExternalLink, Github, Loader2 } from "lucide-react";
+import { useViewOnly } from "@/lib/use-view-only";
 import { issueRefusal, issueView, type FiledIssue, type GithubIssueDestination } from "@/lib/github-issues";
 
 /**
@@ -16,6 +17,7 @@ export function GithubIssueButton({ findingId }: { findingId: string }) {
   const queryClient = useQueryClient();
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { known, viewOnly } = useViewOnly(reportId);
 
   const destination = useQuery({
     queryKey: ["github-issue-destination"],
@@ -25,12 +27,12 @@ export function GithubIssueButton({ findingId }: { findingId: string }) {
   const issues = useQuery({
     queryKey: ["github-issues", reportId],
     queryFn: () => customFetch<{ issues: Record<string, FiledIssue> }>(`/api/reports/${reportId}/github-issues`),
-    enabled: Boolean(reportId) && destination.data?.configured === true,
+    enabled: Boolean(reportId) && !viewOnly && destination.data?.configured === true,
     retry: false,
   });
 
   const view = issueView({ destination: destination.data, filed: issues.data?.issues[findingId], starting });
-  if (!reportId || view.kind === "hidden") return null;
+  if (!reportId || !known || viewOnly || view.kind === "hidden") return null;
 
   async function create() {
     setError(null);

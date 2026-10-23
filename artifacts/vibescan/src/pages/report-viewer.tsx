@@ -2,6 +2,7 @@ import type { PrintableReportData } from "./report-viewer-print";
 import { useReportDismissals, useVulnGroups } from "./report-viewer-hooks";
 import { ReportLoading, ReportLoadFailure, UndoToast } from "./report-viewer-states";
 import { isRepoOnlyReport } from "@/lib/repo-only-report";
+import { isViewOnly } from "@/lib/team";
 import { ReportCover, ReportActionButtons, MonitorCta, ScanAnotherCta } from "./report-viewer-cover";
 import { VerifyBanner } from "./report-viewer-verify";
 import { FindingsHeading, SeverityBadges, SortViewToggles, CategoryFilterPills, AccuracyBar } from "./report-viewer-filters";
@@ -188,6 +189,11 @@ export default function ReportViewer() {
           <ReportActionButtons copyData={copyData} pdfData={pdfData} reportId={reportId} />
         </div>
       </div>
+      {isViewOnly(report) && (
+        <div role="note" className="mb-6 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-muted-foreground">
+          You are reading this report as a teammate of its owner. It is read-only: you can download the evidence pack, but not share it, re-check fixes or change anything.
+        </div>
+      )}
 
       <ReportCover
         report={report}

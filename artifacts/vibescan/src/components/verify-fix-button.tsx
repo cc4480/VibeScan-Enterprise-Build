@@ -6,6 +6,7 @@ import { CheckCircle2, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { refusalMessage, viewOf } from "@/lib/verify-fix";
 import { useVerifications } from "@/lib/use-verifications";
+import { useViewOnly } from "@/lib/use-view-only";
 
 const TONE: Record<string, string> = {
   idle: "border-white/10 bg-white/[0.02]",
@@ -26,6 +27,7 @@ export function VerifyFixButton({ findingId }: { findingId: string }) {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const { known, viewOnly } = useViewOnly(reportId);
   const query = useVerifications(reportId);
   const status = query.data?.verifications.find((v) => v.findingId === findingId);
   const view = viewOf(status, starting);
@@ -47,7 +49,8 @@ export function VerifyFixButton({ findingId }: { findingId: string }) {
     }
   }
 
-  if (!reportId) return null;
+  // Re-checking a fix runs a scan for the owner, so a teammate reading the report is not offered it.
+  if (!reportId || !known || viewOnly) return null;
   const Icon = view.tone === "good" ? CheckCircle2 : view.tone === "busy" ? Loader2 : view.tone === "idle" ? ShieldCheck : RefreshCw;
 
   return (

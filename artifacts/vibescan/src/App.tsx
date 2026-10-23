@@ -26,6 +26,8 @@ const ReportViewer = lazyPage(() => import("@/pages/report-viewer"));
 const MonitorPage = lazyPage(() => import("@/pages/monitor"));
 const SharedReport = lazyPage(() => import("@/pages/shared-report"));
 const TrustPage = lazyPage(() => import("@/pages/trust-page"));
+const TeamAcceptPage = lazyPage(() => import("@/pages/team-accept"));
+const TeamSharedPage = lazyPage(() => import("@/pages/team-shared"));
 const SettingsPage = lazyPage(() => import("@/pages/settings"));
 const DomainsPage = lazyPage(() => import("@/pages/domains"));
 const RegisterPage = lazyPage(() => import("@/pages/register"));
@@ -224,6 +226,8 @@ function Router() {
       <Route path="/forgot-password" component={ForgotPasswordPage} />
       <Route path="/reset-password" component={ResetPasswordPage} />
       <Route path="/verify-email" component={VerifyEmailPage} />
+      {/* An invitation link has to work whatever the session state is; the page itself asks for sign-in. */}
+      <Route path="/team/accept" component={TeamAcceptPage} />
 
       {/* Every route shares the Layout chrome, which renders a "Sign in" link
           when there is no session. Signing in is mandatory for the app itself,
@@ -260,6 +264,7 @@ function Router() {
             <Route path="/scan/:id">{() => <ProtectedRoute><ScanProgressPage /></ProtectedRoute>}</Route>
             <Route path="/report/:id">{() => <ProtectedRoute><ReportViewer /></ProtectedRoute>}</Route>
             <Route path="/monitor">{() => <ProtectedRoute><MonitorPage /></ProtectedRoute>}</Route>
+            <Route path="/team/shared/:id">{() => <ProtectedRoute><TeamSharedPage /></ProtectedRoute>}</Route>
             <Route path="/settings">{() => <ProtectedRoute><SettingsPage /></ProtectedRoute>}</Route>
             <Route path="/domains">{() => <ProtectedRoute><DomainsPage /></ProtectedRoute>}</Route>
             <Route component={NotFound} />
