@@ -3,7 +3,7 @@
  * evidence routes mounted together, the real tables, and the real mailer delivering to a local mail sink
  * (lib/mailSink.testkit.ts). Most of this is about who must NOT get in.
  */
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from "vitest";
 import { randomBytes } from "node:crypto";
 import { Router } from "express";
 import { dbSuiteOf, useRealDb, openDb, makeUser, startApp, type TestApp } from "../lib/realDb.testkit";
@@ -115,7 +115,7 @@ dbSuiteOf(describe)("teams: shared viewing (real Postgres, local mail)", () => {
   describe("every route needs a signed-in account", () => {
     it.each([
       ["GET", "/team"], ["POST", "/team/invites"], ["DELETE", "/team/members/x"], ["POST", "/team/accept"],
-      ["GET", "/team/shared"], ["DELETE", "/team/shared/x"], ["GET", "/team/shared/x/reports"],
+      ["GET", "/team/shared"], ["DELETE", "/team/shared/x"], ["GET", "/team/shared/x/reports"], ["GET", "/team/shared/x/monitors"],
     ])("%s %s", async (method, path) => {
       as(null);
       expect((await call(path, { method, ...(method === "POST" ? { body: {} } : {}) })).status).toBe(401);
@@ -365,6 +365,107 @@ dbSuiteOf(describe)("teams: shared viewing (real Postgres, local mail)", () => {
       as(alice);
       expect((await call(`/team/members/${row!.id}`, { method: "DELETE" })).status).toBe(200);
       expect((await join(token)).status).toBe(404);
+    });
+  });
+
+  describe("monitored sites, read-only", () => {
+    const WEBHOOK = "https://hooks.slack.example/services/T000/B000/SECRETTOKENabc123";
+    const subIds: string[] = [];
+
+    async function monitor(over: Record<string, unknown> = {}) {
+      const [sub] = await dbMod.db.insert(dbMod.monitorSubscriptionsTable).values({
+        userId: alice.id, userEmail: alice.email, targetUrl: "https://shared-monitor.example/", webhookUrl: WEBHOOK,
+        stripeSubscriptionId: "sub_secret_123", expiresAt: new Date(Date.now() + 86_400_000), lastScanAt: new Date(Date.now() - 86_400_000),
+        nextScanAt: new Date(Date.now() + 6 * 86_400_000), lastReportId: aliceReport, ...over,
+      }).returning({ id: dbMod.monitorSubscriptionsTable.id });
+      subIds.push(sub!.id);
+      return sub!.id;
+    }
+    async function pulse(subscriptionId: string, reachable: boolean, ms: number | null, minutesAgo: number, cert: number | null = null) {
+      await dbMod.db.insert(dbMod.monitorPulseChecksTable).values({
+        subscriptionId, reachable, responseTimeMs: ms, certDaysRemaining: cert, checkedAt: new Date(Date.now() - minutesAgo * 60_000),
+      });
+    }
+    async function teamId(who = bob) {
+      as(who);
+      return (await (await call("/team/shared")).json()).teams[0].id as string;
+    }
+    async function textOf(path: string) {
+      const res = await fetch(`${app.base}${path}`);
+      return res.text();
+    }
+    afterEach(async () => {
+      const { inArray } = await import("drizzle-orm");
+      if (subIds.length) await dbMod.db.delete(dbMod.monitorSubscriptionsTable).where(inArray(dbMod.monitorSubscriptionsTable.id, subIds));
+      subIds.length = 0;
+    });
+
+    it("a teammate sees the owner's monitored sites with grade, uptime, certificate and counts", async () => {
+      const sub = await monitor();
+      await pulse(sub, true, 100, 10, 40);
+      await pulse(sub, true, 300, 70);
+      await pulse(sub, false, null, 130);
+      await join(await invite(bob.email));
+      const res = await call(`/team/shared/${await teamId()}/monitors`);
+      expect(res.status).toBe(200);
+      const { monitors } = await res.json();
+      expect(monitors).toHaveLength(1);
+      expect(monitors[0]).toMatchObject({
+        targetUrl: "https://shared-monitor.example/", paused: false, grade: "B", reachable: true,
+        uptime24h: 66.7, medianResponseMs: 200, certDaysRemaining: 40, regressionCount: 0, cveAlertCount: 0,
+      });
+      expect(new Date(monitors[0].nextScanAt).getTime()).toBeGreaterThan(Date.now());
+    });
+
+    it("never carries the webhook URL, the owner's ids or email, or the billing reference", async () => {
+      await monitor();
+      await join(await invite(bob.email));
+      const text = await textOf(`/team/shared/${await teamId()}/monitors`);
+      for (const secret of ["SECRETTOKENabc123", "hooks.slack.example", "sub_secret_123", alice.id, alice.email]) expect(text).not.toContain(secret);
+      expect(Object.keys(JSON.parse(text).monitors[0]).sort()).toEqual([
+        "certDaysRemaining", "cveAlertCount", "grade", "lastCheckedAt", "lastScanAt", "medianResponseMs", "nextScanAt",
+        "paused", "reachable", "regressionCount", "targetUrl", "uptime24h",
+      ]);
+    });
+
+    it("shows a paused site as paused, with no next scan, and leaves out cancelled ones", async () => {
+      await monitor({ pausedAt: new Date() });
+      await monitor({ status: "cancelled", targetUrl: "https://cancelled.example/" });
+      await join(await invite(bob.email));
+      const { monitors } = await (await call(`/team/shared/${await teamId()}/monitors`)).json();
+      expect(monitors).toHaveLength(1);
+      expect(monitors[0]).toMatchObject({ paused: true, nextScanAt: null });
+    });
+
+    it("answers a site nobody has checked yet with nulls, not a guess", async () => {
+      await monitor({ lastReportId: null, lastScanAt: null, nextScanAt: null });
+      await join(await invite(bob.email));
+      const { monitors } = await (await call(`/team/shared/${await teamId()}/monitors`)).json();
+      expect(monitors[0]).toMatchObject({ grade: null, reachable: null, uptime24h: null, medianResponseMs: null, lastCheckedAt: null });
+    });
+
+    it("is for people on that team only, with one answer for every other case", async () => {
+      await monitor();
+      await join(await invite(bob.email));
+      const id = await teamId();
+      as(carol); // signed in, but not on the team
+      expect((await call(`/team/shared/${id}/monitors`)).status).toBe(404);
+      as(alice); // the owner has no membership of their own team
+      expect((await call(`/team/shared/${id}/monitors`)).status).toBe(404);
+      as(bob);
+      expect((await call("/team/shared/not-a-uuid/monitors")).status).toBe(404);
+      expect((await call(`/team/shared/${"0".repeat(8)}-0000-0000-0000-${"0".repeat(12)}/monitors`)).status).toBe(404);
+    });
+
+    it("ends the moment the teammate is removed", async () => {
+      await monitor();
+      await join(await invite(bob.email));
+      const id = await teamId();
+      expect((await call(`/team/shared/${id}/monitors`)).status).toBe(200);
+      as(alice);
+      expect((await call(`/team/members/${(await rows())[0]!.id}`, { method: "DELETE" })).status).toBe(200);
+      as(bob);
+      expect((await call(`/team/shared/${id}/monitors`)).status).toBe(404);
     });
   });
 });

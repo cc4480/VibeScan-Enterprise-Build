@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { inviteFormError, isViewOnly, joinedOn, memberLabel, signInForInvite, teamRefusal } from "./team";
+import { inviteFormError, isViewOnly, joinedOn, memberLabel, monitorFacts, monitorState, signInForInvite, teamRefusal, type SharedMonitor } from "./team";
 
 describe("inviteFormError", () => {
   it("accepts an ordinary address, with or without surrounding space", () => {
@@ -48,5 +48,29 @@ describe("labels", () => {
     expect(joinedOn("2026-10-03T12:00:00Z")).toBe("Joined 3 Oct 2026");
     expect(joinedOn(null)).toBe("");
     expect(joinedOn("not a date")).toBe("");
+  });
+});
+
+describe("monitorState and monitorFacts", () => {
+  const site = (over: Partial<SharedMonitor> = {}): SharedMonitor => ({
+    targetUrl: "https://a.example/", paused: false, grade: "B", lastScanAt: null, nextScanAt: null, reachable: true, lastCheckedAt: null,
+    uptime24h: 100, medianResponseMs: 120, certDaysRemaining: 60, regressionCount: 0, cveAlertCount: 0, ...over,
+  });
+
+  it("names the state in the order that matters", () => {
+    expect(monitorState(site()).label).toBe("Healthy");
+    expect(monitorState(site({ reachable: null })).label).toBe("Not checked yet");
+    expect(monitorState(site({ regressionCount: 1 })).label).toBe("Needs attention");
+    expect(monitorState(site({ cveAlertCount: 2 })).label).toBe("Needs attention");
+    expect(monitorState(site({ certDaysRemaining: 14 })).label).toBe("Needs attention");
+    expect(monitorState(site({ certDaysRemaining: 15 })).label).toBe("Healthy");
+    expect(monitorState(site({ reachable: false, regressionCount: 3 })).label).toBe("Down");
+    expect(monitorState(site({ paused: true, reachable: false })).label).toBe("Paused");
+  });
+
+  it("lists only the facts that are known, with the right plurals", () => {
+    expect(monitorFacts(site({ uptime24h: 99.9, medianResponseMs: 180, certDaysRemaining: 1, regressionCount: 1, cveAlertCount: 2 })))
+      .toEqual(["99.9% up in 24 h", "180 ms", "certificate 1 day", "1 regression", "2 CVE alerts"]);
+    expect(monitorFacts(site({ uptime24h: null, medianResponseMs: null, certDaysRemaining: null }))).toEqual([]);
   });
 });

@@ -40,3 +40,41 @@ export function joinedOn(iso: string | null): string {
   if (Number.isNaN(d.getTime())) return "";
   return `Joined ${d.getUTCDate()} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
+
+/** One monitored site of a team, as the server sends it to a teammate (api-server lib/teamMonitors.ts). Read-only. */
+export interface SharedMonitor {
+  targetUrl: string;
+  paused: boolean;
+  grade: string | null;
+  lastScanAt: string | null;
+  nextScanAt: string | null;
+  reachable: boolean | null;
+  lastCheckedAt: string | null;
+  uptime24h: number | null;
+  medianResponseMs: number | null;
+  certDaysRemaining: number | null;
+  regressionCount: number;
+  cveAlertCount: number;
+}
+
+export type MonitorTone = "good" | "warn" | "bad" | "idle";
+
+/** The one word for a site's state, in the order that matters: paused, down, needs attention, healthy, not checked yet. */
+export function monitorState(m: SharedMonitor): { label: string; tone: MonitorTone } {
+  if (m.paused) return { label: "Paused", tone: "idle" };
+  if (m.reachable === false) return { label: "Down", tone: "bad" };
+  if (m.regressionCount > 0 || m.cveAlertCount > 0 || (m.certDaysRemaining !== null && m.certDaysRemaining <= 14)) return { label: "Needs attention", tone: "warn" };
+  if (m.reachable === true) return { label: "Healthy", tone: "good" };
+  return { label: "Not checked yet", tone: "idle" };
+}
+
+/** The facts under the site name, only those that are known: "99.9% up · 180 ms · certificate 63 days · 2 regressions". */
+export function monitorFacts(m: SharedMonitor): string[] {
+  const facts: string[] = [];
+  if (m.uptime24h !== null) facts.push(`${m.uptime24h}% up in 24 h`);
+  if (m.medianResponseMs !== null) facts.push(`${m.medianResponseMs} ms`);
+  if (m.certDaysRemaining !== null) facts.push(`certificate ${m.certDaysRemaining} day${m.certDaysRemaining === 1 ? "" : "s"}`);
+  if (m.regressionCount > 0) facts.push(`${m.regressionCount} regression${m.regressionCount === 1 ? "" : "s"}`);
+  if (m.cveAlertCount > 0) facts.push(`${m.cveAlertCount} CVE alert${m.cveAlertCount === 1 ? "" : "s"}`);
+  return facts;
+}

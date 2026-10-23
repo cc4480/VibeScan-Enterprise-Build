@@ -136,7 +136,7 @@ export default function SettingsPage() {
           <div>
             <h2 className="text-xl font-bold mb-1">Team</h2>
             <p className="text-sm text-muted-foreground">
-              Let teammates read your reports without sharing your login. They can view reports and download evidence packs; scans, credits and settings stay yours.
+              Let teammates read your reports and monitored sites without sharing your login. They can view them and download evidence packs; scans, credits and settings stay yours.
             </p>
           </div>
         </div>

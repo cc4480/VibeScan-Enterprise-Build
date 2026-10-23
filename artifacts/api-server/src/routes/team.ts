@@ -6,6 +6,7 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { acceptInvite, inviteMember, leaveTeam, listTeam, MAX_TEAM, removeMember, sharedReports, sharedWithMe } from "../lib/team";
+import { sharedMonitors } from "../lib/teamMonitors";
 import { sendTeamInviteEmail } from "../lib/mailer";
 import { rateLimitMiddleware } from "../lib/rateLimit";
 import { UUID } from "./appRouteRunner";
@@ -91,6 +92,15 @@ router.get("/team/shared/:id/reports", async (req, res): Promise<void> => {
   if (!reports) { res.status(404).json({ error: "Not found." }); return; }
   res.setHeader("Cache-Control", "no-store");
   res.json({ reports });
+});
+
+router.get("/team/shared/:id/monitors", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const id = String(req.params["id"]);
+  const monitors = UUID.test(id) ? await sharedMonitors(req.user.id, id) : null;
+  if (!monitors) { res.status(404).json({ error: "Not found." }); return; }
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ monitors });
 });
 
 export default router;

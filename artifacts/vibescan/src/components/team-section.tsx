@@ -80,7 +80,7 @@ export function TeamSection() {
           </div>
         )}
         <p className="text-xs text-muted-foreground">
-          A teammate can read your reports and download evidence packs. They cannot run scans, use your credits, change settings or see billing. Up to {team.data?.max ?? 10} people.
+          A teammate can read your reports and monitored sites, and download evidence packs. They cannot run scans, use your credits, change settings or see billing. Up to {team.data?.max ?? 10} people.
         </p>
         {members.map((m) => (
           <div key={m.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 px-4 py-3">
