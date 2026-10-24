@@ -59,7 +59,7 @@ export const billingSubscriptionsTable = pgTable("billing_subscriptions", {
   // Unique: a user has at most one plan. A second row would make "which limit
   // applies" ambiguous at exactly the moment it matters.
   userId: text("user_id").notNull().unique(),
-  // "unlimited" ($19/month: unlimited scans + 5 sites) is the one plan sold today;
+  // "unlimited" ($19/month: unlimited scans + 3 sites) is the one plan sold today;
   // lib/plans.ts holds the numbers. "starter" ($19: 3 sites + 20 scans) and "pro" ($49:
   // 5 sites + 100 scans) were sold until 2026-10-03 and are kept so a row carrying one
   // still resolves. solo/studio/agency were designed but never sold; kept in the enum so

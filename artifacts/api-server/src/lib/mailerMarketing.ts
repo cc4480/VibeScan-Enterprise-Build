@@ -121,7 +121,7 @@ export async function sendPaymentsLiveEmail(toEmail: string): Promise<"sent" | "
   const heading = "You can keep scanning now";
   const body =
     "You asked us to tell you when you could get more scans on SecScan. You can now.<br><br>" +
-    `<strong>SecScan Unlimited</strong> — $19 a month: unlimited full scans (${fairUseText()}) and up to 5 sites ` +
+    `<strong>SecScan Unlimited</strong> — $19 a month: unlimited full scans (${fairUseText()}) and up to 3 sites ` +
     "watched around the clock. Cancel any time.<br>" +
     "Your 3 free scans every month are still there.";
   const ctaLabel = "See the plan";

@@ -106,9 +106,9 @@ describe("MONITOR_PLANS", () => {
   // The plan decided 2026-10-03. These numbers are what the pricing page promises, so a
   // change here is a change to what customers are sold: it should fail a test and be made
   // on purpose.
-  it("sells one plan: SecScan Unlimited, $19 a month, unlimited scans and 5 sites", () => {
+  it("sells one plan: SecScan Unlimited, $19 a month, unlimited scans and 3 sites", () => {
     expect(SOLD_PLANS.map((p) => p.key)).toEqual(["unlimited"]);
-    expect(MONITOR_PLANS.unlimited).toMatchObject({ amountCents: 1900, urlLimit: 5, unlimitedScans: true });
+    expect(MONITOR_PLANS.unlimited).toMatchObject({ amountCents: 1900, urlLimit: 3, unlimitedScans: true });
     // An unlimited plan keeps no counter, so the allowance a paid invoice grants is 0.
     expect(MONITOR_PLANS.unlimited.includedScans).toBe(0);
     // A request or webhook that names no plan gets the one on sale.
@@ -135,7 +135,7 @@ describe("MONITOR_PLANS", () => {
   });
 
   it("resolves limits for every known plan, and nothing else", () => {
-    expect(urlLimitForPlan("unlimited")).toBe(5);
+    expect(urlLimitForPlan("unlimited")).toBe(3);
     expect(includedScansForPlan("unlimited")).toBe(0);
     expect(urlLimitForPlan("starter")).toBe(3);
     expect(includedScansForPlan("starter")).toBe(20);

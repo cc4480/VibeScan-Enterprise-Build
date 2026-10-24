@@ -89,7 +89,7 @@ export function Terms() {
         </p>
         <p>
           SecScan Unlimited is billed monthly in advance and renews automatically each month
-          until you cancel. It includes continuous monitoring for up to 5 sites and unlimited full
+          until you cancel. It includes continuous monitoring for up to 3 sites and unlimited full
           scans. Unlimited means scans are not counted against you, and it is subject to fair use:
           we limit how fast scans can be started (currently 5 an hour and 20 a day per account) so
           the service stays available to everyone, and we may restrict an account that uses it to

@@ -2,7 +2,7 @@
  * The monitoring subscription.
  *
  * ONE plan is sold, by decision (2026-10-03): SecScan Unlimited, $19 a month, unlimited
- * scans and 5 sites watched. It replaces the two-plan table of 2026-09-24 (Starter $19 for
+ * scans and 3 sites watched (changed from 5 on 2026-10-24). It replaces the two-plan table of 2026-09-24 (Starter $19 for
  * 20 scans, Pro $49 for 100), priced against rivals that sell unlimited scans for $8 to
  * $24 a month (VibeEval, SafeToShip, ZeriFlow). Counting scans was the confusing part of
  * the old plans, and with unlimited scans the two tiers would have differed by two sites.
@@ -64,10 +64,10 @@ export const MONITOR_PLANS: Record<PlanKey, MonitorPlan> = {
     key: "unlimited",
     name: "SecScan Unlimited",
     amountCents: 1900,
-    urlLimit: 5,
+    urlLimit: 3,
     includedScans: 0,
     unlimitedScans: true,
-    description: "Unlimited full scans and up to 5 sites watched around the clock",
+    description: "Unlimited full scans and up to 3 sites watched around the clock",
   },
 };
 

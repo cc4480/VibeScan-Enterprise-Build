@@ -107,7 +107,7 @@ export function TrialExhaustedPanel() {
         <div className="space-y-1">
           <p className="font-semibold text-foreground">That was your last free scan</p>
           <p className="text-sm text-muted-foreground">
-            Keep going with the unlimited plan: unlimited scans plus monitoring for 5 sites.
+            Keep going with the unlimited plan: unlimited scans plus monitoring for 3 sites.
             Your free scans also renew on the 1st of next month. Your existing reports stay on your{" "}
             <Link href="/dashboard" className="text-primary underline underline-offset-2">dashboard</Link>.
           </p>
@@ -147,7 +147,7 @@ export function NotifyWhenBuyablePanel() {
               ? `You've used this month's ${status.data.scanLimit} free scans — they renew on the 1st.`
               : "You've used this month's free scans — they renew on the 1st."}{" "}
             The paid plan will be <span className="text-foreground font-medium">$19/month</span> for
-            unlimited scans and monitoring for 5 sites. There's
+            unlimited scans and monitoring for 3 sites. There's
             no way to buy yet — so rather than send you to a checkout that doesn't exist,
             we'll email you the moment there is.
           </p>

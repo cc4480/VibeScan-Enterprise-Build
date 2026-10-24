@@ -4,7 +4,7 @@ What is sold (decided 2026-10-03; replaces the 2026-09-24 Starter, Pro and credi
 
 | Product | Price | What it gives |
 |---|---|---|
-| **SecScan Unlimited** | $19 / month | Unlimited full scans (fair use: 5 an hour, 20 a day per account by default) + monitoring for up to 5 sites |
+| **SecScan Unlimited** | $19 / month | Unlimited full scans (fair use: 5 an hour, 20 a day per account by default) + monitoring for up to 3 sites |
 
 Starter ($19, 3 sites, 20 scans), Pro ($49, 5 sites, 100 scans) and the 10 and 50-scan packs are
 **not sold**. Starter and Pro stay in `lib/plans.ts` so a row carrying one still resolves, and the
@@ -120,7 +120,7 @@ Card `4242 4242 4242 4242`, any future date, any CVC.
    "Paid scans are coming soon". Once checkout is live, change both to point at
    the pricing. `/monitoring` and any other page there that names Starter, Pro or credit packs
    must be changed to the single SecScan Unlimited plan ($19/month, unlimited scans,
-   5 sites); that page is only true once step 6 has passed.
+   3 sites); that page is only true once step 6 has passed.
 
 ## Sales tax
 

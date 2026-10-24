@@ -48,16 +48,15 @@ export function PricingSection() {
           {
             icon: Bell,
             title: "Unlimited — $19/month",
-            desc: "One plan: unlimited scans and 5 sites watched around the clock.",
+            desc: "One plan: unlimited scans and 3 sites under continuous monitoring.",
             features: [
               `Unlimited full scans (${fairUseText(scanLimits)})`,
-              "5 sites watched around the clock",
+              "3 sites under continuous monitoring, around the clock",
               "Hourly uptime, header and certificate checks",
               "Hourly CVE matching, ranked by EPSS",
               "Rescans that follow your grade (A: 14d → F: 3d)",
               "Regression alerts to email, Slack, Discord and Teams, with quiet hours and your own rescan interval",
               "File findings as GitHub issues, Linear issues or Jira tickets, by click or automatically",
-              "Teammates who can see your reports and sites, without sharing your login",
               "Evidence packs, public trust pages and your own report branding",
               "Cancel any time",
             ],
@@ -138,7 +137,7 @@ function StaticPricing() {
         <div className="glass-panel p-6 rounded-xl flex flex-col items-center text-center gap-1 border-primary/50">
           <span className="text-sm text-muted-foreground mt-1">SecScan Unlimited</span>
           <span className="text-3xl font-bold">$19</span>
-          <span className="text-xs text-muted-foreground">per month · unlimited scans ({fairUseText(scanLimits)}) · 5 sites watched</span>
+          <span className="text-xs text-muted-foreground">per month · unlimited scans ({fairUseText(scanLimits)}) · 3 sites monitored</span>
         </div>
       </div>
       <p className="text-center text-xs text-muted-foreground mt-6">

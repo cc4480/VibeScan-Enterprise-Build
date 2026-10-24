@@ -2,13 +2,12 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSeo } from "@/lib/seo";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Mail, CreditCard, Bot, Github, Palette, ShieldCheck, Ticket, Users } from "lucide-react";
+import { Loader2, Mail, CreditCard, Bot, Github, Palette, ShieldCheck, Ticket } from "lucide-react";
 import { AiEditorsSection } from "@/components/ai-editors";
 import { GithubIssuesSection } from "@/components/github-issues-section";
 import { TicketsSection } from "@/components/tickets-section";
 import { BrandingSection } from "@/components/branding-section";
 import { TrustPagesSection } from "@/components/trust-pages-section";
-import { TeamSection } from "@/components/team-section";
 import { QuietHoursSection } from "@/components/quiet-hours-section";
 import { ConnectedAppsSection } from "@/components/connected-apps";
 import { BillingSummary } from "@/components/billing-summary";
@@ -158,21 +157,6 @@ export default function SettingsPage() {
           </div>
         </div>
         <TrustPagesSection />
-      </div>
-
-      <div className="glass-panel p-6 sm:p-10 rounded-3xl mb-8">
-        <div className="flex items-start gap-4 mb-6">
-          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20 shrink-0">
-            <Users className="w-6 h-6 text-primary" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold mb-1">Team</h2>
-            <p className="text-sm text-muted-foreground">
-              Let teammates read your reports and monitored sites without sharing your login. A viewer reads and downloads evidence packs; an editor can also pause monitors and file tickets from your reports. Scans, your plan and settings stay yours.
-            </p>
-          </div>
-        </div>
-        <TeamSection />
       </div>
 
       <div className="glass-panel p-6 sm:p-10 rounded-3xl mb-8">
