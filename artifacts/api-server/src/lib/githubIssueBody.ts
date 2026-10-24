@@ -26,7 +26,7 @@ export interface IssueFinding {
 
 export const ISSUE_LABELS = ["security", "secscan"];
 const TITLE_MAX = 200;
-const EVIDENCE_MAX = 3_000;
+export const EVIDENCE_MAX = 3_000;
 const TEXT_MAX = 4_000;
 
 /** `owner/name` from "owner/name", "https://github.com/owner/name" or "…/name.git"; null for anything else. */
@@ -47,7 +47,7 @@ export function findingKey(targetUrl: string, findingName: string): string {
   return createHash("sha256").update(`${site}\n${findingName.trim().toLowerCase()}`).digest("hex").slice(0, 32);
 }
 
-const SEVERITY_WORD: Record<string, string> = { critical: "Critical", high: "High", medium: "Medium", low: "Low", info: "Info" };
+export const SEVERITY_WORD: Record<string, string> = { critical: "Critical", high: "High", medium: "Medium", low: "Low", info: "Info" };
 
 /**
  * Secrets as they appear in an exposed file or a response: known key formats (redactForLlm), then any assignment whose
@@ -65,14 +65,14 @@ export function redactSecrets(text: string): string {
     );
 }
 
-const oneLine = (s: string) => s.replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ").replace(/\s+/g, " ").trim();
-const cut = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1).trimEnd()}…` : s);
+export const oneLine = (s: string) => s.replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ").replace(/\s+/g, " ").trim();
+export const cut = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1).trimEnd()}…` : s);
 
 /** A mention is `@` followed by a name; a zero-width space after the `@` keeps the text and removes the notification. */
 const defuseMentions = (s: string) => s.replace(/@(?=[A-Za-z0-9])/g, "@​");
 const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 /** Prose from a scan: redacted, HTML escaped, mentions defused, length bounded. */
-const prose = (s: string | null | undefined, max = TEXT_MAX) => cut(defuseMentions(escapeHtml(redactSecrets(s ?? ""))).trim(), max);
+export const prose = (s: string | null | undefined, max = TEXT_MAX) => cut(defuseMentions(escapeHtml(redactSecrets(s ?? ""))).trim(), max);
 
 export function issueTitle(f: IssueFinding, targetUrl: string): string {
   let host = targetUrl;

@@ -1,6 +1,6 @@
 import { type IRouter } from "express";
 import { isRateLimited, maskEmail } from "./accountShared";
-import { db, scansTable, creditsTable, monitorSubscriptionsTable, dismissedFindingsTable, reportsTable, reportSharesTable, reportBadgesTable, domainVerificationsTable, githubInstallationsTable, authTokensTable, pendingLoginsTable, pendingRegistrationsTable, billingSubscriptionsTable, purchaseIntentsTable, apiTokensTable, feedbackTable, findingVerificationsTable, teamMembersTable, trustPagesTable, githubIssuesTable, githubIssueDestinationsTable, oauthCodesTable, oauthRefreshTokensTable, usersTable } from "@workspace/db";
+import { db, scansTable, creditsTable, monitorSubscriptionsTable, dismissedFindingsTable, reportsTable, reportSharesTable, reportBadgesTable, domainVerificationsTable, githubInstallationsTable, authTokensTable, pendingLoginsTable, pendingRegistrationsTable, billingSubscriptionsTable, purchaseIntentsTable, apiTokensTable, feedbackTable, findingVerificationsTable, teamMembersTable, trustPagesTable, githubIssuesTable, githubIssueDestinationsTable, ticketsTable, ticketDestinationsTable, oauthCodesTable, oauthRefreshTokensTable, usersTable } from "@workspace/db";
 import { stripe } from "../lib/stripe";
 import { eq, or } from "drizzle-orm";
 import { clearSession, deleteSessionsForUser, getSessionId } from "../lib/auth";
@@ -169,6 +169,8 @@ export function registerAccountDelete(router: IRouter): void {
         await tx.delete(trustPagesTable).where(eq(trustPagesTable.userId, userId));
         await tx.delete(githubIssuesTable).where(eq(githubIssuesTable.userId, userId));
         await tx.delete(githubIssueDestinationsTable).where(eq(githubIssueDestinationsTable.userId, userId));
+        await tx.delete(ticketsTable).where(eq(ticketsTable.userId, userId));
+        await tx.delete(ticketDestinationsTable).where(eq(ticketDestinationsTable.userId, userId));
         await tx.delete(oauthCodesTable).where(eq(oauthCodesTable.userId, userId));
         await tx.delete(oauthRefreshTokensTable).where(eq(oauthRefreshTokensTable.userId, userId));
         await tx.delete(pendingLoginsTable).where(eq(pendingLoginsTable.userId, userId));
