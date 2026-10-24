@@ -6,6 +6,7 @@ import { createReportShare, hashShareToken } from "../lib/reportShare";
 import { UUID_ANY } from "./accountShared";
 import { withNoteFreeTotals } from "../lib/reportTotals";
 import { rateLimitMiddleware } from "../lib/rateLimit";
+import { getBranding } from "../lib/branding";
 
 const router: IRouter = Router();
 
@@ -222,6 +223,8 @@ router.get("/share/:token", shareReadLimit, async (req, res): Promise<void> => {
       createdAt: report.createdAt,
       // Totals saved before the notes left them are recounted here (lib/reportTotals.ts).
       data: withNoteFreeTotals(report.data),
+      // The owner's report branding, if any: a shared report says who prepared it.
+      brand: await getBranding(report.userId),
     });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch shared report");

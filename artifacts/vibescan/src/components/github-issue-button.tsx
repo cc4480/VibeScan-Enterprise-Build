@@ -7,6 +7,8 @@ import { ExternalLink, Github, Loader2 } from "lucide-react";
 import { useViewOnly } from "@/lib/use-view-only";
 import { issueRefusal, issueView, type FiledIssue, type GithubIssueDestination } from "@/lib/github-issues";
 
+type Destination = Pick<GithubIssueDestination, "configured" | "repo" | "available">;
+
 /**
  * "Create GitHub issue" under a finding's recommended fix. Shows the issue when one already exists for this problem on this
  * site (from this report or an earlier scan), and offers to connect a repository when there is none. Nothing is shown to
@@ -17,22 +19,20 @@ export function GithubIssueButton({ findingId }: { findingId: string }) {
   const queryClient = useQueryClient();
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { known, viewOnly } = useViewOnly(reportId);
+  const { known, canFile, viewOnly } = useViewOnly(reportId);
 
-  const destination = useQuery({
-    queryKey: ["github-issue-destination"],
-    queryFn: () => customFetch<GithubIssueDestination>("/api/integrations/github-issues"),
-    retry: false,
-  });
+  // The report's own answer: its issues and where they would go. For an editor that is the owner's repository.
   const issues = useQuery({
     queryKey: ["github-issues", reportId],
-    queryFn: () => customFetch<{ issues: Record<string, FiledIssue> }>(`/api/reports/${reportId}/github-issues`),
-    enabled: Boolean(reportId) && !viewOnly && destination.data?.configured === true,
+    queryFn: () => customFetch<{ issues: Record<string, FiledIssue>; destination: Destination | null }>(`/api/reports/${reportId}/github-issues`),
+    enabled: Boolean(reportId) && canFile,
     retry: false,
   });
 
-  const view = issueView({ destination: destination.data, filed: issues.data?.issues[findingId], starting });
-  if (!reportId || !known || viewOnly || view.kind === "hidden") return null;
+  const view = issueView({ destination: issues.data?.destination ?? undefined, filed: issues.data?.issues[findingId], starting });
+  if (!reportId || !known || !canFile || view.kind === "hidden") return null;
+  // An editor is on someone else's team: with no repository connected there is nothing for them to do, and Settings is not theirs.
+  if (viewOnly && view.kind === "connect") return null;
 
   async function create() {
     setError(null);

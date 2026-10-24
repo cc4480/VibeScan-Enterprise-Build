@@ -8,6 +8,7 @@ import { z } from "zod";
 import { AUTO_SEVERITIES, fileIssue, getDestination, issuesForReport, removeDestination, saveDestination, setAutoFile } from "../lib/githubIssues";
 import { isEncryptionConfigured } from "../lib/crypto";
 import { UUID } from "./appRouteRunner";
+import { actingOwnerForReport } from "../lib/team";
 
 const router: IRouter = Router();
 
@@ -58,7 +59,10 @@ router.post("/reports/:id/github-issue", async (req, res): Promise<void> => {
   const reportId = String(req.params["id"]);
   const parsed = FileBody.safeParse(req.body);
   if (!UUID.test(reportId) || !parsed.success) { res.status(404).json({ error: "That finding was not found in your report.", code: "finding_not_found" }); return; }
-  const result = await fileIssue({ userId: req.user.id, reportId, findingId: parsed.data.findingId });
+  // Their own report, or the owner's when the caller is an editor on the owner's team.
+  const ownerId = await actingOwnerForReport(req.user.id, reportId);
+  if (!ownerId) { res.status(404).json({ error: "That finding was not found in your report.", code: "finding_not_found" }); return; }
+  const result = await fileIssue({ userId: ownerId, reportId, findingId: parsed.data.findingId });
   if (!result.ok) { res.status(result.status).json({ error: result.message, code: result.code }); return; }
   req.log.info({ reportId, issue: result.issueNumber, created: result.created }, "GitHub issue filed");
   res.status(result.created ? 201 : 200).json({ created: result.created, issueNumber: result.issueNumber, issueUrl: result.issueUrl, repo: result.repoFullName });
@@ -69,7 +73,11 @@ router.get("/reports/:id/github-issues", async (req, res): Promise<void> => {
   const reportId = String(req.params["id"]);
   if (!UUID.test(reportId)) { res.json({ issues: {} }); return; }
   res.setHeader("Cache-Control", "no-store");
-  res.json({ issues: await issuesForReport(req.user.id, reportId) });
+  const ownerId = await actingOwnerForReport(req.user.id, reportId);
+  if (!ownerId) { res.json({ issues: {}, destination: null }); return; }
+  // The destination is the owner's, so an editor sees where the report's issues go without being given anything else.
+  const dest = await getDestination(ownerId);
+  res.json({ issues: await issuesForReport(ownerId, reportId), destination: dest ? { configured: true, repo: dest.repoFullName, available: isEncryptionConfigured() } : { configured: false, repo: null, available: isEncryptionConfigured() } });
 });
 
 export default router;

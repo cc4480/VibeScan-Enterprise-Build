@@ -2,10 +2,11 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSeo } from "@/lib/seo";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Mail, CreditCard, Bot, Github, ShieldCheck, Ticket, Users } from "lucide-react";
+import { Loader2, Mail, CreditCard, Bot, Github, Palette, ShieldCheck, Ticket, Users } from "lucide-react";
 import { AiEditorsSection } from "@/components/ai-editors";
 import { GithubIssuesSection } from "@/components/github-issues-section";
 import { TicketsSection } from "@/components/tickets-section";
+import { BrandingSection } from "@/components/branding-section";
 import { TrustPagesSection } from "@/components/trust-pages-section";
 import { TeamSection } from "@/components/team-section";
 import { QuietHoursSection } from "@/components/quiet-hours-section";
@@ -132,6 +133,21 @@ export default function SettingsPage() {
       <div className="glass-panel p-6 sm:p-10 rounded-3xl mb-8">
         <div className="flex items-start gap-4 mb-6">
           <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20 shrink-0">
+            <Palette className="w-6 h-6 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold mb-1">Report branding</h2>
+            <p className="text-sm text-muted-foreground">
+              Put your own name on the PDFs and shared reports you send to clients, in place of SecScan's.
+            </p>
+          </div>
+        </div>
+        <BrandingSection />
+      </div>
+
+      <div className="glass-panel p-6 sm:p-10 rounded-3xl mb-8">
+        <div className="flex items-start gap-4 mb-6">
+          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20 shrink-0">
             <ShieldCheck className="w-6 h-6 text-primary" />
           </div>
           <div>
@@ -152,7 +168,7 @@ export default function SettingsPage() {
           <div>
             <h2 className="text-xl font-bold mb-1">Team</h2>
             <p className="text-sm text-muted-foreground">
-              Let teammates read your reports and monitored sites without sharing your login. They can view them and download evidence packs; scans, credits and settings stay yours.
+              Let teammates read your reports and monitored sites without sharing your login. A viewer reads and downloads evidence packs; an editor can also pause monitors and file tickets from your reports. Scans, your plan and settings stay yours.
             </p>
           </div>
         </div>

@@ -354,13 +354,13 @@ dbSuiteOf(describe)("GitHub issues for findings (real Postgres, local GitHub)", 
     it("shows nothing without a destination, for another account's report, or for a malformed id", async () => {
       asAlice();
       const mine = await report(alice.id);
-      expect(await (await api(`/reports/${mine}/github-issues`)).json()).toEqual({ issues: {} });
+      expect(await (await api(`/reports/${mine}/github-issues`)).json()).toEqual({ issues: {}, destination: { configured: false, repo: null, available: true } });
       expect(await (await api(`/reports/not-a-uuid/github-issues`)).json()).toEqual({ issues: {} });
       githubAccepts();
       await api("/integrations/github-issues", { method: "PUT", body: { repo: REPO, token: TOKEN } });
       await api(`/reports/${mine}/github-issue`, { method: "POST", body: { findingId: "f-csp" } });
       app.as(bob);
-      expect(await (await api(`/reports/${mine}/github-issues`)).json()).toEqual({ issues: {} });
+      expect(await (await api(`/reports/${mine}/github-issues`)).json()).toEqual({ issues: {}, destination: null });
     });
   });
 });

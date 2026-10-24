@@ -5,7 +5,7 @@
  */
 import { Router, type IRouter } from "express";
 import { z } from "zod";
-import { acceptInvite, inviteMember, leaveTeam, listTeam, MAX_TEAM, removeMember, sharedReports, sharedWithMe } from "../lib/team";
+import { acceptInvite, inviteMember, leaveTeam, listTeam, MAX_TEAM, removeMember, roleOf, setRole, sharedReports, sharedWithMe } from "../lib/team";
 import { sharedMonitors } from "../lib/teamMonitors";
 import { sendTeamInviteEmail } from "../lib/mailer";
 import { rateLimitMiddleware } from "../lib/rateLimit";
@@ -26,7 +26,8 @@ const acceptLimit = rateLimitMiddleware({
   keyFrom: (req) => (req.isAuthenticated() ? `user:${req.user.id}` : undefined),
 });
 
-const InviteBody = z.object({ email: z.string().max(300) });
+const InviteBody = z.object({ email: z.string().max(300), role: z.enum(["viewer", "editor"]).optional() });
+const RoleBody = z.object({ role: z.enum(["viewer", "editor"]) });
 const AcceptBody = z.object({ token: z.string().max(200) });
 
 router.get("/team", async (req, res): Promise<void> => {
@@ -40,10 +41,10 @@ router.post("/team/invites", inviteLimit, async (req, res): Promise<void> => {
   if (!req.user.email) { res.status(400).json({ error: "Add an email address to your account before inviting a teammate.", code: "no_owner_email" }); return; }
   const parsed = InviteBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Enter the teammate's email address.", code: "bad_email" }); return; }
-  const invited = await inviteMember(req.user.id, req.user.email, parsed.data.email);
+  const invited = await inviteMember(req.user.id, req.user.email, parsed.data.email, roleOf(parsed.data.role));
   if (!invited.ok) { res.status(invited.status).json({ error: invited.message, code: invited.code }); return; }
   try {
-    await sendTeamInviteEmail(invited.email, req.user.email, invited.url);
+    await sendTeamInviteEmail(invited.email, req.user.email, invited.url, roleOf(parsed.data.role));
   } catch (err) {
     // The mailer reports most failures itself; this is the rare one it does not. The link below still works.
     req.log.warn({ err }, "Team invitation email could not be sent");
@@ -51,6 +52,16 @@ router.post("/team/invites", inviteLimit, async (req, res): Promise<void> => {
   req.log.info({ resent: invited.resent }, "Team invitation created");
   // The link is returned to the owner too: it only works for the invited address, and mail can fail or land in spam.
   res.status(invited.resent ? 200 : 201).json({ email: invited.email, resent: invited.resent, inviteUrl: invited.url });
+});
+
+router.patch("/team/members/:id/role", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const id = String(req.params["id"]);
+  const parsed = RoleBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Choose viewer or editor.", code: "bad_role" }); return; }
+  const changed = UUID.test(id) && (await setRole(req.user.id, id, parsed.data.role));
+  if (!changed) { res.status(404).json({ error: "That person is not on your team." }); return; }
+  res.json({ role: parsed.data.role });
 });
 
 router.delete("/team/members/:id", async (req, res): Promise<void> => {

@@ -17,6 +17,8 @@ export const teamMembersTable = pgTable("team_members", {
   /** SHA-256 of the invitation token; cleared when the invitation is accepted. */
   tokenHash: text("token_hash"),
   status: text("status", { enum: ["pending", "active"] }).notNull().default("pending"),
+  /** viewer reads; editor can also pause and resume the owner's monitors and file tickets from the owner's reports (lib/team.ts). Never more. */
+  role: text("role", { enum: ["viewer", "editor"] }).notNull().default("viewer"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   acceptedAt: timestamp("accepted_at", { withTimezone: true }),
 }, (table) => [

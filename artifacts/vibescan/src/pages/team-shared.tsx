@@ -1,10 +1,11 @@
+import { useState } from "react";
 import { Link, useParams } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, Pause, Play } from "lucide-react";
 import { useSeo } from "@/lib/seo";
 import { cn, getGradeColor } from "@/lib/utils";
-import { monitorFacts, monitorState, type MonitorTone, type SharedMonitor, type SharedReport } from "@/lib/team";
+import { monitorFacts, monitorState, teamRefusal, type MonitorTone, type SharedMonitor, type SharedReport, type SharedTeam } from "@/lib/team";
 import { relativeTime } from "./monitor-format";
 
 const TONE: Record<MonitorTone, string> = {
@@ -14,10 +15,19 @@ const TONE: Record<MonitorTone, string> = {
   idle: "bg-white/5 border-white/10 text-muted-foreground",
 };
 
-/** The reports of a team you were invited onto: newest first, each opening the same read-only report page. */
+/**
+ * The reports and monitored sites of a team you were invited onto: newest first, each report opening the same report page.
+ * A viewer only reads. An editor can also pause and resume the owner's sites here, and file tickets from a report.
+ */
 export default function TeamSharedPage() {
   useSeo({ title: "Shared reports — SecScan.us", noindex: true });
   const { id } = useParams<{ id: string }>();
+  const queryClient = useQueryClient();
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Which role this membership has: from the teams the account is on, so it is the server's word, not the page's.
+  const teams = useQuery({ queryKey: ["team-shared"], queryFn: () => customFetch<{ teams: SharedTeam[] }>("/api/team/shared") });
+  const isEditor = teams.data?.teams.find((t) => t.id === id)?.role === "editor";
   const reports = useQuery({
     queryKey: ["team-shared-reports", id],
     queryFn: () => customFetch<{ reports: SharedReport[] }>(`/api/team/shared/${encodeURIComponent(id ?? "")}/reports`),
@@ -33,11 +43,30 @@ export default function TeamSharedPage() {
     retry: false,
   });
 
+  async function setPaused(m: SharedMonitor, paused: boolean) {
+    if (!m.id) return;
+    setError(null);
+    setBusyId(m.id);
+    try {
+      await customFetch(`/api/monitor/subscriptions/${encodeURIComponent(m.id)}/pause`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ paused }) });
+      await queryClient.invalidateQueries({ queryKey: ["team-shared-monitors", id] });
+    } catch (err) {
+      setError(teamRefusal(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
       <Link href="/settings" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6"><ArrowLeft className="w-4 h-4" /> Settings</Link>
       <h1 className="text-2xl font-bold mb-1">Shared reports</h1>
-      <p className="text-sm text-muted-foreground mb-6">You can read these monitored sites and reports, and download evidence packs. You cannot change anything.</p>
+      <p className="text-sm text-muted-foreground mb-6">
+        {isEditor
+          ? "You can read these monitored sites and reports, pause and resume the sites, file tickets from a report, and download evidence packs. Everything else stays with the owner."
+          : "You can read these monitored sites and reports, and download evidence packs. You cannot change anything."}
+      </p>
+      {error && <p role="alert" className="text-sm text-red-400 mb-4">{error}</p>}
 
       {monitors.data && monitors.data.monitors.length > 0 && (
         <section className="mb-10" aria-label="Monitored sites">
@@ -57,6 +86,18 @@ export default function TeamSharedPage() {
                     </div>
                   </div>
                   <span className={cn("px-2 py-0.5 rounded-full text-xs font-semibold border shrink-0", TONE[state.tone])}>{state.label}</span>
+                  {isEditor && m.id && (
+                    <button
+                      type="button"
+                      onClick={() => void setPaused(m, !m.paused)}
+                      disabled={busyId === m.id}
+                      aria-label={`${m.paused ? "Resume" : "Pause"} ${m.targetUrl}`}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-white/15 text-xs font-semibold disabled:opacity-60 shrink-0"
+                    >
+                      {busyId === m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : m.paused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
+                      {m.paused ? "Resume" : "Pause"}
+                    </button>
+                  )}
                 </div>
               );
             })}

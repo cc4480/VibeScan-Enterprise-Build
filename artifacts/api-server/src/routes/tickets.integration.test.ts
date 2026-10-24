@@ -496,13 +496,13 @@ dbSuiteOf(describe)("Linear and Jira tickets for findings (real Postgres, local 
     it("shows nothing without a destination, for another account's report, or for a malformed id", async () => {
       asAlice();
       const mine = await report(alice.id);
-      expect(await (await api(`/reports/${mine}/tickets`)).json()).toEqual({ tickets: {} });
+      expect(await (await api(`/reports/${mine}/tickets`)).json()).toEqual({ tickets: {}, destinations: [] });
       expect(await (await api(`/reports/not-a-uuid/tickets`)).json()).toEqual({ tickets: {} });
       linearAccepts();
       await api("/integrations/tickets/linear", { method: "PUT", body: LINEAR });
       await api(`/reports/${mine}/ticket`, { method: "POST", body: { provider: "linear", findingId: "f-csp" } });
       app.as(bob);
-      expect(await (await api(`/reports/${mine}/tickets`)).json()).toEqual({ tickets: {} });
+      expect(await (await api(`/reports/${mine}/tickets`)).json()).toEqual({ tickets: {}, destinations: [] });
     });
   });
 });

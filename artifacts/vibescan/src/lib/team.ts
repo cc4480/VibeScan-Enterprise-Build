@@ -1,10 +1,17 @@
 /**
- * Teams as shared viewing: the wording and the small checks. The server decides everything that matters (who is on a team,
+ * Teams: the wording and the small checks. The server decides everything that matters (who is on a team,
  * what a teammate may read: api-server lib/team.ts); this only words it.
  */
 
-export interface TeamMember { id: string; email: string; status: "pending" | "active"; createdAt: string; acceptedAt: string | null }
-export interface SharedTeam { id: string; ownerEmail: string | null; since: string | null }
+/** A viewer reads. An editor can also pause and resume the owner's monitors and file tickets from the owner's reports. */
+export type Role = "viewer" | "editor";
+export const ROLE_CHOICES: ReadonlyArray<{ value: Role; label: string; note: string }> = [
+  { value: "viewer", label: "Viewer", note: "Reads reports and monitored sites, and downloads evidence packs." },
+  { value: "editor", label: "Editor", note: "Also pauses and resumes monitors, and files tickets from your reports in your GitHub, Linear or Jira." },
+];
+
+export interface TeamMember { id: string; email: string; role: Role; status: "pending" | "active"; createdAt: string; acceptedAt: string | null }
+export interface SharedTeam { id: string; ownerEmail: string | null; since: string | null; role: Role }
 export interface SharedReport { id: string; targetUrl: string; scannedAt: string; tier: string; grade: string | null }
 
 /** What the invite form checks before it sends anything; the server checks again. */
@@ -22,6 +29,13 @@ export function teamRefusal(err: unknown): string {
 /** Whether a report was opened by a teammate rather than its owner (the server says which, in `access`). */
 export function isViewOnly(report: unknown): boolean {
   return typeof report === "object" && report !== null && (report as { access?: unknown }).access === "team";
+}
+
+/** May the caller file tickets from this report? Its owner, and an editor on the owner's team; never a viewer. */
+export function canFile(report: unknown): boolean {
+  if (typeof report !== "object" || report === null) return false;
+  const r = report as { access?: unknown; role?: unknown };
+  return r.access === "owner" || (r.access === "team" && r.role === "editor");
 }
 
 /** Where to send someone who is not signed in, so they come back to the invitation. Only the token travels, as a query value. */
@@ -43,6 +57,8 @@ export function joinedOn(iso: string | null): string {
 
 /** One monitored site of a team, as the server sends it to a teammate (api-server lib/teamMonitors.ts). Read-only. */
 export interface SharedMonitor {
+  /** Only given to an editor, who needs it to pause or resume the site. */
+  id?: string;
   targetUrl: string;
   paused: boolean;
   grade: string | null;

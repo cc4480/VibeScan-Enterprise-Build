@@ -8,6 +8,7 @@ import { z } from "zod";
 import { AUTO_SEVERITIES, PROVIDERS, fileTicket, getDestination, getDestinations, removeDestination, saveDestination, setAutoFile, ticketsForReport, type Provider } from "../lib/tickets";
 import { isEncryptionConfigured } from "../lib/crypto";
 import { UUID } from "./appRouteRunner";
+import { actingOwnerForReport } from "../lib/team";
 
 const router: IRouter = Router();
 
@@ -72,7 +73,10 @@ router.post("/reports/:id/ticket", async (req, res): Promise<void> => {
   const reportId = String(req.params["id"]);
   const parsed = FileBody.safeParse(req.body);
   if (!UUID.test(reportId) || !parsed.success) { res.status(404).json({ error: "That finding was not found in your report.", code: "finding_not_found" }); return; }
-  const result = await fileTicket({ userId: req.user.id, provider: parsed.data.provider, reportId, findingId: parsed.data.findingId });
+  // Their own report, or the owner's when the caller is an editor on the owner's team.
+  const ownerId = await actingOwnerForReport(req.user.id, reportId);
+  if (!ownerId) { res.status(404).json({ error: "That finding was not found in your report.", code: "finding_not_found" }); return; }
+  const result = await fileTicket({ userId: ownerId, provider: parsed.data.provider, reportId, findingId: parsed.data.findingId });
   if (!result.ok) { res.status(result.status).json({ error: result.message, code: result.code }); return; }
   req.log.info({ reportId, provider: result.provider, ticket: result.ticketKey, created: result.created }, "Ticket filed");
   res.status(result.created ? 201 : 200).json({ created: result.created, provider: result.provider, ticketKey: result.ticketKey, ticketUrl: result.ticketUrl });
@@ -83,7 +87,10 @@ router.get("/reports/:id/tickets", async (req, res): Promise<void> => {
   const reportId = String(req.params["id"]);
   if (!UUID.test(reportId)) { res.json({ tickets: {} }); return; }
   res.setHeader("Cache-Control", "no-store");
-  res.json({ tickets: await ticketsForReport(req.user.id, reportId) });
+  const ownerId = await actingOwnerForReport(req.user.id, reportId);
+  if (!ownerId) { res.json({ tickets: {}, destinations: [] }); return; }
+  // The destinations are the owner's: an editor learns where a ticket would go, never the credential (it is not in this list).
+  res.json({ tickets: await ticketsForReport(ownerId, reportId), destinations: await getDestinations(ownerId) });
 });
 
 export default router;

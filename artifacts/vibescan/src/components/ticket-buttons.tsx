@@ -5,7 +5,7 @@ import { customFetch } from "@workspace/api-client-react";
 import { ExternalLink, Loader2, Ticket } from "lucide-react";
 import { useViewOnly } from "@/lib/use-view-only";
 import { issueRefusal } from "@/lib/github-issues";
-import { ticketViews, type Provider, type TicketDestinations, type TicketRef } from "@/lib/tickets";
+import { ticketViews, type Provider, type TicketDestination, type TicketRef } from "@/lib/tickets";
 
 /**
  * "Create Linear issue" / "Create Jira ticket" under a finding, for each system the account has connected. Shows the ticket
@@ -17,23 +17,18 @@ export function TicketButtons({ findingId }: { findingId: string }) {
   const queryClient = useQueryClient();
   const [starting, setStarting] = useState<Provider | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { known, viewOnly } = useViewOnly(reportId);
+  const { known, canFile } = useViewOnly(reportId);
 
-  const destinations = useQuery({
-    queryKey: ["ticket-destinations"],
-    queryFn: () => customFetch<TicketDestinations>("/api/integrations/tickets"),
-    retry: false,
-  });
-  const connected = destinations.data?.available === true && destinations.data.destinations.length > 0;
+  // The report's own answer: its tickets and where they would go. For an editor that is the owner's destinations.
   const tickets = useQuery({
     queryKey: ["tickets", reportId],
-    queryFn: () => customFetch<{ tickets: Record<string, Partial<Record<Provider, TicketRef>>> }>(`/api/reports/${reportId}/tickets`),
-    enabled: Boolean(reportId) && !viewOnly && connected,
+    queryFn: () => customFetch<{ tickets: Record<string, Partial<Record<Provider, TicketRef>>>; destinations: TicketDestination[] }>(`/api/reports/${reportId}/tickets`),
+    enabled: Boolean(reportId) && canFile,
     retry: false,
   });
 
-  const views = ticketViews({ destinations: connected ? destinations.data?.destinations : [], filed: tickets.data?.tickets[findingId], starting });
-  if (!reportId || !known || viewOnly || views.length === 0) return null;
+  const views = ticketViews({ destinations: tickets.data?.destinations, filed: tickets.data?.tickets[findingId], starting });
+  if (!reportId || !known || !canFile || views.length === 0) return null;
 
   async function create(provider: Provider) {
     setError(null);

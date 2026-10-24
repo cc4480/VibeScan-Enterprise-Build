@@ -62,7 +62,7 @@ export default function TeamAcceptPage() {
       <AuthShell title="You are on the team">
         <div className="flex items-start gap-3 text-sm">
           <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
-          <p className="text-muted-foreground">You can now read their reports and monitored sites, and download evidence packs. You will find them under Settings, Team, Shared with you.</p>
+          <p className="text-muted-foreground">You can now read their reports and monitored sites, and download evidence packs; an editor can also pause monitors and file tickets. You will find them under Settings, Team, Shared with you.</p>
         </div>
         <Link href="/settings" className="inline-block mt-5 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium">Go to Settings</Link>
       </AuthShell>

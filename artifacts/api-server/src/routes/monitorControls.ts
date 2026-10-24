@@ -15,8 +15,10 @@ import { and, eq } from "drizzle-orm";
 import { db, monitorSubscriptionsTable } from "@workspace/db";
 import { enforcementEnabled, rescanFloorDays } from "../lib/entitlements";
 import { hasLivePlan } from "../lib/billing";
+import { mayActFor } from "../lib/team";
 
 const router: IRouter = Router();
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const body = z.object({ paused: z.boolean() });
 
 router.patch("/monitor/subscriptions/:id/pause", async (req, res): Promise<void> => {
@@ -30,10 +32,11 @@ router.patch("/monitor/subscriptions/:id/pause", async (req, res): Promise<void>
     return;
   }
 
-  const [sub] = await db
-    .select()
-    .from(monitorSubscriptionsTable)
-    .where(and(eq(monitorSubscriptionsTable.id, String(req.params.id)), eq(monitorSubscriptionsTable.userId, req.user.id)));
+  // The owner, or an editor on the owner's team (lib/team.ts); anyone else gets the answer for a site that does not exist.
+  const [found] = UUID.test(String(req.params.id))
+    ? await db.select().from(monitorSubscriptionsTable).where(eq(monitorSubscriptionsTable.id, String(req.params.id)))
+    : [];
+  const sub = found && (await mayActFor(req.user.id, found.userId)) ? found : undefined;
   if (!sub) {
     res.status(404).json({ error: "Subscription not found" });
     return;

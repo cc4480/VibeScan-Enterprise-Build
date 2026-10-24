@@ -47,7 +47,7 @@ export function safeIssueHref(url: string): string | null {
   }
 }
 
-export function issueView(input: { destination: GithubIssueDestination | undefined; filed: FiledIssue | undefined; starting: boolean }): IssueView {
+export function issueView(input: { destination: Pick<GithubIssueDestination, "configured" | "repo" | "available"> | undefined; filed: FiledIssue | undefined; starting: boolean }): IssueView {
   const { destination, filed, starting } = input;
   if (!destination || !destination.available) return { kind: "hidden" };
   if (filed) {

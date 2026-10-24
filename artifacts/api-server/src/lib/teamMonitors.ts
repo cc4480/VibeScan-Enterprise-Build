@@ -14,6 +14,8 @@ import {
 import { summariseUptime } from "./monitorPulse";
 
 export interface SharedMonitorRow {
+  /** Only for an editor, who needs it to pause or resume the site; a viewer is never given it. */
+  id?: string;
   targetUrl: string;
   paused: boolean;
   grade: string | null;
@@ -33,7 +35,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** The active monitored sites of the team with this membership id, for the teammate; null when the caller is not on that team. */
 export async function sharedMonitors(viewerId: string, membershipId: string): Promise<SharedMonitorRow[] | null> {
-  const [m] = await db.select({ ownerId: teamMembersTable.userId }).from(teamMembersTable)
+  const [m] = await db.select({ ownerId: teamMembersTable.userId, role: teamMembersTable.role }).from(teamMembersTable)
     .where(and(eq(teamMembersTable.id, membershipId), eq(teamMembersTable.memberId, viewerId), eq(teamMembersTable.status, "active"))).limit(1);
   if (!m) return null;
 
@@ -82,6 +84,7 @@ export async function sharedMonitors(viewerId: string, membershipId: string): Pr
 
     const grade = s.lastReportId ? gradeOf.get(s.lastReportId) : null;
     return {
+      ...(m.role === "editor" ? { id: s.id } : {}),
       targetUrl: s.targetUrl,
       paused: s.pausedAt !== null,
       grade: typeof grade === "string" ? grade : null,

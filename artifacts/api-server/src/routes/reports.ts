@@ -5,7 +5,8 @@ import { GetReportResponse } from "@workspace/api-zod";
 import { UUID_ANY } from "./accountShared";
 import { changesForReport } from "../lib/scanDiffLoader";
 import { withNoteFreeTotals } from "../lib/reportTotals";
-import { isTeamViewer } from "../lib/team";
+import { teamRoleOf } from "../lib/team";
+import { getBranding } from "../lib/branding";
 
 const router: IRouter = Router();
 
@@ -31,7 +32,8 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     // The owner reads it; so does a teammate the owner invited (lib/team.ts). Anyone else gets the same answer as for a
     // report that does not exist.
     const isOwner = report?.userId === req.user.id;
-    const asTeammate = report !== undefined && !isOwner && (await isTeamViewer(req.user.id, report.userId));
+    const teamRole = report !== undefined && !isOwner ? await teamRoleOf(req.user.id, report.userId) : null;
+    const asTeammate = teamRole !== null;
     if (!report || (!isOwner && !asTeammate)) {
       res.status(404).json({ error: "Report not found" });
       return;
@@ -67,6 +69,10 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
       ...parsed,
       // Which of the two the caller is, so the page can show a teammate the read-only view.
       access: isOwner ? "owner" : "team",
+      // What a teammate may do: an editor can also file tickets from the report; a viewer only reads.
+      ...(isOwner ? {} : { role: teamRole }),
+      // Whose name the PDF carries: the report owner's, for a teammate too.
+      brand: await getBranding(report.userId),
       data: {
         ...parsed.data,
         ...(stored.tests !== undefined ? { tests: stored.tests } : {}),

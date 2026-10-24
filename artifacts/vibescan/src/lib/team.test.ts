@@ -74,3 +74,14 @@ describe("monitorState and monitorFacts", () => {
     expect(monitorFacts(site({ uptime24h: null, medianResponseMs: null, certDaysRemaining: null }))).toEqual([]);
   });
 });
+
+describe("canFile", () => {
+  it("is true for the owner and for an editor on the owner's team, and for nobody else", async () => {
+    const { canFile } = await import("./team");
+    expect(canFile({ access: "owner" })).toBe(true);
+    expect(canFile({ access: "team", role: "editor" })).toBe(true);
+    expect(canFile({ access: "team", role: "viewer" })).toBe(false);
+    expect(canFile({ access: "team" })).toBe(false);
+    for (const v of [undefined, null, {}, "owner", { role: "editor" }, { access: "OWNER" }, { access: "owner-ish", role: "editor" }]) expect(canFile(v), String(v)).toBe(false);
+  });
+});
