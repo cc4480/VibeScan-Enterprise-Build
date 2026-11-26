@@ -85,6 +85,11 @@ services:
       # proof. Must match the secscan tier's value, or a scan is accepted here
       # and downgraded to passive checks where it actually runs.
       ALLOW_UNVERIFIED_ACTIVE_PROBES: ${ALLOW_UNVERIFIED_ACTIVE_PROBES:-false}
+      # Single-operator local instance: sign loopback requests in as this account
+      # so the dashboard opens without the OIDC round trip. The app also checks
+      # the request Host, so a public deployment is unaffected even if this is
+      # set by mistake. Leave empty on anything reachable from outside.
+      LOCAL_AUTO_LOGIN: ${LOCAL_AUTO_LOGIN:-}
     ports:
       # Defaults to 8090 on the host: this machine already runs Apache on 8080,
       # which silently competes for the port.

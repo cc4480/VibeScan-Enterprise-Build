@@ -2,7 +2,7 @@ import { type Request, type Response, type NextFunction } from "express";
 import type { AuthUser } from "@workspace/api-zod";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { getSession } from "../lib/auth";
+import { createSession, getSession, SESSION_COOKIE, SESSION_TTL } from "../lib/auth";
 import { legacyBearerAllowed, legacyBearerReporter, loggableRoute } from "../lib/legacyBearer";
 
 declare global {
@@ -23,9 +23,15 @@ declare global {
 // Only accept UUID v4 tokens (used as anonymous user IDs)
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+/** True when the request was addressed to this machine, not a public hostname. */
+function isLoopbackRequest(req: Request): boolean {
+  const h = String(req.hostname || "").toLowerCase();
+  return h === "127.0.0.1" || h === "localhost" || h === "::1" || h === "[::1]";
+}
+
 export async function authMiddleware(
   req: Request,
-  _res: Response,
+  res: Response,
   next: NextFunction,
 ) {
   req.isAuthenticated = function (this: Request) {
@@ -34,6 +40,39 @@ export async function authMiddleware(
 
   // ── 1. Cookie-based OIDC session (highest priority) ──────────────────────
   const sid = req.cookies?.["sid"] as string | undefined;
+
+  // Local-only auto sign-in: the single-operator instance opens straight into
+  // the operator account when it is reached on 127.0.0.1. Guarded by the
+  // request's Host rather than by NODE_ENV, so a deployment answering on a real
+  // hostname is unaffected even if LOCAL_AUTO_LOGIN is copied there. Everything
+  // downstream is unchanged: a real session row and a normal cookie.
+  if (!sid && process.env.LOCAL_AUTO_LOGIN && isLoopbackRequest(req)) {
+    const email = process.env.LOCAL_AUTO_LOGIN.trim().toLowerCase();
+    const [dbUser] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.email, email))
+      .limit(1);
+    if (dbUser) {
+      const user = {
+        id: dbUser.id,
+        email: dbUser.email,
+        firstName: dbUser.firstName,
+        lastName: dbUser.lastName,
+        profileImageUrl: dbUser.profileImageUrl,
+      };
+      const autoSid = await createSession({ user });
+      res.cookie(SESSION_COOKIE, autoSid, {
+        httpOnly: true,
+        sameSite: "lax",
+        maxAge: SESSION_TTL,
+        secure: false,
+      });
+      req.user = user as User;
+      next();
+      return;
+    }
+  }
   if (sid) {
     try {
       const session = await getSession(sid);
