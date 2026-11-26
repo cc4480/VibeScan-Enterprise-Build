@@ -80,6 +80,11 @@ services:
       # Sign in with Google. Both must be set for the routes to work at all.
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      # Operator override for a self-hosted install scanning its own estate:
+      # "true" lets deep scans run ACTIVE probes without a domain-ownership
+      # proof. Must match the secscan tier's value, or a scan is accepted here
+      # and downgraded to passive checks where it actually runs.
+      ALLOW_UNVERIFIED_ACTIVE_PROBES: ${ALLOW_UNVERIFIED_ACTIVE_PROBES:-false}
     ports:
       # Defaults to 8090 on the host: this machine already runs Apache on 8080,
       # which silently competes for the port.
@@ -131,6 +136,9 @@ services:
       # fail, so SSRF detection is simply skipped until one of these is a real
       # hostname.
       OOB_BASE_URL: ${OOB_BASE_URL:-}
+      # Must match the web tier's value: the scanner tier is where the gate is
+      # consulted while the scan actually runs.
+      ALLOW_UNVERIFIED_ACTIVE_PROBES: ${ALLOW_UNVERIFIED_ACTIVE_PROBES:-false}
     # Chromium needs more shared memory than Docker's 64 MB default; below that
     # it crashes on content-heavy pages rather than failing cleanly.
     shm_size: "1gb"
